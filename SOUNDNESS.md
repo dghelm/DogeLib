@@ -7,9 +7,7 @@ A proof links a Lean definition to a theorem. Both are assumed to match somethin
 Each of those links is an assumption, and this document names them one by one.
 It follows the structure of EthLib's [`SOUNDNESS.md`](https://github.com/ethereum/EthLib/blob/6a93711e7cc062e787fff6747e4101a141d38b7a/SOUNDNESS.md), which follows s2n-bignum's.
 
-DogeLib has four groups of definitions with theorems: SHA-256, double SHA-256, the codec foundations, and CompactSize.
-SHA-256 is adapted from EthLib. The codec foundations and the generic CompactSize codec are adapted from btc-verified.
-No definition of a Dogecoin data structure exists yet.
+[COVERAGE.md](COVERAGE.md) lists the definitions and their theorems.
 Each section states the mitigations that exist today, and the policy for definitions that are not written yet.
 A lane that adds a definition, a theorem, an execution path or a dependency updates the affected rows in the same change.
 
@@ -33,12 +31,12 @@ Gap D asks whether the use of DogeLib holds together.
 
 | ID | Risk | Mitigation in place | Applies to |
 |----|------|---------------------|------------|
-| A1 | A definition does not match the pinned Dogecoin behavior | Source mapping in `SOURCES.md`, by review only. SHA-256 has a proof against a FIPS 180-4 model, and NIST CAVP known answers. Known answers from Core's genesis data test the integer codecs. Known answers from Core's CompactSize tests test the CompactSize codec and reader. No Core comparisons yet. | P R I F |
+| A1 | A definition does not match the pinned Dogecoin behavior | Source mapping in `SOURCES.md`, by review only. SHA-256 has a proof against a FIPS 180-4 model, and NIST CAVP known answers. Known answers from Core's genesis data test the integer codecs. Core's own test cases are known answers for CompactSize, the compact encoding and the difficulty retarget. No comparison against a running Core yet. | P R I F |
 | A2 | A theorem holds only under a hypothesis | Policy: each conditional theorem lists its hypotheses here and in `COVERAGE.md` | P I |
 | A3 | Timing reveals secret data | None: no constant-time claim | R I |
 | A4 | A security theorem idealises a primitive | None: no security theorem yet | P |
 | A5 | A rule depends on a protocol context that the definition does not model | Policy: each operation records its mode, network and era in `SOURCES.md` | P R I F |
-| B1 | The Lean compiler, the C compiler or the Lean runtime is wrong | `lake test` runs the NIST CAVP SHA-256 vectors through the compiled code | R |
+| B1 | The Lean compiler, the C compiler or the Lean runtime is wrong | `lake test` runs the NIST CAVP SHA-256 vectors and Core's compact-encoding and retarget test cases through the compiled code | R |
 | B2 | Lean core runs code other than its definitions | Lean core is a declared baseline | R |
 | B3 | Elaboration runs native code | None yet | P |
 | B4 | The oracle's IO adapter or a foreign boundary is wrong | None yet | R F |
@@ -49,7 +47,7 @@ Gap D asks whether the use of DogeLib holds together.
 | C3 | A declaration reached the environment unchecked | None | P I |
 | D1 | A client misuses an operation, such as a prefix decoder where complete consumption is required | Policy: each public operation documents its input domain and consumption contract | R I |
 | D2 | A dependency changes | Pins in `SOURCES.md` and `lean-toolchain`. The package has no Lake dependencies. | P R I |
-| D3 | The fixtures are wrong | Each fixture records its provenance. The NIST CAVP files are pinned by digest, and CI checks the pin. | F |
+| D3 | The fixtures are wrong | Each fixture records its provenance. The NIST CAVP files are pinned by digest, and CI checks the pin. Core's test cases are copied into `tests/KnownAnswers.lean` with their file and line. | F |
 
 ## What the proofs say
 
@@ -193,6 +191,55 @@ By `#print axioms` with Lean `v4.35.0`:
 
 Upstream proves two small facts in `decode_encode` and `encode_head` with `bv_decide`.
 Here `toUInt8_lt_fd` and `toUInt8_ne_zero` prove them: each converts the bytes to natural numbers and closes the goal with `omega` (C2).
+### Compact encoding and difficulty retarget
+
+The `Work` layer specifies Core's `SetCompact`, `GetCompact` and `CalculateDogecoinNextWorkRequired` (SOURCES.md, D6, D12, D13).
+
+For every 256-bit value `a`, `setCompact_getCompact_le` says that decoding the compact encoding of `a` gives at most `a`.
+`setCompact_getCompact_flags` says that the decoder reports no sign and no overflow for it.
+`getCompact_setCompact_getCompact` says that encoding the decoded value again gives the same compact.
+`setCompact_getCompact_of_lt` says that the round trip is exact for `a < 2^23`.
+`getCompact_assertions` says that the two `assert` statements of `GetCompact` hold for every value.
+
+`getCompact_setCompact_iff` says that a 32-bit compact survives decoding and encoding again exactly when `GetCompact` produces it.
+Core's tests contain compacts that do not survive, and three theorems record them, such as `0x04923456`, which encodes again as `0x04123456`.
+`setCompact_fOverflow` says that `SetCompact` sets its overflow flag exactly when the encoded number is at least 2^256.
+
+`modulatedTimespan_mem` says that the clamped timespan lies within the bounds of its regime, for every input.
+Four theorems state those bounds for DigiShield and for each height range before it, and two state them for the mainnet parameters.
+`retarget_decoded_le_powLimit` says that the new compact target decodes to at most `powLimit`, with neither flag set, for every input.
+The input includes old targets above `powLimit` and 256-bit products that wrap.
+
+The signed arithmetic is specified in `Int`, with `Int.tdiv` for the C++ division.
+`signedSteps_fit` says that no `int64_t` step overflows when both block times are in `[0, 2^32)` and the target timespan is below 2^61.
+`modulatedTimespan_eq_int64` says that Lean's `Int64` operations compute the same timespan on that domain.
+Outside it, a C++ signed overflow is undefined behavior, and the `Int` result is a choice of this specification.
+
+The 256-bit product at line 80 is reduced modulo 2^256, as Core reduces it.
+`retarget_eq_of_no_wrap` gives the exact result when the product does not wrap.
+`no_wrap_of_le_powLimit` and `mainnet_limit` say that it does not wrap for the mainnet parameters when the old target is at most `powLimit`.
+`retarget_wrap_example` shows a wrap for an old target of 2^255: a longer actual timespan gives a smaller target.
+No theorem shows that a valid chain never reaches such a target, because block-index walking and header validity are not specified.
+
+The axioms of the 45 theorems of the layer, by `#print axioms` with Lean `v4.35.0`:
+
+| Axioms | Theorems |
+| --- | --- |
+| None | `mainnet_limit`, `filteredTimespan_rounding` |
+| `propext` | `pow256`, `getCompact_setCompact_zero_mantissa`, `getCompact_setCompact_negative`, `setCompact_overflow_example`, `retargetTimespan_pos` |
+| `propext`, `Quot.sound` | `byteLength_bounds`, `byteLength_eq`, `byteLength_le`, `and_two_pow_ne_zero`, `sign_bit`, `tdiv_eq`, `timespanLimits_le` |
+| `propext`, `Classical.choice`, `Quot.sound` | every other theorem of the layer, including `modulatedTimespan_mem`, `retarget_decoded_le_powLimit`, `setCompact_getCompact_le`, `getCompact_setCompact_iff`, `setCompact_fOverflow`, `signedSteps_fit`, `retarget_eq_of_no_wrap` and `no_wrap_of_le_powLimit` |
+Some concrete examples use `decide +kernel`, which the kernel checks without compiled code.
+
+These parts are not proved and not specified:
+
+- Which parameters apply at which height, `Consensus::Params::GetConsensus`.
+- When a retarget happens and which first block it uses, `GetNextWorkRequired`, and its walk over `CBlockIndex`.
+- The minimum-difficulty rules of the test networks.
+- Header validity, including `CheckProofOfWork`, and AuxPoW.
+
+The relation between Core's word-by-word loops in `arith_uint256.cpp` and the arithmetic results that the definitions state is checked by review (A1).
+`lake test` runs the six `get_next_work_*` cases of `dogecoin_tests.cpp` and the 21 steps of `bignum_SetCompact` through the compiled code (B1).
 
 ### What cannot be proved yet
 

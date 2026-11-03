@@ -91,7 +91,7 @@ Report only the checks you ran, with the exact command, revision, and result ([C
 | Declaration check | `lake exe check-decls` | Yes | `ci` / `lean` |
 | Declaration check self-test | `bash scripts/test_check_decls.sh` | Yes | `ci` / `lean` |
 | Source and coverage review | Manual review of SOURCES.md and COVERAGE.md | Manual | No |
-| Conformance | `lake test`: known answers through the compiled code | Yes, for SHA-256, double SHA-256, the fixed-width integer codecs and CompactSize | `ci` / `lean` |
+| Conformance | `lake test`: known answers through the compiled code | Yes, for the operations that [COVERAGE.md](COVERAGE.md) gives a `lake test` comparison | `ci` / `lean` |
 | Pinned vectors | `sha256sum -c SHA256SUMS` in each vendored vector directory | Yes | `ci` / `tools` |
 | Refinement | `lake build --wfail`: the `LawfulPackedCodec` instances prove that the packed codecs agree with the codec specification | Yes, for the packed fixed-width codecs and the packed CompactSize codec | `ci` / `lean` |
 | Soundness review | Manual review of SOUNDNESS.md | Manual | No |

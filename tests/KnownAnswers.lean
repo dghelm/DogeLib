@@ -1,6 +1,7 @@
 import DogeLib.Cryptography.Hash.Sha256
 import DogeLib.Cryptography.Hash.Sha256d
 import DogeLib.Serialization
+import DogeLib.Work
 
 /-!
 # `KnownAnswers`
@@ -457,6 +458,165 @@ def check : IO Nat := do
 
 end KnownAnswers.CompactSize
 
+/-!
+## Difficulty retarget
+
+Runs every `get_next_work_*` case of Dogecoin Core's `src/test/dogecoin_tests.cpp` at commit `e0a1c15` (SOURCES.md, D7) through the compiled `calculateDogecoinNextWorkRequired`.
+Each case gives the last block's height, time and `nBits`, the first block time, the parameter set, and the expected `nBits`.
+The inputs and the expected values are copied from the test file, with the line of each value.
+
+## Compact encoding
+
+Runs Core's `bignum_SetCompact` test of `src/test/arith_uint256_tests.cpp` at the same commit (SOURCES.md, D16) through the compiled `setCompact` and `getCompact`.
+Each case gives the compact input, the value that `GetHex` shows, the expected `GetCompact` result and the two flags.
+-/
+
+namespace KnownAnswers.Work
+
+open DogeLib.Work
+
+/-- Eight lowercase hexadecimal digits of a 32-bit value. -/
+def hex32 (n : UInt32) : String :=
+  let digits := Nat.toDigits 16 n.toNat
+  "0x" ++ String.ofList (List.replicate (8 - digits.length) '0' ++ digits)
+
+/-- One `get_next_work_*` case of `dogecoin_tests.cpp`. -/
+structure RetargetCase where
+  /-- The name of the Boost test case. -/
+  name : String
+  /-- The line of the `BOOST_CHECK_EQUAL` that states the expected value. -/
+  line : Nat
+  /-- The parameters that `Params().GetConsensus(h)` returns in the test. -/
+  params : RetargetParams
+  /-- `pindexLast.nHeight + 1`, the height of the next block. -/
+  nHeight : Int32
+  /-- `pindexLast.nTime`. -/
+  nLastBlockTime : Int64
+  /-- `nLastRetargetTime`, the time of the first block. -/
+  nFirstBlockTime : Int64
+  /-- `pindexLast.nBits`. -/
+  nBits : UInt32
+  /-- The expected result. -/
+  expected : UInt32
+
+/-- The six `get_next_work_*` cases of `src/test/dogecoin_tests.cpp` at `e0a1c15`.
+`GetConsensus(0)` is `mainnetParams`, and `GetConsensus(145000)` is `mainnetDigishieldParams`. -/
+def retargetCases : Array RetargetCase := #[
+  -- Lines 123-135: GetConsensus(0), nLastRetargetTime 1386474927, nHeight 239.
+  { name := "get_next_work_difficulty_limit", line := 134, params := mainnetParams,
+    nHeight := 239 + 1, nLastBlockTime := 1386475638, nFirstBlockTime := 1386474927,
+    nBits := 0x1e0ffff0, expected := 0x1e00ffff },
+  -- Lines 137-149: GetConsensus(0), nLastRetargetTime 1386942008, nHeight 9599.
+  { name := "get_next_work_pre_digishield", line := 148, params := mainnetParams,
+    nHeight := 9599 + 1, nLastBlockTime := 1386954113, nFirstBlockTime := 1386942008,
+    nBits := 0x1c1a1206, expected := 0x1c15ea59 },
+  -- Lines 151-164: GetConsensus(145000), nLastRetargetTime 1395094427, nHeight 145000.
+  { name := "get_next_work_digishield", line := 163, params := mainnetDigishieldParams,
+    nHeight := 145000 + 1, nLastBlockTime := 1395094679, nFirstBlockTime := 1395094427,
+    nBits := 0x1b499dfd, expected := 0x1b671062 },
+  -- Lines 166-179: GetConsensus(145000), nLastRetargetTime 1395100835, nHeight 145107.
+  { name := "get_next_work_digishield_modulated_upper", line := 178, params := mainnetDigishieldParams,
+    nHeight := 145107 + 1, nLastBlockTime := 1395101360, nFirstBlockTime := 1395100835,
+    nBits := 0x1b3439cd, expected := 0x1b4e56b3 },
+  -- Lines 181-194: GetConsensus(145000), nLastRetargetTime 1395380517, nHeight 149423.
+  -- The first block time is after the last, so the actual timespan is negative.
+  { name := "get_next_work_digishield_modulated_lower", line := 193, params := mainnetDigishieldParams,
+    nHeight := 149423 + 1, nLastBlockTime := 1395380447, nFirstBlockTime := 1395380517,
+    nBits := 0x1b446f21, expected := 0x1b335358 },
+  -- Lines 196-210: GetConsensus(145000), nLastRetargetTime 1395094679, nHeight 145001.
+  { name := "get_next_work_digishield_rounding", line := 209, params := mainnetDigishieldParams,
+    nHeight := 145001 + 1, nLastBlockTime := 1395094727, nFirstBlockTime := 1395094679,
+    nBits := 0x1b671062, expected := 0x1b6558a4 }
+]
+
+/-- Runs every retarget case, and checks that there are six.
+Returns the number of failures. -/
+def checkRetarget : IO Nat := do
+  let mut failures := 0
+  if retargetCases.size != 6 then
+    IO.eprintln s!"FAIL dogecoin_tests.cpp: {retargetCases.size} retarget cases, expected 6"
+    failures := failures + 1
+  for c in retargetCases do
+    let got := calculateDogecoinNextWorkRequired c.params c.nHeight c.nLastBlockTime c.nFirstBlockTime c.nBits
+    if got != c.expected then
+      IO.eprintln s!"FAIL dogecoin_tests.cpp:{c.line} {c.name}: got {hex32 got}, expected {hex32 c.expected}"
+      failures := failures + 1
+  IO.println s!"dogecoin_tests.cpp get_next_work_*: {retargetCases.size} cases, {failures} failures"
+  return failures
+
+/-- One step of `bignum_SetCompact` in `arith_uint256_tests.cpp`. -/
+structure CompactCase where
+  /-- The line of the `SetCompact` call, or of the assignment for the case without one. -/
+  line : Nat
+  /-- The input: a compact for `SetCompact`, or `none` when the test assigns `value` directly. -/
+  nCompact : Option UInt32
+  /-- The value that `GetHex` shows, or `none` when the test does not check it. -/
+  value : Option Nat
+  /-- The argument that the test passes to `GetCompact`. -/
+  negativeArgument : Bool
+  /-- The expected `GetCompact` result, or `none` when the test does not check it. -/
+  compact : Option UInt32
+  /-- The expected `*pfNegative`, or `none` without a `SetCompact` call. -/
+  fNegative : Option Bool
+  /-- The expected `*pfOverflow`, or `none` without a `SetCompact` call. -/
+  fOverflow : Option Bool
+
+/-- Every step of `bignum_SetCompact`, lines 412-538 of `src/test/arith_uint256_tests.cpp` at `e0a1c15`. -/
+def compactCases : Array CompactCase := #[
+  ⟨417, some 0x00000000, some 0, false, some 0, some false, some false⟩,
+  ⟨423, some 0x00123456, some 0, false, some 0, some false, some false⟩,
+  ⟨429, some 0x01003456, some 0, false, some 0, some false, some false⟩,
+  ⟨435, some 0x02000056, some 0, false, some 0, some false, some false⟩,
+  ⟨441, some 0x03000000, some 0, false, some 0, some false, some false⟩,
+  ⟨447, some 0x04000000, some 0, false, some 0, some false, some false⟩,
+  ⟨453, some 0x00923456, some 0, false, some 0, some false, some false⟩,
+  ⟨459, some 0x01803456, some 0, false, some 0, some false, some false⟩,
+  ⟨465, some 0x02800056, some 0, false, some 0, some false, some false⟩,
+  ⟨471, some 0x03800000, some 0, false, some 0, some false, some false⟩,
+  ⟨477, some 0x04800000, some 0, false, some 0, some false, some false⟩,
+  ⟨483, some 0x01123456, some 0x12, false, some 0x01120000, some false, some false⟩,
+  -- Line 490 assigns `num = 0x80` with no `SetCompact` call.
+  ⟨490, none, some 0x80, false, some 0x02008000, none, none⟩,
+  ⟨493, some 0x01fedcba, some 0x7e, true, some 0x01fe0000, some true, some false⟩,
+  ⟨499, some 0x02123456, some 0x1234, false, some 0x02123400, some false, some false⟩,
+  ⟨505, some 0x03123456, some 0x123456, false, some 0x03123456, some false, some false⟩,
+  ⟨511, some 0x04123456, some 0x12345600, false, some 0x04123456, some false, some false⟩,
+  ⟨517, some 0x04923456, some 0x12345600, true, some 0x04923456, some true, some false⟩,
+  ⟨523, some 0x05009234, some 0x92340000, false, some 0x05009234, some false, some false⟩,
+  ⟨529, some 0x20123456,
+    some 0x1234560000000000000000000000000000000000000000000000000000000000, false,
+    some 0x20123456, some false, some false⟩,
+  ⟨535, some 0xff123456, none, false, none, some false, some true⟩
+]
+
+/-- Runs every compact case, and checks that there are twenty-one.
+Returns the number of failures. -/
+def checkCompact : IO Nat := do
+  let mut failures := 0
+  if compactCases.size != 21 then
+    IO.eprintln s!"FAIL arith_uint256_tests.cpp: {compactCases.size} compact cases, expected 21"
+    failures := failures + 1
+  for c in compactCases do
+    let (value, flags) := match c.nCompact with
+      | some n =>
+        let r := ArithUint256.setCompact n
+        (r.value, some (r.fNegative, r.fOverflow))
+      | none => (ArithUint256.ofNat (c.value.getD 0), none)
+    let mut ok := true
+    if let some v := c.value then
+      if value.val != v then ok := false
+    if let some e := c.compact then
+      if ArithUint256.getCompact value c.negativeArgument != e then ok := false
+    if let some (neg, ovf) := flags then
+      if c.fNegative != some neg || c.fOverflow != some ovf then ok := false
+    if !ok then
+      IO.eprintln s!"FAIL arith_uint256_tests.cpp:{c.line}: value {value.val}, flags {flags}"
+      failures := failures + 1
+  IO.println s!"arith_uint256_tests.cpp bignum_SetCompact: {compactCases.size} cases, {failures} failures"
+  return failures
+
+end KnownAnswers.Work
+
 /-- Entry point of `lake test`. -/
 def main : IO UInt32 := do
   let dir : System.FilePath := "tests/cryptography/sha256/cavp"
@@ -465,4 +625,6 @@ def main : IO UInt32 := do
   let genesis ← KnownAnswers.Genesis.check
   let codec ← KnownAnswers.Codec.check
   let compactSize ← KnownAnswers.CompactSize.check
-  return if short + long + genesis + codec + compactSize == 0 then 0 else 1
+  let compact ← KnownAnswers.Work.checkCompact
+  let retarget ← KnownAnswers.Work.checkRetarget
+  return if short + long + genesis + codec + compactSize + compact + retarget == 0 then 0 else 1

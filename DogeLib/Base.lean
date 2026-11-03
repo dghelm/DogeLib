@@ -1,6 +1,7 @@
 module
 
 public import DogeLib.Base.ByteSlice
+public import DogeLib.Base.Bytes
 
 /-!
 # `DogeLib.Base`

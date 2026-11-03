@@ -2,6 +2,7 @@ module
 
 public import DogeLib.Base.Proofs.ByteArray
 public import DogeLib.Base.Proofs.ByteSlice
+public import DogeLib.Base.Proofs.Bytes
 
 /-!
 # `DogeLib.Base.Proofs`

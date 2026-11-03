@@ -13,7 +13,7 @@ This roadmap is the living plan. The reasoning behind it is in [design record 00
 | 0b | Codec adaptation from btc-verified: CompactSize and counted lists | btc-verified's CompactSize and `CountedList` codecs and their packed forms are ported on top of the codec foundations, with `bv_decide` steps replaced and provenance recorded | CompactSize done in `feat/compactsize`. `CountedList` done in `feat/countedlist`, with Core's bounded vector reader. |
 | 1 | Source registry, shared types, contribution policy | Baseline and evidence conventions are explicit | Documents only |
 | 2 | Bounded CompactSize reader and proofs | Accepted-prefix relation, bounded round trip, Core comparisons | Reader, relation, soundness and completeness, bounded round trip, and known answers from Core's tests done in `feat/compactsize`. A comparison that runs Core and a packed reader (issue #12) are not started. |
-| 3 | Raw transaction types and base codecs | Exact field preservation, explicit parse mode, parser obligations | Not started |
+| 3 | Raw transaction types and base codecs | Exact field preservation, explicit parse mode, parser obligations | Fixed-length byte strings and `Hash256` done in `feat/fixed-bytes`. Transaction types not started. |
 | 4 | Legacy hash-plan specification | Declared lower-level modes and special cases are covered | Not started |
 | 5 | Streaming preimage implementation and proof | Exact plan equality on the recorded domain | Not started |
 | 6 | Rust refinement experiment | One extracted implementation matches an independent contract | Not started |

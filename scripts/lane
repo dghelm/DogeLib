@@ -1,0 +1,171 @@
+#!/usr/bin/env bash
+# Manage DogeLib work lanes: one purpose, one branch, one git worktree, one STATUS.md.
+# See AGENTS.md#lanes.
+set -euo pipefail
+
+TYPES='feat|fix|proof|perf|refactor|test|docs|build|ci|chore'
+MAIN_BRANCH=main
+
+die() { echo "lane: $*" >&2; exit 1; }
+
+usage() {
+  cat <<EOF
+usage: scripts/lane new <type>/<slug> [--base <ref>]
+       scripts/lane list
+       scripts/lane rm <lane-dir-name>
+
+types: ${TYPES//|/ }
+lanes dir: ../<repo>-worktrees, or \$DOGELIB_LANES_DIR (absolute)
+EOF
+}
+
+# The main worktree is the first entry git lists, whichever worktree runs this script.
+main_worktree() {
+  git worktree list --porcelain | awk 'NR == 1 && /^worktree / { sub(/^worktree /, ""); print; exit }'
+}
+
+lanes_dir() {
+  local main
+  if [ -n "${DOGELIB_LANES_DIR:-}" ]; then
+    [[ $DOGELIB_LANES_DIR == /* ]] || die "DOGELIB_LANES_DIR must be an absolute path"
+    echo "${DOGELIB_LANES_DIR%/}"
+    return
+  fi
+  main=$(main_worktree)
+  echo "$(dirname "$main")/$(basename "$main")-worktrees"
+}
+
+write_status() {
+  local path=$1 branch=$2 base=$3 base_sha=$4
+  cat >"$path/STATUS.md" <<EOF
+# Lane: $branch
+
+- State: active
+- Branch: \`$branch\`
+- Base: \`$base\` at \`$base_sha\`
+- Created: $(date -u +%Y-%m-%dT%H:%MZ)
+- Owner: <agent session or person>
+
+## Goal
+
+<One purpose. The claim, definition, or problem this lane addresses.>
+
+## Scope
+
+In:
+Out:
+
+## Progress
+
+## Running jobs
+
+<!-- PID | command | log (.lane/...) | started. Remove when the process ends. -->
+
+## Checks run
+
+<!-- command | revision | result. Unrun gates are listed as not run. -->
+
+## Deferred
+
+<!-- Set-aside work. Move each item to ROADMAP.md or an issue before the lane closes. -->
+
+## Handoff notes
+EOF
+}
+
+cmd_new() {
+  local branch="" base=$MAIN_BRANCH
+  while [ $# -gt 0 ]; do
+    case $1 in
+      --base) [ $# -ge 2 ] || die "--base needs a ref"; base=$2; shift 2 ;;
+      -*) die "unknown option: $1" ;;
+      *) [ -z "$branch" ] || die "one branch name only"; branch=$1; shift ;;
+    esac
+  done
+  [ -n "$branch" ] || { usage; exit 2; }
+  [[ $branch =~ ^($TYPES)/[a-z0-9][a-z0-9-]*$ ]] \
+    || die "branch must be <type>/<slug> with type in {${TYPES//|/,}} and a lowercase-hyphen slug"
+
+  git rev-parse --verify --quiet "$base^{commit}" >/dev/null \
+    || die "base '$base' does not resolve to a commit (does $MAIN_BRANCH have a first commit?)"
+  git show-ref --verify --quiet "refs/heads/$branch" && die "branch '$branch' already exists"
+
+  local dir path base_sha
+  dir=${branch//\//-}
+  path="$LANES/$dir"
+  [ -e "$path" ] && die "$path already exists"
+  base_sha=$(git rev-parse "$base^{commit}")
+
+  mkdir -p "$LANES"
+  git worktree add -b "$branch" "$path" "$base_sha" >/dev/null
+  mkdir -p "$path/.lane"
+  write_status "$path" "$branch" "$base" "$base_sha"
+
+  echo "created lane $dir"
+  echo "  path:   $path"
+  echo "  branch: $branch (from $base at ${base_sha:0:12})"
+  echo "next: cd $path, fill in STATUS.md, then work only there."
+}
+
+cmd_list() {
+  local main path branch state dirty ab
+  main=$(main_worktree)
+  printf '%-40s %-10s %-6s %-9s %s\n' LANE STATE DIRTY "+/-$MAIN_BRANCH" BRANCH
+  git worktree list --porcelain | awk '/^worktree /{p=substr($0,10)} /^branch /{print p "\t" substr($0,19)} /^detached/{print p "\t(detached)"}' |
+  # Lanes can lack STATUS.md, sit on a detached HEAD mid-rebase, or be missing on disk;
+  # report '?' for those instead of aborting.
+  while IFS=$'\t' read -r path branch; do
+    [ "$path" = "$main" ] && continue
+    state=$(sed -n 's/^- State: *//p' "$path/STATUS.md" 2>/dev/null | head -1) || state=""
+    dirty=$(git -C "$path" status --porcelain 2>/dev/null | wc -l | tr -d ' ') || dirty="?"
+    ab=$(git -C "$path" rev-list --left-right --count "HEAD...$MAIN_BRANCH" 2>/dev/null | awk '{print "+" $1 "/-" $2}') || ab=""
+    printf '%-40s %-10s %-6s %-9s %s\n' "$(basename "$path")" "${state:-?}" "$dirty" "${ab:-?}" "$branch"
+  done
+  if ! git -C "$main" diff --quiet HEAD 2>/dev/null || [ -n "$(git -C "$main" status --porcelain 2>/dev/null)" ]; then
+    echo "warning: the main checkout has uncommitted changes" >&2
+  fi
+}
+
+cmd_rm() {
+  [ $# -eq 1 ] || { usage; exit 2; }
+  local dir=$1 path branch archive
+  [[ $dir != */* && $dir != .* ]] || die "give the lane directory name, as shown by 'scripts/lane list'"
+  path="$LANES/$dir"
+  [ -d "$path" ] || die "no lane at $path"
+  # The caller may be standing in the lane being removed.
+  cd "$(main_worktree)"
+  branch=$(git -C "$path" symbolic-ref --quiet --short HEAD || true)
+  [ -z "$(git -C "$path" status --porcelain)" ] \
+    || die "$dir has uncommitted or untracked changes; commit, move, or discard them first"
+
+  archive="$LANES/.archive/$dir-$(date -u +%Y%m%dT%H%M%SZ)"
+  mkdir -p "$archive"
+  [ -f "$path/STATUS.md" ] && cp "$path/STATUS.md" "$archive/"
+  [ -d "$path/.lane" ] && cp -R "$path/.lane" "$archive/lane"
+  echo "archived lane files to $archive"
+
+  git worktree remove "$path"
+  echo "removed worktree $path"
+
+  if [ -n "$branch" ]; then
+    if git merge-base --is-ancestor "$branch" "$MAIN_BRANCH"; then
+      git branch -d "$branch" >/dev/null && echo "deleted merged branch $branch"
+    else
+      echo "kept branch $branch: it is not an ancestor of $MAIN_BRANCH."
+      echo "  if it was squash-merged or abandoned, delete it with: git branch -D $branch"
+    fi
+  fi
+}
+
+# Resolve once: a failure inside a command substitution would not stop the caller.
+case ${1:-} in
+  new|list|ls|rm|remove) LANES=$(lanes_dir) ;;
+esac
+
+case ${1:-} in
+  new) shift; cmd_new "$@" ;;
+  list|ls) shift; cmd_list "$@" ;;
+  rm|remove) shift; cmd_rm "$@" ;;
+  -h|--help|help|"") usage ;;
+  *) usage; exit 2 ;;
+esac

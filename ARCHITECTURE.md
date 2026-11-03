@@ -1,0 +1,84 @@
+# Architecture
+
+This document describes the intended structure of DogeLib.
+It follows EthLib's [`ARCHITECTURE.md`](https://github.com/ethereum/EthLib/blob/6a93711e7cc062e787fff6747e4101a141d38b7a/ARCHITECTURE.md).
+Where EthLib and btc-verified differ, DogeLib follows EthLib.
+No module or Lake library exists yet. The `build/toolchain-selection` lane creates the first ones.
+
+## Three kinds of content
+
+DogeLib holds three kinds of Lean code, and they answer different questions.
+
+A **specification** says what Dogecoin computes.
+It is executable, pure and total, and it follows its source by definition.
+Clients and other Lean projects import it, and the oracle runs it.
+
+A **property** says what a specification guarantees.
+Round trips of encodings, the rejection of malformed input, exact commitment bytes and agreement between two definitions are all properties.
+They are stated about the specification itself, the same definitions that the compiled code is built from. [SOUNDNESS.md](SOUNDNESS.md#gap-b-does-the-code-that-runs-match-the-definitions), Gap B, lists what a user trusts between those definitions and the running code.
+
+A **model** says why the protocol is secure, or how a network of nodes behaves.
+It is abstract where the specification is concrete: a hash becomes a random oracle, and a network becomes an adversary that schedules messages.
+A model connects to the specification by a refinement theorem, which says that the concrete definition is an instance of the abstract one.
+Without that theorem, the security proof is about a different object than the one clients run.
+DogeLib has no model yet. One is added when a concrete theorem needs it.
+
+Each kind depends only on the kinds before it.
+A specification never imports a property or a model, and a property never imports a model.
+
+A fourth kind of code relates another implementation to the specification:
+a refinement theorem about a packed codec, a streaming preimage constructor, or extracted Rust.
+The implementation never becomes the specification.
+
+## Lake libraries
+
+| Library | Contents | `precompileModules` |
+| --- | --- | --- |
+| `DogeLib` | The specification | On |
+| `Proofs` | Properties, rooted at each layer's `Proofs` tree | Off |
+| `Exports` | The oracle adapter and later binding-facing code | On |
+| `Refinement` | Extracted implementation models and their refinement proofs | Off |
+| `check-decls` | An executable that checks the axioms and substitutions of every compiled declaration | — |
+
+Each library uses the Lean module system (`requiresModuleSystem := true`), as EthLib does.
+Proofs live in their own library, so the specification builds and links without them.
+The oracle lives in `Exports`, so a Lean project that imports the specification gets no IO adapter.
+Heavy mathematical and probabilistic dependencies stay in `Proofs` and in model code.
+
+## Layout
+
+```text
+DogeLib/<Layer>/<Module>             the specification
+DogeLib/<Layer>/Proofs/<Module>      theorems about it
+DogeLib/<Layer>/Exports/             the oracle adapter for that layer
+Refinement/Rust/                     Rust sources, extraction configuration, refinement proofs
+tests/<layer>/                       fixtures with recorded provenance
+scripts/                             repository tools and checks
+```
+
+A new layer adds its proof root to the `Proofs` library and, if it has an adapter, its export root to `Exports`.
+
+## Layers
+
+Bottom-up. Each layer imports only the layers above it in this list.
+
+| Layer | Responsibility |
+| --- | --- |
+| `Base` | Bytes, fixed-width field meanings, endianness, hash representations |
+| `Serialization` | Codecs, prefix decoders, CompactSize, counted lists, packed representations |
+| `Cryptography` | SHA-256 and double SHA-256, and later secp256k1 and signature encodings |
+| `Transaction` | Raw transaction types, base serialization, transaction IDs, legacy signature hashing |
+
+Script, Ledger, Rules and Models layers are added when their work begins.
+
+## Adopted upstream code
+
+Adapted code follows this layout and the module system. It does not keep the layout of the project it came from.
+The btc-verified project keeps definitions, proofs and packed instances in one file, and its generic codec module imports Mathlib.
+An adaptation splits those into the specification and `Proofs` libraries.
+Each adapted file names its origin and commit in its module docstring and keeps any notice that the upstream terms require.
+
+## Status vocabulary
+
+A module never receives a single "verified" status.
+[COVERAGE.md](COVERAGE.md) records each kind of evidence separately for each operation. The kinds are an executable definition, theorems with their hypotheses, comparison evidence, and a proved implementation refinement.

@@ -1,0 +1,30 @@
+# Private working notes; promote content into committed documents instead.
+.docs/
+
+# Lane state, per worktree (see AGENTS.md#lanes).
+/STATUS.md
+/.lane/
+
+# Lake / Lean build output
+.lake/
+lake-packages/
+lakefile.olean
+build/
+
+# Rust (Refinement/Rust/)
+target/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Local agent-tool state
+.claude/codex-session-id
+.claude/settings.local.json

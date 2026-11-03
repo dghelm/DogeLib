@@ -95,11 +95,12 @@ The laws hold with no hypothesis for the codecs of `UInt8`, `UInt16`, `UInt32` a
 They also hold for the little-endian codec of `BitVec (8 * n)`, for every `n` (`lawfulCodec_bitVecCodecLE`).
 They hold for a pair of lawful codecs (`instLawfulCodecProd`).
 
-The laws also hold for the codec of byte strings of a fixed length `n`, for every `n` (`instLawfulCodecBytes`), and so for `Hash256`, which is `Bytes 32`.
-`decodeBytes_eq_none_iff` says that this decoder rejects exactly the inputs with fewer than `n` bytes.
 `LawfulCodec.ofEquiv` proves them for a codec carried along two functions, under the hypothesis that the functions are inverse to each other.
 Each fixed-width instance discharges that hypothesis by `rfl`.
 `encode_injective` follows from the round trip for every lawful codec.
+
+The laws also hold for the codec of byte strings of a fixed length `n`, for every `n` (`instLawfulCodecBytes`), and so for `Hash256`, which is `Bytes 32`.
+`decodeBytes_eq_none_iff` says that this decoder rejects exactly the inputs with fewer than `n` bytes.
 
 A decoder that satisfies these laws rejects every input that does not start with a canonical encoding.
 The laws do not say which values a Dogecoin rule accepts.

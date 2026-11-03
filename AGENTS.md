@@ -91,7 +91,7 @@ Report only the checks you ran, with the exact command, revision, and result ([C
 | Declaration check | `lake exe check-decls` | Yes | `ci` / `lean` |
 | Declaration check self-test | `bash scripts/test_check_decls.sh` | Yes | `ci` / `lean` |
 | Source and coverage review | Manual review of SOURCES.md and COVERAGE.md | Manual | No |
-| Conformance | `lake test`: known answers through the compiled code | Yes, for SHA-256 | `ci` / `lean` |
+| Conformance | `lake test`: known answers through the compiled code | Yes, for SHA-256 and double SHA-256 | `ci` / `lean` |
 | Pinned vectors | `sha256sum -c SHA256SUMS` in each vendored vector directory | Yes | `ci` / `tools` |
 | Refinement | — | No | No |
 | Soundness review | Manual review of SOUNDNESS.md | Manual | No |

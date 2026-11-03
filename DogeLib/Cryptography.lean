@@ -1,6 +1,7 @@
 module
 
 public import DogeLib.Cryptography.Hash.Sha256
+public import DogeLib.Cryptography.Hash.Sha256d
 
 /-!
 # `DogeLib.Cryptography`

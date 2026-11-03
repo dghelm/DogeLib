@@ -7,8 +7,8 @@ A proof links a Lean definition to a theorem. Both are assumed to match somethin
 Each of those links is an assumption, and this document names them one by one.
 It follows the structure of EthLib's [`SOUNDNESS.md`](https://github.com/ethereum/EthLib/blob/6a93711e7cc062e787fff6747e4101a141d38b7a/SOUNDNESS.md), which follows s2n-bignum's.
 
-DogeLib has one definition with a theorem: SHA-256, adapted from EthLib.
-No Dogecoin-specific definition exists yet.
+DogeLib has two definitions with theorems: SHA-256, adapted from EthLib, and double SHA-256.
+No definition of a Dogecoin data structure exists yet.
 Each section states the mitigations that exist today, and the policy for definitions that are not written yet.
 A lane that adds a definition, a theorem, an execution path or a dependency updates the affected rows in the same change.
 
@@ -68,6 +68,21 @@ A reader checks that by comparing the model with the standard (A1).
 The vectors come from NIST, not from the code under test, and `tests/cryptography/sha256/cavp/README.md` records their provenance.
 They test the compiled code only on those inputs.
 Both files are adapted from EthLib at commit `6a93711`.
+
+### Double SHA-256
+
+`Sha256d.hash` is `CHash256` of Dogecoin Core (SOURCES.md, D8): SHA-256 applied to the SHA-256 digest of the message.
+`size_hash` says that the digest has 32 bytes.
+`hash_eq_spec` says that `Sha256d.hash` equals the FIPS 180-4 model applied twice, on every message shorter than 2^61 bytes.
+The inner digest has 32 bytes, so the outer application needs no hypothesis of its own.
+`hash_eq_spec` depends on `propext`, `Classical.choice` and `Quot.sound`, and `size_hash` on `propext` and `Quot.sound`, by `#print axioms`.
+
+`lake test` checks the compiled `Sha256d.hash` against four values that Dogecoin Core asserts.
+They are the genesis merkle root and the genesis block hashes of the main, test and regression-test networks.
+The bytes to hash are derived by hand from `src/chainparams.cpp`, and the derivation is in `tests/KnownAnswers.lean`.
+
+Neither theorem says how Dogecoin orders the bytes of a hash for display, or which bytes it hashes.
+Those belong to the definitions of the objects that are hashed.
 
 ### What cannot be proved yet
 

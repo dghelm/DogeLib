@@ -38,6 +38,10 @@ Design records and module documentation cite these identifiers.
 | D5 | [Dogecoin bundled public-key parser: accepted point encodings](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/secp256k1/src/eckey_impl.h) |
 | D6 | [Dogecoin difficulty: `CalculateDogecoinNextWorkRequired`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/dogecoin.cpp) |
 | D7 | [Dogecoin difficulty tests: DigiShield rounding regression](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/test/dogecoin_tests.cpp) |
+| D8 | [Dogecoin hashing: `CHash256`, `CHashWriter`, `SerializeHash`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/hash.h) |
+| D9 | [Dogecoin chain parameters: genesis blocks and their asserted hashes](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/chainparams.cpp) |
+| D10 | [Dogecoin pure block header: fields, serialization order, `GetHash`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/primitives/pureheader.h) |
+| D11 | [Dogecoin 256-bit values: `GetHex` display order](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/uint256.cpp) |
 | E1 | [EthLib build definition](https://github.com/ethereum/EthLib/blob/6a93711e7cc062e787fff6747e4101a141d38b7a/lakefile.lean) |
 | E2 | [EthLib architecture](https://github.com/ethereum/EthLib/blob/6a93711e7cc062e787fff6747e4101a141d38b7a/ARCHITECTURE.md) |
 | E3 | [EthLib contribution policy](https://github.com/ethereum/EthLib/blob/6a93711e7cc062e787fff6747e4101a141d38b7a/CONTRIBUTING.md) |
@@ -53,7 +57,8 @@ One row per public operation. Add rows in sorted order by operation name.
 
 | Operation | DogeLib declaration | Source (ID, file, function) | Mode / context | Notes |
 | --- | --- | --- | --- | --- |
-| SHA-256 | `DogeLib.Cryptography.Hash.Sha256.hash` | FIPS 180-4 §6.2. Code adapted from EthLib `EthLib/Cryptography/Hash/Sha256.lean` at `6a93711` | Messages of whole bytes | Primitive, no Dogecoin context. Double SHA-256 is not defined yet. |
+| Double SHA-256 | `DogeLib.Cryptography.Hash.Sha256d.hash` | D8, `src/hash.h`, `CHash256::Finalize` | Messages of whole bytes | The digest is in SHA-256 output order. Display order (D11) is not defined here. |
+| SHA-256 | `DogeLib.Cryptography.Hash.Sha256.hash` | FIPS 180-4 §6.2. Code adapted from EthLib `EthLib/Cryptography/Hash/Sha256.lean` at `6a93711` | Messages of whole bytes | Primitive, no Dogecoin context. Primitive, no Dogecoin context. |
 
 ## Known differences
 

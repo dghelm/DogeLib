@@ -23,6 +23,8 @@ It is empty, and a new finding is fixed, never added to it.
 `lake test` runs known answers through the compiled code.
 The NIST CAVP vectors in `tests/cryptography/sha256/cavp/` test SHA-256, and their README gives their provenance.
 The other known answers, and their provenance, are in `tests/KnownAnswers.lean`.
+Dogecoin Core's own test cases test the compact target encoding and the difficulty retarget.
+`tests/KnownAnswers.lean` gives the file and line of each case.
 
 After a change to the check itself, run its self-test:
 

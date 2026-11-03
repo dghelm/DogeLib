@@ -6,10 +6,7 @@ It makes existing Dogecoin consensus behavior precise, and states proposed proto
 
 ## Status
 
-Two primitives exist: SHA-256 and double SHA-256.
-Theorems relate both to a model of FIPS 180-4, and known answers from NIST and Dogecoin Core test their compiled code.
-The codec foundations also exist: list codecs and packed codecs, with proofs of round trip, canonicality and agreement between the two forms.
-No definition of a Dogecoin data structure, Core comparison, or Rust extraction exists yet. [COVERAGE.md](COVERAGE.md) records what is implemented, per operation and per kind of evidence.
+The build skeleton and the first specifications exist. [COVERAGE.md](COVERAGE.md) records what is implemented, per operation and per kind of evidence. No comparison against a running Dogecoin Core and no Rust extraction exist yet.
 
 The first release target is:
 

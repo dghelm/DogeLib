@@ -18,7 +18,7 @@ This roadmap is the living plan. The reasoning behind it is in [design record 00
 | 5 | Streaming preimage implementation and proof | Exact plan equality on the recorded domain | Not started |
 | 6 | Rust refinement experiment | One extracted implementation matches an independent contract | Not started |
 
-The steps are units of review, not one pull request each. Step 6 can start after step 2. A DigiShield arithmetic module is a reasonable parallel lane that must not delay the transaction path (design record 0001, section 10).
+The steps are units of review, not one pull request each. Step 6 can start after step 2. The DigiShield retarget arithmetic is a parallel lane that must not delay the transaction path (design record 0001, section 10). The `Work` layer specifies it as an isolated function, with Core's `get_next_work_*` cases as known answers. Parameter selection by height, `GetNextWorkRequired` and header validity are not specified.
 
 Steps 0 and 0b follow design record 0002: the first contributions adopt audited codec foundations and then define Dogecoin's bounded decoding contract. They replace the original plan to build fixed-width encodings and CompactSize from scratch. Design record 0002 preferred a pinned btc-verified dependency first. The decisions below choose an adaptation instead, because btc-verified's toolchain, file structure and trust policy all differ from EthLib's.
 

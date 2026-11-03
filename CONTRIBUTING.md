@@ -403,7 +403,7 @@ Material under one of these licences can ship without a further check:
 | Apache 2.0 | btc-verified |
 
 Each can accompany MIT-licensed material, provided DogeLib meets every condition of its licence.
-For Apache 2.0, those conditions include a copy of the licence, a statement in each modified file that it was changed, and any upstream `NOTICE` attributions.
+For Apache 2.0, they include a copy of the licence, a change statement in each modified file, and any upstream `NOTICE` attributions.
 The material keeps its own licence. It does not become MIT-licensed.
 Material under any other licence, or with no licence, needs a maintainer's decision first.
 If its licence is not compatible, the maintainer can direct a clean-room reimplementation, and decides its process separately.

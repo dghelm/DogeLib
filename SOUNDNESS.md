@@ -221,8 +221,14 @@ The 256-bit product at line 80 is reduced modulo 2^256, as Core reduces it.
 `retarget_wrap_example` shows a wrap for an old target of 2^255: a longer actual timespan gives a smaller target.
 No theorem shows that a valid chain never reaches such a target, because block-index walking and header validity are not specified.
 
-Each theorem named in this subsection depends on `propext`, `Classical.choice` and `Quot.sound`, or on fewer, by `#print axioms` with Lean `v4.35.0`.
-`filteredTimespan_rounding` depends on no axiom.
+The axioms of the 45 theorems of the layer, by `#print axioms` with Lean `v4.35.0`:
+
+| Axioms | Theorems |
+| --- | --- |
+| None | `mainnet_limit`, `filteredTimespan_rounding` |
+| `propext` | `pow256`, `getCompact_setCompact_zero_mantissa`, `getCompact_setCompact_negative`, `setCompact_overflow_example`, `retargetTimespan_pos` |
+| `propext`, `Quot.sound` | `byteLength_bounds`, `byteLength_eq`, `byteLength_le`, `and_two_pow_ne_zero`, `sign_bit`, `tdiv_eq`, `timespanLimits_le` |
+| `propext`, `Classical.choice`, `Quot.sound` | every other theorem of the layer, including `modulatedTimespan_mem`, `retarget_decoded_le_powLimit`, `setCompact_getCompact_le`, `getCompact_setCompact_iff`, `setCompact_fOverflow`, `signedSteps_fit`, `retarget_eq_of_no_wrap` and `no_wrap_of_le_powLimit` |
 Some concrete examples use `decide +kernel`, which the kernel checks without compiled code.
 
 These parts are not proved and not specified:

@@ -78,17 +78,12 @@ If the Rust refinement is not in the first release, the release says so and make
 
 | Decision | Options under consideration | Owner lane |
 | --- | --- | --- |
-| Core compatibility pin | Adopt `v1.14.9` / `e0a1c15` or choose another | Maintainers |
+| Core compatibility pin | Adopt `v1.14.9` / `e0a1c15` or choose another | Maintainers, issue #5 |
 | Oracle record format | Not yet proposed | Milestone B |
 | First signature-proof domain | Fully parsed script code is the candidate | Milestone C |
-| Project license and contributor terms | Not yet chosen. EthLib uses CC0 1.0. Must preserve upstream terms. | Maintainers |
-| Issue tracker | Until a remote exists, track deferrals in the table below | Maintainers |
+| Project license and contributor terms | Not yet chosen. EthLib uses CC0 1.0. Must preserve upstream terms. | Maintainers, issue #4 |
 
 ## Deferred work
 
-Record work that a lane sets aside, until an issue tracker exists. Each entry names the lane that deferred it and enough context to act on it cold.
-
-| Item | Deferred by | Context |
-| --- | --- | --- |
-| SHA-256 known answers through the compiled code | `build/toolchain-selection` | `hash_eq_spec` covers the definitions, not the compiled code (SOUNDNESS.md, B1). Add FIPS 180-4 or NIST CAVP vectors with recorded provenance, run by a test target. |
-| Mathlib dependency | `build/toolchain-selection` | Not needed yet. Add it to the `Proofs` library with step 0b, if the adapted codec proofs need it. |
+Deferred work is tracked as GitHub issues with the `deferred` label.
+Decisions that only a maintainer can make carry the `needs-maintainer` label.

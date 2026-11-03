@@ -366,7 +366,7 @@ A new module or a subtle proof deserves one concrete example, with real bytes tr
 ### Deferred work
 
 A deferral is complete only when it is tracked.
-Record set-aside work in [ROADMAP.md](ROADMAP.md#deferred-work), or as an issue once the tracker exists.
+Record set-aside work as a GitHub issue with the `deferred` label, with enough context to act on it cold.
 Reference it where the work was deferred.
 
 ## AI contributors

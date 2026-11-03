@@ -28,7 +28,7 @@ Use the commit pinned in [SOURCES.md](SOURCES.md) before you cite or copy from a
 
 ## Current state
 
-The build skeleton exists: Lean `v4.35.0`, the `DogeLib` and `Proofs` libraries, and `lake exe check-decls`. The only specification is SHA-256, adapted from EthLib. [BUILDING.md](BUILDING.md) gives the commands, and [ROADMAP.md](ROADMAP.md) gives the next steps.
+The build skeleton exists: Lean `v4.35.0`, the `DogeLib` and `Proofs` libraries, and `lake exe check-decls`. [COVERAGE.md](COVERAGE.md) lists the operations that exist, [BUILDING.md](BUILDING.md) gives the commands, and [ROADMAP.md](ROADMAP.md) gives the next steps.
 
 ## Work as a specialist
 

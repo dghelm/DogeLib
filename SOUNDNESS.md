@@ -99,7 +99,7 @@ Three things guard against that, once they exist.
 Each definition is named and shaped after its source in `SOURCES.md`, so that a reader can compare them line by line.
 Fixtures come from pinned Core tests, primary specifications or documented historical data, never from the implementation under test.
 Core comparisons run the compiled oracle against the pinned Core revision.
-The source registry exists. The only fixtures are the NIST CAVP SHA-256 vectors, which test a primitive, not a Dogecoin rule. No Core comparison exists yet.
+The source registry exists. The fixtures are listed per operation in the *Comparison* column of [COVERAGE.md](COVERAGE.md), and each records its provenance. No Core comparison exists yet.
 
 A Dogecoin rule can differ from the Bitcoin rule it descends from.
 A definition or proof adopted from btc-verified is evidence to investigate, not a compatibility proof for Dogecoin.

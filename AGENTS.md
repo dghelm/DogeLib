@@ -172,8 +172,7 @@ An agent never merges these, even with authorization to merge.
 It opens the pull request, labels it `needs-maintainer`, and continues with other work:
 
 - The project licence and contributor terms.
-- Material from another project, under any licence, including public-domain data ([CONTRIBUTING.md](CONTRIBUTING.md#material-from-other-projects)).
-  A maintainer checks that the licence allows DogeLib to ship it.
+- Material from another project under a licence that is not in the table of [CONTRIBUTING.md](CONTRIBUTING.md#material-from-other-projects), or with no licence.
 - A change to a pin in [SOURCES.md](SOURCES.md), including the Dogecoin Core compatibility target.
 - An exception to the trust policy in [SOUNDNESS.md](SOUNDNESS.md).
 - A change to an agreed theorem statement, public contract or fixture format.

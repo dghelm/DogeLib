@@ -32,4 +32,5 @@ That sentence describes the goal, not the current state.
 
 ## License
 
-Not yet selected. See [ROADMAP.md](ROADMAP.md#open-decisions).
+DogeLib's own material is intended to be MIT-licensed, and the licence is recorded before the repository becomes public.
+Material from other projects keeps its own licence, as each adapted file and [CONTRIBUTING.md](CONTRIBUTING.md#material-from-other-projects) state.

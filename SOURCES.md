@@ -42,6 +42,8 @@ Design records and module documentation cite these identifiers.
 | D9 | [Dogecoin chain parameters: genesis blocks and their asserted hashes](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/chainparams.cpp) |
 | D10 | [Dogecoin pure block header: fields, serialization order, `GetHash`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/primitives/pureheader.h) |
 | D11 | [Dogecoin 256-bit values: `GetHex` display order](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/uint256.cpp) |
+| D20 | [Dogecoin serialization tests: `compactsize` and `noncanonical`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/test/serialize_tests.cpp) |
+| D21 | [Dogecoin streams: `CDataStream::read` and its "end of data" failure](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/streams.h) |
 | E1 | [EthLib build definition](https://github.com/ethereum/EthLib/blob/6a93711e7cc062e787fff6747e4101a141d38b7a/lakefile.lean) |
 | E2 | [EthLib architecture](https://github.com/ethereum/EthLib/blob/6a93711e7cc062e787fff6747e4101a141d38b7a/ARCHITECTURE.md) |
 | E3 | [EthLib contribution policy](https://github.com/ethereum/EthLib/blob/6a93711e7cc062e787fff6747e4101a141d38b7a/CONTRIBUTING.md) |
@@ -55,6 +57,7 @@ Design records and module documentation cite these identifiers.
 | B5 | [btc-verified `ByteArray.toList` lemmas](https://github.com/ProofOfKeags/btc-verified/blob/ecf4f0d2c5ab4df84f2595ca60ba2e1fd62d1bce/BtcVerified/Ext/ByteArray.lean) |
 | B6 | [btc-verified width casts](https://github.com/ProofOfKeags/btc-verified/blob/ecf4f0d2c5ab4df84f2595ca60ba2e1fd62d1bce/BtcVerified/Serialize/WidthCast.lean) |
 | B7 | [btc-verified licence, Apache 2.0](https://github.com/ProofOfKeags/btc-verified/blob/ecf4f0d2c5ab4df84f2595ca60ba2e1fd62d1bce/LICENSE) |
+| B8 | [btc-verified CompactSize codec and its packed form](https://github.com/ProofOfKeags/btc-verified/blob/ecf4f0d2c5ab4df84f2595ca60ba2e1fd62d1bce/BtcVerified/Serialize/CompactSize.lean) |
 | R1 | [Aeneas documentation](https://github.com/AeneasVerif/aeneas) (for discovery only: pin a revision before use) |
 
 ## Operation-to-source mapping
@@ -65,9 +68,12 @@ One row per public operation. Add rows in sorted order by operation name.
 | --- | --- | --- | --- | --- |
 | Byte slice reads | `ByteSlice.toList`, `ByteSlice.take`, `ByteSlice.drop`, `ByteSlice.uncons` | B4, `BtcVerified/Ext/ByteSlice.lean`, the same four functions | No Dogecoin context | Over core's `Std.Data.ByteSlice`. Lemmas in `DogeLib.Base.Proofs.ByteSlice`, and `ByteArray.toList` lemmas from B5. |
 | Codec composition | `DogeLib.Serialization.instCodecProd`, `DogeLib.Serialization.Codec.ofEquiv` | B2, `BtcVerified/Serialize/Codec.lean`, `instCodecProd` and `Codec.ofEquiv` | No Dogecoin context | Laws in `DogeLib.Serialization.Proofs.Codec`. `Codec.ofEquiv` takes two functions instead of a Mathlib `Equiv`. |
+| CompactSize, Core's bounded reader | `DogeLib.Serialization.CompactSize.decodeBounded`, `maxSize`, `ReadError`, `readCanonical`, `readPayload` | D1, `src/serialize.h`, `ReadCompactSize` (lines 244 to 274) and `MAX_SIZE` (line 26). D21, `src/streams.h`, `CDataStream::read` (lines 342 to 352), for truncation | All modes. A prefix reader: it returns the remainder. | Checks in Core's order: truncation, canonical form, then `MAX_SIZE`. Known answers from D20. The relation `ValidCompactSizePrefix` and the theorems are in `DogeLib.Serialization.Proofs.CompactSize`. |
+| CompactSize, generic canonical codec | `DogeLib.Serialization.CompactSize.encode`, `CompactSize.decode`, `CompactSize.codec` | B8, `BtcVerified/Serialize/CompactSize.lean`, `encode`, `decode` and `compactSizeCodec`. D1, `WriteCompactSize` (lines 219 to 242) | All modes | `encode` writes the same bytes as `WriteCompactSize` for every `UInt64`, by reading. `decode` accepts every canonical `UInt64`, so it is not Core's reader. Laws in `DogeLib.Serialization.Proofs.CompactSize`. |
 | Double SHA-256 | `DogeLib.Cryptography.Hash.Sha256d.hash` | D8, `src/hash.h`, `CHash256::Finalize` | Messages of whole bytes | The digest is in SHA-256 output order. Display order (D11) is not defined here. |
 | Fixed-width little-endian integers | `DogeLib.Serialization.instCodecUInt8` to `instCodecUInt64`, `bitVecCodecLE` | B2, `BtcVerified/Serialize/Codec.lean`, `instCodecUInt8` to `instCodecUInt64`, `bitVecCodecLE`. D1, `ser_writedata8` to `ser_writedata64` and `ser_readdata8` to `ser_readdata64` | All modes | Core writes these integers with `htole16`, `htole32` and `htole64`, and reads them with `le16toh`, `le32toh` and `le64toh`. The little-endian byte order follows D1 by reading. `lake test` checks it on genesis fields from D9. No Core comparison exists yet. |
 | Packed codec composition | `DogeLib.Serialization.instPackedCodecProd`, `DogeLib.Serialization.PackedCodec.ofEquiv` | B3, `BtcVerified/Packed/Codec.lean`, `instPackedCodecProd` and `PackedCodec.ofEquiv` | No Dogecoin context | Agreement laws in `DogeLib.Serialization.Proofs.PackedCodec` |
+| Packed CompactSize codec | `DogeLib.Serialization.CompactSize.encodeInto`, `CompactSize.decodeSlice`, `CompactSize.packedCodec` | B8, `BtcVerified/Serialize/CompactSize.lean`, packed section, `pushCompactSize` and `readCompactSize` | All modes | Renamed, because Core's `ReadCompactSize` is the bounded reader. Agreement laws in `DogeLib.Serialization.Proofs.CompactSize`. |
 | Packed fixed-width little-endian integers | `DogeLib.Serialization.instPackedCodecUInt8` to `instPackedCodecUInt64`, `packedBitVecLE` | B3, `BtcVerified/Packed/Codec.lean`, `instPackedCodecUInt8` to `instPackedCodecUInt64`, `packedBitVecLE` | All modes | Agreement laws in `DogeLib.Serialization.Proofs.PackedCodec` |
 | SHA-256 | `DogeLib.Cryptography.Hash.Sha256.hash` | FIPS 180-4 §6.2. Code adapted from EthLib `EthLib/Cryptography/Hash/Sha256.lean` at `6a93711` | Messages of whole bytes | Primitive, no Dogecoin context. Primitive, no Dogecoin context. |
 
@@ -77,7 +83,7 @@ Differences between DogeLib's targets and related upstream definitions. DogeLib 
 
 | Subject | Difference | Handling |
 | --- | --- | --- |
-| CompactSize decoding | btc-verified accepts every canonical `UInt64`. Core `v1.14.9` also rejects values above `MAX_SIZE = 0x02000000`. Input `fe 01 00 00 02` separates them. | Separate bounded reader. See ROADMAP.md, milestone A. |
+| CompactSize decoding | btc-verified accepts every canonical `UInt64`. Core `v1.14.9` also rejects values above `MAX_SIZE = 0x02000000`. Input `fe 01 00 00 02` separates them. | Separate bounded reader `CompactSize.decodeBounded`, next to the generic `CompactSize.decode`. `decodeBounded_eq_ok_iff_decode` states the difference, and `decode_maxSize_succ` and `decodeBounded_maxSize_succ` the input. |
 | Public-key encodings | EthLib accepts compressed and uncompressed keys. Dogecoin's bundled parser also handles hybrid encodings under applicable checks. | Review acceptance wrappers independently (D5, E6) |
 | Transaction dispatch | btc-verified's top-level `Tx` models Bitcoin's witness-aware dispatch. DogeLib's first parser is base/no-witness. | Reuse from `TxBody` components, not `Tx` |
 

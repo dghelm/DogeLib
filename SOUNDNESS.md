@@ -7,7 +7,8 @@ A proof links a Lean definition to a theorem. Both are assumed to match somethin
 Each of those links is an assumption, and this document names them one by one.
 It follows the structure of EthLib's [`SOUNDNESS.md`](https://github.com/ethereum/EthLib/blob/6a93711e7cc062e787fff6747e4101a141d38b7a/SOUNDNESS.md), which follows s2n-bignum's.
 
-DogeLib has three groups of definitions with theorems: SHA-256, adapted from EthLib, double SHA-256, and the codec foundations, adapted from btc-verified.
+DogeLib has four groups of definitions with theorems: SHA-256, double SHA-256, the codec foundations, and CompactSize.
+SHA-256 is adapted from EthLib. The codec foundations and the generic CompactSize codec are adapted from btc-verified.
 No definition of a Dogecoin data structure exists yet.
 Each section states the mitigations that exist today, and the policy for definitions that are not written yet.
 A lane that adds a definition, a theorem, an execution path or a dependency updates the affected rows in the same change.
@@ -32,7 +33,7 @@ Gap D asks whether the use of DogeLib holds together.
 
 | ID | Risk | Mitigation in place | Applies to |
 |----|------|---------------------|------------|
-| A1 | A definition does not match the pinned Dogecoin behavior | Source mapping in `SOURCES.md`, by review only. SHA-256 has a proof against a FIPS 180-4 model, and NIST CAVP known answers. Known answers from Core's genesis data test the integer codecs. No Core comparisons yet. | P R I F |
+| A1 | A definition does not match the pinned Dogecoin behavior | Source mapping in `SOURCES.md`, by review only. SHA-256 has a proof against a FIPS 180-4 model, and NIST CAVP known answers. Known answers from Core's genesis data test the integer codecs. Known answers from Core's CompactSize tests test the CompactSize codec and reader. No Core comparisons yet. | P R I F |
 | A2 | A theorem holds only under a hypothesis | Policy: each conditional theorem lists its hypotheses here and in `COVERAGE.md` | P I |
 | A3 | Timing reveals secret data | None: no constant-time claim | R I |
 | A4 | A security theorem idealises a primitive | None: no security theorem yet | P |
@@ -101,7 +102,7 @@ Each fixed-width instance discharges that hypothesis by `rfl`.
 
 A decoder that satisfies these laws rejects every input that does not start with a canonical encoding.
 The laws do not say which values a Dogecoin rule accepts.
-For example, a bounded CompactSize reader rejects some canonical encodings, so it needs its own contract (ROADMAP.md, milestone A).
+For example, Core's CompactSize reader rejects some canonical encodings, so `CompactSize.decodeBounded` is not a codec and has its own contract (see *CompactSize*).
 A decoder returns a remainder, and a client that needs the whole input consumed checks that the remainder is empty (D1).
 
 The byte order of the integer codecs follows Core's `ser_writedata16` to `ser_writedata64` and `ser_readdata16` to `ser_readdata64`, by a reading of the source code (A1).
@@ -141,6 +142,57 @@ By `#print axioms` with Lean `v4.35.0`:
 | `instLawfulPackedCodecUInt8` to `instLawfulPackedCodecUInt64`, `abstractParse_readBitVecLE`, `LawfulPackedCodec.abstractParse_decode`, `LawfulPackedCodec.abstractParse_decode_toByteArray`, `ByteSlice.toList_of_uncons_some`, `ByteSlice.toList_drop` | `propext`, `Classical.choice`, `Quot.sound` |
 
 The source files are adapted from btc-verified at commit `ecf4f0d`. None of them uses `bv_decide` (C2).
+
+### CompactSize
+
+`DogeLib.Serialization.CompactSize` defines two decoders of the CompactSize format.
+`decode` is the generic canonical decoder, and `decodeBounded` is Core's `ReadCompactSize` (SOURCES.md, D1).
+The theorems are in `DogeLib.Serialization.Proofs.CompactSize`.
+
+The generic codec `CompactSize.codec` satisfies both codec laws on every `UInt64` (`lawfulCodec`, from `decode_encode` and `decode_canonical`).
+The packed codec `CompactSize.packedCodec` agrees with it on every value and every slice (`lawfulPackedCodec`).
+`encode_length_le` says that an encoding has at most 9 bytes.
+`encode_head` says that an encoding starts with a byte that is `0x00` only for the value 0.
+
+Two relations state the accepted bytes without reference to a decoder.
+`CanonicalCompactSizePrefix bytes value rest` lists the four forms.
+For each form it gives the marker, the number of payload bytes, the little-endian value of the payload, and the smallest value.
+`rest` is the bytes after the encoding.
+`ValidCompactSizePrefix` adds `value ≤ 0x02000000`.
+Each of these theorems holds for all bytes, values and remainders:
+
+- `decode_eq_some_iff`: `decode bytes = some (value, rest)` exactly when `CanonicalCompactSizePrefix bytes value rest`.
+- `decodeBounded_eq_ok_iff_valid`: `decodeBounded bytes = ok (value, rest)` exactly when `ValidCompactSizePrefix bytes value rest`.
+- `decodeBounded_eq_ok_iff_decode`: `decodeBounded bytes = ok (value, rest)` exactly when `decode bytes = some (value, rest)` and `value ≤ 0x02000000`.
+- `decodeBounded_eq_error_tooLarge_iff`: `decodeBounded bytes` is the error `tooLarge` exactly when `decode` accepts `bytes` with a value above `0x02000000`.
+- `decodeBounded_encode`: for every `n ≤ 0x02000000` and all bytes `rest`, `decodeBounded (encode n ++ rest) = ok (n, rest)`.
+
+The bound of the round trip is necessary.
+`decodeBounded_encode_maxSize_succ` says that `decodeBounded (encode 0x02000001)` is `tooLarge`, and `decode_maxSize_succ` that `decode` accepts the same bytes, `fe 01 00 00 02`.
+
+No theorem says which inputs give the errors `truncated` and `nonCanonical`.
+The known answers check these errors on Core's `noncanonical` cases and on truncated inputs.
+The order of Core's checks comes from a reading of `ReadCompactSize` (A1).
+The relations are a second statement of the format, written from the same reading of D1, so a misreading of Core can be in both.
+The known answers guard against that on the inputs they cover.
+
+`lake test` runs Core's `compactsize` sweep of the powers of two up to `MAX_SIZE` and the cases of its `noncanonical` test (D20) through the compiled code.
+The expected results are Core's assertions, or derived from D1 and from `CDataStream::read` (D21).
+Core itself does not run, so this is not a Core comparison.
+
+The packed codec runs core's `ByteArray.push` and `ByteArray.get`, as the other packed codecs do (B2).
+
+By `#print axioms` with Lean `v4.35.0`:
+
+| Theorem | Axioms |
+| --- | --- |
+| `maxSize_toNat` | None |
+| `encode_maxSize_succ`, `encodeFixedWidth_length` | `propext` |
+| `lawfulCodec`, `decode_encode`, `decode_canonical`, `encode_length_le`, `encode_head`, `toUInt8_lt_fd`, `toUInt8_ne_zero`, `toList_encodeInto`, `readCanonical_toOption`, `decodeBounded_eq_error_tooLarge_iff`, `decode_maxSize_succ`, `decodeBounded_maxSize_succ`, `decodeBounded_encode_maxSize_succ` | `propext`, `Quot.sound` |
+| `lawfulPackedCodec`, `abstractParse_decodeSlice`, `decode_eq_some_iff`, `decodeBounded_eq_ok_iff_decode`, `decodeBounded_eq_ok_iff_valid`, `decodeBounded_encode` | `propext`, `Classical.choice`, `Quot.sound` |
+
+Upstream proves two small facts in `decode_encode` and `encode_head` with `bv_decide`.
+Here `toUInt8_lt_fd` and `toUInt8_ne_zero` prove them: each converts the bytes to natural numbers and closes the goal with `omega` (C2).
 
 ### What cannot be proved yet
 
@@ -264,6 +316,7 @@ It also trusts every `@[implemented_by]` and `@[extern]` that the compiled code 
 CONTRIBUTING.md does not allow these tactics (*Proofs*).
 btc-verified allows the axioms that `bv_decide` records, and its `CompactSize.decode_encode` and `encode_head` use `bv_decide`.
 A proof adopted from btc-verified has those steps replaced by proofs the kernel checks alone (design record 0002, section 5).
+In `DogeLib.Serialization.Proofs.CompactSize`, `toUInt8_lt_fd` and `toUInt8_ne_zero` replace them.
 
 No theorem in the `DogeLib` and `Proofs` libraries uses them, by `lake exe check-decls`.
 The fixtures in `scripts/CheckDeclsTest` use them on purpose.

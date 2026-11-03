@@ -91,9 +91,9 @@ Report only the checks you ran, with the exact command, revision, and result ([C
 | Declaration check | `lake exe check-decls` | Yes | `ci` / `lean` |
 | Declaration check self-test | `bash scripts/test_check_decls.sh` | Yes | `ci` / `lean` |
 | Source and coverage review | Manual review of SOURCES.md and COVERAGE.md | Manual | No |
-| Conformance | `lake test`: known answers through the compiled code | Yes, for SHA-256, double SHA-256 and the fixed-width integer codecs | `ci` / `lean` |
+| Conformance | `lake test`: known answers through the compiled code | Yes, for SHA-256, double SHA-256, the fixed-width integer codecs and CompactSize | `ci` / `lean` |
 | Pinned vectors | `sha256sum -c SHA256SUMS` in each vendored vector directory | Yes | `ci` / `tools` |
-| Refinement | `lake build --wfail`: the `LawfulPackedCodec` instances prove that the packed codecs agree with the codec specification | Yes, for the packed fixed-width codecs | `ci` / `lean` |
+| Refinement | `lake build --wfail`: the `LawfulPackedCodec` instances prove that the packed codecs agree with the codec specification | Yes, for the packed fixed-width codecs and the packed CompactSize codec | `ci` / `lean` |
 | Soundness review | Manual review of SOUNDNESS.md | Manual | No |
 | Writing | `uv run --no-project --python 3.12 python scripts/check_writing.py --base main` | Yes. Its findings are advice and never fail the check. | `writing`, as annotations |
 | Writing checker tests | `uv run --no-project --python 3.12 python -m unittest scripts/test_check_writing.py` | Yes | `writing` |

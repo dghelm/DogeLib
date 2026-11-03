@@ -93,7 +93,7 @@ Report only the checks you ran, with the exact command, revision, and result ([C
 | Source and coverage review | Manual review of SOURCES.md and COVERAGE.md | Manual | No |
 | Conformance | `lake test`: known answers through the compiled code | Yes, for SHA-256, double SHA-256 and the fixed-width integer codecs | `ci` / `lean` |
 | Pinned vectors | `sha256sum -c SHA256SUMS` in each vendored vector directory | Yes | `ci` / `tools` |
-| Refinement | — | No | No |
+| Refinement | `lake build --wfail`: the `LawfulPackedCodec` instances prove that the packed codecs agree with the codec specification | Yes, for the packed fixed-width codecs | `ci` / `lean` |
 | Soundness review | Manual review of SOUNDNESS.md | Manual | No |
 | Writing | `uv run --no-project --python 3.12 python scripts/check_writing.py --base main` | Yes. Its findings are advice and never fail the check. | `writing`, as annotations |
 | Writing checker tests | `uv run --no-project --python 3.12 python -m unittest scripts/test_check_writing.py` | Yes | `writing` |

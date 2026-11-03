@@ -125,7 +125,10 @@ It holds for a pair of agreeing packed codecs (`instLawfulPackedCodecProd`), and
 `LawfulPackedCodec.toList_encode` and `LawfulPackedCodec.abstractParse_decode` give the same agreement for a whole byte array.
 
 The agreement theorems are about the Lean definitions of the packed codecs.
-The compiled code runs core's `@[extern]` implementations of `ByteArray.push`, `ByteArray.get` and `ByteArray.copySlice`, and no theorem covers them (B1, B2).
+The compiled packed codecs run core's `@[extern]` implementations of `ByteArray.push` and `ByteArray.get`, and advance slices without copying.
+`ByteSlice.toList`, the abstraction function of the agreement laws, copies the bytes in view through `ByteArray.extract`, which runs `ByteArray.copySlice`.
+The tests call `toList` to compare results, so they run that copy too.
+No theorem covers these implementations (B1, B2).
 
 ### Axioms of the codec theorems
 
@@ -211,7 +214,8 @@ Known answers and Core comparisons through the compiled code test it end to end,
 Lean core implements some `Array`, `ByteArray` and `Nat` operations with `@[implemented_by]` or `@[extern]`.
 The compiled code runs those implementations, not the definitions the kernel checks.
 Lean core is a declared trusted baseline.
-The packed codecs run three `@[extern]` operations of core: `ByteArray.push`, `ByteArray.get`, and `ByteArray.copySlice` through `ByteArray.extract`.
+The packed encoders and decoders run two `@[extern]` operations of core: `ByteArray.push` and `ByteArray.get`.
+`ByteSlice.toList` and the tests that call it also run `ByteArray.copySlice`, through `ByteArray.extract`.
 
 ### B3. Native code during elaboration
 

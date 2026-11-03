@@ -402,10 +402,11 @@ Material under one of these licences can ship without a further check:
 | BSD 2-clause or 3-clause | None yet |
 | Apache 2.0 | btc-verified |
 
-Each is compatible with an MIT-licensed project when its notices stay with the material.
+Each can accompany MIT-licensed material, provided DogeLib meets every condition of its licence.
+For Apache 2.0, those conditions include a copy of the licence, a statement in each modified file that it was changed, and any upstream `NOTICE` attributions.
+The material keeps its own licence. It does not become MIT-licensed.
 Material under any other licence, or with no licence, needs a maintainer's decision first.
-If its licence is not compatible, the maintainer can choose a clean-room reimplementation.
-That reimplementation uses the other code only as a specification, copies none of its text, and records that it did so.
+If its licence is not compatible, the maintainer can direct a clean-room reimplementation, and decides its process separately.
 
 A definition or proof adapted from a Bitcoin-family project is evidence to investigate, not a compatibility proof for Dogecoin.
 Audit each one against Dogecoin's rules.

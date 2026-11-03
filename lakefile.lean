@@ -28,7 +28,8 @@ this library rather than to `DogeLib`. -/
 @[default_target]
 lean_lib «Proofs» where
   requiresModuleSystem := true
-  roots := #[`DogeLib.Proofs, `DogeLib.Cryptography.Proofs]
+  roots := #[`DogeLib.Proofs, `DogeLib.Base.Proofs, `DogeLib.Cryptography.Proofs,
+    `DogeLib.Serialization.Proofs]
   precompileModules := false
 
 /-- Checks the compiled declarations of every library: their axioms, and any

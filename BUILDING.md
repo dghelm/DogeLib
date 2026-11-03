@@ -22,6 +22,7 @@ It is empty, and a new finding is fixed, never added to it.
 
 `lake test` runs known answers through the compiled code.
 The NIST CAVP vectors in `tests/cryptography/sha256/cavp/` test SHA-256, and their README gives their provenance.
+The other known answers, and their provenance, are in `tests/KnownAnswers.lean`.
 
 After a change to the check itself, run its self-test:
 

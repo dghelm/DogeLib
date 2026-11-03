@@ -310,6 +310,153 @@ def check : IO Nat := do
 
 end KnownAnswers.Codec
 
+/-!
+## CompactSize: Core's `compactsize` and `noncanonical` tests
+
+Known answers for the generic CompactSize codec and for Core's bounded reader, `decodeBounded`.
+Each expected result comes from an assertion of Dogecoin Core's `src/test/serialize_tests.cpp` (SOURCES.md, D20), or from a reading of `src/serialize.h` (D1) and `src/streams.h` (D21).
+None comes from the decoders under test.
+
+- Boundary sweep, `compactsize` test, lines 231 to 242.
+  Core writes `i - 1` and `i` for `i = 1, 2, 4, …, MAX_SIZE` into one stream, and asserts that `ReadCompactSize` reads them back in order.
+  Here `encode` writes the same 52 values into one byte list.
+  `decodeBounded` must read each value back in order, with the rest of the list as the remainder, and leave nothing at the end.
+- Encoder bytes at the boundaries of the forms, derived from `WriteCompactSize`, `src/serialize.h` lines 219 to 242, and from the little-endian `ser_writedata16` to `ser_writedata64`.
+- Non-canonical encodings, `noncanonical` test, lines 264 to 291.
+  Core asserts the failure "non-canonical ReadCompactSize()" for six inputs, and the value `0xfd` for `fd fd 00`.
+- Truncation. `ReadCompactSize` reads the marker and the payload through the stream (lines 247, 255, 261 and 267).
+  `CDataStream::read` throws "end of data" when fewer bytes remain than it reads (`src/streams.h` lines 348 to 352).
+- Values above `MAX_SIZE = 0x02000000` (`src/serialize.h` line 26).
+  `ReadCompactSize` throws "size too large" at lines 271 and 272, after the check for a canonical encoding at lines 256, 262 and 268.
+  So a non-canonical encoding of a value above `MAX_SIZE` is reported as non-canonical.
+
+The generic decoder `decode` must accept the canonical encodings above `MAX_SIZE` that the bounded reader rejects.
+The packed generic codec is checked on the same bytes, at a nonzero offset of the array.
+-/
+
+namespace KnownAnswers.CompactSize
+
+open DogeLib.Serialization DogeLib.Serialization.CompactSize
+
+/-- An expected result of `decodeBounded`: a value with its remainder, or an error. -/
+inductive Expected where
+  | ok (value : UInt64) (rest : List UInt8)
+  | error (e : ReadError)
+
+/-- Whether a result of `decodeBounded` is the expected result. -/
+def Expected.matches : Expected → Except ReadError (UInt64 × List UInt8) → Bool
+  | .ok v r, .ok (v', r') => v == v' && r == r'
+  | .error e, .error e' => e == e'
+  | _, _ => false
+
+/-- The values of the boundary sweep of Core's `compactsize` test: `i - 1` and `i` for `i = 2 ^ 0, …, 2 ^ 25 = MAX_SIZE`, in Core's order. -/
+def sweepValues : List UInt64 :=
+  (List.range 26).flatMap fun k => [2 ^ k - 1, 2 ^ k]
+
+/-- Reads `values.length` values from `bytes` with `decodeBounded`, as Core's loop does, and checks each value and remainder. Returns the names of the failed checks. -/
+def readSweep (values : List UInt64) (bytes : List UInt8) : List String :=
+  match values with
+  | [] => if bytes.isEmpty then [] else ["sweep leaves bytes after the last value"]
+  | v :: vs =>
+    match decodeBounded bytes with
+    | .ok (v', rest) =>
+      (if v' == v then [] else [s!"sweep reads {v'}, expected {v}"]) ++ readSweep vs rest
+    | .error _ => [s!"sweep rejects the encoding of {v}"]
+
+/-- The checks on `decodeBounded`, each with its name, input and expected result. -/
+def boundedCases : List (String × List UInt8 × Expected) := [
+  -- noncanonical, lines 264 to 291.
+  ("line 265: zero in three bytes", [0xfd, 0x00, 0x00], .error .nonCanonical),
+  ("line 269: 0xfc in three bytes", [0xfd, 0xfc, 0x00], .error .nonCanonical),
+  ("line 273: 0xfd in three bytes is OK", [0xfd, 0xfd, 0x00], .ok 0xfd []),
+  ("line 278: zero in five bytes", [0xfe, 0x00, 0x00, 0x00, 0x00], .error .nonCanonical),
+  ("line 282: 0xffff in five bytes", [0xfe, 0xff, 0xff, 0x00, 0x00], .error .nonCanonical),
+  ("line 286: zero in nine bytes",
+    [0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00], .error .nonCanonical),
+  ("line 290: 0x01ffffff in nine bytes",
+    [0xff, 0xff, 0xff, 0xff, 0x01, 0x00, 0x00, 0x00, 0x00], .error .nonCanonical),
+  -- Remainder: the reader consumes only the encoding.
+  ("0xfd in three bytes, then one more byte", [0xfd, 0xfd, 0x00, 0xab], .ok 0xfd [0xab]),
+  ("252 in one byte, then one more byte", [0xfc, 0xfd], .ok 252 [0xfd]),
+  -- Truncation: the stream ends before the marker or the payload.
+  ("no bytes", [], .error .truncated),
+  ("marker fd with no payload", [0xfd], .error .truncated),
+  ("marker fd with 1 of 2 payload bytes", [0xfd, 0xfd], .error .truncated),
+  ("marker fe with 3 of 4 payload bytes", [0xfe, 0x00, 0x00, 0x01], .error .truncated),
+  ("marker ff with 7 of 8 payload bytes",
+    [0xff, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00], .error .truncated),
+  -- MAX_SIZE, lines 26, 271 and 272.
+  ("MAX_SIZE = 0x02000000 is accepted", [0xfe, 0x00, 0x00, 0x00, 0x02], .ok 0x02000000 []),
+  ("0x02000001 is too large", [0xfe, 0x01, 0x00, 0x00, 0x02], .error .tooLarge),
+  ("0xffffffff is too large", [0xfe, 0xff, 0xff, 0xff, 0xff], .error .tooLarge),
+  ("0x100000000 is too large",
+    [0xff, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00], .error .tooLarge),
+  ("0xffffffffffffffff is too large",
+    [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff], .error .tooLarge),
+  ("0xffffffff in nine bytes is non-canonical, not too large",
+    [0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00], .error .nonCanonical)]
+
+/-- The checks on `encode`: a value and its bytes by `WriteCompactSize`. -/
+def encodeCases : List (UInt64 × List UInt8) := [
+  (0, [0x00]),
+  (252, [0xfc]),
+  (253, [0xfd, 0xfd, 0x00]),
+  (0xffff, [0xfd, 0xff, 0xff]),
+  (0x10000, [0xfe, 0x00, 0x00, 0x01, 0x00]),
+  (0x02000000, [0xfe, 0x00, 0x00, 0x00, 0x02]),
+  (0x02000001, [0xfe, 0x01, 0x00, 0x00, 0x02]),
+  (0xffffffff, [0xfe, 0xff, 0xff, 0xff, 0xff]),
+  (0x100000000, [0xff, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00]),
+  (0xffffffffffffffff, [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff])]
+
+/-- The checks on the generic decoders, each with its name and whether it holds. -/
+def genericCases : List (String × Bool) :=
+  let big := [0xfe, 0x01, 0x00, 0x00, 0x02, 0xab]
+  let arr : ByteArray := ⟨#[0x00, 0x00] ++ big.toArray⟩
+  [("generic decode accepts 0x02000001",
+      decode big == some (0x02000001, [0xab])),
+    ("generic decode accepts 0xffffffffffffffff",
+      decode [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff] == some (0xffffffffffffffff, [])),
+    ("generic decode rejects zero in three bytes", decode [0xfd, 0x00, 0x00] == none),
+    ("generic decode rejects marker fd with 1 of 2 payload bytes", decode [0xfd, 0xfd] == none),
+    ("packed decode accepts 0x02000001 at offset 2",
+      ((decodeSlice ((ByteSlice.ofByteArray arr).drop 2)).map fun p => (p.1, p.2.toList))
+        == some (0x02000001, [0xab])),
+    ("packed encode appends 0x02000001",
+      (encodeInto 0x02000001 ⟨#[0x00, 0x00]⟩).toList == [0x00, 0x00, 0xfe, 0x01, 0x00, 0x00, 0x02])]
+
+/-- Every CompactSize known answer. Returns the number of failures. -/
+def check : IO Nat := do
+  let mut failures := 0
+  let mut count := 0
+  -- The boundary sweep.
+  if sweepValues.length != 52 then
+    IO.eprintln s!"FAIL compactsize: the sweep has {sweepValues.length} values, expected 52"
+    failures := failures + 1
+  for name in readSweep sweepValues (sweepValues.flatMap encode) do
+    IO.eprintln s!"FAIL compactsize {name}"
+    failures := failures + 1
+  count := count + 1
+  for (name, input, expected) in boundedCases do
+    count := count + 1
+    if !expected.matches (decodeBounded input) then
+      IO.eprintln s!"FAIL compactsize {name}"
+      failures := failures + 1
+  for (value, bytes) in encodeCases do
+    count := count + 1
+    if encode value != bytes then
+      IO.eprintln s!"FAIL compactsize encode {value}: got {encode value}, expected {bytes}"
+      failures := failures + 1
+  for (name, ok) in genericCases do
+    count := count + 1
+    if !ok then
+      IO.eprintln s!"FAIL compactsize {name}"
+      failures := failures + 1
+  IO.println s!"compactsize: {count} checks, {failures} failures"
+  return failures
+
+end KnownAnswers.CompactSize
+
 /-- Entry point of `lake test`. -/
 def main : IO UInt32 := do
   let dir : System.FilePath := "tests/cryptography/sha256/cavp"
@@ -317,4 +464,5 @@ def main : IO UInt32 := do
   let long ← KnownAnswers.Sha256Cavp.checkFile (dir / "SHA256LongMsg.rsp") 64
   let genesis ← KnownAnswers.Genesis.check
   let codec ← KnownAnswers.Codec.check
-  return if short + long + genesis + codec == 0 then 0 else 1
+  let compactSize ← KnownAnswers.CompactSize.check
+  return if short + long + genesis + codec + compactSize == 0 then 0 else 1

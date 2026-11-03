@@ -1,6 +1,7 @@
 module
 
 public import DogeLib.Serialization.Codec
+public import DogeLib.Serialization.CompactSize
 public import DogeLib.Serialization.PackedCodec
 
 /-!

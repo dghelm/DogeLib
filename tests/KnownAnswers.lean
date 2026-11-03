@@ -459,6 +459,163 @@ def check : IO Nat := do
 end KnownAnswers.CompactSize
 
 /-!
+## Counted lists: the scripts of the genesis coinbase, and Core's vector reader
+
+Known answers for the generic counted-list codec, its packed forms, and Core's bounded reader `decodeBounded`.
+
+The two scripts of the genesis coinbase are counted lists of bytes.
+The input is the coinbase literal of the codec section, which that section checks against the merkle root that Core asserts (SOURCES.md, D9).
+Each script is at its offset in the serialization order of a transaction (D4):
+
+```text
+coinbase  41        scriptSig count     = 0x10
+coinbase  42..58    scriptSig           = 04ffff001d0104084e696e746f6e646f
+coinbase  71        scriptPubKey count  = 0x43
+coinbase  72..139   scriptPubKey        = 41 04…a9 ac
+```
+
+The other expected results come from a reading of `Unserialize_impl` and `ReadCompactSize` in `src/serialize.h` (D1), and of `CDataStream::read` in `src/streams.h` (D21):
+
+- A count above `MAX_SIZE` is `tooLarge`, and no element is read (`ReadCompactSize`, lines 271 and 272).
+- A non-canonical count is `nonCanonical` (lines 256, 262 and 268).
+- A count of `MAX_SIZE` with no bytes after it is `truncated`, because the first block read fails (lines 667 to 673, and `CDataStream::read`).
+- Too few elements is `truncated`.
+
+The list of `UInt16` values `[1, 0x0302]` encodes as `02 01 00 02 03`, by `WriteCompactSize` (lines 219 to 242) and `ser_writedata16`.
+-/
+
+namespace KnownAnswers.CountedList
+
+open DogeLib.Serialization DogeLib.Serialization.CountedList
+open DogeLib.Serialization.CompactSize (ReadError)
+open KnownAnswers.Sha256Cavp (parseHex)
+open KnownAnswers.Codec (coinbaseHex)
+
+/-- A decoder result with the counted list read as a list, for comparison. -/
+def view {α : Type} (r : Option (CountedList α × List UInt8)) : Option (List α × List UInt8) :=
+  r.map fun p => (p.1.val, p.2)
+
+/-- A packed decoder result with the counted list and the remaining slice read as lists, for comparison. -/
+def viewPacked {α : Type} (r : Option (CountedList α × ByteSlice)) : Option (List α × List UInt8) :=
+  r.map fun p => (p.1.val, p.2.toList)
+
+/-- A bounded reader result with the counted list read as a list, or `none` for any error, for comparison with an accepted result. -/
+def viewBounded {α : Type} (r : Except ReadError (CountedList α × List UInt8)) :
+    Option (List α × List UInt8) :=
+  r.toOption.map fun p => (p.1.val, p.2)
+
+/-- Whether a bounded result is the error `e`. -/
+def isError {α : Type} (r : Except ReadError α) (e : ReadError) : Bool :=
+  match r with
+  | .error e' => e' == e
+  | .ok _ => false
+
+/-- A list of bytes as a counted list. The lists here are short, so the check never fails. -/
+def counted (l : List UInt8) : CountedList UInt8 :=
+  match CountedList.ofList? l with
+  | some cl => cl
+  | none => ⟨[], by decide⟩
+
+/-- The checks on the coinbase literal and on short inputs, each with its name and whether it holds. -/
+def cases (coinbase : ByteArray) : Except String (List (String × Bool)) := do
+  let c := coinbase.toList
+  let cs := ByteSlice.ofByteArray coinbase
+  let scriptSig := (← parseHex "04ffff001d0104084e696e746f6e646f").toList
+  let scriptPubKey := (c.drop 72).take 67
+  let readUInt16 : List UInt8 → Except ReadError (UInt16 × List UInt8) := fun bs =>
+    match (Codec.decode bs : Option (UInt16 × List UInt8)) with
+    | some p => .ok p
+    | none => .error .truncated
+  let maxSizeCount : List UInt8 := [0xfe, 0x00, 0x00, 0x00, 0x02]
+  return [
+    ("scriptSig count byte is 0x10", c[41]? == some 0x10),
+    ("scriptPubKey count byte is 0x43 and ends with OP_CHECKSIG",
+      c[71]? == some 0x43 && scriptPubKey.length == 67 && scriptPubKey.getLast? == some 0xac),
+    -- The generic codec.
+    ("generic decode reads scriptSig",
+      view (Codec.decode (α := CountedList UInt8) (c.drop 41)) == some (scriptSig, c.drop 58)),
+    ("generic decode reads scriptPubKey",
+      view (Codec.decode (α := CountedList UInt8) (c.drop 71)) == some (scriptPubKey, c.drop 139)),
+    ("generic encode writes scriptSig",
+      Codec.encode (counted scriptSig) == (c.drop 41).take 17),
+    ("generic encode writes scriptPubKey",
+      Codec.encode (counted scriptPubKey) == (c.drop 71).take 68),
+    ("generic decode reads scriptSig when it ends the input",
+      view (Codec.decode (α := CountedList UInt8) ((c.drop 41).take 17)) == some (scriptSig, [])),
+    ("generic decode rejects scriptSig without its last byte",
+      view (Codec.decode (α := CountedList UInt8) ((c.drop 41).take 16)) == none),
+    ("UInt16 list [1, 0x0302] encodes as 02 01 00 02 03",
+      Codec.encode (α := CountedList UInt16) ⟨[1, 0x0302], by decide⟩ == [0x02, 0x01, 0x00, 0x02, 0x03]),
+    ("UInt16 list decodes with a remainder",
+      view (Codec.decode (α := CountedList UInt16) [0x02, 0x01, 0x00, 0x02, 0x03, 0xff])
+        == some ([1, 0x0302], [0xff])),
+    ("UInt16 list rejects a missing byte",
+      view (Codec.decode (α := CountedList UInt16) [0x02, 0x01, 0x00, 0x02]) == none),
+    ("generic decode reads count 0x02000001 and rejects the missing elements",
+      view (Codec.decode (α := CountedList UInt8) [0xfe, 0x01, 0x00, 0x00, 0x02]) == none),
+    -- The packed codecs, at nonzero offsets.
+    ("packed byte decode reads scriptSig",
+      viewPacked (PackedCodec.decodeSlice (α := CountedList UInt8) (cs.drop 41))
+        == some (scriptSig, c.drop 58)),
+    ("packed generic decode reads scriptPubKey",
+      viewPacked (CountedList.decodeSlice (α := UInt8) (cs.drop 71)) == some (scriptPubKey, c.drop 139)),
+    ("packed byte decode reads scriptPubKey when it ends the slice",
+      viewPacked (PackedCodec.decodeSlice (α := CountedList UInt8) ((cs.drop 71).take 68))
+        == some (scriptPubKey, [])),
+    ("packed byte decode rejects scriptPubKey without its last byte",
+      viewPacked (PackedCodec.decodeSlice (α := CountedList UInt8) ((cs.drop 71).take 67)) == none),
+    ("packed byte encode appends scriptSig",
+      (PackedCodec.encodeInto (counted scriptSig) (coinbase.extract 0 41)).toList == c.take 58),
+    ("packed generic encode appends scriptPubKey",
+      (CountedList.encodeInto (counted scriptPubKey) (coinbase.extract 0 71)).toList == c.take 139),
+    -- Core's bounded reader.
+    ("bounded reader reads scriptSig",
+      viewBounded (decodeBoundedBytes (c.drop 41)) == some (scriptSig, c.drop 58)),
+    ("bounded reader, one byte at a time, reads scriptPubKey",
+      viewBounded (decodeBounded readByte (c.drop 71)) == some (scriptPubKey, c.drop 139)),
+    ("bounded reader reads an empty list", viewBounded (decodeBoundedBytes [0x00, 0xab]) == some ([], [0xab])),
+    ("bounded reader reads a list that ends the input",
+      viewBounded (decodeBoundedBytes [0x03, 0x01, 0x02, 0x03]) == some ([0x01, 0x02, 0x03], [])),
+    ("bounded reader reads scriptSig when it ends the input",
+      viewBounded (decodeBoundedBytes ((c.drop 41).take 17)) == some (scriptSig, [])),
+    ("bounded reader reads a UInt16 list",
+      viewBounded (decodeBounded readUInt16 [0x02, 0x01, 0x00, 0x02, 0x03]) == some ([1, 0x0302], [])),
+    ("count 0x02000001 is too large",
+      isError (decodeBoundedBytes [0xfe, 0x01, 0x00, 0x00, 0x02]) .tooLarge),
+    ("count 0x02000001 is too large for a UInt16 list",
+      isError (decodeBounded readUInt16 [0xfe, 0x01, 0x00, 0x00, 0x02, 0x01, 0x00]) .tooLarge),
+    ("count MAX_SIZE with no bytes is truncated", isError (decodeBoundedBytes maxSizeCount) .truncated),
+    ("count MAX_SIZE with no bytes is truncated, one byte at a time",
+      isError (decodeBounded readByte maxSizeCount) .truncated),
+    ("non-canonical count 3 in three bytes",
+      isError (decodeBoundedBytes [0xfd, 0x03, 0x00, 0x01, 0x02, 0x03]) .nonCanonical),
+    ("count 3 with 2 bytes is truncated", isError (decodeBoundedBytes [0x03, 0x01, 0x02]) .truncated),
+    ("scriptSig without its last byte is truncated",
+      isError (decodeBoundedBytes ((c.drop 41).take 16)) .truncated),
+    ("no bytes is truncated", isError (decodeBoundedBytes []) .truncated)]
+
+/-- Every counted-list known answer. Returns the number of failures. -/
+def check : IO Nat := do
+  let result := do
+    let coinbase ← parseHex coinbaseHex
+    if coinbase.size != 143 then throw s!"coinbase literal has {coinbase.size} bytes, expected 143"
+    cases coinbase
+  match result with
+  | .error e =>
+    IO.eprintln s!"FAIL countedlist: {e}"
+    return 1
+  | .ok cs =>
+    let mut failures := 0
+    for (name, ok) in cs do
+      if !ok then
+        IO.eprintln s!"FAIL countedlist {name}"
+        failures := failures + 1
+    IO.println s!"countedlist: {cs.length} checks, {failures} failures"
+    return failures
+
+end KnownAnswers.CountedList
+
+/-!
 ## Difficulty retarget
 
 Runs every `get_next_work_*` case of Dogecoin Core's `src/test/dogecoin_tests.cpp` at commit `e0a1c15` (SOURCES.md, D7) through the compiled `calculateDogecoinNextWorkRequired`.
@@ -625,6 +782,7 @@ def main : IO UInt32 := do
   let genesis ← KnownAnswers.Genesis.check
   let codec ← KnownAnswers.Codec.check
   let compactSize ← KnownAnswers.CompactSize.check
+  let countedList ← KnownAnswers.CountedList.check
   let compact ← KnownAnswers.Work.checkCompact
   let retarget ← KnownAnswers.Work.checkRetarget
-  return if short + long + genesis + codec + compactSize + compact + retarget == 0 then 0 else 1
+  return if short + long + genesis + codec + compactSize + countedList + compact + retarget == 0 then 0 else 1

@@ -2,6 +2,7 @@ module
 
 public import DogeLib.Serialization.Proofs.Codec
 public import DogeLib.Serialization.Proofs.CompactSize
+public import DogeLib.Serialization.Proofs.CountedList
 public import DogeLib.Serialization.Proofs.PackedCodec
 public import DogeLib.Serialization.Proofs.WidthCast
 

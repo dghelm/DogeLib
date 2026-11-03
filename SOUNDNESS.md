@@ -31,12 +31,12 @@ Gap D asks whether the use of DogeLib holds together.
 
 | ID | Risk | Mitigation in place | Applies to |
 |----|------|---------------------|------------|
-| A1 | A definition does not match the pinned Dogecoin behavior | Source mapping in `SOURCES.md`, by review only. SHA-256 has a proof against a FIPS 180-4 model, and NIST CAVP known answers. Known answers from Core's genesis data test the integer codecs. Core's own test cases are known answers for CompactSize, the compact encoding and the difficulty retarget. No comparison against a running Core yet. | P R I F |
+| A1 | A definition does not match the pinned Dogecoin behavior | Source mapping in `SOURCES.md`, by review only. SHA-256 has a proof against a FIPS 180-4 model, and NIST CAVP known answers. Known answers from Core's genesis data test the integer codecs. Core's own test cases are known answers for CompactSize, the compact encoding and the difficulty retarget. The scripts of the genesis coinbase are known answers for counted lists. No comparison against a running Core yet. | P R I F |
 | A2 | A theorem holds only under a hypothesis | Policy: each conditional theorem lists its hypotheses here and in `COVERAGE.md` | P I |
 | A3 | Timing reveals secret data | None: no constant-time claim | R I |
 | A4 | A security theorem idealises a primitive | None: no security theorem yet | P |
 | A5 | A rule depends on a protocol context that the definition does not model | Policy: each operation records its mode, network and era in `SOURCES.md` | P R I F |
-| B1 | The Lean compiler, the C compiler or the Lean runtime is wrong | `lake test` runs the NIST CAVP SHA-256 vectors and Core's compact-encoding and retarget test cases through the compiled code | R |
+| B1 | The Lean compiler, the C compiler or the Lean runtime is wrong | `lake test` runs the NIST CAVP SHA-256 vectors, Core's compact-encoding and retarget test cases, and the codec known answers through the compiled code | R |
 | B2 | Lean core runs code other than its definitions | Lean core is a declared baseline | R |
 | B3 | Elaboration runs native code | None yet | P |
 | B4 | The oracle's IO adapter or a foreign boundary is wrong | None yet | R F |
@@ -191,6 +191,58 @@ By `#print axioms` with Lean `v4.35.0`:
 
 Upstream proves two small facts in `decode_encode` and `encode_head` with `bv_decide`.
 Here `toUInt8_lt_fd` and `toUInt8_ne_zero` prove them: each converts the bytes to natural numbers and closes the goal with `omega` (C2).
+### Counted lists
+
+`DogeLib.Serialization.CountedList` defines a counted list: a CompactSize count, then that many elements.
+A `CountedList α` is a list with fewer than `2 ^ 64` elements.
+As for CompactSize, there are two decoders.
+`CountedList.decode` is the generic decoder, and `decodeBounded` is Core's `Unserialize_impl` for vectors (SOURCES.md, D1).
+The theorems are in `DogeLib.Serialization.Proofs.CountedList`.
+
+For every lawful element codec, the codec of counted lists satisfies both codec laws on every counted list (`instLawfulCodecCountedList`, from `decode_encode` and `decode_canonical`).
+`decode_eq_some_iff` says that `decode` accepts exactly a count read by `CompactSize.decode`, followed by that many elements.
+For every packed element codec that agrees with its codec, the packed codec of counted lists agrees with the codec (`instLawfulPackedCodecCountedList`).
+The packed codec of byte lists copies the bytes as one block, and agrees with the same codec (`instLawfulPackedCodecCountedListBytes`).
+
+`decodeBounded` takes an element reader `elem`.
+Its contract assumes that `elem` accepts exactly what the element codec accepts: `(elem bs).toOption = Codec.decode bs` for all bytes `bs`.
+`readByte_toOption` discharges the assumption for `readByte` and `UInt8`.
+Under the assumption, and for all bytes, counted lists and remainders:
+
+- `decodeBounded_eq_ok_iff`: `decodeBounded elem bs = ok (cl, rest)` exactly when `decode bs = some (cl, rest)` and `cl` has at most `0x02000000` elements.
+- `decodeBounded_encode`: if the element codec is also lawful and `cl` has at most `0x02000000` elements, then `decodeBounded elem (encode cl ++ rest) = ok (cl, rest)`.
+
+Two theorems need no assumption on `elem`.
+`decodeBounded_of_count_error` says that an error of Core's count reader is the error of the list reader.
+So a count above `MAX_SIZE` is `tooLarge`, and no element is read.
+`decodeBoundedBytes_eq` says that the block read of bytes, `decodeBoundedBytes`, is `decodeBounded readByte` on every input, including its errors.
+
+No theorem says which error an element failure gives.
+It is the error of `elem`, and a later layer that defines an element reader states it.
+Core grows a vector in blocks of about 5 MB, and the definitions do not.
+A reading of D1 and D21 says that the blocks change neither the elements read nor the error (A1).
+
+`lake test` runs the two scripts of the genesis coinbase through the generic, packed and bounded decoders, at nonzero offsets.
+It also runs short inputs for each error of the bounded reader.
+The expected results are Core's bytes (D9), or derived from D1 and D21.
+Core itself does not run, so this is not a Core comparison.
+
+The element-at-a-time readers recurse once for each element.
+In one run of `lake env lean --run`, the generic decoder of a byte list overflowed the stack at 4,000,000 elements, below `MAX_SIZE`.
+The block readers of bytes read 30,000,000 bytes in the same run.
+No theorem covers stack use. Issue #19 tracks readers whose stack use does not grow with the count.
+
+By `#print axioms` with Lean `v4.35.0`:
+
+| Theorem | Axioms |
+| --- | --- |
+| `readElemsBounded_toOption` | None |
+| `ofList?_eq_some`, `val_of_ofList?`, `decodeElems_encodeElems`, `toList_pushElems`, `readElemsBounded_readByte` | `propext` |
+| `instLawfulCodecCountedList`, `decode_encode`, `decode_canonical`, `decode_eq_some_iff`, `decodeElems_length`, `decodeElems_canonical`, `abstractParse_readElems`, `toList_pushBytes`, `encode_uint8`, `decode_uint8_cons`, `decode_uint8_nil`, `encodeElems_uint8`, `decodeElems_uint8`, `decodeBounded_eq_ok_iff_parts`, `decodeBounded_of_count_error`, `readByte_toOption`, `decodeBoundedBytes_eq`, `decodeBoundedBytes_maxSize_succ`, `decode_maxSize_succ` | `propext`, `Quot.sound` |
+| `instLawfulPackedCodecCountedList`, `instLawfulPackedCodecCountedListBytes`, `abstractParse_readByteList`, `decodeBounded_eq_ok_iff`, `decodeBounded_encode` | `propext`, `Classical.choice`, `Quot.sound` |
+
+The upstream file uses no `bv_decide` (C2).
+
 ### Compact encoding and difficulty retarget
 
 The `Work` layer specifies Core's `SetCompact`, `GetCompact` and `CalculateDogecoinNextWorkRequired` (SOURCES.md, D6, D12, D13).

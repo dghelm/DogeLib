@@ -144,9 +144,39 @@ The checker counts words and matches patterns, so some of its findings are wrong
 Fix the real problems, and keep an accurate technical expression.
 Do not rewrite a correct claim only to make the checker quiet.
 
-## Commits and pull requests
+## Pull requests
 
-Follow [CONTRIBUTING.md](CONTRIBUTING.md#branches-commits-and-pull-requests) for titles and pull request bodies. Commit, push, or open a pull request only when the user asks. A draft description goes in `.lane/`, not in a committed file.
+Each lane ends in one pull request against `main` on GitHub.
+Follow [CONTRIBUTING.md](CONTRIBUTING.md#branches-commits-and-pull-requests) for the title and the body.
+
+1. Commit in the lane, and push its branch: `git push -u origin <branch>`.
+2. Write the description in `.lane/pr-body.md`, and check it with the writing checker.
+3. Open the pull request: `gh pr create --base main --title "<title>" --body-file .lane/pr-body.md`.
+   For a stacked lane, use its base branch as `--base`.
+4. Wait for CI: `gh pr checks <number> --watch`.
+   A failed check is fixed in the lane, never ignored.
+5. Get a review of the change.
+6. Merge with `gh pr merge <number> --squash`, so that the title becomes the commit on `main`.
+   A stacked pull request never merges into its parent branch.
+   Wait until the parent merges, then rebase the lane onto `main`, push it, and change the base with `gh pr edit <number> --base main`.
+   Repeat steps 4 and 5 for the new head before you merge.
+7. Update the main checkout with `git pull --ff-only`, and remove the lane with `scripts/lane rm`.
+
+An agent merges a pull request only with a maintainer's authorization to merge, and only when CI passes and the review approves.
+Record the pull request number and its state in `STATUS.md`.
+
+### Changes that need a maintainer
+
+An agent never merges these, even with authorization to merge.
+It opens the pull request, labels it `needs-maintainer`, and continues with other work:
+
+- The project licence and contributor terms.
+- A change to a pin in [SOURCES.md](SOURCES.md), including the Dogecoin Core compatibility target.
+- An exception to the trust policy in [SOUNDNESS.md](SOUNDNESS.md).
+- A change to an agreed theorem statement, public contract or fixture format.
+- A rewrite of the history of `main`, or a force push to it.
+
+A decision of this kind that blocks a lane becomes an issue with the `needs-maintainer` label.
 
 ## Do not commit
 

@@ -207,6 +207,13 @@ header   76..80   nNonce   = 99943
 coinbase 63..71   nValue   = 88 * COIN = 8800000000
 ```
 
+Two 32-byte hashes check the codec of `Hash256`, which is `Bytes 32`:
+
+```text
+header   36..68   hashMerkleRoot = 5b2a3f…6a69 in display order (D9)
+coinbase  5..37   prevout hash   = 32 zero bytes, COutPoint::SetNull (D4)
+```
+
 Each decoder check compares the full result: the value and the remainder, or the rejection.
 The packed decoder checks read slices that start at a nonzero offset of the array.
 -/
@@ -261,6 +268,28 @@ def cases (header coinbase : ByteArray) : Except String (List (String × Bool)) 
     ("UInt32 rejects the last 3 bytes", (Codec.decode (h.drop 77) : Option (UInt32 × List UInt8)) == none),
     ("UInt64 rejects the last 7 bytes", (Codec.decode (c.drop 136) : Option (UInt64 × List UInt8)) == none),
     ("UInt8 rejects no bytes", (Codec.decode [] : Option (UInt8 × List UInt8)) == none),
+    -- Fixed-length bytes: the merkle root and the null prevout hash.
+    ("Hash256 reads hashMerkleRoot",
+      (Codec.decode (α := DogeLib.Hash256) (h.drop 36)).map (fun p => (p.1.val, p.2))
+        == some (root.toList, h.drop 68)),
+    ("Hash256 reads hashMerkleRoot in display order",
+      ((Codec.decode (α := DogeLib.Hash256) (h.drop 36)).map (·.1.displayBytes))
+        == some root.toList.reverse),
+    ("Hash256 of the display bytes of the merkle root",
+      ((DogeLib.Hash256.ofDisplayBytes? root.toList.reverse).map (·.val)) == some root.toList),
+    ("Hash256 reads the null prevout hash",
+      (Codec.decode (α := DogeLib.Hash256) (c.drop 5)).map (fun p => (p.1.val, p.2))
+        == some (DogeLib.Hash256.zero.val, c.drop 37)),
+    ("Hash256 rejects 31 bytes", (Codec.decode (α := DogeLib.Hash256) ((h.drop 36).take 31)).isNone),
+    ("Hash256 writes the null prevout hash",
+      Codec.encode DogeLib.Hash256.zero == (c.drop 5).take 32),
+    ("packed Hash256 reads hashMerkleRoot at offset 36",
+      viewPacked ((PackedCodec.decodeSlice (α := DogeLib.Hash256) (hs.drop 36)).map
+        fun p => (p.1.val, p.2)) == some (root.toList, h.drop 68)),
+    ("packed Hash256 rejects 31 bytes",
+      (PackedCodec.decodeSlice (α := DogeLib.Hash256) ((hs.drop 36).take 31)).isNone),
+    ("packed Hash256 appends the null prevout hash",
+      (PackedCodec.encodeInto DogeLib.Hash256.zero (coinbase.extract 0 5)).toList == c.take 37),
     -- List codecs: encoding.
     ("UInt32 writes nTime", Codec.encode (1386325540 : UInt32) == (h.drop 68).take 4),
     ("UInt64 writes nValue", Codec.encode (8800000000 : UInt64) == (c.drop 63).take 8),

@@ -1,5 +1,6 @@
 module
 
+public import DogeLib.Serialization.Bytes
 public import DogeLib.Serialization.Codec
 public import DogeLib.Serialization.CompactSize
 public import DogeLib.Serialization.PackedCodec
@@ -44,9 +45,8 @@ The bounded reader rejects it as `tooLarge` and reads no element.
 
 The generic codec and its packed forms are adapted from btc-verified, [`BtcVerified/Serialize/CountedList.lean`](https://github.com/ProofOfKeags/btc-verified/blob/ecf4f0d2c5ab4df84f2595ca60ba2e1fd62d1bce/BtcVerified/Serialize/CountedList.lean),
 commit `ecf4f0d`, Copyright 2026 Keagan McClelland, licensed under the Apache License, Version 2.0.
-`pushBytes` is adapted from `BtcVerified/Serialize/Bytes.lean` of the same commit.
 The licence text is in `LICENSES/btc-verified-Apache-2.0.txt`.
-The adapted material is `CountedList`, `ofList?`, `encodeElems`, `decodeElems`, `encode`, `decode`, `instCodecCountedList`, `pushElems`, `readElems`, `encodeInto`, `decodeSlice`, `instPackedCodecCountedList`, `pushBytes`, `readByteList` and `instPackedCodecCountedListBytes`.
+The adapted material is `CountedList`, `ofList?`, `encodeElems`, `decodeElems`, `encode`, `decode`, `instCodecCountedList`, `pushElems`, `readElems`, `encodeInto`, `decodeSlice`, `instPackedCodecCountedList`, `readByteList` and `instPackedCodecCountedListBytes`.
 These are the changes:
 
 - Upstream keeps the definitions and the theorems in one file.
@@ -160,12 +160,8 @@ def decodeSlice {α : Type} [PackedCodec α] (s : ByteSlice) :
 A list of bytes encodes as the bytes themselves after the count.
 So the packed codec of a `CountedList UInt8` does not call the element codec once for each byte.
 Its decoder reads the bytes as one block, with `ByteSlice.toList`.
-Its encoder appends the bytes with `ByteArray.push`, one byte at a time.
+Its encoder appends the bytes with `pushBytes` of `DogeLib.Serialization.Bytes`, one byte at a time.
 -/
-
-/-- The buffer with the bytes of a list appended. -/
-def pushBytes (bs : List UInt8) (acc : ByteArray) : ByteArray :=
-  bs.foldl ByteArray.push acc
 
 /-- The first `n` bytes of the slice as a list, with the rest of the slice, or `none` when the slice has fewer than `n` bytes. -/
 def readByteList (n : Nat) (s : ByteSlice) : Option (List UInt8 × ByteSlice) :=

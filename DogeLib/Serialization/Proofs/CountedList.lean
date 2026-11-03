@@ -1,6 +1,7 @@
 module
 
 public import DogeLib.Base.Proofs.ByteArray
+public import DogeLib.Serialization.Proofs.Bytes
 public import DogeLib.Serialization.CountedList
 public import DogeLib.Serialization.Proofs.Codec
 public import DogeLib.Serialization.Proofs.CompactSize
@@ -44,7 +45,6 @@ That error is the error of `elem`.
 The sections *The generic codec* and *The packed codecs* of this file are adapted from btc-verified.
 The source is [`BtcVerified/Serialize/CountedList.lean`](https://github.com/ProofOfKeags/btc-verified/blob/ecf4f0d2c5ab4df84f2595ca60ba2e1fd62d1bce/BtcVerified/Serialize/CountedList.lean),
 commit `ecf4f0d`, Copyright 2026 Keagan McClelland, licensed under the Apache License, Version 2.0.
-`toList_pushBytes` is adapted from `BtcVerified/Serialize/Bytes.lean` of the same commit.
 The licence text is in `LICENSES/btc-verified-Apache-2.0.txt`.
 These are the changes:
 
@@ -214,15 +214,6 @@ theorem abstractParse_readElems {α : Type} [Codec α] [PackedCodec α] [LawfulP
     dsimp only
     rw [← ih s1]
     exact abstractParse_bind _ fun xs s2 => rfl
-
-/-- For every list of bytes `bs` and buffer `acc`, the bytes of `pushBytes bs acc` are the bytes of `acc` followed by `bs`. -/
-theorem toList_pushBytes (bs : List UInt8) (acc : ByteArray) :
-    (pushBytes bs acc).toList = acc.toList ++ bs := by
-  induction bs generalizing acc with
-  | nil => simp [pushBytes]
-  | cons b bs ih =>
-    change (pushBytes bs (acc.push b)).toList = _
-    rw [ih, ByteArray.toList_push, List.append_assoc, List.singleton_append]
 
 /-- For every byte `b`, the codec of `UInt8` encodes `b` as the one byte `[b]`. -/
 theorem encode_uint8 (b : UInt8) : Codec.encode b = [b] := by

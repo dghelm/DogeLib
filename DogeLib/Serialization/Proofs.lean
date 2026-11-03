@@ -1,5 +1,6 @@
 module
 
+public import DogeLib.Serialization.Proofs.Bytes
 public import DogeLib.Serialization.Proofs.Codec
 public import DogeLib.Serialization.Proofs.CompactSize
 public import DogeLib.Serialization.Proofs.CountedList

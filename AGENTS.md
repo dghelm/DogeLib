@@ -157,6 +157,9 @@ Follow [CONTRIBUTING.md](CONTRIBUTING.md#branches-commits-and-pull-requests) for
    A failed check is fixed in the lane, never ignored.
 5. Get a review of the change.
 6. Merge with `gh pr merge <number> --squash`, so that the title becomes the commit on `main`.
+   A stacked pull request never merges into its parent branch.
+   Wait until the parent merges, then rebase the lane onto `main`, push it, and change the base with `gh pr edit <number> --base main`.
+   Repeat steps 4 and 5 for the new head before you merge.
 7. Update the main checkout with `git pull --ff-only`, and remove the lane with `scripts/lane rm`.
 
 An agent merges a pull request only with a maintainer's authorization to merge, and only when CI passes and the review approves.

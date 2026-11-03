@@ -27,7 +27,7 @@ As for CompactSize, this module defines two decoders with different contracts.
 
 - `CountedList.decode` is the generic decoder. It reads the count with the generic `CompactSize.decode`, which accepts every canonical count.
   With `CountedList.encode`, it is the codec `instCodecCountedList`.
-  `instPackedCodecCountedList` is its packed form, and `instPackedCodecCountedListBytes` is a faster packed form for lists of bytes.
+  `instPackedCodecCountedList` is its packed form, and `instPackedCodecCountedListBytes` is a packed form for lists of bytes that does not call the element codec for each byte.
 - `CountedList.decodeBounded` is the reader of Dogecoin Core, `Unserialize_impl` for `std::vector` and `prevector` in `src/serialize.h` (D1).
   It reads the count with Core's `ReadCompactSize`, `CompactSize.decodeBounded`, so it rejects a count above `MAX_SIZE = 0x02000000` before it reads any element.
   It reads each element with a reader that the caller passes, and returns a typed error, `CompactSize.ReadError`.
@@ -158,7 +158,9 @@ def decodeSlice {α : Type} [PackedCodec α] (s : ByteSlice) :
 /-! ## The packed codec of byte lists
 
 A list of bytes encodes as the bytes themselves after the count.
-So the packed codec of a `CountedList UInt8` can copy the bytes as one block, instead of calling the element codec once for each byte.
+So the packed codec of a `CountedList UInt8` does not call the element codec once for each byte.
+Its decoder reads the bytes as one block, with `ByteSlice.toList`.
+Its encoder appends the bytes with `ByteArray.push`, one byte at a time.
 -/
 
 /-- The buffer with the bytes of a list appended. -/
@@ -169,7 +171,7 @@ def pushBytes (bs : List UInt8) (acc : ByteArray) : ByteArray :=
 def readByteList (n : Nat) (s : ByteSlice) : Option (List UInt8 × ByteSlice) :=
   if n ≤ s.size then some ((s.take n).toList, s.drop n) else none
 
-/-- The buffer with the encoding of a counted list of bytes appended, with the bytes copied as one block. -/
+/-- The buffer with the encoding of a counted list of bytes appended. It appends each byte with `ByteArray.push`, without the element codec. -/
 def encodeIntoBytes (cl : CountedList UInt8) (acc : ByteArray) : ByteArray :=
   pushBytes cl.val (CompactSize.encodeInto (UInt64.ofNat cl.val.length) acc)
 
@@ -191,7 +193,7 @@ instance instPackedCodecCountedList {α : Type} [PackedCodec α] : PackedCodec (
   decodeSlice := CountedList.decodeSlice
 
 /--
-The packed codec of a counted list of bytes, which copies the bytes as one block.
+The packed codec of a counted list of bytes, which does not call the element codec for each byte.
 It has a higher priority than `instPackedCodecCountedList`, so it is the instance for `CountedList UInt8`.
 Its agreement with `instCodecCountedList` is `instLawfulPackedCodecCountedListBytes`.
 -/

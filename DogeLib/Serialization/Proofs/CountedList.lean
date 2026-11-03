@@ -22,7 +22,7 @@ The laws of the generic counted-list codec, the agreement of its packed forms, a
 
 - `instLawfulPackedCodecCountedList`: the packed codec agrees with the codec, for every element codec whose packed codec agrees with it.
 - `encode_uint8`, `encodeElems_uint8` and `decodeElems_uint8`: a list of bytes encodes as itself, and `n` byte elements decode as the first `n` bytes.
-- `instLawfulPackedCodecCountedListBytes`: the packed codec of byte lists, which copies the bytes as one block, agrees with the same codec.
+- `instLawfulPackedCodecCountedListBytes`: the packed codec of byte lists, which reads the bytes as one block, agrees with the same codec.
 
 ## Core's bounded reader
 

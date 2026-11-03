@@ -126,6 +126,7 @@ It holds for a pair of agreeing packed codecs (`instLawfulPackedCodecProd`), and
 The agreement theorems are about the Lean definitions of the packed codecs.
 The compiled packed codecs run core's `@[extern]` implementations of `ByteArray.push` and `ByteArray.get`, and advance slices without copying.
 `ByteSlice.toList`, the abstraction function of the agreement laws, copies the bytes in view through `ByteArray.extract`, which runs `ByteArray.copySlice`.
+The packed decoder of byte lists also calls it to read its bytes.
 The tests call `toList` to compare results, so they run that copy too.
 No theorem covers these implementations (B1, B2).
 
@@ -202,7 +203,9 @@ The theorems are in `DogeLib.Serialization.Proofs.CountedList`.
 For every lawful element codec, the codec of counted lists satisfies both codec laws on every counted list (`instLawfulCodecCountedList`, from `decode_encode` and `decode_canonical`).
 `decode_eq_some_iff` says that `decode` accepts exactly a count read by `CompactSize.decode`, followed by that many elements.
 For every packed element codec that agrees with its codec, the packed codec of counted lists agrees with the codec (`instLawfulPackedCodecCountedList`).
-The packed codec of byte lists copies the bytes as one block, and agrees with the same codec (`instLawfulPackedCodecCountedListBytes`).
+The packed codec of byte lists does not call the element codec for each byte, and agrees with the same codec (`instLawfulPackedCodecCountedListBytes`).
+Its decoder reads the bytes with `ByteSlice.toList`, so the compiled decoder runs `ByteArray.copySlice` (B2).
+Its encoder appends each byte with `ByteArray.push`.
 
 `decodeBounded` takes an element reader `elem`.
 Its contract assumes that `elem` accepts exactly what the element codec accepts: `(elem bs).toOption = Codec.decode bs` for all bytes `bs`.
@@ -367,6 +370,7 @@ The compiled code runs those implementations, not the definitions the kernel che
 Lean core is a declared trusted baseline.
 The packed encoders and decoders run two `@[extern]` operations of core: `ByteArray.push` and `ByteArray.get`.
 `ByteSlice.toList` and the tests that call it also run `ByteArray.copySlice`, through `ByteArray.extract`.
+The packed decoder of byte lists, `instPackedCodecCountedListBytes`, calls `ByteSlice.toList` to read its bytes, so it runs `ByteArray.copySlice` too.
 
 ### B3. Native code during elaboration
 

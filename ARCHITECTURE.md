@@ -53,6 +53,7 @@ DogeLib/<Layer>/Proofs/<Module>      theorems about it
 DogeLib/<Layer>/Exports/             the oracle adapter for that layer
 Refinement/Rust/                     Rust sources, extraction configuration, refinement proofs
 tests/<layer>/                       fixtures with recorded provenance
+tests/KnownAnswers.lean              the driver that `lake test` runs
 scripts/                             repository tools and checks
 ```
 

@@ -52,6 +52,11 @@ jobs:
         if: ${{ !cancelled() }}
         run: bash scripts/test_check_decls.sh
 
+      # Known answers from independent sources, through the compiled code.
+      - name: known answers
+        if: ${{ !cancelled() }}
+        run: lake test
+
   tools:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -61,3 +66,8 @@ jobs:
 
       - name: lane tool
         run: bash scripts/test_lane.sh
+
+      # Every vendored vector file must match its pinned digest.
+      - name: pinned vectors
+        if: ${{ !cancelled() }}
+        run: cd tests/cryptography/sha256/cavp && sha256sum -c SHA256SUMS

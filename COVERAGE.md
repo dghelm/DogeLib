@@ -22,4 +22,4 @@ Add rows in sorted order by operation name. Change only the cells your evidence 
 
 | Operation | Definition | Theorems | Comparison | Refinement | Excluded |
 | --- | --- | --- | --- | --- | --- |
-| SHA-256 | `Cryptography.Hash.Sha256.hash` | `hash_eq_spec`: equals a separate FIPS 180-4 model, for messages shorter than 2^61 bytes | None in DogeLib | None | Messages of 2^61 bytes or more, and inputs that are not whole bytes |
+| SHA-256 | `Cryptography.Hash.Sha256.hash` | `hash_eq_spec`: equals a separate FIPS 180-4 model, for messages shorter than 2^61 bytes | `lake test`: 129 NIST CAVP vectors (CAVS 11.0) through the compiled code | None | Messages of 2^61 bytes or more, and inputs that are not whole bytes |

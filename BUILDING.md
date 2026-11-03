@@ -8,6 +8,7 @@ The package has no dependencies beyond Lean core, so no Mathlib cache is needed.
 ```bash
 lake build --wfail
 lake exe check-decls
+lake test
 ```
 
 `lake build --wfail` compiles the specification and checks every proof.
@@ -18,6 +19,9 @@ It reports any axiom beyond `propext`, `Classical.choice` and `Quot.sound`, and 
 It also reports a specification definition that reaches an opaque constant, so that the kernel cannot unfold it.
 `scripts/check_decls_baseline.txt` lists the findings that exist today.
 It is empty, and a new finding is fixed, never added to it.
+
+`lake test` runs known answers through the compiled code.
+The NIST CAVP vectors in `tests/cryptography/sha256/cavp/` test SHA-256, and their README gives their provenance.
 
 After a change to the check itself, run its self-test:
 

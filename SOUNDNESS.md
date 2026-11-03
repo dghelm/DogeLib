@@ -32,12 +32,12 @@ Gap D asks whether the use of DogeLib holds together.
 
 | ID | Risk | Mitigation in place | Applies to |
 |----|------|---------------------|------------|
-| A1 | A definition does not match the pinned Dogecoin behavior | Source mapping in `SOURCES.md`, by review only. SHA-256 has a proof against a FIPS 180-4 model. No fixtures or comparisons yet. | P R I F |
+| A1 | A definition does not match the pinned Dogecoin behavior | Source mapping in `SOURCES.md`, by review only. SHA-256 has a proof against a FIPS 180-4 model, and NIST CAVP known answers. No Core comparisons yet. | P R I F |
 | A2 | A theorem holds only under a hypothesis | Policy: each conditional theorem lists its hypotheses here and in `COVERAGE.md` | P I |
 | A3 | Timing reveals secret data | None: no constant-time claim | R I |
 | A4 | A security theorem idealises a primitive | None: no security theorem yet | P |
 | A5 | A rule depends on a protocol context that the definition does not model | Policy: each operation records its mode, network and era in `SOURCES.md` | P R I F |
-| B1 | The Lean compiler, the C compiler or the Lean runtime is wrong | None yet | R |
+| B1 | The Lean compiler, the C compiler or the Lean runtime is wrong | `lake test` runs the NIST CAVP SHA-256 vectors through the compiled code | R |
 | B2 | Lean core runs code other than its definitions | Lean core is a declared baseline | R |
 | B3 | Elaboration runs native code | None yet | P |
 | B4 | The oracle's IO adapter or a foreign boundary is wrong | None yet | R F |
@@ -48,7 +48,7 @@ Gap D asks whether the use of DogeLib holds together.
 | C3 | A declaration reached the environment unchecked | None | P I |
 | D1 | A client misuses an operation, such as a prefix decoder where complete consumption is required | Policy: each public operation documents its input domain and consumption contract | R I |
 | D2 | A dependency changes | Pins in `SOURCES.md` and `lean-toolchain`. The package has no Lake dependencies. | P R I |
-| D3 | The fixtures are wrong | Policy: provenance recorded for each fixture. No fixtures yet. | F |
+| D3 | The fixtures are wrong | Each fixture records its provenance. The NIST CAVP files are pinned by digest, and CI checks the pin. | F |
 
 ## What the proofs say
 
@@ -64,8 +64,9 @@ The theorem depends on `propext`, `Classical.choice` and `Quot.sound`, by `#prin
 
 The theorem does not show that `Spec.hash` matches FIPS 180-4.
 A reader checks that by comparing the model with the standard (A1).
-No known-answer test exercises the compiled code in DogeLib yet (B1).
-EthLib tests the same code against the NIST CAVP vectors, through its own bindings.
+`lake test` runs the 129 byte-oriented NIST CAVP vectors through the compiled `hash` (B1).
+The vectors come from NIST, not from the code under test, and `tests/cryptography/sha256/cavp/README.md` records their provenance.
+They test the compiled code only on those inputs.
 Both files are adapted from EthLib at commit `6a93711`.
 
 ### What cannot be proved yet
@@ -83,7 +84,7 @@ Three things guard against that, once they exist.
 Each definition is named and shaped after its source in `SOURCES.md`, so that a reader can compare them line by line.
 Fixtures come from pinned Core tests, primary specifications or documented historical data, never from the implementation under test.
 Core comparisons run the compiled oracle against the pinned Core revision.
-None of the three exists yet beyond the source registry.
+The source registry exists. The only fixtures are the NIST CAVP SHA-256 vectors, which test a primitive, not a Dogecoin rule. No Core comparison exists yet.
 
 A Dogecoin rule can differ from the Bitcoin rule it descends from.
 A definition or proof adopted from btc-verified is evidence to investigate, not a compatibility proof for Dogecoin.
@@ -132,7 +133,8 @@ A proof about extracted Rust narrows that gap for the extracted code only.
 
 The Lean compiler turns the definitions into C, a C compiler turns that into machine code, and the Lean runtime runs it.
 No theorem covers that path.
-Core comparisons through the compiled oracle test it end to end, only on the inputs they cover.
+Known answers and Core comparisons through the compiled code test it end to end, only on the inputs they cover.
+`lake test` runs the 129 NIST CAVP SHA-256 vectors through the compiled `hash`.
 
 ### B2. Lean core's own implementations
 

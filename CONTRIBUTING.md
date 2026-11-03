@@ -377,9 +377,10 @@ Reviewers assess definitions and theorem statements on their own merits, whateve
 
 ## Licence
 
-DogeLib's licence and contributor terms are not chosen yet.
-[ROADMAP.md](ROADMAP.md#open-decisions) tracks the decision.
-DogeLib does not accept external contributions until it is recorded here.
+DogeLib's own material is intended to be distributed under the MIT licence.
+The repository is private, and the licence is recorded in a `LICENSE` file before it becomes public.
+The goal is the most open licence that is compatible with the material DogeLib takes from other projects.
+DogeLib does not accept external contributions until the licence and contributor terms are recorded here.
 
 ## Material from other projects
 
@@ -388,8 +389,23 @@ Code, proofs, data or text taken from another project keeps its own licence and 
 - Mark where the material starts and ends, and name its project, commit and licence.
   For a whole adapted file, the module docstring says so.
 - Do not remove or reword an upstream notice.
+- Keep a copy of each upstream licence that requires one in `LICENSES/`, and state what the adaptation changed.
 - Say in the pull request where the material comes from and under which licence.
-  A maintainer then checks that the licence allows DogeLib to ship it.
+
+Material under one of these licences can ship without a further check:
+
+| Licence | Examples in DogeLib |
+| --- | --- |
+| Public domain | NIST CAVP test vectors |
+| CC0 1.0 | EthLib |
+| MIT | Values from Dogecoin Core's tests and chain parameters |
+| BSD 2-clause or 3-clause | None yet |
+| Apache 2.0 | btc-verified |
+
+Each is compatible with an MIT-licensed project when its notices stay with the material.
+Material under any other licence, or with no licence, needs a maintainer's decision first.
+If its licence is not compatible, the maintainer can choose a clean-room reimplementation.
+That reimplementation uses the other code only as a specification, copies none of its text, and records that it did so.
 
 A definition or proof adapted from a Bitcoin-family project is evidence to investigate, not a compatibility proof for Dogecoin.
 Audit each one against Dogecoin's rules.

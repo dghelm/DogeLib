@@ -7,8 +7,9 @@ A proof links a Lean definition to a theorem. Both are assumed to match somethin
 Each of those links is an assumption, and this document names them one by one.
 It follows the structure of EthLib's [`SOUNDNESS.md`](https://github.com/ethereum/EthLib/blob/6a93711e7cc062e787fff6747e4101a141d38b7a/SOUNDNESS.md), which follows s2n-bignum's.
 
-DogeLib has no definitions or theorems yet.
-Each section states the policy that applies when the first ones land, and the mitigations that exist today.
+DogeLib has one definition with a theorem: SHA-256, adapted from EthLib.
+No Dogecoin-specific definition exists yet.
+Each section states the mitigations that exist today, and the policy for definitions that are not written yet.
 A lane that adds a definition, a theorem, an execution path or a dependency updates the affected rows in the same change.
 
 ## Ways to use DogeLib
@@ -31,7 +32,7 @@ Gap D asks whether the use of DogeLib holds together.
 
 | ID | Risk | Mitigation in place | Applies to |
 |----|------|---------------------|------------|
-| A1 | A definition does not match the pinned Dogecoin behavior | Source mapping in `SOURCES.md`, by review only. No fixtures or comparisons yet. | P R I F |
+| A1 | A definition does not match the pinned Dogecoin behavior | Source mapping in `SOURCES.md`, by review only. SHA-256 has a proof against a FIPS 180-4 model. No fixtures or comparisons yet. | P R I F |
 | A2 | A theorem holds only under a hypothesis | Policy: each conditional theorem lists its hypotheses here and in `COVERAGE.md` | P I |
 | A3 | Timing reveals secret data | None: no constant-time claim | R I |
 | A4 | A security theorem idealises a primitive | None: no security theorem yet | P |
@@ -40,21 +41,32 @@ Gap D asks whether the use of DogeLib holds together.
 | B2 | Lean core runs code other than its definitions | Lean core is a declared baseline | R |
 | B3 | Elaboration runs native code | None yet | P |
 | B4 | The oracle's IO adapter or a foreign boundary is wrong | None yet | R F |
-| B5 | This repository substitutes compiled code | Policy: any `@[implemented_by]`, `@[extern]` or `@[csimp]` is listed in B5 | R |
+| B5 | This repository substitutes compiled code | `lake exe check-decls` fails on any new substitution | R |
 | B6 | Extraction or the Rust toolchain is wrong | None: no extraction yet | I |
 | C1 | The Lean kernel or its axioms are unsound | None | P I |
-| C2 | A proof trusts compiled code | Policy: forbidden by CONTRIBUTING.md, *Proofs*. The declaration check does not exist yet. | P I |
+| C2 | A proof trusts compiled code | `lake exe check-decls` fails on any use | P I |
 | C3 | A declaration reached the environment unchecked | None | P I |
 | D1 | A client misuses an operation, such as a prefix decoder where complete consumption is required | Policy: each public operation documents its input domain and consumption contract | R I |
-| D2 | A dependency changes | Policy: pins in `SOURCES.md`. No `lake-manifest.json` yet. | P R I |
+| D2 | A dependency changes | Pins in `SOURCES.md` and `lean-toolchain`. The package has no Lake dependencies. | P R I |
 | D3 | The fixtures are wrong | Policy: provenance recorded for each fixture. No fixtures yet. | F |
 
 ## What the proofs say
 
-No theorem exists yet.
-Each operation that gains a theorem adds a subsection here.
+Each operation with a theorem has a subsection here.
 It says what is proved, under which hypotheses and over which input domain, and what is not proved.
 [COVERAGE.md](COVERAGE.md) gives the per-operation status. This section explains its meaning and limits.
+
+### SHA-256
+
+`hash_eq_spec` says that `hash` equals `Spec.hash` on every message shorter than 2^61 bytes.
+`Spec.hash` restates FIPS 180-4 over 32-bit bit vectors, independently of the executable code.
+The theorem depends on `propext`, `Classical.choice` and `Quot.sound`, by `#print axioms` with Lean `v4.35.0`.
+
+The theorem does not show that `Spec.hash` matches FIPS 180-4.
+A reader checks that by comparing the model with the standard (A1).
+No known-answer test exercises the compiled code in DogeLib yet (B1).
+EthLib tests the same code against the NIST CAVP vectors, through its own bindings.
+Both files are adapted from EthLib at commit `6a93711`.
 
 ### What cannot be proved yet
 
@@ -144,7 +156,8 @@ Any later foreign boundary, such as a C or Rust binding, is listed here with its
 `@[implemented_by]` and `@[extern]` make the compiled code run something other than the definition, with no proof that the two agree.
 `@[csimp]` replaces a function with one proved equal to it, so it adds no logical trust. The code that runs is still not the definition a reader reads.
 
-The repository has none of the three.
+The `DogeLib` and `Proofs` libraries have none of the three, by `lake exe check-decls`.
+The fixtures in `scripts/CheckDeclsTest` contain them on purpose, to test the check, and no library imports them.
 
 | Declaration | Kind | Proof-backed | Justification |
 | --- | --- | --- | --- |
@@ -162,8 +175,8 @@ The extracted model is an implementation artifact. It never becomes the specific
 Every theorem trusts the Lean kernel, and whichever of the three standard axioms it uses: `propext`, `Classical.choice` and `Quot.sound`.
 Those three are the allowed set. A theorem may use fewer.
 
-The declaration check will check dependencies: no declaration may depend on an axiom outside that set.
-It will not check the kernel, and it will not show that the axioms are consistent.
+`lake exe check-decls` checks dependencies: no declaration may depend on an axiom outside that set.
+It does not check the kernel, and it does not show that the axioms are consistent.
 
 ### C2. Tactics that trust compiled code
 
@@ -175,7 +188,8 @@ CONTRIBUTING.md does not allow these tactics (*Proofs*).
 btc-verified allows the axioms that `bv_decide` records, and its `CompactSize.decode_encode` and `encode_head` use `bv_decide`.
 A proof adopted from btc-verified has those steps replaced by proofs the kernel checks alone (design record 0002, section 5).
 
-No theorem uses them.
+No theorem in the `DogeLib` and `Proofs` libraries uses them, by `lake exe check-decls`.
+The fixtures in `scripts/CheckDeclsTest` use them on purpose.
 
 ### C3. Declarations the kernel did not check
 

@@ -6,7 +6,7 @@ It makes existing Dogecoin consensus behavior precise, and states proposed proto
 
 ## Status
 
-The repository contains its project documents only. No Lean code, proof, comparison run, or Rust extraction exists yet. [COVERAGE.md](COVERAGE.md) records what is implemented, per operation and per kind of evidence.
+The build skeleton and one primitive exist: SHA-256, with a proof that it agrees with a model of FIPS 180-4. No Dogecoin-specific definition, comparison run, or Rust extraction exists yet. [COVERAGE.md](COVERAGE.md) records what is implemented, per operation and per kind of evidence.
 
 The first release target is:
 
@@ -20,6 +20,7 @@ That sentence describes the goal, not the current state.
 | --- | --- |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Contribution and review policy |
 | [AGENTS.md](AGENTS.md) | How to work here, including parallel lanes in git worktrees |
+| [BUILDING.md](BUILDING.md) | How to build and check the library |
 | [ROADMAP.md](ROADMAP.md) | Milestones, work order, and open decisions |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Library targets, dependency rules, and layout |
 | [SOURCES.md](SOURCES.md) | Pinned reference revisions and source mappings |

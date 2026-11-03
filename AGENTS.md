@@ -28,7 +28,7 @@ Use the commit pinned in [SOURCES.md](SOURCES.md) before you cite or copy from a
 
 ## Current state
 
-The repository holds documents and repository tools only. There is no Lean toolchain pin, no lakefile, and no Lean code. The first lane, `build/toolchain-selection`, establishes those (see [ROADMAP.md](ROADMAP.md)). Until it lands, do not write a lakefile or Lean modules in another lane.
+The build skeleton exists: Lean `v4.35.0`, the `DogeLib` and `Proofs` libraries, and `lake exe check-decls`. The only specification is SHA-256, adapted from EthLib. [BUILDING.md](BUILDING.md) gives the commands, and [ROADMAP.md](ROADMAP.md) gives the next steps.
 
 ## Work as a specialist
 
@@ -72,7 +72,7 @@ The branch name is `<type>/<slug>`, using a commit type from [CONTRIBUTING.md](C
 3. Put every lane artifact in `.lane/`: handoff documents, review transcripts, build and test logs, scratch notes. Do not write them next to the repository, in the main checkout, or in a committed path.
 4. Keep `STATUS.md` current. Update it when the state changes, before you stop, and before a handoff. Another agent must be able to continue from it alone.
 5. Register every long-running process in `STATUS.md` under *Running jobs*: PID, command, log path under `.lane/`, start time. Remove the entry when the process ends. Never detach a build with `nohup`, `setsid`, or `&` so that it outlives the session.
-6. Run one heavy build per lane at a time. Each worktree has its own `.lake/` directory. Run `lake exe cache get` once in a new worktree before the first build, so that Mathlib is not compiled from source.
+6. Run one heavy build per lane at a time, and limit its CPUs on a shared machine ([BUILDING.md](BUILDING.md#shared-machines)). Each worktree has its own `.lake/` directory. Once the lakefile requires Mathlib, run `lake exe cache get` before the first build in a new worktree.
 7. Rebase onto `main` before review. Do not merge `main` into a lane.
 8. Edit shared registries additively. [COVERAGE.md](COVERAGE.md), [SOURCES.md](SOURCES.md), and the library root import file are conflict points. Add rows in sorted position. Do not reorder, reflow, or reformat rows another lane owns.
 9. Only one lane at a time changes a pin in [SOURCES.md](SOURCES.md), the toolchain, or the trust policy in [SOUNDNESS.md](SOUNDNESS.md). That lane says so in its `STATUS.md` and pull request.
@@ -87,8 +87,9 @@ Report only the checks you ran, with the exact command, revision, and result ([C
 
 | Gate ([CONTRIBUTING.md](CONTRIBUTING.md#checks)) | Command | Exists |
 | --- | --- | --- |
-| Build | — | No. Defined by `build/toolchain-selection`. |
-| Declaration audit | — | No |
+| Build | `lake build --wfail` | Yes |
+| Declaration check | `lake exe check-decls` | Yes |
+| Declaration check self-test | `bash scripts/test_check_decls.sh` (when the check changes) | Yes |
 | Source and coverage review | Manual review of SOURCES.md and COVERAGE.md | Manual |
 | Conformance | — | No |
 | Refinement | — | No |

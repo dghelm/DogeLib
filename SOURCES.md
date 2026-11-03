@@ -7,10 +7,10 @@ This file is the single source registry ([CONTRIBUTING.md](CONTRIBUTING.md#sourc
 | Repository | Commit | Label | Role | Adopted |
 | --- | --- | --- | --- | --- |
 | [Dogecoin Core](https://github.com/dogecoin/dogecoin) | `e0a1c157791544e818c901bd9341896965afbf9d` | `v1.14.9` | Compatibility target for the selected functions and modes | Proposed |
-| [EthLib](https://github.com/ethereum/EthLib) | `6a93711e7cc062e787fff6747e4101a141d38b7a` | — | Model project: architecture, proof policy, writing standard, SHA-256 | Proposed |
+| [EthLib](https://github.com/ethereum/EthLib) | `6a93711e7cc062e787fff6747e4101a141d38b7a` | — | Model project: architecture, proof policy, writing standard, SHA-256, declaration check | Adopted |
 | [btc-verified](https://github.com/ProofOfKeags/btc-verified) | `ecf4f0d2c5ab4df84f2595ca60ba2e1fd62d1bce` | — | Codec, byte-representation, and packed-refinement candidates | Proposed |
 | [Charon](https://github.com/AeneasVerif/charon) / [Aeneas](https://github.com/AeneasVerif/aeneas) | Not selected | — | Rust extraction and refinement | Not selected |
-| Lean toolchain | Not selected | — | Build | Not selected |
+| [Lean 4](https://github.com/leanprover/lean4) | `eb6cafb7290e8bd5f2937522d8d804f58f02bafc` | `v4.35.0` | Toolchain, pinned in `lean-toolchain` | Adopted |
 
 Design records 0001 and 0002 cite EthLib at `5d4b584`. The pin above is two commits later and uses the same toolchain, `v4.35.0`. The two commits add the SHA-256 precompile and the rule against every tactic that trusts compiled code. `WRITING.md` and `scripts/check_writing.py` are adapted from this pin.
 
@@ -53,6 +53,7 @@ One row per public operation. Add rows in sorted order by operation name.
 
 | Operation | DogeLib declaration | Source (ID, file, function) | Mode / context | Notes |
 | --- | --- | --- | --- | --- |
+| SHA-256 | `DogeLib.Cryptography.Hash.Sha256.hash` | FIPS 180-4 §6.2. Code adapted from EthLib `EthLib/Cryptography/Hash/Sha256.lean` at `6a93711` | Messages of whole bytes | Primitive, no Dogecoin context. Double SHA-256 is not defined yet. |
 
 ## Known differences
 

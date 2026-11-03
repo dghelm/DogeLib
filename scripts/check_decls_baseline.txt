@@ -1,0 +1,8 @@
+# Findings of `lake exe check-decls` that exist today, each one to be removed.
+#
+# One finding per line: its kind, then the declaration it is reported at.
+# A finding not listed here fails the check.
+# A line that no longer matches a finding fails the check too, so this file is
+# always the exact list of findings that exist.
+# Remove an entry in the pull request that removes its finding.
+# Never add one: a new finding is fixed, not listed.

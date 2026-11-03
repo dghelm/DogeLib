@@ -3,7 +3,7 @@
 This document describes the intended structure of DogeLib.
 It follows EthLib's [`ARCHITECTURE.md`](https://github.com/ethereum/EthLib/blob/6a93711e7cc062e787fff6747e4101a141d38b7a/ARCHITECTURE.md).
 Where EthLib and btc-verified differ, DogeLib follows EthLib.
-No module or Lake library exists yet. The `build/toolchain-selection` lane creates the first ones.
+[BUILDING.md](BUILDING.md) says how to build it.
 
 ## Three kinds of content
 
@@ -36,8 +36,8 @@ The implementation never becomes the specification.
 | --- | --- | --- |
 | `DogeLib` | The specification | On |
 | `Proofs` | Properties, rooted at each layer's `Proofs` tree | Off |
-| `Exports` | The oracle adapter and later binding-facing code | On |
-| `Refinement` | Extracted implementation models and their refinement proofs | Off |
+| `Exports` | The oracle adapter and later binding-facing code. Added with the oracle. | On |
+| `Refinement` | Extracted implementation models and their refinement proofs. Added with the first refinement. | Off |
 | `check-decls` | An executable that checks the axioms and substitutions of every compiled declaration | — |
 
 Each library uses the Lean module system (`requiresModuleSystem := true`), as EthLib does.

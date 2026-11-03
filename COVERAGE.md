@@ -2,7 +2,7 @@
 
 What DogeLib implements, per operation and per kind of evidence ([CONTRIBUTING.md](CONTRIBUTING.md#coverage-and-status)). Each column records a separate claim. A blank cell means nothing exists.
 
-No operation is implemented yet.
+SHA-256 is the only operation implemented.
 
 ## Legend
 
@@ -22,3 +22,4 @@ Add rows in sorted order by operation name. Change only the cells your evidence 
 
 | Operation | Definition | Theorems | Comparison | Refinement | Excluded |
 | --- | --- | --- | --- | --- | --- |
+| SHA-256 | `Cryptography.Hash.Sha256.hash` | `hash_eq_spec`: equals a separate FIPS 180-4 model, for messages shorter than 2^61 bytes | None in DogeLib | None | Messages of 2^61 bytes or more, and inputs that are not whole bytes |

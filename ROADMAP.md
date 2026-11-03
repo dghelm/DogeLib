@@ -8,7 +8,7 @@ This roadmap is the living plan. The reasoning behind it is in [design record 00
 
 | Step | Deliverable | Exit condition | Status |
 | --- | --- | --- | --- |
-| 0 | Toolchain, build skeleton and checks | Lean `v4.35.0` is pinned. The lakefile has the libraries of ARCHITECTURE.md. EthLib's SHA-256 builds. `lake exe check-decls` runs. `BUILDING.md` lists the commands. | Not started |
+| 0 | Toolchain, build skeleton and checks | Lean `v4.35.0` is pinned. The lakefile has the libraries of ARCHITECTURE.md. EthLib's SHA-256 builds. `lake exe check-decls` runs. `BUILDING.md` lists the commands. | Done in `build/toolchain-selection` |
 | 0b | Codec adaptation from btc-verified | The selected codecs and packed refinements are ported to `v4.35.0` and DogeLib's layout, with `bv_decide` steps replaced and provenance recorded | Not started |
 | 1 | Source registry, shared types, contribution policy | Baseline and evidence conventions are explicit | Documents only |
 | 2 | Bounded CompactSize reader and proofs | Accepted-prefix relation, bounded round trip, Core comparisons | Not started |
@@ -68,8 +68,8 @@ If the Rust refinement is not in the first release, the release says so and make
 | Decision | Choice | Reason | Confirmed by |
 | --- | --- | --- | --- |
 | Model project | EthLib | Stronger separation of specification, property and model, and explicit soundness documentation | Maintainer, 2026-11-03 |
-| Lean toolchain | `v4.35.0`, EthLib's | Follows the model project and its module system. btc-verified pins `v4.30.0-rc2`. | Pending: step 0 build |
-| SHA-256 provider | EthLib | Its `hash_eq_spec` relates the executable code to a separate FIPS 180-4 specification | Pending: step 0 build |
+| Lean toolchain | `v4.35.0`, EthLib's | Follows the model project and its module system. btc-verified pins `v4.30.0-rc2`. | Step 0 build |
+| SHA-256 provider | EthLib | Its `hash_eq_spec` relates the executable code to a separate FIPS 180-4 model. It needs only Lean core, so it is adapted, not required. | Step 0 build |
 | Proof-trust policy | EthLib's: standard axioms only, no tactic that trusts compiled code | See SOUNDNESS.md, C2 | Adopted |
 | btc-verified reuse form | Adaptation into DogeLib's layout, with provenance, not a dependency | Different toolchain, colocated proofs, and `bv_decide` steps | Pending: step 0b |
 | Writing standard | EthLib's `WRITING.md` and checker, with DogeLib vocabulary | Follows the model project | Adopted |
@@ -90,4 +90,6 @@ Record work that a lane sets aside, until an issue tracker exists. Each entry na
 
 | Item | Deferred by | Context |
 | --- | --- | --- |
+| SHA-256 known answers through the compiled code | `build/toolchain-selection` | `hash_eq_spec` covers the definitions, not the compiled code (SOUNDNESS.md, B1). Add FIPS 180-4 or NIST CAVP vectors with recorded provenance, run by a test target. |
+| Mathlib dependency | `build/toolchain-selection` | Not needed yet. Add it to the `Proofs` library with step 0b, if the adapted codec proofs need it. |
 | Run `check_writing.py` in CI | Bootstrap | EthLib runs it as an advisory workflow (`.github/workflows/writing.yml`). Add it with the first CI. |

@@ -8,7 +8,7 @@ This file is the single source registry ([CONTRIBUTING.md](CONTRIBUTING.md#sourc
 | --- | --- | --- | --- | --- |
 | [Dogecoin Core](https://github.com/dogecoin/dogecoin) | `e0a1c157791544e818c901bd9341896965afbf9d` | `v1.14.9` | Compatibility target for the selected functions and modes | Proposed |
 | [EthLib](https://github.com/ethereum/EthLib) | `6a93711e7cc062e787fff6747e4101a141d38b7a` | — | Model project: architecture, proof policy, writing standard, SHA-256, declaration check | Adopted |
-| [btc-verified](https://github.com/ProofOfKeags/btc-verified) | `ecf4f0d2c5ab4df84f2595ca60ba2e1fd62d1bce` | — | Codec, byte-representation, and packed-refinement candidates | Proposed |
+| [btc-verified](https://github.com/ProofOfKeags/btc-verified) | `ecf4f0d2c5ab4df84f2595ca60ba2e1fd62d1bce` | — | Codecs, byte representations and packed refinements. Its Apache 2.0 licence is in `LICENSES/btc-verified-Apache-2.0.txt`. | Adopted |
 | [Charon](https://github.com/AeneasVerif/charon) / [Aeneas](https://github.com/AeneasVerif/aeneas) | Not selected | — | Rust extraction and refinement | Not selected |
 | [Lean 4](https://github.com/leanprover/lean4) | `eb6cafb7290e8bd5f2937522d8d804f58f02bafc` | `v4.35.0` | Toolchain, pinned in `lean-toolchain` | Adopted |
 
@@ -49,6 +49,12 @@ Design records and module documentation cite these identifiers.
 | E5 | [EthLib SHA-256 proof](https://github.com/ethereum/EthLib/blob/6a93711e7cc062e787fff6747e4101a141d38b7a/EthLib/Cryptography/Proofs/Hash/Sha256.lean) |
 | E6 | [EthLib point encoding](https://github.com/ethereum/EthLib/blob/6a93711e7cc062e787fff6747e4101a141d38b7a/EthLib/Cryptography/Secp256k1/Encoding.lean) |
 | B1 | [btc-verified packed serialization](https://github.com/ProofOfKeags/btc-verified/blob/ecf4f0d2c5ab4df84f2595ca60ba2e1fd62d1bce/BtcVerified/Packed/README.md) |
+| B2 | [btc-verified codec class, pairs, transport and little-endian integers](https://github.com/ProofOfKeags/btc-verified/blob/ecf4f0d2c5ab4df84f2595ca60ba2e1fd62d1bce/BtcVerified/Serialize/Codec.lean) |
+| B3 | [btc-verified packed codec class and agreement laws](https://github.com/ProofOfKeags/btc-verified/blob/ecf4f0d2c5ab4df84f2595ca60ba2e1fd62d1bce/BtcVerified/Packed/Codec.lean) |
+| B4 | [btc-verified `ByteSlice` reader operations and lemmas](https://github.com/ProofOfKeags/btc-verified/blob/ecf4f0d2c5ab4df84f2595ca60ba2e1fd62d1bce/BtcVerified/Ext/ByteSlice.lean) |
+| B5 | [btc-verified `ByteArray.toList` lemmas](https://github.com/ProofOfKeags/btc-verified/blob/ecf4f0d2c5ab4df84f2595ca60ba2e1fd62d1bce/BtcVerified/Ext/ByteArray.lean) |
+| B6 | [btc-verified width casts](https://github.com/ProofOfKeags/btc-verified/blob/ecf4f0d2c5ab4df84f2595ca60ba2e1fd62d1bce/BtcVerified/Serialize/WidthCast.lean) |
+| B7 | [btc-verified licence, Apache 2.0](https://github.com/ProofOfKeags/btc-verified/blob/ecf4f0d2c5ab4df84f2595ca60ba2e1fd62d1bce/LICENSE) |
 | R1 | [Aeneas documentation](https://github.com/AeneasVerif/aeneas) (for discovery only: pin a revision before use) |
 
 ## Operation-to-source mapping
@@ -57,7 +63,12 @@ One row per public operation. Add rows in sorted order by operation name.
 
 | Operation | DogeLib declaration | Source (ID, file, function) | Mode / context | Notes |
 | --- | --- | --- | --- | --- |
+| Byte slice reads | `ByteSlice.toList`, `ByteSlice.take`, `ByteSlice.drop`, `ByteSlice.uncons` | B4, `BtcVerified/Ext/ByteSlice.lean`, the same four functions | No Dogecoin context | Over core's `Std.Data.ByteSlice`. Lemmas in `DogeLib.Base.Proofs.ByteSlice`, and `ByteArray.toList` lemmas from B5. |
+| Codec composition | `DogeLib.Serialization.instCodecProd`, `DogeLib.Serialization.Codec.ofEquiv` | B2, `BtcVerified/Serialize/Codec.lean`, `instCodecProd` and `Codec.ofEquiv` | No Dogecoin context | Laws in `DogeLib.Serialization.Proofs.Codec`. `Codec.ofEquiv` takes two functions instead of a Mathlib `Equiv`. |
 | Double SHA-256 | `DogeLib.Cryptography.Hash.Sha256d.hash` | D8, `src/hash.h`, `CHash256::Finalize` | Messages of whole bytes | The digest is in SHA-256 output order. Display order (D11) is not defined here. |
+| Fixed-width little-endian integers | `DogeLib.Serialization.instCodecUInt8` to `instCodecUInt64`, `bitVecCodecLE` | B2, `BtcVerified/Serialize/Codec.lean`, `instCodecUInt8` to `instCodecUInt64`, `bitVecCodecLE`. D1, `ser_writedata8` to `ser_writedata64` and `ser_readdata8` to `ser_readdata64` | All modes | Core writes these integers with `htole16`, `htole32` and `htole64`, and reads them with `le16toh`, `le32toh` and `le64toh`. The little-endian byte order follows D1 by reading. `lake test` checks it on genesis fields from D9. No Core comparison exists yet. |
+| Packed codec composition | `DogeLib.Serialization.instPackedCodecProd`, `DogeLib.Serialization.PackedCodec.ofEquiv` | B3, `BtcVerified/Packed/Codec.lean`, `instPackedCodecProd` and `PackedCodec.ofEquiv` | No Dogecoin context | Agreement laws in `DogeLib.Serialization.Proofs.PackedCodec` |
+| Packed fixed-width little-endian integers | `DogeLib.Serialization.instPackedCodecUInt8` to `instPackedCodecUInt64`, `packedBitVecLE` | B3, `BtcVerified/Packed/Codec.lean`, `instPackedCodecUInt8` to `instPackedCodecUInt64`, `packedBitVecLE` | All modes | Agreement laws in `DogeLib.Serialization.Proofs.PackedCodec` |
 | SHA-256 | `DogeLib.Cryptography.Hash.Sha256.hash` | FIPS 180-4 §6.2. Code adapted from EthLib `EthLib/Cryptography/Hash/Sha256.lean` at `6a93711` | Messages of whole bytes | Primitive, no Dogecoin context. Primitive, no Dogecoin context. |
 
 ## Known differences

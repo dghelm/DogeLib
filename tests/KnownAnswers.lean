@@ -1,5 +1,6 @@
 import DogeLib.Cryptography.Hash.Sha256
 import DogeLib.Cryptography.Hash.Sha256d
+import DogeLib.Serialization
 
 /-!
 # `KnownAnswers`
@@ -185,10 +186,135 @@ def check : IO Nat := do
 
 end KnownAnswers.Genesis
 
+/-!
+## Codecs: fixed-width integers in Dogecoin's genesis data
+
+Known answers for the list codecs and the packed codecs of the fixed-width integers.
+
+The inputs are two hexadecimal literals: the 80-byte pure header of the main-network genesis block, and the genesis coinbase transaction.
+The test first checks that the double SHA-256 of each literal is the digest that Core asserts in `src/chainparams.cpp` (SOURCES.md, D9).
+So the literals are Core's bytes, independently of the codecs.
+
+The expected integers are the arguments of `CreateGenesisBlock(1386325540, 99943, 0x1e0ffff0, 1, 88 * COIN)` in the same file.
+Each field is at its offset in the serialization order of the header (D10) and of the transaction (D4):
+
+```text
+header    0..4    nVersion = 1
+header   68..72   nTime    = 1386325540
+header   72..76   nBits    = 0x1e0ffff0
+header   76..80   nNonce   = 99943
+coinbase 63..71   nValue   = 88 * COIN = 8800000000
+```
+
+Each decoder check compares the full result: the value and the remainder, or the rejection.
+The packed decoder checks read slices that start at a nonzero offset of the array.
+-/
+
+namespace KnownAnswers.Codec
+
+open DogeLib.Serialization
+open KnownAnswers.Sha256Cavp (parseHex toHex)
+open KnownAnswers.Genesis (ofDisplay merkleRoot)
+
+/-- The pure header of the main-network genesis block. -/
+def headerHex : String :=
+  "01000000" ++ "0000000000000000000000000000000000000000000000000000000000000000"
+    ++ "696ad20e2dd4365c7459b4a4a5af743d5e92c6da3229e6532cd605f6533f2a5b"
+    ++ "24a6a152" ++ "f0ff0f1e" ++ "67860100"
+
+/-- The genesis coinbase transaction. -/
+def coinbaseHex : String :=
+  "01000000" ++ "01" ++ "0000000000000000000000000000000000000000000000000000000000000000"
+    ++ "ffffffff" ++ "10" ++ "04ffff001d0104084e696e746f6e646f" ++ "ffffffff" ++ "01"
+    ++ "0058850c02000000" ++ "43"
+    ++ "41040184710fa689ad5023690c80f3a49c8f13f8d45b8c857fbcbc8bc4a8e4d3eb4b10f4d4604fa08dce601aaf0f470216fe1b51850b4acf21b179c45070ac7b03a9ac"
+    ++ "00000000"
+
+/-- A packed decoder result with its remaining slice read as a list, for comparison. -/
+def viewPacked {α : Type} (r : Option (α × ByteSlice)) : Option (α × List UInt8) :=
+  r.map fun p => (p.1, p.2.toList)
+
+/-- The checks on the two literals, each with its name and whether it holds. -/
+def cases (header coinbase : ByteArray) : Except String (List (String × Bool)) := do
+  let h := header.toList
+  let c := coinbase.toList
+  let mainHash ← ofDisplay "1a91e3dace36e2be3bf030a65679fe821aa1d6ef92e7c9902eb318182c355691"
+  let root ← ofDisplay merkleRoot
+  let hs := ByteSlice.ofByteArray header
+  let cs := ByteSlice.ofByteArray coinbase
+  return [
+    ("header literal hashes to the main genesis hash",
+      (DogeLib.Cryptography.Hash.Sha256d.hash header).toList == mainHash.toList),
+    ("coinbase literal hashes to the genesis merkle root",
+      (DogeLib.Cryptography.Hash.Sha256d.hash coinbase).toList == root.toList),
+    -- List codecs: decoding.
+    ("UInt8 reads the first byte of nVersion", Codec.decode h == some ((1 : UInt8), h.drop 1)),
+    ("UInt16 reads the first two bytes of nVersion", Codec.decode h == some ((1 : UInt16), h.drop 2)),
+    ("UInt32 reads nVersion", Codec.decode h == some ((1 : UInt32), h.drop 4)),
+    ("UInt32 reads nTime", Codec.decode (h.drop 68) == some ((1386325540 : UInt32), h.drop 72)),
+    ("UInt32 reads nBits", Codec.decode (h.drop 72) == some ((0x1e0ffff0 : UInt32), h.drop 76)),
+    ("UInt32 reads nNonce and leaves nothing", Codec.decode (h.drop 76) == some ((99943 : UInt32), [])),
+    ("UInt64 reads nValue", Codec.decode (c.drop 63) == some ((8800000000 : UInt64), c.drop 71)),
+    ("pair reads nTime then nBits",
+      Codec.decode (h.drop 68) == some (((1386325540 : UInt32), (0x1e0ffff0 : UInt32)), h.drop 76)),
+    ("UInt32 rejects the last 3 bytes", (Codec.decode (h.drop 77) : Option (UInt32 × List UInt8)) == none),
+    ("UInt64 rejects the last 7 bytes", (Codec.decode (c.drop 136) : Option (UInt64 × List UInt8)) == none),
+    ("UInt8 rejects no bytes", (Codec.decode [] : Option (UInt8 × List UInt8)) == none),
+    -- List codecs: encoding.
+    ("UInt32 writes nTime", Codec.encode (1386325540 : UInt32) == (h.drop 68).take 4),
+    ("UInt64 writes nValue", Codec.encode (8800000000 : UInt64) == (c.drop 63).take 8),
+    ("pairs write nTime, nBits and nNonce",
+      Codec.encode (((1386325540 : UInt32), (0x1e0ffff0 : UInt32)), (99943 : UInt32)) == h.drop 68),
+    -- Packed codecs: decoding from slices at a nonzero offset.
+    ("packed UInt32 reads nTime",
+      viewPacked (PackedCodec.decodeSlice (hs.drop 68)) == some ((1386325540 : UInt32), h.drop 72)),
+    ("packed UInt32 reads nNonce and leaves nothing",
+      viewPacked (PackedCodec.decodeSlice (hs.drop 76)) == some ((99943 : UInt32), [])),
+    ("packed UInt64 reads nValue",
+      viewPacked (PackedCodec.decodeSlice (cs.drop 63)) == some ((8800000000 : UInt64), c.drop 71)),
+    ("packed pair reads nTime then nBits",
+      viewPacked (PackedCodec.decodeSlice (hs.drop 68))
+        == some (((1386325540 : UInt32), (0x1e0ffff0 : UInt32)), h.drop 76)),
+    ("packed UInt32 reads nVersion from the whole array",
+      viewPacked (PackedCodec.decode header) == some ((1 : UInt32), h.drop 4)),
+    ("packed UInt32 rejects the last 3 bytes",
+      (viewPacked (PackedCodec.decodeSlice (hs.drop 77)) : Option (UInt32 × List UInt8)) == none),
+    ("packed UInt64 rejects the last 7 bytes",
+      (viewPacked (PackedCodec.decodeSlice (cs.drop 136)) : Option (UInt64 × List UInt8)) == none),
+    -- Packed codecs: encoding.
+    ("packed UInt32 writes nTime", (PackedCodec.encode (1386325540 : UInt32)).toList == (h.drop 68).take 4),
+    ("packed UInt64 writes nValue", (PackedCodec.encode (8800000000 : UInt64)).toList == (c.drop 63).take 8),
+    ("packed UInt32 appends nNonce to the first 76 bytes",
+      (PackedCodec.encodeInto (99943 : UInt32) (header.extract 0 76)).toList == h)]
+
+/-- Every codec known answer. Returns the number of failures. -/
+def check : IO Nat := do
+  let result := do
+    let header ← parseHex headerHex
+    let coinbase ← parseHex coinbaseHex
+    if header.size != 80 then throw s!"header literal has {header.size} bytes, expected 80"
+    if coinbase.size != 143 then throw s!"coinbase literal has {coinbase.size} bytes, expected 143"
+    cases header coinbase
+  match result with
+  | .error e =>
+    IO.eprintln s!"FAIL codec: {e}"
+    return 1
+  | .ok cs =>
+    let mut failures := 0
+    for (name, ok) in cs do
+      if !ok then
+        IO.eprintln s!"FAIL codec {name}"
+        failures := failures + 1
+    IO.println s!"codec: {cs.length} checks, {failures} failures"
+    return failures
+
+end KnownAnswers.Codec
+
 /-- Entry point of `lake test`. -/
 def main : IO UInt32 := do
   let dir : System.FilePath := "tests/cryptography/sha256/cavp"
   let short ← KnownAnswers.Sha256Cavp.checkFile (dir / "SHA256ShortMsg.rsp") 65
   let long ← KnownAnswers.Sha256Cavp.checkFile (dir / "SHA256LongMsg.rsp") 64
   let genesis ← KnownAnswers.Genesis.check
-  return if short + long + genesis == 0 then 0 else 1
+  let codec ← KnownAnswers.Codec.check
+  return if short + long + genesis + codec == 0 then 0 else 1

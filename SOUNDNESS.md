@@ -7,7 +7,7 @@ A proof links a Lean definition to a theorem. Both are assumed to match somethin
 Each of those links is an assumption, and this document names them one by one.
 It follows the structure of EthLib's [`SOUNDNESS.md`](https://github.com/ethereum/EthLib/blob/6a93711e7cc062e787fff6747e4101a141d38b7a/SOUNDNESS.md), which follows s2n-bignum's.
 
-DogeLib has two definitions with theorems: SHA-256, adapted from EthLib, and double SHA-256.
+DogeLib has three groups of definitions with theorems: SHA-256, adapted from EthLib, double SHA-256, and the codec foundations, adapted from btc-verified.
 No definition of a Dogecoin data structure exists yet.
 Each section states the mitigations that exist today, and the policy for definitions that are not written yet.
 A lane that adds a definition, a theorem, an execution path or a dependency updates the affected rows in the same change.
@@ -32,7 +32,7 @@ Gap D asks whether the use of DogeLib holds together.
 
 | ID | Risk | Mitigation in place | Applies to |
 |----|------|---------------------|------------|
-| A1 | A definition does not match the pinned Dogecoin behavior | Source mapping in `SOURCES.md`, by review only. SHA-256 has a proof against a FIPS 180-4 model, and NIST CAVP known answers. No Core comparisons yet. | P R I F |
+| A1 | A definition does not match the pinned Dogecoin behavior | Source mapping in `SOURCES.md`, by review only. SHA-256 has a proof against a FIPS 180-4 model, and NIST CAVP known answers. Known answers from Core's genesis data test the integer codecs. No Core comparisons yet. | P R I F |
 | A2 | A theorem holds only under a hypothesis | Policy: each conditional theorem lists its hypotheses here and in `COVERAGE.md` | P I |
 | A3 | Timing reveals secret data | None: no constant-time claim | R I |
 | A4 | A security theorem idealises a primitive | None: no security theorem yet | P |
@@ -83,6 +83,61 @@ The bytes to hash are derived by hand from `src/chainparams.cpp`, and the deriva
 
 Neither theorem says how Dogecoin orders the bytes of a hash for display, or which bytes it hashes.
 Those belong to the definitions of the objects that are hashed.
+
+### Codecs
+
+A codec has an encoder `encode : α → List UInt8` and a prefix decoder `decode : List UInt8 → Option (α × List UInt8)`.
+The class `LawfulCodec` in `DogeLib.Serialization.Proofs.Codec` states two laws:
+
+- `decode_encode`: for every value `a` and all bytes `rest`, `decode (encode a ++ rest) = some (a, rest)`.
+- `decode_canonical`: for all bytes `bs`, if `decode bs = some (a, rest)`, then `bs = encode a ++ rest`.
+
+The laws hold with no hypothesis for the codecs of `UInt8`, `UInt16`, `UInt32` and `UInt64` (`instLawfulCodecUInt8` to `instLawfulCodecUInt64`).
+They also hold for the little-endian codec of `BitVec (8 * n)`, for every `n` (`lawfulCodec_bitVecCodecLE`).
+They hold for a pair of lawful codecs (`instLawfulCodecProd`).
+`LawfulCodec.ofEquiv` proves them for a codec carried along two functions, under the hypothesis that the functions are inverse to each other.
+Each fixed-width instance discharges that hypothesis by `rfl`.
+`encode_injective` follows from the round trip for every lawful codec.
+
+A decoder that satisfies these laws rejects every input that does not start with a canonical encoding.
+The laws do not say which values a Dogecoin rule accepts.
+For example, a bounded CompactSize reader rejects some canonical encodings, so it needs its own contract (ROADMAP.md, milestone A).
+A decoder returns a remainder, and a client that needs the whole input consumed checks that the remainder is empty (D1).
+
+The byte order of the integer codecs follows Core's `ser_writedata16` to `ser_writedata64` and `ser_readdata16` to `ser_readdata64`, by a reading of the source code (A1).
+`lake test` checks the compiled list and packed codecs against fields of the main-network genesis header and the genesis coinbase.
+Their bytes are hexadecimal literals whose double SHA-256 is the digest that Core asserts, and their values are the arguments of `CreateGenesisBlock` (SOURCES.md, D9).
+These known answers cover `UInt8` to `UInt64`, pairs, truncated input, and slices that start at a nonzero offset.
+They are not a comparison with Core on other inputs.
+
+### Packed codecs
+
+A packed codec encodes into a `ByteArray` and decodes from a `ByteSlice`.
+The class `LawfulPackedCodec` in `DogeLib.Serialization.Proofs.PackedCodec` states its agreement with a list codec:
+
+- `toList_encodeInto`: for every value `a` and buffer `acc`, the bytes of `encodeInto a acc` are the bytes of `acc` followed by `encode a`.
+- `abstractParse_decodeSlice`: for every slice `s`, the packed decoder fails exactly when `decode s.toList` fails.
+  If both succeed, they return the same value, and the bytes of the remaining slice equal the remainder of `decode`.
+
+Agreement holds with no hypothesis for the packed codecs of `UInt8` to `UInt64` (`instLawfulPackedCodecUInt8` to `instLawfulPackedCodecUInt64`).
+It also holds for the packed little-endian codec of `BitVec (8 * n)`, for every `n` (`lawfulPackedCodec_packedBitVecLE`).
+It holds for a pair of agreeing packed codecs (`instLawfulPackedCodecProd`), and for every transport (`LawfulPackedCodec.ofEquiv`).
+`LawfulPackedCodec.toList_encode` and `LawfulPackedCodec.abstractParse_decode` give the same agreement for a whole byte array.
+
+The agreement theorems are about the Lean definitions of the packed codecs.
+The compiled code runs core's `@[extern]` implementations of `ByteArray.push`, `ByteArray.get` and `ByteArray.copySlice`, and no theorem covers them (B1, B2).
+
+### Axioms of the codec theorems
+
+By `#print axioms` with Lean `v4.35.0`:
+
+| Theorem | Axioms |
+| --- | --- |
+| `LawfulCodec.ofEquiv`, `LawfulPackedCodec.ofEquiv`, `encode_injective`, `setWidth_setWidth_eq_self` | `propext` |
+| `instLawfulCodecProd`, `instLawfulCodecUInt8` to `instLawfulCodecUInt64`, `lawfulCodec_bitVecCodecLE`, `decodeBitVecLE_encodeBitVecLE`, `decodeBitVecLE_canonical`, `instLawfulPackedCodecProd`, `toList_pushBitVecLE`, `LawfulPackedCodec.toList_encode`, `ByteArray.toList_eq_data_toList` | `propext`, `Quot.sound` |
+| `instLawfulPackedCodecUInt8` to `instLawfulPackedCodecUInt64`, `abstractParse_readBitVecLE`, `LawfulPackedCodec.abstractParse_decode`, `LawfulPackedCodec.abstractParse_decode_toByteArray`, `ByteSlice.toList_of_uncons_some`, `ByteSlice.toList_drop` | `propext`, `Classical.choice`, `Quot.sound` |
+
+The source files are adapted from btc-verified at commit `ecf4f0d`. None of them uses `bv_decide` (C2).
 
 ### What cannot be proved yet
 
@@ -156,6 +211,7 @@ Known answers and Core comparisons through the compiled code test it end to end,
 Lean core implements some `Array`, `ByteArray` and `Nat` operations with `@[implemented_by]` or `@[extern]`.
 The compiled code runs those implementations, not the definitions the kernel checks.
 Lean core is a declared trusted baseline.
+The packed codecs run three `@[extern]` operations of core: `ByteArray.push`, `ByteArray.get`, and `ByteArray.copySlice` through `ByteArray.extract`.
 
 ### B3. Native code during elaboration
 

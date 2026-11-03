@@ -9,7 +9,8 @@ This roadmap is the living plan. The reasoning behind it is in [design record 00
 | Step | Deliverable | Exit condition | Status |
 | --- | --- | --- | --- |
 | 0 | Toolchain, build skeleton and checks | Lean `v4.35.0` is pinned. The lakefile has the libraries of ARCHITECTURE.md. EthLib's SHA-256 builds. `lake exe check-decls` runs. `BUILDING.md` lists the commands. | Done in `build/toolchain-selection` |
-| 0b | Codec adaptation from btc-verified | The selected codecs and packed refinements are ported to `v4.35.0` and DogeLib's layout, with `bv_decide` steps replaced and provenance recorded | Not started |
+| 0b | Codec adaptation from btc-verified: codec foundations | btc-verified's codec class, fixed-width integer codecs, byte-buffer lemmas and packed codecs are ported to `v4.35.0` and DogeLib's layout, with provenance recorded | Done in `feat/codec-foundations` |
+| 0b | Codec adaptation from btc-verified: CompactSize and counted lists | btc-verified's CompactSize and `CountedList` codecs and their packed forms are ported on top of the codec foundations, with `bv_decide` steps replaced and provenance recorded | Not started |
 | 1 | Source registry, shared types, contribution policy | Baseline and evidence conventions are explicit | Documents only |
 | 2 | Bounded CompactSize reader and proofs | Accepted-prefix relation, bounded round trip, Core comparisons | Not started |
 | 3 | Raw transaction types and base codecs | Exact field preservation, explicit parse mode, parser obligations | Not started |
@@ -71,7 +72,7 @@ If the Rust refinement is not in the first release, the release says so and make
 | Lean toolchain | `v4.35.0`, EthLib's | Follows the model project and its module system. btc-verified pins `v4.30.0-rc2`. | Step 0 build |
 | SHA-256 provider | EthLib | Its `hash_eq_spec` relates the executable code to a separate FIPS 180-4 model. It needs only Lean core, so it is adapted, not required. | Step 0 build |
 | Proof-trust policy | EthLib's: standard axioms only, no tactic that trusts compiled code | See SOUNDNESS.md, C2 | Adopted |
-| btc-verified reuse form | Adaptation into DogeLib's layout, with provenance, not a dependency | Different toolchain, colocated proofs, and `bv_decide` steps | Pending: step 0b |
+| btc-verified reuse form | Adaptation into DogeLib's layout, with provenance, not a dependency | Different toolchain, colocated proofs, and `bv_decide` steps | Step 0b, codec foundations, with Lean core and `Std` only |
 | Writing standard | EthLib's `WRITING.md` and checker, with DogeLib vocabulary | Follows the model project | Adopted |
 
 ## Open decisions

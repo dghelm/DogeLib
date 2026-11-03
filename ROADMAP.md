@@ -92,4 +92,3 @@ Record work that a lane sets aside, until an issue tracker exists. Each entry na
 | --- | --- | --- |
 | SHA-256 known answers through the compiled code | `build/toolchain-selection` | `hash_eq_spec` covers the definitions, not the compiled code (SOUNDNESS.md, B1). Add FIPS 180-4 or NIST CAVP vectors with recorded provenance, run by a test target. |
 | Mathlib dependency | `build/toolchain-selection` | Not needed yet. Add it to the `Proofs` library with step 0b, if the adapted codec proofs need it. |
-| Run `check_writing.py` in CI | Bootstrap | EthLib runs it as an advisory workflow (`.github/workflows/writing.yml`). Add it with the first CI. |

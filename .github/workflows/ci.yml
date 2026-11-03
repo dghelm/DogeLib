@@ -1,0 +1,63 @@
+# Build the specification and its proofs, check their compiled declarations,
+# and run the tests of the repository tools.
+#
+# Adapted from EthLib's ci.yml at commit 6a93711 (CC0 1.0), with the same
+# pinned actions. The build has no dependencies and takes seconds, so this
+# workflow keeps no build cache and records no timing.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A new push to a pull request supersedes the run still in flight.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  lean:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      # Installs elan and the toolchain that lean-toolchain pins.
+      - uses: leanprover/lean-action@50fcf42d2e460296f1a34b402e990d1b24f8b596 # v1.6.0
+        with:
+          auto-config: false
+          use-mathlib-cache: false
+          use-github-cache: false
+
+      # An unfinished proof only warns, so warnings have to be fatal.
+      - name: build
+        run: lake build --wfail
+
+      # Every compiled declaration: its axioms, and anything the kernel cannot
+      # unfold or the compiler runs differently. Only the findings listed in
+      # scripts/check_decls_baseline.txt pass, and that list is empty.
+      - name: declarations
+        if: ${{ !cancelled() }}
+        run: lake exe check-decls
+
+      # The check must report exactly what its fixtures plant.
+      - name: declaration check fixtures
+        if: ${{ !cancelled() }}
+        run: bash scripts/test_check_decls.sh
+
+  tools:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: lane tool
+        run: bash scripts/test_lane.sh

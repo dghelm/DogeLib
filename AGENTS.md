@@ -85,20 +85,20 @@ The branch name is `<type>/<slug>`, using a commit type from [CONTRIBUTING.md](C
 
 Report only the checks you ran, with the exact command, revision, and result ([CONTRIBUTING.md](CONTRIBUTING.md#checks)). Mark every other gate as not run.
 
-| Gate ([CONTRIBUTING.md](CONTRIBUTING.md#checks)) | Command | Exists |
-| --- | --- | --- |
-| Build | `lake build --wfail` | Yes |
-| Declaration check | `lake exe check-decls` | Yes |
-| Declaration check self-test | `bash scripts/test_check_decls.sh` (when the check changes) | Yes |
-| Source and coverage review | Manual review of SOURCES.md and COVERAGE.md | Manual |
-| Conformance | — | No |
-| Refinement | — | No |
-| Soundness review | Manual review of SOUNDNESS.md | Manual |
-| Writing | `uv run --no-project --python 3.12 python scripts/check_writing.py --base main` | Yes. Its findings are advice and never fail the check. |
-| Writing checker tests | `uv run --no-project --python 3.12 python scripts/test_check_writing.py` | Yes |
-| Lane tool | `bash scripts/test_lane.sh` (when `scripts/lane` changes) | Yes |
+| Gate ([CONTRIBUTING.md](CONTRIBUTING.md#checks)) | Command | Exists | In CI |
+| --- | --- | --- | --- |
+| Build | `lake build --wfail` | Yes | `ci` / `lean` |
+| Declaration check | `lake exe check-decls` | Yes | `ci` / `lean` |
+| Declaration check self-test | `bash scripts/test_check_decls.sh` | Yes | `ci` / `lean` |
+| Source and coverage review | Manual review of SOURCES.md and COVERAGE.md | Manual | No |
+| Conformance | — | No | No |
+| Refinement | — | No | No |
+| Soundness review | Manual review of SOUNDNESS.md | Manual | No |
+| Writing | `uv run --no-project --python 3.12 python scripts/check_writing.py --base main` | Yes. Its findings are advice and never fail the check. | `writing`, as annotations |
+| Writing checker tests | `uv run --no-project --python 3.12 python -m unittest scripts/test_check_writing.py` | Yes | `writing` |
+| Lane tool | `bash scripts/test_lane.sh` | Yes | `ci` / `tools` |
 
-When a lane adds a command, it updates this table in the same change. No check runs in CI yet, because the repository has no CI.
+When a lane adds a command, it updates this table in the same change. The workflows are in `.github/workflows/`. CI runs on every pull request and on every push to `main`.
 
 ## When a definition or proof lands
 

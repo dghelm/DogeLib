@@ -94,7 +94,6 @@ The class `LawfulCodec` in `DogeLib.Serialization.Proofs.Codec` states two laws:
 The laws hold with no hypothesis for the codecs of `UInt8`, `UInt16`, `UInt32` and `UInt64` (`instLawfulCodecUInt8` to `instLawfulCodecUInt64`).
 They also hold for the little-endian codec of `BitVec (8 * n)`, for every `n` (`lawfulCodec_bitVecCodecLE`).
 They hold for a pair of lawful codecs (`instLawfulCodecProd`).
-
 `LawfulCodec.ofEquiv` proves them for a codec carried along two functions, under the hypothesis that the functions are inverse to each other.
 Each fixed-width instance discharges that hypothesis by `rfl`.
 `encode_injective` follows from the round trip for every lawful codec.

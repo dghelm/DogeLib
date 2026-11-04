@@ -6,6 +6,17 @@ Instructions for an AI agent that changes this repository. Humans follow the sam
 
 EthLib is the model project. Where EthLib and btc-verified differ in structure, policy or style, follow EthLib. Use btc-verified as a source of components to adapt, not as a pattern for the repository.
 
+## Start here
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) and [WRITING.md](WRITING.md) before changing files.
+Use [COVERAGE.md](COVERAGE.md) for implemented evidence and [ROADMAP.md](ROADMAP.md) for work order.
+Work in one [lane worktree](#lanes), and keep its `STATUS.md` current.
+Run the affected [checks](#checks), report commands, revisions and results, and mark every other gate as not run.
+Every pull request needs an [independent review](#pull-requests) before merge, with the verdict and findings recorded.
+Implementation approval does not authorize a merge.
+
+Read the [maintainer-only list](#changes-that-need-a-maintainer) before settling a contract or merging a pull request.
+
 ## Read first
 
 | Document | Read it for |
@@ -26,9 +37,12 @@ Local reference clones, when present on the machine:
 
 Use the commit pinned in [SOURCES.md](SOURCES.md) before you cite or copy from a clone. A clone's working tree can be at a different commit.
 
-## Current state
+## Document roles
 
-The build skeleton exists: Lean `v4.35.0`, the `DogeLib` and `Proofs` libraries, and `lake exe check-decls`. [COVERAGE.md](COVERAGE.md) lists the operations that exist, [BUILDING.md](BUILDING.md) gives the commands, and [ROADMAP.md](ROADMAP.md) gives the next steps.
+[COVERAGE.md](COVERAGE.md) holds detailed evidence per operation.
+[SOUNDNESS.md](SOUNDNESS.md) explains the assumptions and meaning of the claims.
+[ROADMAP.md](ROADMAP.md) records completed milestones and next work.
+[README.md](README.md) gives a short overview, and [BUILDING.md](BUILDING.md) gives the check commands.
 
 ## Work as a specialist
 
@@ -166,6 +180,15 @@ Do not rewrite a correct claim only to make the checker quiet.
 
 ## Pull requests
 
+After the maintainer approves a feature scope, the implementer may settle routine additive details in the pull request.
+These details can include response field shapes.
+The maintainer reviews the finished pull request.
+The [maintainer-only list](#changes-that-need-a-maintainer) still applies.
+
+Every pull request needs an independent review before merge.
+Use a Codex review or a separate review agent that did not write the change.
+Record the reviewer's verdict and findings in the pull request or lane.
+
 Each lane ends in one pull request against `main` on GitHub.
 Follow [CONTRIBUTING.md](CONTRIBUTING.md#branches-commits-and-pull-requests) for the title and the body.
 
@@ -175,20 +198,27 @@ Follow [CONTRIBUTING.md](CONTRIBUTING.md#branches-commits-and-pull-requests) for
    For a stacked lane, use its base branch as `--base`.
 4. Wait for CI: `gh pr checks <number> --watch`.
    A failed check is fixed in the lane, never ignored.
-5. Get a review of the change.
+5. Get an independent review of the change, and record the verdict and findings.
 6. Merge with `gh pr merge <number> --squash`, so that the title becomes the commit on `main`.
    A stacked pull request never merges into its parent branch.
    Wait until the parent merges, then rebase the lane onto `main`, push it, and change the base with `gh pr edit <number> --base main`.
    Repeat steps 4 and 5 for the new head before you merge.
 7. Update the main checkout with `git pull --ff-only`, and remove the lane with `scripts/lane rm`.
 
-An agent merges a pull request only with a maintainer's authorization to merge, and only when CI passes and the review approves.
+Approval to implement does not authorize a merge.
+Merge authorization is a separate maintainer decision and may cover a single pull request in conversation.
+An agent merges only with maintainer authorization, after CI passes and an independent review approves.
+
 Record the pull request number and its state in `STATUS.md`.
 
 ### Changes that need a maintainer
 
-An agent never merges these, even with authorization to merge.
-It opens the pull request, labels it `needs-maintainer`, and continues with other work:
+Scope approval does not let an implementer settle a listed change in the pull request.
+Label their pull requests `needs-maintainer`.
+An agent never rewrites or force-pushes `main` on general authority.
+An agent merges a listed change only when the maintainer explicitly authorizes that specific pull request's merge.
+CI must pass, and an independent review must approve before merge.
+General merge authority never covers these changes:
 
 - The project licence and contributor terms.
 - Material from another project under a licence that is not in the table of [CONTRIBUTING.md](CONTRIBUTING.md#material-from-other-projects), or with no licence.

@@ -1,6 +1,9 @@
 # Roadmap
 
-This roadmap is the living plan. The reasoning behind it is in [design record 0001](docs/design/0001-initial-handoff.md) and [design record 0002](docs/design/0002-btc-verified-reuse.md). Update the *Status* column when a lane's pull request merges, not when work starts.
+This roadmap records completed milestones and next work.
+[COVERAGE.md](COVERAGE.md) holds detailed evidence, and [SOUNDNESS.md](SOUNDNESS.md) explains its assumptions and limits.
+The reasoning behind the work order is in [design record 0001](docs/design/0001-initial-handoff.md) and [design record 0002](docs/design/0002-btc-verified-reuse.md).
+Update the *Status* column when a lane's pull request merges, not when work starts.
 
 **Model project.** Where EthLib and btc-verified differ, DogeLib follows EthLib. That covers architecture, the proof-trust policy, the module system, the writing standard and the soundness documentation. The btc-verified project supplies components, mainly its codecs and packed-codec refinements, which DogeLib adapts to EthLib's structure.
 
@@ -16,7 +19,7 @@ This roadmap is the living plan. The reasoning behind it is in [design record 00
 | 3 | Raw transaction types and base codecs | Exact field preservation, explicit parse mode, parser obligations | Fixed-length byte strings and `Hash256` done in `feat/fixed-bytes`. Transaction types, base codecs, Core's base-mode reader, the complete reader and the transaction ID done in `feat/transaction-base`. The base-mode records of Core's transaction corpus are known answers (issue #22). The witness-allowed format, as a serialization format only, done in `feat/transaction-witness-format`. The oracle exposes both witness readers, serialization and hashes. The Core comparison covers all 198 corpus records and malformed variants (issue #36). |
 | 4 | Legacy hash-plan specification | Declared lower-level modes and special cases are covered | Done in `feat/legacy-sighash`: `legacySignatureHashPlan` for `SIGVERSION_BASE`, Core's `sighash.json` corpus and hand-derived preimages as known answers. The witness v0 digest and the `CheckSig` wrapper are not specified. |
 | 5 | Field-by-field preimage construction proved equal to the transaction-transformation reference | Exact plan equality on the recorded domain | Done in `proof/legacy-sighash-reference`. `legacySignatureHashPlan_eq_reference` proves the production plan equal to the `SignatureHashOld` transformation. It needs a fully parsed script code and counts below 2^32. The two differ on a script that ends in a short push. |
-| 6 | Rust refinement experiment | One extracted implementation matches an independent contract | Merged (#51) |
+| 6 | Rust refinement experiment | One extracted implementation matches an independent contract | Done in `feat/rust-compactsize-refinement` (#51). See [milestone D](#d-the-rust-refinement-path-step-6). |
 
 The steps are units of review, not one pull request each.
 Step 6 can start after step 2.
@@ -27,8 +30,10 @@ The `Work` layer specifies the arithmetic as an isolated function, with Core's `
 `Work.NextWork` specifies `GetNextWorkRequired` on a checked finite view, including minimum-difficulty rules.
 Header validity is not specified.
 
-Word models for multiplication, both shifts, bit length and low-64-bit extraction have equivalence proofs against the arithmetic definitions.
-Word division and its subtraction and comparison dependencies remain deferred under issue #16.
+The word-arithmetic proofs cover division and its dependencies (#47), as well as multiplication, shifts, bit length and low-64-bit extraction (#42).
+The compact, constructor and byte-conversion paths and the composed word retarget also have arithmetic equivalence proofs (#50).
+[COVERAGE.md](COVERAGE.md#operations) records the operation-level evidence.
+[SOUNDNESS.md](SOUNDNESS.md#256-bit-word-division) explains the division domain, zero-divisor exception and source-review boundaries.
 
 Steps 0 and 0b follow design record 0002: the first contributions adopt audited codec foundations and then define Dogecoin's bounded decoding contract. They replace the original plan to build fixed-width encodings and CompactSize from scratch. Design record 0002 preferred a pinned btc-verified dependency first. The decisions below choose an adaptation instead, because btc-verified's toolchain, file structure and trust policy all differ from EthLib's.
 
@@ -62,7 +67,11 @@ An incremental hash sink and measured memory or speed gains are later work.
 
 ### D: the Rust refinement path (step 6)
 
-A safe Rust CompactSize decoder extracted through Charon/Aeneas at pinned revisions, proved against DogeLib's independent contract, and exercised on the same fixtures.
+The bounded Rust CompactSize decoder and its extracted Lean model are in `Refinement/Rust/` and `Refinement/Refinement/Rust/` (#51).
+`decode_refines` proves complete-result agreement with the independent bounded-reader specification.
+[SOUNDNESS.md](SOUNDNESS.md#rust-bounded-compactsize-reader) explains the theorem's domain, complete-result equality and extraction boundaries.
+[COVERAGE.md](COVERAGE.md#operations) records its proof and fixture evidence.
+[Refinement/Rust/README.md](Refinement/Rust/README.md) gives the regeneration and test commands.
 
 ## Release acceptance criteria
 
@@ -77,11 +86,6 @@ From design record 0001, section 9. A first release has:
 - Independent fixtures, targeted boundary and malformed cases, and minimized mismatches.
 - A statement of proof assumptions, execution boundaries, and unsupported areas.
 - Validation reports identifying the exact revisions and commands actually run ([report command](BUILDING.md#validation-reports)).
-
-The Rust bounded-reader implementation and its extracted model are in `Refinement/Rust/`.
-`decode_refines` proves complete-result agreement with `CompactSize.decodeBounded` for every Rust-representable slice.
-The theorem includes failures and the remaining input, and it holds on 32- and 64-bit platforms.
-Charon, Aeneas and the Rust compiler remain trusted boundaries (SOUNDNESS.md, B6).
 
 ## Decisions
 

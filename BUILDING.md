@@ -1,32 +1,46 @@
 # Building DogeLib
 
 DogeLib needs [elan](https://github.com/leanprover/elan), which installs the Lean toolchain that `lean-toolchain` pins, `v4.35.0`.
-The specification uses Lean core.
-The `Refinement` library also requires the pinned Aeneas backend and Mathlib.
-Fetch the Mathlib cache before the first build in each worktree:
-
-```bash
-lake exe cache get
-```
-
-Do not build Mathlib from source on a shared machine.
-The cached dependency directory occupies about 7.2 GiB per worktree, measured with this toolchain.
-Aeneas and extraction tools need additional disk space ([Rust instructions](Refinement/Rust/README.md)).
+The root DogeLib package uses Lean core and has no Lake dependencies.
+Downstream projects that require it do not fetch Aeneas or Mathlib.
+The optional package under `Refinement/` owns those dependencies and the Rust refinement library.
 
 ## Build and check
 
+Build the specification and its proofs without the optional package:
+
 ```bash
 lake build --wfail
-lake exe check-decls
+lake exe check-decls --skip-refinement
 lake test
 bash scripts/test_oracle.sh
 ```
 
-`lake build --wfail` compiles the specification and checks every proof.
+The explicit `--skip-refinement` flag prints `Refinement NOT checked` in the declaration-check summary.
+It does not establish any result for the Rust refinement library.
+
+For the full production checks, fetch the optional package's cache and build both packages:
+
+```bash
+lake -d Refinement exe cache get
+lake build --wfail
+lake -d Refinement build --wfail
+lake exe check-decls
+```
+
+The default declaration check fails if the refinement package is absent, unbuilt or cannot load every requested module.
+It names the reason and never silently checks fewer modules.
+Production CI uses the default command.
+Do not build Mathlib from source on a shared machine.
+Its cached dependency directory occupies about 7.2 GiB per worktree, measured with this toolchain.
+Aeneas and extraction tools need additional disk space ([Rust instructions](Refinement/Rust/README.md)).
+
+`lake build --wfail` compiles the specification and checks its proofs.
+The separate refinement build checks the generated model and its proof.
 An unfinished proof only warns, so `--wfail` turns every warning into an error.
 
-`lake exe check-decls` reads the compiled declarations of the `DogeLib`, `Proofs`, `Exports` and `Refinement` libraries.
-It requires every `.lean` file under `DogeLib/` and `Refinement/`, plus both library roots, to be reachable from those roots.
+`lake exe check-decls` reads the compiled declarations of `DogeLib`, `Proofs`, `Exports` and `Refinement`.
+It requires every `.lean` source under `DogeLib/` and `Refinement/Refinement/`, plus their roots, to be reachable.
 It names each unreachable module and fails the check.
 
 It reports any axiom beyond `propext`, `Classical.choice` and `Quot.sound` in the transitive dependencies of safe declarations.
@@ -39,7 +53,7 @@ Every other opaque dependency remains a finding ([SOUNDNESS.md](SOUNDNESS.md#c1-
 `scripts/check_decls_baseline.txt` lists the findings that exist today.
 It is empty, and a new finding is fixed, never added to it.
 
-`lake test` runs known answers through the compiled code.
+`lake test` runs known answers through the compiled specification.
 Four directories hold vendored files, each with a README that gives their provenance:
 
 - `tests/cryptography/sha256/cavp/`: the NIST CAVP vectors, for SHA-256.
@@ -86,8 +100,9 @@ The self-test also plants an unimported production file and requires a failure t
 
 ## Rust refinement
 
-The default build checks the committed generated model and its complete-result proof.
-CI uses the Mathlib cache and does not install extraction tools.
+The optional package build checks the committed generated model and its complete-result proof.
+CI uses the Mathlib cache in the separate package and caches Aeneas backend artifacts by pin and toolchain.
+It does not install extraction tools.
 Regenerate and compare the model locally, and test the compiled Rust reader:
 
 ```bash

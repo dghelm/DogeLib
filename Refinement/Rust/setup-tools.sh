@@ -2,7 +2,13 @@
 # Install the pinned extraction tools inside this lane, without system packages.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
-tools_dir="$repo_root/.lane/tools"
+tools_dir="$repo_root/build/tools"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --tools-dir) tools_dir=$(realpath -m -- "${2:?--tools-dir requires a directory}"); shift 2 ;;
+    *) echo "usage: $0 [--tools-dir DIR]" >&2; exit 2 ;;
+  esac
+done
 aeneas_pin=d1e177bb9fdc17fa62e730d524ac905ba19776ed
 charon_pin=a58d159210b3a36fedeaba4437bda896a8b12f0d
 aeneas_tag=nightly-2026.11.04-d1e177b
@@ -12,7 +18,7 @@ if [[ $(uname -sm) != "Linux x86_64" ]]; then
 fi
 mkdir -p "$tools_dir"
 if [[ ! -d "$tools_dir/aeneas/.git" ]]; then
-  gh repo clone https://github.com/AeneasVerif/aeneas.git "$tools_dir/aeneas" -- --depth 1 --branch "$aeneas_tag"
+  git clone https://github.com/AeneasVerif/aeneas.git "$tools_dir/aeneas" --depth 1 --branch "$aeneas_tag"
 fi
 test "$(git -C "$tools_dir/aeneas" rev-parse HEAD)" = "$aeneas_pin"
 if [[ ! -f "$tools_dir/aeneas-linux-x86_64.tar.gz" ]]; then

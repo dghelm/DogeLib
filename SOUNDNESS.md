@@ -992,7 +992,7 @@ The extracted model is an implementation artifact.
 It never becomes the specification.
 
 `Refinement/Rust/src/lib.rs` implements the bounded CompactSize reader.
-Charon and Aeneas at the pins in SOURCES.md produce `Refinement/Rust/Generated/DogelibCompactsize.lean`.
+Charon and Aeneas at the pins in SOURCES.md produce `Refinement/Refinement/Rust/Generated/DogelibCompactsize.lean`.
 `Refinement/Rust/regenerate.sh --check` compares a fresh extraction with the committed model.
 The refinement theorem is about that Lean model, not a proof of the extractors or compiled Rust.
 The Rust compiler, standard-library models, extraction tools and runtime remain trusted.
@@ -1024,7 +1024,9 @@ This Lean core parameter supplies the word size of Rust `usize`.
 The exception does not permit an opaque declaration in either library, another reachable opaque, or this parameter in a `DogeLib` specification definition.
 The self-test rejects those cases, imported Aeneas axioms and native proofs.
 The allowed axioms remain the same three standard axioms.
-Aeneas and Mathlib are dependencies outside the checked module namespaces, but their transitive axiom dependencies remain checked at each in-scope use.
+
+Aeneas and Mathlib belong only to the separate refinement package and remain outside the checked module namespaces.
+The checker still follows their transitive axiom dependencies at each in-scope use.
 
 ### C2. Tactics that trust compiled code
 
@@ -1046,10 +1048,14 @@ A metaprogram can add a declaration to the environment without the kernel checki
 An independent checker that replays the environment, such as `lean4checker`, would catch it, but none runs yet.
 
 The default declaration check loads `DogeLib`, `DogeLib.Proofs`, `DogeLib.Exports` and `Refinement` with their private proof bodies.
-It requires every `.lean` file under `DogeLib/` and `Refinement/`, plus both library roots, to appear in that imported environment.
+It requires every `.lean` source under `DogeLib/` and `Refinement/Refinement/`, plus their library roots, to appear in that imported environment.
 An unreachable module fails the check, including a leaf omitted from its layer root.
 This reachability check does not replay kernel checks or detect a metaprogram that bypassed them.
 The default imports, checked namespaces and file inventory include the extracted model and its proof.
+
+The default check fails if the separate refinement package is missing, unbuilt or cannot load every requested module.
+`--skip-refinement` checks only DogeLib and prints `Refinement NOT checked` in the summary.
+Production CI never uses this flag.
 
 ## Gap D: does the use of DogeLib hold together?
 

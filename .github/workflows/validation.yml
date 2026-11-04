@@ -34,8 +34,20 @@ jobs:
       - uses: leanprover/lean-action@50fcf42d2e460296f1a34b402e990d1b24f8b596 # v1.6.0
         with:
           auto-config: false
-          use-mathlib-cache: true
+          use-mathlib-cache: false
           use-github-cache: false
+
+      - name: refinement dependencies
+        run: MATHLIB_NO_CACHE_ON_UPDATE=1 lake -d Refinement update
+
+      - name: Aeneas backend cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: Refinement/.lake/packages/aeneas/backends/lean/.lake/build
+          key: aeneas-${{ runner.os }}-${{ runner.arch }}-d1e177bb9fdc17fa62e730d524ac905ba19776ed-${{ hashFiles('lean-toolchain', 'Refinement/lean-toolchain', 'Refinement/lake-manifest.json') }}
+
+      - name: Mathlib cache
+        run: lake -d Refinement exe cache get
 
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
@@ -50,7 +62,7 @@ jobs:
         # Rust extraction and fixtures require the local pinned tools.
         # The report records these two gates as not run in CI.
         run: |
-          gates=$(python3 -I scripts/validation_report.py --list | cut -d: -f1 | rg -v '^(rust-known-answers|rust-extraction-freshness)$' | paste -sd,)
+          gates=$(python3 -I scripts/validation_report.py --list | cut -d: -f1 | grep -Ev '^(rust-known-answers|rust-extraction-freshness)$' | paste -sd,)
           python3 -I scripts/validation_report.py --gates "$gates" --core-clone build/core-src --output build/validation/report.md
 
       - name: upload report and logs

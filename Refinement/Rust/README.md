@@ -32,10 +32,14 @@ Refinement/Rust/regenerate.sh
 Refinement/Rust/regenerate.sh --check
 ```
 
-The setup script uses the exact-pin Aeneas release and builds Charon from its pinned source.
+The setup script requires authenticated `gh` access for the release download.
+Run `gh auth login` before setup.
+It uses the exact-pin Aeneas release and builds Charon from its pinned source.
 It installs Rust with user-local rustup and never installs system packages.
-Both tools and the intermediate LLBC file stay in `.lane/`.
-The generated file is `Generated/DogelibCompactsize.lean`.
+Both tools use `build/tools` by default, and both scripts accept `--tools-dir DIR`.
+The intermediate LLBC file stays in `.lane/`.
+
+The generated file is `../Refinement/Rust/Generated/DogelibCompactsize.lean`.
 Do not edit it by hand.
 The check extracts into a temporary lane directory and compares the full generated directory with the committed files.
 

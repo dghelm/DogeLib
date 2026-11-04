@@ -1600,6 +1600,140 @@ def checkOperators : IO Nat := do
     IO.println s!"arith_uint256_tests.cpp multiply, divide, GetLow64: {cs.length} cases, {failures} failures"
     return failures
 
+/-!
+### Next-work selection
+
+Parameter expectations come from D14 at `e0a1c15`: mainnet lines 88-95 and 126-141,
+testnet lines 233-251 and 282-306, regtest lines 392-397 and 425-437.
+Synthetic branch fixtures follow D17 lines 32-88 and D6 lines 26-39.
+They are source-derived examples, not observed historical headers or a Core comparison.
+-/
+
+/-- Compares the full result, including finite-view error categories. -/
+private instance : BEq (Except NextWorkError UInt32) where
+  beq a b := match a, b with
+    | .ok x, .ok y => x == y
+    | .error x, .error y => decide (x = y)
+    | _, _ => false
+
+/-- Synthetic view entry. Times and compact targets are supplied without header validation. -/
+def workEntry (height : Nat) (time bits : UInt32) : BlockIndex := ⟨height, time, bits⟩
+
+/-- Parameter fields fixed independently by Core's network records (D14).
+The tuple is timespan, spacing, DigiShield permission, minimum-difficulty permission and compact limit. -/
+def workFields (network : WorkNetwork) (height : UInt32) : Int × Nat × Bool × Bool × UInt32 :=
+  let p := getConsensus network height
+  (p.nPowTargetTimespan.toInt, p.nPowTargetSpacing, p.fDigishieldDifficultyCalculation,
+    p.fPowAllowMinDifficultyBlocks, ArithUint256.getCompact p.powLimit)
+
+/-- Boundary examples from the effective heights in D14, including records whose work fields repeat. -/
+def parameterCases : List (String × Bool) :=
+  let mainLegacy := (14400, 60, false, false, 0x1e0fffff)
+  let mainDigi := (60, 60, true, false, 0x1e0fffff)
+  let testLegacy := (14400, 60, false, true, 0x1e0fffff)
+  let testMin := (60, 60, true, true, 0x1e0fffff)
+  let regLegacy := (14400, 1, false, true, 0x207fffff)
+  let regDigi := (1, 1, true, true, 0x207fffff)
+  [("main genesis fields", workFields .mainnet 0 == mainLegacy),
+   ("main 144999", workFields .mainnet 144999 == mainLegacy),
+   ("main 145000", workFields .mainnet 145000 == mainDigi),
+   ("main 145001", workFields .mainnet 145001 == mainDigi),
+   ("main 371336", workFields .mainnet 371336 == mainDigi),
+   ("main 371337", workFields .mainnet 371337 == mainDigi),
+   ("main 371338", workFields .mainnet 371338 == mainDigi),
+   ("test 144999", workFields .testnet 144999 == testLegacy),
+   ("test 145000", workFields .testnet 145000 == mainDigi),
+   ("test 145001", workFields .testnet 145001 == mainDigi),
+   ("test 157499", workFields .testnet 157499 == mainDigi),
+   ("test 157500", workFields .testnet 157500 == testMin),
+   ("test 157501", workFields .testnet 157501 == testMin),
+   ("test 158099", workFields .testnet 158099 == testMin),
+   ("test 158100", workFields .testnet 158100 == testMin),
+   ("test 158101", workFields .testnet 158101 == testMin),
+   ("regtest 9", workFields .regtest 9 == regLegacy),
+   ("regtest 10", workFields .regtest 10 == regDigi),
+   ("regtest 11", workFields .regtest 11 == regDigi),
+   ("regtest 19", workFields .regtest 19 == regDigi),
+   ("regtest 20", workFields .regtest 20 == regDigi),
+   ("regtest 21", workFields .regtest 21 == regDigi),
+   ("main UInt32 maximum", workFields .mainnet 0xffffffff == mainDigi),
+   ("test UInt32 maximum", workFields .testnet 0xffffffff == testMin),
+   ("regtest UInt32 maximum", workFields .regtest 0xffffffff == regDigi)]
+
+/-- Synthetic inputs fixed by the return statements and strict comparisons of D17 and D6.
+Malformed and truncated inputs check the finite-view adapter, not Core rejection codes. -/
+def nextWorkCases : List (String × Bool) :=
+  let legacy := testnetWorkParams
+  let minParams := testnetMinDifficultyWorkParams
+  let e := workEntry
+  [("main genesis", nextWorkRequired .mainnet [] 0 == .ok 0x1e0fffff),
+   ("test genesis", nextWorkRequired .testnet [] 0 == .ok 0x1e0fffff),
+   ("regtest genesis", nextWorkRequired .regtest [] 0 == .ok 0x207fffff),
+   -- D17 lines 50-53: threshold uses previous height.
+   ("local interval 144999", retargetInterval mainnetWorkParams 144999 == 240),
+   ("local interval 145000", retargetInterval mainnetWorkParams 145000 == 1),
+   ("local interval 145001", retargetInterval mainnetWorkParams 145001 == 1),
+   ("record interval stays 240", mainnetWorkParams.difficultyAdjustmentInterval == 240),
+   ("first interval lookback", blocksToGoBack 240 239 == 239),
+   ("later interval lookback", blocksToGoBack 240 479 == 240),
+   ("main copies compact verbatim", nextWorkRequired .mainnet [e 1 100 0x04923456] 101 == .ok 0x04923456),
+   -- D17 lines 54-73: equality is not a delay, and boundary stops recovery.
+   ("legacy equal delay", nextWorkRequired .testnet [e 1 100 0x1c123456] 220 == .ok 0x1c123456),
+   ("legacy delayed", nextWorkRequired .testnet [e 1 100 0x1c123456] 221 == .ok 0x1e0fffff),
+   ("recovery nonminimum", nextWorkRequired .testnet
+      [e 3 100 0x1e0fffff, e 2 90 0x1e0fffff, e 1 80 0x1c123456] 101 == .ok 0x1c123456),
+   ("recovery interval boundary", nextWorkRequired .testnet
+      [e 241 100 0x1e0fffff, e 240 90 0x1e0fffff, e 239 80 0x1c123456] 101 == .ok 0x1e0fffff),
+   ("recovery genesis", nextWorkRequired .testnet
+      [e 1 100 0x1e0fffff, e 0 90 0x1e0fffff] 101 == .ok 0x1e0fffff),
+   ("recovery missing history", nextWorkRequired .testnet [e 1 100 0x1e0fffff] 101 == .error .missingAncestor),
+   -- D6 lines 29-38: independent previous-height and permission checks.
+   ("DigiShield previous 157499", !allowDigishieldMinDifficultyForBlock minParams (e 157499 100 0) 221),
+   ("DigiShield previous 157500", allowDigishieldMinDifficultyForBlock minParams (e 157500 100 0) 221),
+   ("DigiShield previous 157501", allowDigishieldMinDifficultyForBlock minParams (e 157501 100 0) 221),
+   ("DigiShield equal delay", !allowDigishieldMinDifficultyForBlock minParams (e 157500 100 0) 220),
+   ("DigiShield permission false", !allowDigishieldMinDifficultyForBlock testnetDigishieldWorkParams (e 157500 100 0) 221),
+   ("test candidate 157500 still retargets", nextWorkRequired .testnet [e 157499 100 0x1c123456] 221 == .error .missingAncestor),
+   ("test candidate 157501 minimum", nextWorkRequired .testnet [e 157500 100 0x1c123456] 221 == .ok 0x1e0fffff),
+   ("DigiShield equality needs ancestor", nextWorkRequired .testnet [e 157500 100 0x1c123456] 220 == .error .missingAncestor),
+   ("activation candidate 145000 needs ancestor", nextWorkRequired .mainnet [e 144999 100 0] 101 == .error .missingAncestor),
+   ("main missing retarget ancestor", nextWorkRequired .mainnet [e 239 100 0] 101 == .error .missingAncestor),
+   -- Regtest's fPowNoRetargeting is true, but this caller ignores it (D17 line 88).
+   -- With T=1 and actual timespan=1, D6 returns the old compact.
+   ("regtest retarget at 10", nextWorkRequired .regtest [e 9 100 0x1c123456, e 8 99 0] 101 == .ok 0x1c123456),
+   ("regtest ignores no-retarget flag and normalizes compact", nextWorkRequired .regtest
+      [e 9 100 0x04923456, e 8 99 0] 101 == .ok 0x04123456),
+   ("regtest delayed before retarget", nextWorkRequired .regtest [e 1 100 0x1c123456] 103 == .ok 0x207fffff),
+   ("regtest maximum widened time", nextWorkRequired .regtest [e 1 0xffffffff 0x1c123456] 0xffffffff == .ok 0x1c123456),
+   ("inconsistent view", nextWorkRequired .mainnet [e 2 100 0, e 0 90 0] 101 == .error .inconsistentHeights),
+   ("height overflow", nextWorkRequired .mainnet [e 2147483647 100 0] 101 == .error .heightOutOfRange),
+   ("genesis with predecessor", nextWorkRequired .mainnet [e 0 100 0, e 0 90 0] 101 == .error .inconsistentHeights),
+   ("zero custom interval", getNextWorkRequired { legacy with nPowTargetSpacing := 20000 }
+      [e 1 100 0] 101 == .error .zeroInterval)]
+
+/-- Synthetic contiguous windows with the six pinned D7 arithmetic inputs.
+The first and last timestamps and expected compact are from the cited test.
+Intermediate timestamps and heights provide context for the caller and make no historical claim. -/
+def callerRetargetCases : List (String × Bool) :=
+  retargetCases.toList.map fun c =>
+    let height := c.nHeight.toInt.toNat - 1
+    let back := if height = 239 then 239 else if height < 145000 then 240 else 1
+    let view := (List.range (back + 1)).map fun i =>
+      workEntry (height - i)
+        (UInt32.ofNat (if i = back then c.nFirstBlockTime.toInt.toNat else c.nLastBlockTime.toInt.toNat)) c.nBits
+    (s!"caller {c.name}", nextWorkRequired .mainnet view 0 == .ok c.expected)
+
+/-- Runs the source-derived next-work examples and pinned retarget answers through the caller. -/
+def checkNextWork : IO Nat := do
+  let cases := parameterCases ++ nextWorkCases ++ callerRetargetCases
+  let mut failures := 0
+  for (name, ok) in cases do
+    if !ok then
+      IO.eprintln s!"FAIL next work: {name}"
+      failures := failures + 1
+  IO.println s!"next-work selection: {cases.length} cases, {failures} failures"
+  return failures
+
 end KnownAnswers.Work
 
 /-- Entry point of `lake test`. -/
@@ -1617,5 +1751,6 @@ def main : IO UInt32 := do
   let sighash ← KnownAnswers.LegacySighash.check
   let compact ← KnownAnswers.Work.checkCompact
   let retarget ← KnownAnswers.Work.checkRetarget
+  let nextWork ← KnownAnswers.Work.checkNextWork
   let operators ← KnownAnswers.Work.checkOperators
-  return if short + long + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + operators == 0 then 0 else 1
+  return if short + long + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + operators == 0 then 0 else 1

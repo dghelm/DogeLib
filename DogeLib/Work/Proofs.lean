@@ -1,6 +1,8 @@
 module
 
 public import DogeLib.Work.Proofs.ArithUint256
+public import DogeLib.Work.Proofs.Consensus
+public import DogeLib.Work.Proofs.NextWork
 public import DogeLib.Work.Proofs.Retarget
 
 /-!

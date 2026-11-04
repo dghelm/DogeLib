@@ -305,7 +305,7 @@ The upstream files use no `bv_decide` (C2).
 `DogeLib.Transaction.LegacySighash` specifies Core's `SignatureHash` with `SIGVERSION_BASE` (SOURCES.md, D3).
 `legacySignatureHashPlan` returns a `LegacyHashPlan`: the fixed digest `legacyOne`, or the bytes to hash with double SHA-256.
 The preimage is written field by field after `CTransactionSignatureSerializer`, not by transforming a transaction and serializing it.
-The theorems are in `DogeLib.Transaction.Proofs.LegacySighash`.
+The theorems are in `DogeLib.Transaction.Proofs.LegacySighash`, except `readOp_rest_length`, `readPush_op_append` and `readOp_op_append`. Those are in the specification module, because `scanOps` and `findAndDelete` need them to terminate.
 For every script code, transaction, input index and hash type:
 
 - `legacySignatureHashPlan_eq_fixedDigest_iff`: the plan is `fixedDigest legacyOne` exactly when `nIn` is at least the number of inputs. With SINGLE, it is also `legacyOne` when `nIn` is at least the number of outputs.
@@ -340,6 +340,46 @@ By `#print axioms` with Lean `v4.35.0`:
 | `readPush_op_append`, `readOp_op_append`, `readOp_stop_nil` | `propext` |
 | `readOp_rest_length`, `readOp_stop_prefix`, `scanOps_prefix`, `scanOps_eq_of_complete`, `legacySignatureHashPlan_eq_fixedDigest_iff`, `legacySignatureHashPlan_eq_hashBytes`, `legacyPreimage_eq`, `HashType.flags_eq_of_and`, `LegacyHashPlan.digest_fixedDigest`, `LegacyHashPlan.digest_hashBytes_val` | `propext`, `Quot.sound` |
 | `scriptCodeBytes_eq_encode` | `propext`, `Classical.choice`, `Quot.sound` |
+
+### Legacy signature hash: transformation reference
+
+`DogeLib.Transaction.LegacySighashReference` defines the same commitment a second way.
+`legacyReferencePlan` follows `SignatureHashOld` (SOURCES.md, D2), Core's copy of the old `SignatureHash`.
+It copies the transaction and removes the separators from the script code with `findAndDelete` (D24).
+Then it blanks scripts, sequences and outputs, and serializes the copy with the base codec.
+The production plan writes the preimage field by field. The two definitions share `readOp`, `Script.empty`, `TxOut.null`, `legacyOne`, the hash-type flags and the field codecs.
+
+`legacySignatureHashPlan_eq_reference` says that the two plans are equal, for every input index and every hash type, under three hypotheses:
+
+- No instruction of the script code fails to parse: `(scanOps sc.bytes.val).2 = []`.
+- The transaction has fewer than 2^32 inputs.
+- The transaction has fewer than 2^32 outputs.
+
+`legacySignatureHash_eq_reference` gives the equality of the digests.
+The equality is between two Lean definitions. It says nothing about memory use or speed, and nothing about C++ object code.
+
+Each hypothesis is needed for a reason.
+The production serializer reduces the counts modulo 2^32, and `SignatureHashOld` does not.
+
+Take a script that ends in a short push.
+The serializer writes its bytes up to the cursor of the failed `GetOp`, and omits the unread rest. `FindAndDelete` keeps the rest.
+`legacyPlans_differ_shortPush` shows this on the script `4c 05 aa`.
+So for such a script the two Core functions commit to different bytes, and only the production function is consensus code.
+
+`lake test` runs Core's 500 corpus records and the hand-derived preimages through both plans.
+Every corpus script parses fully, so the corpus does not test the difference.
+
+Core's `FindAndDelete` counts the copies it removes in an `int`, and `findAndDelete` counts them in a `Nat`.
+The Core compatibility of `findAndDelete` excludes a count that overflows an `int`.
+
+By `#print axioms` with Lean `v4.35.0`:
+
+| Theorem | Axioms |
+| --- | --- |
+| `take_one_set_zero` | None |
+| `CountedList.encodeElems_eq_flatten`, `CountedList.encode_eq_flatten`, `readOp_separator`, `readOp_cons_opcode` | `propext` |
+| `dropMatches_length_le`, `findAndDeleteLoop_length_le`, `findAndDelete_length_le`, `referenceInputs_length_le`, `referenceOutputs_length_le`, `TxIn.encode_eq`, `Transaction.encode_eq`, `Script.encode_eq`, `scanOps_of_op`, `scanOps_of_stop`, `dropMatches_nil`, `dropMatches_separator_cons`, `dropMatches_separator_of_ne`, `findAndDeleteLoop_of_op`, `findAndDeleteLoop_of_stop`, `findAndDeleteLoop_separator_cons`, `legacyPlans_differ_shortPush` | `propext`, `Quot.sound` |
+| `findAndDeleteLoop_separator`, `keptBytes_length_add`, `findAndDelete_separator`, `encode_referenceScriptCode`, `referenceSequencedInputs_map_encode`, `encode_referenceInputs`, `encode_referenceOutputs`, `legacySignatureHashPlan_eq_reference`, `legacySignatureHash_eq_reference` | `propext`, `Classical.choice`, `Quot.sound` |
 
 ### Compact encoding and difficulty retarget
 

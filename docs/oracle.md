@@ -115,7 +115,7 @@ The `tx` object holds every field as it was read:
 
 These operations are planned, and each would need a new format name:
 
-- The witness-allowed mode of Core's transaction reader (issue #23).
+- The witness-allowed format of Core's transaction reader (issue #36). The specification defines it in `Transaction.Witness`.
   It models a serialization format that Core's code can read. It does not mean that segregated witness is active on any Dogecoin network.
 - Building a transaction from its fields.
 

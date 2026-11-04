@@ -30,5 +30,5 @@ That sentence describes the goal, not the current state.
 
 ## License
 
-DogeLib's own material is intended to be MIT-licensed, and the licence is recorded before the repository becomes public.
+DogeLib's own material is distributed under the MIT licence, in [LICENSE](LICENSE).
 Material from other projects keeps its own licence, as each adapted file and [CONTRIBUTING.md](CONTRIBUTING.md#material-from-other-projects) state.

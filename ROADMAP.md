@@ -78,13 +78,13 @@ If the Rust refinement is not in the first release, the release says so and make
 | Writing standard | EthLib's `WRITING.md` and checker, with DogeLib vocabulary | Follows the model project | Adopted |
 | Oracle record format | JSON Lines, `dogelib-oracle/1`, in [docs/oracle.md](docs/oracle.md) | One request and one response per line, so a harness can keep the oracle open. Hashes in both byte orders, and preimages in the response. | Maintainer asked for the proposal, 2026-11-04 |
 | Core compatibility pin | Dogecoin Core `v1.14.9`, commit `e0a1c15` | The latest Core release on 2026-11-03 | Maintainer, 2026-11-03, issue #5 |
+| Project licence and contributor terms | MIT, in `LICENSE`. A contributor makes a contribution available under the same licence. Material from other projects follows CONTRIBUTING.md. | The most open licence that is compatible with the material DogeLib takes from other projects | Maintainer, 2026-11-04, issue #4 |
 
 ## Open decisions
 
 | Decision | Options under consideration | Owner lane |
 | --- | --- | --- |
 | First signature-proof domain | Fully parsed script code is the candidate | Milestone C |
-| Project license and contributor terms | MIT intended. Recorded in `LICENSE` before the repository becomes public. Third-party material follows CONTRIBUTING.md. | Maintainers, issue #4 |
 
 ## Deferred work
 

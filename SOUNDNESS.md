@@ -235,18 +235,24 @@ It also runs short inputs for each error of the bounded reader.
 The expected results are Core's bytes (D9), or derived from D1 and D21.
 Core itself does not run, so this is not a Core comparison.
 
-The element-at-a-time readers recurse once for each element.
-In one run of `lake env lean --run`, the generic decoder of a byte list overflowed the stack at 4,000,000 elements, below `MAX_SIZE`.
-The block readers of bytes read 30,000,000 bytes in the same run.
-No theorem covers stack use. Issue #19 tracks readers whose stack use does not grow with the count.
+`decode`, `decodeSlice` and `decodeBounded` read the elements with loop forms: `decodeElemsLoop`, `readElemsLoop` and `readElemsBoundedLoop`.
+Each one calls itself in tail position and keeps the values read so far in an array.
+`decodeElemsLoop_nil`, `readElemsLoop_nil` and `readElemsBoundedLoop_nil` prove that each returns what the recursive form returns, including every failure and error.
+So every theorem about `decodeElems`, `readElems` and `readElemsBounded` holds for the readers.
+
+These theorems are about results, not about stack use. Stack use is an observation of the compiled code (B1).
+In `lake test`, the recursive forms overflowed the stack at 16,000,000 elements, and the loop forms read 16,000,000.
+In `lake env lean --run`, the recursive forms overflowed at 5,000,000.
+An element reader that itself recurses deeply can still use more stack, and `MAX_SIZE` itself (33,554,432 elements) was not run.
+CI reads lists of 3,000,000 elements through the three readers, which checks results, not stack use.
 
 By `#print axioms` with Lean `v4.35.0`:
 
 | Theorem | Axioms |
 | --- | --- |
 | `readElemsBounded_toOption` | None |
-| `ofList?_eq_some`, `val_of_ofList?`, `decodeElems_encodeElems`, `toList_pushElems`, `readElemsBounded_readByte` | `propext` |
-| `instLawfulCodecCountedList`, `decode_encode`, `decode_canonical`, `decode_eq_some_iff`, `decodeElems_length`, `decodeElems_canonical`, `abstractParse_readElems`, `encode_uint8`, `decode_uint8_cons`, `decode_uint8_nil`, `encodeElems_uint8`, `decodeElems_uint8`, `decodeBounded_eq_ok_iff_parts`, `decodeBounded_of_count_error`, `readByte_toOption`, `decodeBoundedBytes_eq`, `decodeBoundedBytes_maxSize_succ`, `decode_maxSize_succ` | `propext`, `Quot.sound` |
+| `ofList?_eq_some`, `val_of_ofList?`, `decodeElems_encodeElems`, `toList_pushElems`, `readElemsBounded_readByte`, `readElemsBoundedLoop_eq`, `readElemsBoundedLoop_nil` | `propext` |
+| `decodeElemsLoop_eq`, `decodeElemsLoop_nil`, `readElemsLoop_eq`, `readElemsLoop_nil`, `instLawfulCodecCountedList`, `decode_encode`, `decode_canonical`, `decode_eq_some_iff`, `decodeElems_length`, `decodeElems_canonical`, `abstractParse_readElems`, `encode_uint8`, `decode_uint8_cons`, `decode_uint8_nil`, `encodeElems_uint8`, `decodeElems_uint8`, `decodeBounded_eq_ok_iff_parts`, `decodeBounded_of_count_error`, `readByte_toOption`, `decodeBoundedBytes_eq`, `decodeBoundedBytes_maxSize_succ`, `decode_maxSize_succ` | `propext`, `Quot.sound` |
 | `instLawfulPackedCodecCountedList`, `instLawfulPackedCodecCountedListBytes`, `abstractParse_readByteList`, `decodeBounded_eq_ok_iff`, `decodeBounded_encode` | `propext`, `Classical.choice`, `Quot.sound` |
 
 The upstream file uses no `bv_decide` (C2).

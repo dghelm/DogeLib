@@ -123,6 +123,30 @@ theorem decodeElems_canonical {α : Type} [Codec α] [LawfulCodec α] (n : Nat) 
     have e2 := ih r1 xs' r2 hd2
     rw [e1, e2, encodeElems, List.append_assoc]
 
+/-! ## The loop forms of the element readers -/
+
+/-- For every `n`, input and accumulator: the loop form returns what `decodeElems` returns, after the accumulated values. -/
+theorem decodeElemsLoop_eq {α : Type} [Codec α] (n : Nat) (bs : List UInt8) (acc : Array α) :
+    decodeElemsLoop n bs acc = (decodeElems n bs).map fun p => (acc.toList ++ p.1, p.2) := by
+  induction n generalizing bs acc with
+  | zero => simp [decodeElemsLoop, decodeElems]
+  | succ n ih =>
+    simp only [decodeElemsLoop, decodeElems, Option.bind_eq_bind, Option.pure_def]
+    cases h : Codec.decode (α := α) bs with
+    | none => rfl
+    | some p =>
+      obtain ⟨x, rest⟩ := p
+      simp only [Option.bind_some, ih]
+      cases decodeElems (α := α) n rest with
+      | none => rfl
+      | some q => simp
+
+/-- For every `n` and input, the loop form with an empty accumulator is `decodeElems`. -/
+theorem decodeElemsLoop_nil {α : Type} [Codec α] (n : Nat) (bs : List UInt8) :
+    decodeElemsLoop n bs (#[] : Array α) = decodeElems n bs := by
+  rw [decodeElemsLoop_eq]
+  cases decodeElems (α := α) n bs <;> simp
+
 /--
 For every element codec, `CountedList.decode bs = some (cl, rest)` exactly when `CompactSize.decode bs` reads a count with a remainder `r`, and `decodeElems` reads the elements of `cl` from `r` with the remainder `rest`.
 -/
@@ -133,14 +157,14 @@ theorem decode_eq_some_iff {α : Type} [Codec α] (bs : List UInt8) (cl : Counte
         decodeElems count.toNat r = some (cl.val, rest) := by
   constructor
   · intro h
-    simp only [CountedList.decode, Option.bind_eq_bind, Option.pure_def,
+    simp only [CountedList.decode, decodeElemsLoop_nil, Option.bind_eq_bind, Option.pure_def,
       Option.bind_eq_some_iff, Option.some.injEq, Prod.mk.injEq] at h
     obtain ⟨⟨count, r0⟩, hc, ⟨xs, r1⟩, he, cl', hof, rfl, rfl⟩ := h
     rw [val_of_ofList? hof]
     exact ⟨count, r0, hc, he⟩
   · rintro ⟨count, r, hc, he⟩
-    simp only [CountedList.decode, Option.bind_eq_bind, Option.pure_def, hc, Option.bind_some, he,
-      ofList?_eq_some cl.property]
+    simp only [CountedList.decode, decodeElemsLoop_nil, Option.bind_eq_bind, Option.pure_def, hc,
+      Option.bind_some, he, ofList?_eq_some cl.property]
 
 /--
 The round trip of the generic codec: for every lawful element codec, every counted list `cl` and all bytes `rest`, `CountedList.decode (CountedList.encode cl ++ rest) = some (cl, rest)`.
@@ -199,6 +223,28 @@ theorem toList_pushElems {α : Type} [Codec α] [PackedCodec α] [LawfulPackedCo
   | nil => simp [pushElems, encodeElems]
   | cons x xs ih =>
     rw [pushElems, ih, LawfulPackedCodec.toList_encodeInto, encodeElems, List.append_assoc]
+
+/-- For every `n`, slice and accumulator: the packed loop form returns what `readElems` returns, after the accumulated values. -/
+theorem readElemsLoop_eq {α : Type} [PackedCodec α] (n : Nat) (s : ByteSlice) (acc : Array α) :
+    readElemsLoop n s acc = (readElems n s).map fun p => (acc.toList ++ p.1, p.2) := by
+  induction n generalizing s acc with
+  | zero => simp [readElemsLoop, readElems]
+  | succ n ih =>
+    simp only [readElemsLoop, readElems, Option.bind_eq_bind, Option.pure_def]
+    cases h : PackedCodec.decodeSlice (α := α) s with
+    | none => rfl
+    | some p =>
+      obtain ⟨x, s1⟩ := p
+      simp only [Option.bind_some, ih]
+      cases readElems (α := α) n s1 with
+      | none => rfl
+      | some q => simp
+
+/-- For every `n` and slice, the packed loop form with an empty accumulator is `readElems`. -/
+theorem readElemsLoop_nil {α : Type} [PackedCodec α] (n : Nat) (s : ByteSlice) :
+    readElemsLoop n s (#[] : Array α) = readElems n s := by
+  rw [readElemsLoop_eq]
+  cases readElems (α := α) n s <;> simp
 
 /-- For every element codec with a lawful packed codec, every `n` and every slice `s`, `abstractParse (readElems n s) = decodeElems n s.toList`. -/
 theorem abstractParse_readElems {α : Type} [Codec α] [PackedCodec α] [LawfulPackedCodec α] :
@@ -279,6 +325,7 @@ instance instLawfulPackedCodecCountedList {α : Type} [Codec α] [PackedCodec α
   abstractParse_decodeSlice s := by
     change abstractParse (CountedList.decodeSlice s) = CountedList.decode s.toList
     unfold CountedList.decodeSlice CountedList.decode
+    simp only [readElemsLoop_nil, decodeElemsLoop_nil]
     rw [← CompactSize.abstractParse_decodeSlice s]
     refine abstractParse_bind _ fun count s1 => ?_
     dsimp only
@@ -300,6 +347,7 @@ instance (priority := high) instLawfulPackedCodecCountedListBytes :
   abstractParse_decodeSlice s := by
     change abstractParse (CountedList.decodeSliceBytes s) = CountedList.decode s.toList
     unfold CountedList.decodeSliceBytes CountedList.decode
+    simp only [decodeElemsLoop_nil]
     rw [← CompactSize.abstractParse_decodeSlice s]
     refine abstractParse_bind _ fun count s1 => ?_
     dsimp only
@@ -320,6 +368,32 @@ open CompactSize (ReadError)
 private theorem except_eq_ok_iff {ε β : Type} (x : Except ε β) (a : β) :
     x = .ok a ↔ x.toOption = some a := by
   cases x <;> simp [Except.toOption]
+
+/-- For every element reader, `n`, input and accumulator: the loop form returns what `readElemsBounded` returns, after the accumulated values, and the same error. -/
+theorem readElemsBoundedLoop_eq {α : Type} (elem : List UInt8 → Except ReadError (α × List UInt8))
+    (n : Nat) (bs : List UInt8) (acc : Array α) :
+    readElemsBoundedLoop elem n bs acc = (readElemsBounded elem n bs).map fun p => (acc.toList ++ p.1, p.2) := by
+  induction n generalizing bs acc with
+  | zero => simp [readElemsBoundedLoop, readElemsBounded, Except.map]
+  | succ n ih =>
+    simp only [readElemsBoundedLoop, readElemsBounded]
+    cases elem bs with
+    | error e => rfl
+    | ok p =>
+      obtain ⟨x, rest⟩ := p
+      simp only [ih]
+      cases readElemsBounded elem n rest with
+      | error e => rfl
+      | ok q => simp [Except.map]
+
+/-- For every element reader, `n` and input, the loop form with an empty accumulator is `readElemsBounded`. -/
+theorem readElemsBoundedLoop_nil {α : Type} (elem : List UInt8 → Except ReadError (α × List UInt8))
+    (n : Nat) (bs : List UInt8) :
+    readElemsBoundedLoop elem n bs (#[] : Array α) = readElemsBounded elem n bs := by
+  rw [readElemsBoundedLoop_eq]
+  cases readElemsBounded elem n bs with
+  | error e => rfl
+  | ok p => simp [Except.map]
 
 /--
 For every element codec and every element reader `elem` that accepts exactly what the codec accepts, `readElemsBounded elem n bs` accepts exactly what `decodeElems n bs` accepts.
@@ -360,6 +434,7 @@ theorem decodeBounded_eq_ok_iff_parts {α : Type}
       ∃ count r, CompactSize.decodeBounded bs = .ok (count, r) ∧
         readElemsBounded elem count.toNat r = .ok (cl.val, rest) := by
   unfold decodeBounded
+  simp only [readElemsBoundedLoop_nil]
   constructor
   · intro h
     split at h
@@ -392,6 +467,7 @@ theorem decodeBounded_of_count_error {α : Type}
     (h : CompactSize.decodeBounded bs = .error e) :
     decodeBounded elem bs = .error e := by
   unfold decodeBounded
+  simp only [readElemsBoundedLoop_nil]
   rw [h]
 
 /--
@@ -454,6 +530,7 @@ theorem readElemsBounded_readByte (n : Nat) (bs : List UInt8) :
 theorem decodeBoundedBytes_eq (bs : List UInt8) :
     decodeBoundedBytes bs = decodeBounded readByte bs := by
   unfold decodeBoundedBytes decodeBounded
+  simp only [readElemsBoundedLoop_nil]
   cases CompactSize.decodeBounded bs with
   | error e => rfl
   | ok p =>
@@ -580,6 +657,6 @@ It does not distinguish this input from any other truncated list.
 theorem decode_maxSize_succ :
     CountedList.decode (α := UInt8) [0xfe, 0x01, 0x00, 0x00, 0x02] = none := by
   rw [CountedList.decode, CompactSize.decode_maxSize_succ]
-  simp [decodeElems_uint8]
+  simp [decodeElemsLoop_nil, decodeElems_uint8]
 
 end DogeLib.Serialization.CountedList

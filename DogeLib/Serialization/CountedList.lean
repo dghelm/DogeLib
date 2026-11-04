@@ -39,6 +39,12 @@ For example, `fe 01 00 00 02` is the count `0x02000001`.
 The generic decoder reads it, then tries to read that many elements.
 The bounded reader rejects it as `tooLarge` and reads no element.
 
+The recursive element readers `decodeElems`, `readElems` and `readElemsBounded` are the definitions that the theorems describe.
+The decoders run their loop forms, `decodeElemsLoop`, `readElemsLoop` and `readElemsBoundedLoop`, which call themselves in tail position.
+So the stack use of the compiled loops does not grow with the length of the list, by observation and not by proof.
+An element reader can still use stack of its own.
+The proof library shows that each loop form returns what its recursive form returns.
+
 `DogeLib.Serialization.Proofs.CountedList` proves the codec laws, the agreement of the packed codecs, and the contract of the bounded reader.
 
 ## Source
@@ -99,6 +105,18 @@ def decodeElems {α : Type} [Codec α] : Nat → List UInt8 → Option (List α 
     let (xs, rest') ← decodeElems n rest
     return (x :: xs, rest')
 
+/--
+The loop form of `decodeElems`: the values read so far are in `acc`, and each step calls itself in tail position.
+So the compiled loop does not use more stack for a larger `n`.
+`decodeElemsLoop_eq` proves that it returns what `decodeElems` returns, after `acc`.
+-/
+def decodeElemsLoop {α : Type} [Codec α] : Nat → List UInt8 → Array α → Option (List α × List UInt8)
+  | 0, bs, acc => some (acc.toList, bs)
+  | n + 1, bs, acc =>
+    match Codec.decode (α := α) bs with
+    | none => none
+    | some (x, rest) => decodeElemsLoop n rest (acc.push x)
+
 /-- The canonical CompactSize encoding of the length, then the encodings of the elements. -/
 def encode {α : Type} [Codec α] (cl : CountedList α) : List UInt8 :=
   CompactSize.encode (UInt64.ofNat cl.val.length) ++ encodeElems cl.val
@@ -112,7 +130,7 @@ The check `ofList?` never fails here, because the list has as many elements as t
 -/
 def decode {α : Type} [Codec α] (bs : List UInt8) : Option (CountedList α × List UInt8) := do
   let (count, rest) ← CompactSize.decode bs
-  let (xs, rest') ← decodeElems count.toNat rest
+  let (xs, rest') ← decodeElemsLoop count.toNat rest #[]
   let cl ← ofList? xs
   return (cl, rest')
 
@@ -143,6 +161,17 @@ def readElems {α : Type} [PackedCodec α] : Nat → ByteSlice → Option (List 
     let (xs, s2) ← readElems n s1
     return (x :: xs, s2)
 
+/--
+The loop form of `readElems`, with the values read so far in `acc`. Each step calls itself in tail position.
+`readElemsLoop_eq` proves that it returns what `readElems` returns, after `acc`.
+-/
+def readElemsLoop {α : Type} [PackedCodec α] : Nat → ByteSlice → Array α → Option (List α × ByteSlice)
+  | 0, s, acc => some (acc.toList, s)
+  | n + 1, s, acc =>
+    match PackedCodec.decodeSlice (α := α) s with
+    | none => none
+    | some (x, s1) => readElemsLoop n s1 (acc.push x)
+
 /-- The buffer with the encoding of a counted list appended: the packed form of `encode`. -/
 def encodeInto {α : Type} [PackedCodec α] (cl : CountedList α) (acc : ByteArray) : ByteArray :=
   pushElems cl.val (CompactSize.encodeInto (UInt64.ofNat cl.val.length) acc)
@@ -151,7 +180,7 @@ def encodeInto {α : Type} [PackedCodec α] (cl : CountedList α) (acc : ByteArr
 def decodeSlice {α : Type} [PackedCodec α] (s : ByteSlice) :
     Option (CountedList α × ByteSlice) := do
   let (count, s1) ← CompactSize.decodeSlice s
-  let (xs, s2) ← readElems count.toNat s1
+  let (xs, s2) ← readElemsLoop count.toNat s1 #[]
   let cl ← ofList? xs
   return (cl, s2)
 
@@ -224,6 +253,18 @@ def readElemsBounded {α : Type} (elem : List UInt8 → Except ReadError (α × 
       | .error e => .error e
       | .ok (xs, rest') => .ok (x :: xs, rest')
 
+/--
+The loop form of `readElemsBounded`, with the values read so far in `acc`. Each step calls itself in tail position.
+`readElemsBoundedLoop_eq` proves that it returns what `readElemsBounded` returns, after `acc`, and the same error.
+-/
+def readElemsBoundedLoop {α : Type} (elem : List UInt8 → Except ReadError (α × List UInt8)) :
+    Nat → List UInt8 → Array α → Except ReadError (List α × List UInt8)
+  | 0, bs, acc => .ok (acc.toList, bs)
+  | n + 1, bs, acc =>
+    match elem bs with
+    | .error e => .error e
+    | .ok (x, rest) => readElemsBoundedLoop elem n rest (acc.push x)
+
 /-- One byte, or `truncated` when there are no bytes: Core's read of one `unsigned char` from a `CDataStream` (D21). -/
 def readByte : List UInt8 → Except ReadError (UInt8 × List UInt8)
   | [] => .error .truncated
@@ -263,7 +304,7 @@ def decodeBounded {α : Type} (elem : List UInt8 → Except ReadError (α × Lis
   match CompactSize.decodeBounded bs with
   | .error e => .error e
   | .ok (count, rest) =>
-    match readElemsBounded elem count.toNat rest with
+    match readElemsBoundedLoop elem count.toNat rest #[] with
     | .error e => .error e
     | .ok (xs, rest') =>
       match ofList? xs with

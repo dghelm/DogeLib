@@ -852,6 +852,140 @@ def check : IO Nat := do
 end KnownAnswers.Transactions
 
 /-!
+## Transactions: the witness-allowed format
+
+Known answers for `Transaction.readAllowWitness`, the complete reader, the writer and the witness hash.
+They model a serialization format only. Segregated witness is not active on Dogecoin's main or test network at the pin.
+
+The inputs are built by hand.
+Their expected results come from a reading of `UnserializeTransaction` and `SerializeTransaction` in `src/primitives/transaction.h`, lines 211 to 272 (D4), with `ReadCompactSize` (D1) and `CDataStream::read` (D21):
+
+- After the version, an input count of zero is followed by a flags byte. Flags zero end the transaction before the lock time, with no outputs.
+- With flags that are not zero, Core reads the inputs and the outputs. If bit 0 is set, it reads one stack per input.
+- Only then does it reject any other flag bit, before it reads the lock time.
+  So a read error in the lists or the stacks comes first, and a missing lock time does not hide the flags error.
+- A stack with one empty item counts as witness data. A section of empty stacks does not, and the writer then uses the base form.
+
+The witness hash of the genesis coinbase, which has no witness data, is its transaction ID, the merkle root that Core asserts (D9).
+-/
+
+namespace KnownAnswers.Witness
+
+open DogeLib DogeLib.Serialization DogeLib.Transaction
+open DogeLib.Serialization.CompactSize (ReadError)
+open KnownAnswers.Sha256Cavp (parseHex)
+open KnownAnswers.Codec (coinbaseHex)
+open KnownAnswers.Genesis (ofDisplay merkleRoot)
+open KnownAnswers.Transactions (le outpointBytes ver tooBig)
+
+/-- An input with the outpoint of `outpointBytes`, an empty script and sequence `0xffffffff`. -/
+def input0 : List UInt8 := outpointBytes ++ [0x00] ++ le 4 0xffffffff
+
+/-- An output of value 0 with an empty script. -/
+def output0 : List UInt8 := le 8 0 ++ [0x00]
+
+/-- A stack with one item of one byte, `ab`. -/
+def stack1 : List UInt8 := [0x01, 0x01, 0xab]
+
+/-- Lock time 0. -/
+def lock : List UInt8 := le 4 0
+
+/-- The extended form with these flags, one input, one output and these stack bytes, without the lock time. -/
+def extended (flags : UInt8) (stacks : List UInt8) : List UInt8 :=
+  ver ++ [0x00, flags] ++ [0x01] ++ input0 ++ [0x01] ++ output0 ++ stacks
+
+/-- The base form of the transaction with one input and one output. -/
+def base : List UInt8 := ver ++ [0x01] ++ input0 ++ [0x01] ++ output0 ++ lock
+
+/-- Whether the reader fails on `bs` with error `e`. -/
+def isError (bs : List UInt8) (e : WitnessReadError) : Bool :=
+  match Transaction.readAllowWitness bs with
+  | .error e' => e' == e
+  | .ok _ => false
+
+/-- Whether the reader reads `bs` as a transaction and remainder that `check` accepts. -/
+def reads (bs : List UInt8) (check : WitnessTransaction → List UInt8 → Bool) : Bool :=
+  match Transaction.readAllowWitness bs with
+  | .ok (w, rest) => check w rest
+  | .error _ => false
+
+/-- The checks, each with its name and whether it holds. -/
+def cases (coinbase : ByteArray) : Except String (List (String × Bool)) := do
+  let root ← ofDisplay merkleRoot
+  return [
+    -- Zero flags.
+    ("zero count, zero flags and a lock time: no inputs, no outputs",
+      reads (ver ++ [0x00, 0x00] ++ lock) fun w rest =>
+        w.tx.inputs.val.isEmpty && w.tx.outputs.val.isEmpty && w.witnesses.isEmpty && rest.isEmpty),
+    ("zero count, zero flags, no lock time: truncated", isError (ver ++ [0x00, 0x00]) (.read .truncated)),
+    ("zero count and no flags byte: truncated", isError (ver ++ [0x00]) (.read .truncated)),
+    -- Flag bit 0.
+    ("flags 01 with one stack: read, witness data, written again",
+      reads (extended 0x01 stack1 ++ lock) fun w rest =>
+        w.hasWitness && rest.isEmpty && w.encode == extended 0x01 stack1 ++ lock),
+    ("flags 01 with zero inputs: no stacks, written in the base form",
+      reads (ver ++ [0x00, 0x01, 0x00, 0x01] ++ output0 ++ lock) fun w rest =>
+        !w.hasWitness && w.witnesses.isEmpty && rest.isEmpty &&
+          w.encode == ver ++ [0x00, 0x01] ++ output0 ++ lock),
+    ("a stack with one empty item is witness data",
+      reads (extended 0x01 [0x01, 0x00] ++ lock) fun w _ =>
+        w.hasWitness && w.encode == extended 0x01 [0x01, 0x00] ++ lock),
+    ("a section of empty stacks is read, and written in the base form",
+      reads (extended 0x01 [0x00] ++ lock) fun w _ => !w.hasWitness && w.encode == base),
+    ("flags 01, lock time missing: truncated", isError (extended 0x01 stack1) (.read .truncated)),
+    ("flags 01, stack truncated: truncated", isError (extended 0x01 [0x01, 0x05, 0xab]) (.read .truncated)),
+    ("flags 01, stack count non-canonical",
+      isError (extended 0x01 [0xfd, 0x01, 0x00, 0x01, 0xab] ++ lock) (.read .nonCanonical)),
+    ("flags 01, stack count above MAX_SIZE: tooLarge", isError (extended 0x01 tooBig) (.read .tooLarge)),
+    ("flags 01, item length above MAX_SIZE: tooLarge", isError (extended 0x01 ([0x01] ++ tooBig)) (.read .tooLarge)),
+    -- Other flag bits.
+    ("flags 02, complete: unknownOptionalData", isError (extended 0x02 [] ++ lock) .unknownOptionalData),
+    ("flags 02, lock time missing: unknownOptionalData", isError (extended 0x02 []) .unknownOptionalData),
+    ("flags 02, outputs truncated: truncated, before the flags",
+      isError (ver ++ [0x00, 0x02, 0x01] ++ input0 ++ [0x01] ++ output0.take 4) (.read .truncated)),
+    ("flags 03, complete with a stack: unknownOptionalData", isError (extended 0x03 stack1 ++ lock) .unknownOptionalData),
+    ("flags 03, a stack, lock time missing: unknownOptionalData", isError (extended 0x03 stack1) .unknownOptionalData),
+    ("flags ff, complete with a stack: unknownOptionalData", isError (extended 0xff stack1 ++ lock) .unknownOptionalData),
+    ("flags 03, stack truncated: truncated, before the flags",
+      isError (extended 0x03 [0x01, 0x05, 0xab]) (.read .truncated)),
+    ("flags 03, stack count non-canonical: nonCanonical, before the flags",
+      isError (extended 0x03 [0xfd, 0x01, 0x00, 0x01, 0xab] ++ lock) (.read .nonCanonical)),
+    ("flags 03, item length above MAX_SIZE: tooLarge, before the flags",
+      isError (extended 0x03 ([0x01] ++ tooBig)) (.read .tooLarge)),
+    -- Remainders.
+    ("one trailing byte: the prefix reader keeps it",
+      reads (extended 0x01 stack1 ++ lock ++ [0x00]) fun _ rest => rest == [0x00]),
+    ("one trailing byte: the complete reader reports it",
+      match Transaction.decodeAllowWitnessComplete (extended 0x01 stack1 ++ lock ++ [0x00]) with
+      | .error (.trailingBytes 1) => true
+      | _ => false),
+    -- The witness hash.
+    ("the genesis coinbase has no witness data, and its witness hash is its ID",
+      match Transaction.decodeAllowWitnessComplete coinbase.toList with
+      | .ok w => !w.hasWitness && w.wtxid.val == root.toList
+      | .error _ => false)]
+
+/-- Every known answer of the witness-allowed format. Returns the number of failures. -/
+def check : IO Nat := do
+  let result := do
+    let coinbase ← parseHex coinbaseHex
+    cases coinbase
+  match result with
+  | .error e =>
+    IO.eprintln s!"FAIL witness format: {e}"
+    return 1
+  | .ok cs =>
+    let mut failures := 0
+    for (name, ok) in cs do
+      if !ok then
+        IO.eprintln s!"FAIL witness format {name}"
+        failures := failures + 1
+    IO.println s!"witness format: {cs.length} checks, {failures} failures"
+    return failures
+
+end KnownAnswers.Witness
+
+/-!
 ## Core's transaction corpus
 
 Runs the serialized transactions of Core's `src/test/data/tx_valid.json` and `tx_invalid.json` at commit `e0a1c15` (SOURCES.md, D28 and D29), vendored in `tests/transaction/corpus/`, through the compiled base-mode reader and codec.
@@ -861,12 +995,18 @@ So a record of `tx_invalid.json` is a transaction that Core reads and then rejec
 Script validity is not checked here.
 
 A record is in base mode when byte 4 of its transaction, the first byte of the input count, is not `00`.
-`UnserializeTransaction` (D4, lines 218 to 241) reads a flags byte only after an empty input list.
+`UnserializeTransaction` (D4, lines 219 to 230) reads a flags byte only after an empty input list.
 So for these records, Core's reading with witness data allowed is the base reading.
-The rule reads raw bytes, not DogeLib's reader. The other records use the witness serialization (issue #23), and are counted.
+The rule reads raw bytes, not DogeLib's reader. The other records use the witness-allowed format.
 
-For each base-mode record, the test checks four things. `readBase` reads the whole transaction, `decodeBaseComplete` accepts it, the codec writes the same bytes again, and the packed codec reads the same transaction.
-Core's harness checks none of these four directly. They are DogeLib's checks on Core's bytes.
+For each base-mode record, the test checks five things. `readBase` reads the whole transaction, `decodeBaseComplete` accepts it, the codec writes the same bytes again, and the packed codec reads the same transaction.
+`readAllowWitness` reads the same transaction, with an empty stack for each input.
+
+For each record in the witness-allowed format, `decodeAllowWitnessComplete` must read the whole transaction, and `WitnessTransaction.encode` must write the same bytes again.
+Each of these records has a stack that is not empty, so the writer uses the extended form. The test checks that too.
+The format is only a serialization format here. Segregated witness is not active on Dogecoin's main or test network at the pin.
+
+Core's harness checks none of these directly. They are DogeLib's checks on Core's bytes, not a comparison with a running Core.
 -/
 
 namespace KnownAnswers.TxCorpus
@@ -904,6 +1044,14 @@ def checkFile (path : System.FilePath) (base witness : Nat) : IO Nat := do
       failures := failures + 1
     else if bs[4]! == 0x00 then
       nWitness := nWitness + 1
+      match Transaction.decodeAllowWitnessComplete bs with
+      | .ok w =>
+        if !w.hasWitness || w.encode != bs then
+          IO.eprintln s!"FAIL {path}: witness record not written again in the extended form: {toHex ⟨bs.toArray⟩}"
+          failures := failures + 1
+      | .error _ =>
+        IO.eprintln s!"FAIL {path}: decodeAllowWitnessComplete does not read the witness record {toHex ⟨bs.toArray⟩}"
+        failures := failures + 1
     else
       nBase := nBase + 1
       let read := match Transaction.readBase bs with
@@ -919,13 +1067,16 @@ def checkFile (path : System.FilePath) (base witness : Nat) : IO Nat := do
           | .error _ => false
         let packed := (PackedCodec.decodeSlice (α := Transaction) (ByteSlice.ofByteArray ⟨bs.toArray⟩)).map
           fun p => (p.1, p.2.toList)
-        if !complete || Codec.encode tx != bs || packed != some (tx, []) then
-          IO.eprintln s!"FAIL {path}: complete reader, codec or packed codec disagrees on {toHex ⟨bs.toArray⟩}"
+        let allowWitness := match Transaction.readAllowWitness bs with
+          | .ok (w, []) => w == WitnessTransaction.ofBase tx
+          | _ => false
+        if !complete || Codec.encode tx != bs || packed != some (tx, []) || !allowWitness then
+          IO.eprintln s!"FAIL {path}: complete reader, codec, packed codec or witness-allowed reader disagrees on {toHex ⟨bs.toArray⟩}"
           failures := failures + 1
   if nBase != base || nWitness != witness then
     IO.eprintln s!"FAIL {path}: {nBase} base-mode and {nWitness} witness records, expected {base} and {witness}"
     failures := failures + 1
-  IO.println s!"{path}: {nBase} base-mode records read and written again, {nWitness} witness records skipped, {failures} failures"
+  IO.println s!"{path}: {nBase} base-mode and {nWitness} witness-format records read and written again, {failures} failures"
   return failures
 
 /-- Both corpus files. Returns the number of failures. -/
@@ -1461,9 +1612,10 @@ def main : IO UInt32 := do
   let compactSize ← KnownAnswers.CompactSize.check
   let countedList ← KnownAnswers.CountedList.check
   let transactions ← KnownAnswers.Transactions.check
+  let witness ← KnownAnswers.Witness.check
   let txCorpus ← KnownAnswers.TxCorpus.check
   let sighash ← KnownAnswers.LegacySighash.check
   let compact ← KnownAnswers.Work.checkCompact
   let retarget ← KnownAnswers.Work.checkRetarget
   let operators ← KnownAnswers.Work.checkOperators
-  return if short + long + genesis + codec + compactSize + countedList + transactions + txCorpus + sighash + compact + retarget + operators == 0 then 0 else 1
+  return if short + long + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + operators == 0 then 0 else 1

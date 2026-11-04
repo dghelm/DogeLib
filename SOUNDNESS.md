@@ -301,13 +301,12 @@ For each one, `readBase` reads the whole transaction and `decodeBaseComplete` ac
 The codec writes the same bytes again, and the packed codec reads the same transaction.
 Core's own tests check scripts, not these four properties, so these are DogeLib's checks on Core's bytes.
 
-A record is in base mode when byte 4, the first byte of its input count, is not `00`. Then Core never reads a flags byte (D4, lines 218 to 241).
-The 39 other records use the witness serialization and are not checked (issue #23).
+A record is in base mode when byte 4, the first byte of its input count, is not `00`. Then Core never reads a flags byte (D4, lines 219 to 230).
+The 39 other records use the witness-allowed format, which the next section covers.
 
-The reader is the base mode only.
+`readBase` is the base mode only.
 Without `SERIALIZE_TRANSACTION_NO_WITNESS`, Core reads an empty input list as a marker and then a flags byte (A5).
 A transaction with no inputs, `01000000 00 01 …`, has a different reading in that mode.
-Issue #23 tracks that mode.
 
 By `#print axioms` with Lean `v4.35.0`:
 
@@ -319,6 +318,45 @@ By `#print axioms` with Lean `v4.35.0`:
 | `CountedList.decodeBounded_agrees`, `CountedList.decodeBoundedBytes_agrees`, `instLawfulPackedCodecOutPoint` to `instLawfulPackedCodecTransaction`, `Script.read_agrees`, `TxIn.read_agrees`, `TxOut.read_agrees`, `Transaction.readBase_agrees`, `Transaction.readBase_eq_ok_iff`, `Transaction.readBase_encode`, `Transaction.decodeBaseComplete_encode` | `propext`, `Classical.choice`, `Quot.sound` |
 
 The upstream files use no `bv_decide` (C2).
+
+### Transactions: the witness-allowed format
+
+`DogeLib.Transaction.Witness` models the format that Core reads and writes without `SERIALIZE_TRANSACTION_NO_WITNESS` (D4, lines 211 to 272).
+It models a serialization format only.
+Segregated witness is not active on Dogecoin's main or test network at the pin: `src/chainparams.cpp` gives its deployment the timeout 0 on both (D9, lines 111 and 267).
+No definition or theorem here says that a transaction in this format is valid, or that a network accepts it.
+
+`WitnessTransaction` holds a `Transaction` and one `WitnessStack` per input. Its field `witnesses_length` requires the count.
+`Transaction.readAllowWitness` follows Core's order of reads.
+It reads the version and the input list, then the flags byte if that list is empty.
+Then come the lists, the stacks, the check of the other flag bits, and the lock time.
+`WitnessTransaction.WithinMaxSize` adds the bounds of each stack, its item count and each item's length, to `Transaction.WithinMaxSize`.
+
+- `Transaction.readAllowWitness_eq_readBase`: suppose the first input list of the bytes is not empty.
+  Then the reader returns what `readBase` returns, with an empty stack per input, and the same error.
+- `WitnessTransaction.readAllowWitness_encode`: for every `w` with `WithinMaxSize`, `readAllowWitness (w.encode ++ rest) = ok (w, rest)`, if `w` has witness data, or an input, or no output.
+- `noInputsExample_not_roundTrip`: a transaction with no inputs, one output and no witness data is not read back. The complete reader reports 7 bytes left over.
+- `Transaction.readAllowWitness_flags_zero`: a zero input count and zero flags give a transaction with no inputs and no outputs.
+- `readAllowWitness_flags_two`, `readAllowWitness_flags_three`: two complete transactions with flags `02` and `03` fail with `unknownOptionalData`.
+- `readStacks_length`: the reader finds one stack per input, so its last check never fails.
+- `WitnessTransaction.wtxid_of_hasWitness_false`: without witness data, the witness hash is the transaction ID.
+
+No theorem says which error the reader reports.
+`lake test` checks the error order on hand-built inputs, with expected results from a reading of D4.
+The lists and stacks fail first, the other flag bits next, and the lock time last.
+
+`lake test` also reads and writes again the 39 witness-format records of Core's corpus.
+Each of them has witness data, so the writer uses the extended form.
+Core itself does not run, and no known answer gives the witness hash of a transaction with witness data.
+The oracle operations and the comparison with Core are issue #36.
+
+By `#print axioms` with Lean `v4.35.0`:
+
+| Theorem | Axioms |
+| --- | --- |
+| `readElemsBounded_length`, `WitnessStack.isEmpty_iff` | `propext` |
+| `instLawfulCodecWitnessStack`, `readStacks_length`, `Transaction.readAllowWitness_eq_readBase`, `noInputsExample_not_roundTrip`, `readAllowWitness_flags_two`, `readAllowWitness_flags_three`, `WitnessTransaction.wtxid_of_hasWitness_false` | `propext`, `Quot.sound` |
+| `WitnessStack.read_agrees`, `WitnessTransaction.readAllowWitness_encode`, `Transaction.readAllowWitness_flags_zero` | `propext`, `Classical.choice`, `Quot.sound` |
 
 ### Legacy signature hash
 
@@ -499,7 +537,9 @@ A claim that different preimages give different digests needs a named collision 
 Some rules apply only under a serialization mode, a network, an activation state or a historical era.
 A definition that leaves out its context can be right in one era and wrong in another.
 The first operations, base codecs and legacy signature hashing, have few context dependencies.
-The transaction reader is the base mode of Core's reader only, and the witness-allowed mode reads some inputs differently (issue #23).
+
+The transaction readers model two serialization modes of Core's reader: base mode and the witness-allowed format.
+The witness-allowed format is a format only. Segregated witness is not active on Dogecoin's main or test network at the pin, and no theorem says that it is.
 The legacy signature hash is the `SIGVERSION_BASE` mode of `SignatureHash`, and its script code is an input: the interpreter's preparation of it is not specified.
 Script, ledger and activation work will need explicit context.
 

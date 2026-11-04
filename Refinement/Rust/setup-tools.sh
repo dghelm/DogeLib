@@ -40,7 +40,7 @@ test "$(git -C "$tools_dir/charon" rev-parse HEAD)" = "$charon_pin"
 cd "$repo_root"
 rustup toolchain install nightly-2026-09-17 --profile minimal --component rustc-dev --component llvm-tools-preview --component rust-src
 cd "$tools_dir/charon/charon"
-RUSTUP_TOOLCHAIN=nightly-2026-09-17 taskset -c 0-7 nice -n 10 cargo build --release --locked --jobs 8 --no-default-features --features rustc --bin charon --bin charon-driver
+RUSTUP_TOOLCHAIN=nightly-2026-09-17 cargo build --release --locked --jobs 4 --no-default-features --features rustc --bin charon --bin charon-driver
 charon_version=$(./target/release/charon version)
 echo "$charon_version"
 test "$charon_version" = "0.1.308 ($charon_pin)"

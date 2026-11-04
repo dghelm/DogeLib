@@ -41,14 +41,23 @@ The intermediate LLBC file stays in `.lane/`.
 
 The generated file is `../Refinement/Rust/Generated/DogelibCompactsize.lean`.
 Do not edit it by hand.
-The check extracts into a temporary lane directory and compares the full generated directory with the committed files.
+The check extracts into a temporary lane directory and compares the full generated directory with the model files in the working tree.
+Check mode also puts the intermediate LLBC file in that temporary directory.
 
-CI builds the committed Lean model with the Mathlib cache, without running extraction.
+CI builds the committed Lean model with the Mathlib cache.
+The `ci` workflow also runs native Rust tests and extraction freshness on every pull request and push to `main`.
+The extraction cache key includes the runner OS, architecture, pinned Rust nightly and setup script hash.
+The setup script contains the Charon and Aeneas pins, so a pin change selects a different cache.
+Setup checks the tool versions and Aeneas archive digest after cache restore.
+Release validation installs the same tools and includes both Rust gates.
+
+The scripts respect the caller's CPU affinity, and setup uses four Cargo jobs.
+On a shared machine, prefix each command with `taskset -c 0-3 nice -n 10` for a lane assigned cores 0 through 3.
 
 ## Known answers
 
 ```bash
-cargo +nightly-2026-09-17 test --locked --manifest-path Refinement/Rust/Cargo.toml --jobs 8
+cargo +nightly-2026-09-17 test --locked --manifest-path Refinement/Rust/Cargo.toml --jobs 4
 ```
 
 The integration tests run the compiled Rust reader on the 20 bounded cases recorded in `tests/KnownAnswers.lean`.

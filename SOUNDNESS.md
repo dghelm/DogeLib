@@ -504,7 +504,8 @@ The local interval becomes one at previous height 145000.
 `retargetInterval_no_recovery` proves that the non-retarget branch cannot execute from that previous height, for every parameter record.
 
 The recovery loop uses the record's interval instead of that local interval.
-With the selected testnet records, recovery can run only below candidate height 145000, where both intervals are 240.
+`retargetInterval_eq_record_of_nonretarget` proves that the local and record intervals agree whenever the caller is off a retarget boundary, for every record.
+Recovery requires that condition, so no input can reach recovery with different intervals.
 At previous height 144999, the candidate's DigiShield record already has interval one.
 
 The all-block minimum rule checks previous height at least 157500 and a strict delay greater than twice the spacing (D6, lines 26-39).
@@ -522,7 +523,8 @@ The model omits skip links and uses the predecessor path for ancestor lookup (D3
 No theorem relates Core's skip-pointer traversal to that path.
 
 `blocksToGoBack_le` excludes the negative-first-height assertion when the interval is positive and divides the next height.
-The adapter also reports `firstHeightUnderflow` for that condition and `zeroInterval` for custom zero-interval records.
+The adapter checks `zeroInterval` before the retarget boundary and underflow checks.
+Thus `firstHeightUnderflow` is unreachable for every validated view: a positive interval at a retarget satisfies `blocksToGoBack_le`.
 Malformed-view errors are separate from both assertion cases.
 These errors are adapter contracts, not Core rejection codes.
 The UInt32 times widen to Int, and the fixed network spacings of 1 or 60 keep the delay arithmetic within int64_t.
@@ -543,7 +545,7 @@ By `#print axioms` with Lean `v4.35.0`:
 | --- | --- |
 | None | `getConsensus_mainnet`, `getConsensus_regtest` |
 | `propext` | `retargetInterval_after`, `blocksToGoBack_first`, `blocksToGoBack_later`, `recoverLastNonMinDifficulty_mem`, `retargetInterval_no_recovery` |
-| `propext`, `Quot.sound` | `getConsensus_testnet`, `retargetInterval_before`, `blocksToGoBack_le` |
+| `propext`, `Quot.sound` | `getConsensus_testnet`, `retargetInterval_before`, `blocksToGoBack_le`, `retargetInterval_eq_record_of_nonretarget` |
 | `propext`, `Classical.choice`, `Quot.sound` | `getNextWorkRequired_genesis`, `getNextWorkRequired_minDifficulty` |
 
 ### What cannot be proved yet

@@ -77,7 +77,10 @@ def regtestWorkParams : WorkParams :=
 def regtestDigishieldWorkParams : WorkParams :=
   ⟨⟨⟨2 ^ 255 - 1, by decide⟩, 1, true, by decide⟩, 1, true⟩
 
-/-- Network trees with Core's links (`src/chainparams.cpp`, D14, lines 138-141, 302-306 and 434-437 at `e0a1c15`). -/
+/-- Network trees with Core's links (`src/chainparams.cpp`, D14, lines 138-141, 302-306 and 434-437 at `e0a1c15`).
+Core never assigns the base regtest record's effective height.
+Its zero value comes from static initialization of `regTestParams` (line 485).
+That height does not affect the search result, because the left branch returns without checking the effective height (lines 495-496). -/
 def consensusTree : WorkNetwork → ConsensusTree
   | .mainnet => .node 145000 mainnetDigishieldWorkParams
       (some (.node 0 mainnetWorkParams none none))

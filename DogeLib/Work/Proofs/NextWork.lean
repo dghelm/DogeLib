@@ -74,4 +74,15 @@ theorem retargetInterval_no_recovery (params : WorkParams) (height : Nat)
   rw [retargetInterval_after params height h]
   exact Nat.mod_one _
 
+/-- Whenever the caller is off a retarget boundary, the local interval equals the record's interval, for every parameter record and previous height.
+The recovery branch can therefore never observe different intervals. -/
+theorem retargetInterval_eq_record_of_nonretarget (params : WorkParams) (height : Nat)
+    (off : (height + 1) % retargetInterval params height ≠ 0) :
+    retargetInterval params height = params.difficultyAdjustmentInterval := by
+  have before : height < 145000 := by
+    by_cases after : 145000 ≤ height
+    · exact False.elim (off (retargetInterval_no_recovery params height after))
+    · omega
+  exact retargetInterval_before params height before
+
 end DogeLib.Work

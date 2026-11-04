@@ -1701,11 +1701,15 @@ def nextWorkCases : List (String × Bool) :=
    -- Regtest's fPowNoRetargeting is true, but this caller ignores it (D17 line 87).
    -- With T=1 and actual timespan=1, D6 returns the old compact.
    ("regtest retarget at 10", nextWorkRequired .regtest [e 9 100 0x1c123456, e 8 99 0] 101 == .ok 0x1c123456),
+   -- D16 bignum_SetCompact lines 511-521: the signed and unsigned forms
+   -- decode to the same value, whose unsigned GetCompact is 0x04123456.
    ("regtest ignores no-retarget flag and normalizes compact", nextWorkRequired .regtest
       [e 9 100 0x04923456, e 8 99 0] 101 == .ok 0x04123456),
    ("regtest delayed before retarget", nextWorkRequired .regtest [e 1 100 0x1c123456] 103 == .ok 0x207fffff),
    ("regtest maximum widened time", nextWorkRequired .regtest [e 1 0xffffffff 0x1c123456] 0xffffffff == .ok 0x1c123456),
    ("inconsistent view", nextWorkRequired .mainnet [e 2 100 0, e 0 90 0] 101 == .error .inconsistentHeights),
+   ("maximum accepted previous height", nextWorkRequired .mainnet
+      [e 2147483646 100 0x1c123456, e 2147483645 40 0] 0 == .ok 0x1c123456),
    ("height overflow", nextWorkRequired .mainnet [e 2147483647 100 0] 101 == .error .heightOutOfRange),
    ("genesis with predecessor", nextWorkRequired .mainnet [e 0 100 0, e 0 90 0] 101 == .error .inconsistentHeights),
    ("zero custom interval", getNextWorkRequired { legacy with nPowTargetSpacing := 20000 }

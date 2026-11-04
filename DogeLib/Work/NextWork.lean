@@ -45,7 +45,8 @@ inductive NextWorkError where
   | heightOutOfRange
   /-- Adjacent entries do not represent consecutive predecessors. -/
   | inconsistentHeights
-  /-- The first-height assertion at `src/pow.cpp` line 83 would fail. -/
+  /-- The first-height assertion at `src/pow.cpp` line 83 would fail.
+  This error is unreachable on every validated view: `zeroInterval` is checked first, and `blocksToGoBack_le` excludes underflow for a positive interval at a retarget. -/
   | firstHeightUnderflow
   /-- Required history is absent. Core asserts an ancestor at `src/pow.cpp` line 85. -/
   | missingAncestor

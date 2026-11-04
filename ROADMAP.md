@@ -27,6 +27,9 @@ The `Work` layer specifies the arithmetic as an isolated function, with Core's `
 `Work.NextWork` specifies `GetNextWorkRequired` on a checked finite view, including minimum-difficulty rules.
 Header validity is not specified.
 
+Word models for multiplication, both shifts, bit length and low-64-bit extraction have equivalence proofs against the arithmetic definitions.
+Word division and its subtraction and comparison dependencies remain deferred under issue #16.
+
 Steps 0 and 0b follow design record 0002: the first contributions adopt audited codec foundations and then define Dogecoin's bounded decoding contract. They replace the original plan to build fixed-width encodings and CompactSize from scratch. Design record 0002 preferred a pinned btc-verified dependency first. The decisions below choose an adaptation instead, because btc-verified's toolchain, file structure and trust policy all differ from EthLib's.
 
 ## Milestones

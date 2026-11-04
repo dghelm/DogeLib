@@ -20,7 +20,10 @@ SetCompact             arith_uint256.cpp 204-222  compact encoding to value, sig
 GetCompact             arith_uint256.cpp 224-245  value to compact encoding
 ```
 
-The relation between each word loop and its arithmetic result is checked by review, not by a theorem.
+`DogeLib.Work.ArithUint256Words` models multiplication, both shifts, `bits()` and `GetLow64()` over eight words.
+`DogeLib.Work.Proofs.ArithUint256Words` proves that these models agree with the arithmetic results on every input.
+The correspondence between Core's source and each Lean model is checked by review.
+Division and its word subtraction remain by review only (issue #16).
 Core's own tests of the compact encoding run through these definitions in `tests/KnownAnswers.lean`.
 
 The compact encoding packs a number into 32 bits, like a floating-point number in base 256:

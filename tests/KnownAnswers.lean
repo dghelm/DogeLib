@@ -1369,6 +1369,86 @@ def checkCompact : IO Nat := do
   IO.println s!"arith_uint256_tests.cpp bignum_SetCompact: {compactCases.size} cases, {failures} failures"
   return failures
 
+
+/-!
+### Operators: `multiply`, `divide` and `GetLow64`
+
+The cases of `arith_uint256_tests.cpp` (D16) that use the operators the retarget uses: `operator*` by a 32-bit value, `operator/` and `GetLow64`.
+The inputs and expected values are copied from the test file, with the line of each case.
+Two `divide` cases, lines 362 and 368, expect an exception for a zero divisor. `ArithUint256.div` takes a proof that the divisor is not zero, so it has no such case.
+These cases check the definitions, which are stated as `Nat` arithmetic. They do not relate Core's word loops to that arithmetic (issue #16).
+-/
+
+/-- The value of a string of hexadecimal digits, or `none` for another character. -/
+def hexNat? (s : String) : Option Nat :=
+  s.toList.foldlM (init := 0) fun acc c => (KnownAnswers.Sha256Cavp.hexDigit? c).map (acc * 16 + ·.toNat)
+
+/-- `R1L` of `arith_uint256_tests.cpp` lines 25 to 30: `R1Array` read as a little-endian number, which is `R1ArrayHex`. -/
+def r1Hex : String := "7d1de5eaf9b156d53208f033b5aa8122d2d2355d5e12292b121156cfdb4a529c"
+
+/-- `R2L`, lines 33 to 36: `R2Array` read as a little-endian number. The digits are the bytes of `R2Array` from last to first. -/
+def r2Hex : String := "d781cab4f072134971da2d19a3473013bfb69ca6c30a7e26406ba5477c1d3270"
+
+/-- `MaxL`, lines 50 to 53: every bit set. -/
+def maxHex : String := "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+
+/-- `D1L` and `D2L` of the `divide` test, lines 355 and 356. -/
+def d1Hex : String := "ad7133ac1977fa2b7"
+def d2Hex : String := "ecd751716"
+
+/-- The value of `a / b` by `ArithUint256.div`, or `none` for a zero divisor. -/
+def divide? (a b : ArithUint256) : Option ArithUint256 :=
+  if h : b.val ≠ 0 then some (ArithUint256.div a b h) else none
+
+/-- The operator cases, each with its line in `arith_uint256_tests.cpp` and whether it holds. -/
+def operatorCases : Except String (List (Nat × Bool)) := do
+  let num (s : String) : Except String ArithUint256 :=
+    match hexNat? s with
+    | some n => pure (ArithUint256.ofNat n)
+    | none => throw s!"bad hex {s}"
+  let r1 ← num r1Hex
+  let r2 ← num r2Hex
+  let mx ← num maxHex
+  let d1 ← num d1Hex
+  let d2 ← num d2Hex
+  let one := ArithUint256.ofNat 1
+  let zero := ArithUint256.ofNat 0
+  let is (a : ArithUint256) (s : String) : Except String Bool := do return a == (← num s)
+  let divIs (a b : ArithUint256) (c : ArithUint256) : Bool := divide? a b == some c
+  return [
+    (347, ArithUint256.mulUInt32 r1 0 == zero),
+    (348, ArithUint256.mulUInt32 r1 1 == r1),
+    (349, ← is (ArithUint256.mulUInt32 r1 3) "7759b1c0ed14047f961ad09b20ff83687876a0181a367b813634046f91def7d4"),
+    (350, ← is (ArithUint256.mulUInt32 r2 0x87654321) "23f7816e30c4ae2017257b7a0fa64d60402f5234d46e746b61c960d09a26d070"),
+    (357, divIs r1 d1 (← num "00000000000000000b8ac01106981635d9ed112290f8895545a7654dde28fb3a")),
+    (358, divIs r1 d2 (← num "000000000873ce8efec5b67150bad3aa8c5fcb70e947586153bf2cec7c37c57a")),
+    (359, divIs r1 one r1),
+    (360, divIs r1 mx zero),
+    (361, divIs mx r1 (ArithUint256.ofNat 2)),
+    (363, divIs r2 d1 (← num "000000000000000013e1665895a1cc981de6d93670105a6b3ec3b73141b3a3c5")),
+    (364, divIs r2 d2 (← num "000000000e8f0abe753bb0afe2e9437ee85d280be60882cf0bd1aaf7fa3cc2c4")),
+    (365, divIs r2 one r2),
+    (366, divIs r2 mx zero),
+    (367, divIs mx r2 one),
+    (394, ArithUint256.getLow64 r1 == 0x121156cfdb4a529c),
+    (395, ArithUint256.getLow64 (ArithUint256.shiftLeft one 255) == 0),
+    (396, ArithUint256.getLow64 one == 1)]
+
+/-- Every operator case. Returns the number of failures. -/
+def checkOperators : IO Nat := do
+  match operatorCases with
+  | .error e =>
+    IO.eprintln s!"FAIL arith_uint256_tests.cpp operators: {e}"
+    return 1
+  | .ok cs =>
+    let mut failures := 0
+    for (line, ok) in cs do
+      if !ok then
+        IO.eprintln s!"FAIL arith_uint256_tests.cpp:{line}"
+        failures := failures + 1
+    IO.println s!"arith_uint256_tests.cpp multiply, divide, GetLow64: {cs.length} cases, {failures} failures"
+    return failures
+
 end KnownAnswers.Work
 
 /-- Entry point of `lake test`. -/
@@ -1385,4 +1465,5 @@ def main : IO UInt32 := do
   let sighash ← KnownAnswers.LegacySighash.check
   let compact ← KnownAnswers.Work.checkCompact
   let retarget ← KnownAnswers.Work.checkRetarget
-  return if short + long + genesis + codec + compactSize + countedList + transactions + txCorpus + sighash + compact + retarget == 0 then 0 else 1
+  let operators ← KnownAnswers.Work.checkOperators
+  return if short + long + genesis + codec + compactSize + countedList + transactions + txCorpus + sighash + compact + retarget + operators == 0 then 0 else 1

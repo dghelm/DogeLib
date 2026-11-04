@@ -450,6 +450,8 @@ These parts are not proved and not specified:
 
 The relation between Core's word-by-word loops in `arith_uint256.cpp` and the arithmetic results that the definitions state is checked by review (A1).
 `lake test` runs the six `get_next_work_*` cases of `dogecoin_tests.cpp` and the 21 steps of `bignum_SetCompact` through the compiled code (B1).
+It also runs 17 cases of the `multiply`, `divide` and `methods` tests of `arith_uint256_tests.cpp` (D16) through `mulUInt32`, `div` and `getLow64`.
+Those cases check the stated arithmetic on Core's values. They do not relate the word loops to it (issue #16).
 
 ### What cannot be proved yet
 

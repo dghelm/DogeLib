@@ -195,4 +195,45 @@ theorem TxOut.toInt_amount (o : TxOut) : o.amount.toInt = o.value.toBitVec.toInt
 theorem Transaction.toInt_signedVersion (tx : Transaction) :
     tx.signedVersion.toInt = tx.version.toBitVec.toInt := rfl
 
+/-- For every slice, `OutPoint.readSlice` preserves the list reader's error, value and remainder bytes. -/
+theorem OutPoint.abstractRead_readSlice (s : ByteSlice) :
+    abstractRead (OutPoint.readSlice s) = OutPoint.read s.toList := by
+  unfold OutPoint.readSlice OutPoint.read
+  apply abstractRead_readMapSlice
+  exact abstractRead_readPairSlice _ _ _ _ abstractRead_readFixedSlice abstractRead_readFixedSlice
+
+/-- For every slice, `Script.readSlice` preserves the list reader's error, value and remainder bytes. -/
+theorem Script.abstractRead_readSlice (s : ByteSlice) :
+    abstractRead (Script.readSlice s) = Script.read s.toList := by
+  unfold Script.readSlice Script.read
+  apply abstractRead_readMapSlice
+  exact CountedList.abstractRead_decodeBoundedBytesSlice
+
+/-- For every slice, `TxIn.readSlice` preserves the list reader's error, value and remainder bytes. -/
+theorem TxIn.abstractRead_readSlice (s : ByteSlice) :
+    abstractRead (TxIn.readSlice s) = TxIn.read s.toList := by
+  unfold TxIn.readSlice TxIn.read
+  apply abstractRead_readMapSlice
+  exact abstractRead_readPairSlice _ _ _ _ OutPoint.abstractRead_readSlice
+    (abstractRead_readPairSlice _ _ _ _ Script.abstractRead_readSlice abstractRead_readFixedSlice)
+
+/-- For every slice, `TxOut.readSlice` preserves the list reader's error, value and remainder bytes. -/
+theorem TxOut.abstractRead_readSlice (s : ByteSlice) :
+    abstractRead (TxOut.readSlice s) = TxOut.read s.toList := by
+  unfold TxOut.readSlice TxOut.read
+  apply abstractRead_readMapSlice
+  exact abstractRead_readPairSlice _ _ _ _ abstractRead_readFixedSlice Script.abstractRead_readSlice
+
+/-- For every slice, `Transaction.readBaseSlice` preserves the list reader's error, value and remainder bytes. -/
+theorem Transaction.abstractRead_readBaseSlice (s : ByteSlice) :
+    abstractRead (Transaction.readBaseSlice s) = Transaction.readBase s.toList := by
+  unfold Transaction.readBaseSlice Transaction.readBase
+  apply abstractRead_readMapSlice
+  exact abstractRead_readPairSlice _ _ _ _ abstractRead_readFixedSlice
+    (abstractRead_readPairSlice _ _ _ _
+      (CountedList.abstractRead_decodeBoundedSlice _ _ TxIn.abstractRead_readSlice)
+      (abstractRead_readPairSlice _ _ _ _
+        (CountedList.abstractRead_decodeBoundedSlice _ _ TxOut.abstractRead_readSlice)
+        abstractRead_readFixedSlice))
+
 end DogeLib.Transaction

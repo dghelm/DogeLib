@@ -2,6 +2,7 @@ module
 
 public import DogeLib.Serialization.Reader
 public import DogeLib.Serialization.Proofs.Codec
+public import DogeLib.Serialization.Proofs.PackedCodec
 
 /-!
 # Proofs: `Serialization.Reader`
@@ -122,5 +123,53 @@ theorem readMap_agrees {α β : Type} (toFun : α → β) (invFun : β → α)
       exact ⟨⟨rfl, rfl⟩, by rw [right_inv]; exact hp⟩
     · rintro ⟨⟨rfl, rfl⟩, -⟩
       exact ⟨rfl, rfl⟩
+
+/-- For every slice and lawful packed codec, the fixed reader preserves the error, value and remainder bytes. -/
+theorem abstractRead_readFixedSlice {α : Type} [Codec α] [PackedCodec α] [LawfulPackedCodec α]
+    (s : ByteSlice) : abstractRead (readFixedSlice (α := α) s) = readFixed s.toList := by
+  have h := LawfulPackedCodec.abstractParse_decodeSlice (α := α) s
+  cases hp : PackedCodec.decodeSlice (α := α) s with
+  | none => simp [hp, abstractParse] at h; simp [readFixedSlice, hp, readFixed, ← h]
+  | some p =>
+    obtain ⟨a, rest⟩ := p
+    simp [hp, abstractParse] at h
+    simp [readFixedSlice, hp, readFixed, ← h]
+
+/-- For every slice, two agreeing field readers preserve the complete result of their pair reader. -/
+theorem abstractRead_readPairSlice {α β : Type}
+    (p1 : ByteSlice → Except ReadError (α × ByteSlice))
+    (p2 : ByteSlice → Except ReadError (β × ByteSlice))
+    (r1 : List UInt8 → Except ReadError (α × List UInt8))
+    (r2 : List UInt8 → Except ReadError (β × List UInt8))
+    (h1 : ∀ s, abstractRead (p1 s) = r1 s.toList)
+    (h2 : ∀ s, abstractRead (p2 s) = r2 s.toList) (s : ByteSlice) :
+    abstractRead (readPairSlice p1 p2 s) = readPair r1 r2 s.toList := by
+  have h := h1 s
+  cases hp : p1 s with
+  | error e => simp [hp] at h; simp [readPairSlice, hp, readPair, ← h]
+  | ok p =>
+    obtain ⟨a, rest⟩ := p
+    simp [hp] at h
+    have h' := h2 rest
+    cases hq : p2 rest with
+    | error e => simp [hq] at h'; simp [readPairSlice, hp, hq, readPair, ← h, ← h']
+    | ok q =>
+      obtain ⟨b, rest'⟩ := q
+      simp [hq] at h'
+      simp [readPairSlice, hp, hq, readPair, ← h, ← h']
+
+/-- For every slice, conversion of an agreeing reader's value preserves its error and remainder bytes. -/
+theorem abstractRead_readMapSlice {α β : Type} (f : β → α)
+    (p : ByteSlice → Except ReadError (β × ByteSlice))
+    (r : List UInt8 → Except ReadError (β × List UInt8))
+    (h : ∀ s, abstractRead (p s) = r s.toList) (s : ByteSlice) :
+    abstractRead (readMapSlice f p s) = readMap f r s.toList := by
+  have hs := h s
+  cases hp : p s with
+  | error e => simp [hp] at hs; simp [readMapSlice, hp, readMap, ← hs]
+  | ok q =>
+    obtain ⟨b, rest⟩ := q
+    simp [hp] at hs
+    simp [readMapSlice, hp, readMap, ← hs]
 
 end DogeLib.Serialization

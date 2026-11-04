@@ -757,10 +757,22 @@ def tooBig : List UInt8 := [0xfe, 0x01, 0x00, 0x00, 0x02]
 def noInputs (v : Nat) (value : Nat) : List UInt8 :=
   le 4 v ++ [0x00] ++ [0x01] ++ le 8 value ++ [0x00] ++ le 4 0
 
+/-- The complete base-mode result of the slice reader, with the remainder as bytes. -/
+def readSlice (s : ByteSlice) : Except CompactSize.ReadError (Transaction × List UInt8) :=
+  (Transaction.readBaseSlice s).map fun (tx, rest) => (tx, rest.toList)
+
+/-- Compare complete base-mode results at a nonzero offset, with bytes outside both slice bounds. -/
+def sliceAgrees (bs : List UInt8) : Bool :=
+  let bytes : ByteArray := ⟨(0xaa :: 0xbb :: bs ++ [0xcc]).toArray⟩
+  match readSlice ((ByteSlice.ofByteArray bytes).drop 2 |>.take bs.length), Transaction.readBase bs with
+  | .error e, .error e' => decide (e = e')
+  | .ok a, .ok b => a == b
+  | _, _ => false
+
 /-- Whether `readBase` reads all of `bs` as a transaction that `check` accepts, and the codec writes `bs` again. -/
 def readsBack (bs : List UInt8) (check : Transaction → Bool) : Bool :=
   match Transaction.readBase bs with
-  | .ok (tx, []) => check tx && Codec.encode tx == bs
+  | .ok (tx, []) => check tx && Codec.encode tx == bs && sliceAgrees bs
   | _ => false
 
 /-- The checks on the genesis coinbase and on short inputs, each with its name and whether it holds. -/
@@ -780,6 +792,20 @@ def cases (coinbase : ByteArray) : Except String (List (String × Bool)) := do
     -- The genesis coinbase.
     ("generic codec reads the genesis coinbase", Codec.decode c == some (genesis, [])),
     ("generic codec writes the genesis coinbase", Codec.encode genesis == c),
+    ("slice reader reads the genesis coinbase at offset 3",
+      (readSlice ((ByteSlice.ofByteArray padded).drop 3)).toOption == some (genesis, [])),
+    ("slice reader keeps one trailing byte",
+      (readSlice (ByteSlice.ofByteArray ⟨(c ++ [0x00]).toArray⟩)).toOption == some (genesis, [0x00])),
+    ("slice reader agrees on every truncated genesis prefix",
+      (List.range c.length).all fun n => sliceAgrees (c.take n)),
+    ("slice reader preserves count errors at every field",
+      [ver ++ tooBig, ver ++ [0xfd, 0x01, 0x00],
+        ver ++ [1] ++ outpointBytes ++ tooBig,
+        ver ++ [1] ++ outpointBytes ++ [0xfd, 0, 0],
+        ver ++ [0] ++ tooBig, ver ++ [0, 0xfd, 2, 0],
+        ver ++ [0, 1] ++ le 8 0 ++ tooBig,
+        ver ++ [0, 1] ++ le 8 0 ++ [0xfd, 0, 0],
+        ver ++ [1] ++ outpointBytes ++ [0xfd, 0, 0] ++ le 4 0 ++ tooBig].all sliceAgrees),
     ("readBase reads the genesis coinbase", (Transaction.readBase c).toOption == some (genesis, [])),
     ("complete reader reads the genesis coinbase", (Transaction.decodeBaseComplete c).toOption == some genesis),
     ("packed codec reads the genesis coinbase at offset 3",
@@ -1043,6 +1069,9 @@ def checkFile (path : System.FilePath) (base witness : Nat) : IO Nat := do
   let mut nBase := 0
   let mut nWitness := 0
   for bs in txs do
+    if !KnownAnswers.Transactions.sliceAgrees bs then
+      IO.eprintln s!"FAIL {path}: slice base reader disagrees on {toHex ⟨bs.toArray⟩}"
+      failures := failures + 1
     if bs.length < 5 then
       IO.eprintln s!"FAIL {path}: transaction shorter than 5 bytes: {toHex ⟨bs.toArray⟩}"
       failures := failures + 1

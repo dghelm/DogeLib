@@ -260,8 +260,8 @@ The comparator reads the oracle's version at runtime and passes it to the adapte
 The adapter identifies its projection as `FORMAT-rust-compactsize`.
 [BUILDING.md](../BUILDING.md#compiled-rust-compactsize-comparison) gives the commands.
 
-The comparator self-test also includes a three-way positive control and seven Rust-side mutations.
-These mutations change consumption, the read error, the remainder, request acceptance, response count, response ID and JSON syntax.
+The comparator self-test also includes a three-way positive control and eight Rust-side mutations.
+These mutations change consumption, the read error, the remainder, request acceptance, response count, response ID, JSON syntax and the version label.
 Each mutation must fail with its expected code.
 
 Agreement covers the requests in the stream and nothing more.

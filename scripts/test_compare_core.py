@@ -84,7 +84,7 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
     oracle_format = json.loads(subprocess.run([oracle, "--version"], capture_output=True,
                                               text=True, check=True).stdout)["format"]
     projected_format = oracle_format + {"core": "-core-projection", "rust": "-rust-compactsize", "oracle": ""}[role]
-    if mode == "version" and role == "core":
+    if mode == "version" and role in ("core", "rust"):
         projected_format = oracle_format
     if role == "rust":
         if args[:2] != ["--oracle-format", oracle_format]:
@@ -103,6 +103,7 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
         if role == "core" and mode != "core_preimage":
             ok.pop("preimage_hex", None)
 
+    # Data mutations preserve the version handshake so they reach the comparison.
     if responses and all("format" in r.get("ok", {}) for r in responses):
         print("\n".join(json.dumps(r, separators=(",", ":")) for r in responses))
         return 0
@@ -203,7 +204,7 @@ def main() -> int:
         else:
             print(f"ok   positive control: {total[0]}")
 
-        rust_modes = {"none": None, "consumed": "MISMATCH", "reason": "MISMATCH",
+        rust_modes = {"none": None, "version": "VERSION", "consumed": "MISMATCH", "reason": "MISMATCH",
                       "rest_hex": "MISMATCH", "request_error": "REQUEST_ERROR", "drop": "COUNT",
                       "id": "ID", "malformed": "MALFORMED"}
         for mode, code in rust_modes.items():

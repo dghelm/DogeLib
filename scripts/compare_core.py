@@ -602,11 +602,8 @@ def main() -> int:
         try:
             version = json.loads(run_program(args.oracle, ["--version"], "", args.timeout))
             oracle_format = version["format"]
-            if not isinstance(oracle_format, str) or not oracle_format.startswith("dogelib-oracle/"):
-                raise ValueError("unexpected oracle format")
-            suffix = oracle_format.removeprefix("dogelib-oracle/")
-            if not suffix or any(c not in "0123456789" for c in suffix):
-                raise ValueError("unexpected oracle format version")
+            if oracle_format != ORACLE_FORMAT:
+                raise ValueError(f"oracle format {oracle_format!r} does not match pinned {ORACLE_FORMAT}")
             rust_args = ["--oracle-format", oracle_format]
             expected = {"format": oracle_format + "-rust-compactsize"}
             rust_version = json.loads(run_program(args.rust_compactsize, [*rust_args, "--version"], "", args.timeout))

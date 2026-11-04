@@ -77,6 +77,7 @@ Blank lines have no response, and a final line without a newline has a response.
 
 The example uses `serde_json` 1.0.154 under its MIT or Apache-2.0 licence.
 Cargo.lock pins this development dependency and its transitive dependencies.
+Cargo fetches the transitive crates under their own licences, without vendored copies in this repository.
 The library itself has no dependencies.
 The example does not form part of the extracted model.
 

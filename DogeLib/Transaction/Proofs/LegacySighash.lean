@@ -10,7 +10,8 @@ public import DogeLib.Transaction.Proofs.Txid
 - `legacySignatureHashPlan_eq_fixedDigest_iff` and `legacySignatureHashPlan_eq_hashBytes`: the plan is the fixed digest `legacyOne` exactly when `nIn` is not an input index, or the hash type is SINGLE and `nIn` is not an output index. Otherwise the plan hashes `legacyPreimage`.
 - `legacyPreimage_eq`: the preimage is a body that depends on the hash type only through its three flags, then the 4 bytes of the hash type.
 - `HashType.flags_eq_of_and`: two hash types that agree on the bits `0x9f` have the same flags.
-- `readOp_op_append`, `readOp_stop_prefix` and `readOp_stop_nil`: how the bytes of one `readOp` call relate to its input.
+- `readOp_stop_prefix` and `readOp_stop_nil`: the bytes that a failing `readOp` call passes.
+  `readOp_op_append`, for a call that reads an instruction, is in the specification module, with `readOp_rest_length`, because `findAndDelete` needs it to terminate.
 - `scanOps_prefix` and `scanOps_eq_of_complete`: the bytes of the instructions that `scanOps` reads, then the bytes of its failing call, start the script. When no instruction parse failed, the instructions' bytes are the whole script.
 - `scriptCodeBytes_eq_encode`: when no instruction parse failed and no instruction is `OP_CODESEPARATOR`, the script code is written as its ordinary encoding.
 - `LegacyHashPlan.digest_fixedDigest` and `LegacyHashPlan.digest_hashBytes_val`: the digest of each kind of plan.
@@ -84,15 +85,6 @@ theorem HashType.flags_eq_of_and {h h' : UInt32} (heq : h &&& 0x9f = h' &&& 0x9f
 
 /-! ## Script instructions -/
 
-/-- For all bytes `bs`: if `readPush` reads an instruction from `r`, its bytes and the bytes after them make `header ++ r`. -/
-theorem readPush_op_append {opcode o : UInt8} {header r b rest : List UInt8} {size : Nat}
-    (h : readPush opcode header size r = .op o b rest) : b ++ rest = header ++ r := by
-  unfold readPush at h
-  split at h
-  · cases h
-  · cases h
-    rw [List.append_assoc, List.take_append_drop]
-
 /-- For all bytes: if `readPush` stops, it stops after `header`. -/
 theorem readPush_stop {opcode : UInt8} {header r p : List UInt8} {size : Nat}
     (h : readPush opcode header size r = .stop p) : p = header := by
@@ -100,29 +92,6 @@ theorem readPush_stop {opcode : UInt8} {header r p : List UInt8} {size : Nat}
   split at h
   · cases h; rfl
   · cases h
-
-/-- For all bytes `bs`: if `readOp` reads an instruction, its bytes and the bytes after them make `bs`. -/
-theorem readOp_op_append {bs : List UInt8} {o : UInt8} {b r : List UInt8}
-    (h : readOp bs = .op o b r) : b ++ r = bs := by
-  match bs with
-  | [] => simp [readOp] at h
-  | op :: t =>
-    simp only [readOp] at h
-    split at h
-    · exact readPush_op_append h
-    · split at h
-      · split at h
-        · rw [readPush_op_append h]; rfl
-        · cases h
-      · split at h
-        · split at h
-          · rw [readPush_op_append h]; rfl
-          · cases h
-        · split at h
-          · split at h
-            · rw [readPush_op_append h]; rfl
-            · cases h
-          · cases h; rfl
 
 /-- For all bytes `bs`: if `readOp` stops, the bytes it passed start `bs`. -/
 theorem readOp_stop_prefix {bs p : List UInt8} (h : readOp bs = .stop p) : p <+: bs := by

@@ -812,6 +812,10 @@ The corpus gives digests only, so it does not check preimages.
 
 The second is a set of preimages derived by hand from `CTransactionSignatureSerializer` and `SignatureHash` (D3, lines 1054 to 1246) and `GetOp2` (D24).
 Each expected byte string is written out field by field below, not computed with DogeLib's functions.
+
+Both kinds also run through `legacyReferencePlan`, the transformation of `SignatureHashOld` (D2, lines 28 to 88).
+The two plans must give the same answers, except on a script that ends in a short push.
+There `SignatureHashOld` keeps the whole push, and its expected preimage is derived by hand from `FindAndDelete` (D24, lines 570 to 596).
 -/
 
 namespace KnownAnswers.LegacySighash
@@ -855,6 +859,7 @@ def checkCorpus (path : System.FilePath) : IO Nat := do
     | .error e => throw (IO.userError s!"{path}: {e}")
   let mut failures := 0
   let mut fixed := 0
+  let mut unparsed := 0
   if records.size != 500 then
     IO.eprintln s!"FAIL {path}: {records.size} records, expected 500"
     failures := failures + 1
@@ -871,10 +876,16 @@ def checkCorpus (path : System.FilePath) : IO Nat := do
         if got != r.display then
           IO.eprintln s!"FAIL {path}: nIn {r.nIn}, hashType {r.hashType}: got {toHex ⟨got.toArray⟩}, expected {toHex ⟨r.display.toArray⟩}"
           failures := failures + 1
+        -- The transformation reference, SignatureHashOld.
+        if !(scanOps r.script).2.isEmpty then unparsed := unparsed + 1
+        let ref := (legacyReferencePlan ⟨sc⟩ tx (bits32 r.nIn) (bits32 r.hashType)).digest.displayBytes
+        if ref != r.display then
+          IO.eprintln s!"FAIL {path} reference: nIn {r.nIn}, hashType {r.hashType}: got {toHex ⟨ref.toArray⟩}, expected {toHex ⟨r.display.toArray⟩}"
+          failures := failures + 1
     | _, _ =>
       IO.eprintln s!"FAIL {path}: transaction not read whole: {toHex ⟨r.tx.toArray⟩}"
       failures := failures + 1
-  IO.println s!"{path}: {records.size} records, {fixed} with the fixed digest, {failures} failures"
+  IO.println s!"{path}: {records.size} records, {fixed} with the fixed digest, {unparsed} with a script that does not parse, {failures} failures (production and reference)"
   return failures
 
 /-! ### Hand-derived preimages -/
@@ -914,9 +925,35 @@ def codeSep : List UInt8 := [0x76, 0xab, 0xac]
 /-- It is written without the separator: count 2, then `76 ac`. -/
 def codeSepBytes : List UInt8 := [0x02, 0x76, 0xac]
 
-/-- Whether the plan hashes exactly `expected`. -/
-def hashes (sc : List UInt8) (t : Transaction) (nIn h : UInt32) (expected : List UInt8) : Bool :=
+/-- Whether the production plan hashes exactly `expected`. -/
+def hashesProduction (sc : List UInt8) (t : Transaction) (nIn h : UInt32) (expected : List UInt8) : Bool :=
   legacySignatureHashPlan (script sc) t nIn h == .hashBytes expected
+
+/-- Whether the production plan and the transformation reference both hash exactly `expected`. -/
+def hashes (sc : List UInt8) (t : Transaction) (nIn h : UInt32) (expected : List UInt8) : Bool :=
+  hashesProduction sc t nIn h expected && legacyReferencePlan (script sc) t nIn h == .hashBytes expected
+
+/-- Whether both plans are the fixed digest `one`. -/
+def fixedBoth (sc : List UInt8) (t : Transaction) (nIn h : UInt32) : Bool :=
+  legacySignatureHashPlan (script sc) t nIn h == .fixedDigest legacyOne &&
+    legacyReferencePlan (script sc) t nIn h == .fixedDigest legacyOne
+
+/--
+The `FindAndDelete` cases: the script, the pattern, and the script and count that `CScript::FindAndDelete` returns (D24, lines 570 to 596).
+Copies are removed only at instruction boundaries, and the bytes of a failed instruction are kept.
+-/
+def findAndDeleteCases : List (String × List UInt8 × List UInt8 × List UInt8 × Nat) := [
+  ("empty pattern changes nothing", [0xab, 0x51], [], [0xab, 0x51], 0),
+  ("no copy changes nothing", [0x51, 0x52], [0xab], [0x51, 0x52], 0),
+  ("separator instructions are removed", [0x76, 0xab, 0xab, 0xac, 0xab], [0xab], [0x76, 0xac], 3),
+  ("0xab inside push data is not an instruction", [0x02, 0xab, 0xab, 0x51], [0xab], [0x02, 0xab, 0xab, 0x51], 0),
+  ("0xab after push data is removed", [0x02, 0xab, 0xab, 0xab, 0x51], [0xab], [0x02, 0xab, 0xab, 0x51], 1),
+  ("a pattern inside push data is not at a boundary", [0x51, 0x01, 0xab], [0xab], [0x51, 0x01, 0xab], 0),
+  ("repeated three-byte copies at one boundary and at a later one",
+    [0x02, 0xaa, 0xbb, 0x02, 0xaa, 0xbb, 0x51, 0x02, 0xaa, 0xbb], [0x02, 0xaa, 0xbb], [0x51], 3),
+  ("a copy, then a short push: the whole short push is kept",
+    [0xab, 0x4c, 0x05, 0xaa], [0xab], [0x4c, 0x05, 0xaa], 1),
+  ("a short push alone: unchanged", [0x4c, 0x05, 0xaa], [0xab], [0x4c, 0x05, 0xaa], 0)]
 
 /-- The script-code cases: the script, and its bytes as `SerializeScriptCode` writes them. -/
 def scriptCodeCases : List (String × List UInt8 × List UInt8) := [
@@ -946,7 +983,9 @@ def cases : Except String (List (String × Bool)) := do
     [0x02] ++ prevout0 ++ emptyScript ++ otherSeq ++ prevout1 ++ codeSepBytes ++ seq1
   let scriptCodeChecks := scriptCodeCases.map fun (name, sc, expected) =>
     (s!"script code: {name}", scriptCodeBytes (script sc) == expected)
-  return scriptCodeChecks ++ [
+  let findAndDeleteChecks := findAndDeleteCases.map fun (name, s, b, out, n) =>
+    (s!"FindAndDelete: {name}", findAndDelete s b == (out, n))
+  return scriptCodeChecks ++ findAndDeleteChecks ++ [
     ("one displays as 00…01", legacyOne.displayBytes == one.toList),
     ("ALL, nIn 1",
       hashes codeSep both 1 1 (version ++ inputsWithCode1 seq0 ++ allOutputs ++ lockTime ++ [0x01, 0, 0, 0])),
@@ -989,18 +1028,27 @@ def cases : Except String (List (String × Bool)) := do
         (version ++ inputsWithCode1 zeroSeq ++ [0x02] ++ nullOut ++ out1 ++ lockTime ++ [0x03, 0x01, 0, 0])),
     -- A short push in the script code.
     ("short PUSHDATA1 in the script code of input 1",
-      hashes [0x4c, 0x05, 0xaa] both 1 1
+      hashesProduction [0x4c, 0x05, 0xaa] both 1 1
         (version ++ [0x02] ++ prevout0 ++ emptyScript ++ seq0 ++ prevout1 ++ [0x03, 0x4c, 0x05] ++ seq1 ++
+          allOutputs ++ lockTime ++ [0x01, 0, 0, 0])),
+    -- SignatureHashOld keeps the whole short push, so its plan differs.
+    ("reference keeps the whole short PUSHDATA1",
+      legacyReferencePlan (script [0x4c, 0x05, 0xaa]) both 1 1 == .hashBytes
+        (version ++ [0x02] ++ prevout0 ++ emptyScript ++ seq0 ++ prevout1 ++ [0x03, 0x4c, 0x05, 0xaa] ++ seq1 ++
+          allOutputs ++ lockTime ++ [0x01, 0, 0, 0])),
+    ("reference keeps a short push after a separator",
+      legacyReferencePlan (script [0xab, 0x4c, 0x05, 0xaa]) both 1 1 == .hashBytes
+        (version ++ [0x02] ++ prevout0 ++ emptyScript ++ seq0 ++ prevout1 ++ [0x03, 0x4c, 0x05, 0xaa] ++ seq1 ++
           allOutputs ++ lockTime ++ [0x01, 0, 0, 0])),
     -- The fixed digest.
     ("nIn equal to the input count gives one",
-      legacySignatureHashPlan (script codeSep) both 2 1 == .fixedDigest legacyOne),
+      fixedBoth codeSep both 2 1),
     ("nIn 0xffffffff gives one",
-      legacySignatureHashPlan (script codeSep) both 0xffffffff 1 == .fixedDigest legacyOne),
+      fixedBoth codeSep both 0xffffffff 1),
     ("SINGLE with no output at nIn gives one",
-      legacySignatureHashPlan (script codeSep) (tx [txOut0]) 1 3 == .fixedDigest legacyOne),
+      fixedBoth codeSep (tx [txOut0]) 1 3),
     ("SINGLE|ANYONECANPAY with no output at nIn gives one",
-      legacySignatureHashPlan (script codeSep) (tx [txOut0]) 1 0x83 == .fixedDigest legacyOne),
+      fixedBoth codeSep (tx [txOut0]) 1 0x83),
     ("ALL with no output at nIn hashes",
       hashes codeSep (tx [txOut0]) 1 1
         (version ++ inputsWithCode1 seq0 ++ [0x01] ++ out0 ++ lockTime ++ [0x01, 0, 0, 0])),

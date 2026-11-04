@@ -166,6 +166,38 @@ theorem readOp_rest_length {bs : List UInt8} {o : UInt8} {b r : List UInt8}
             · cases h
           · cases h; simp
 
+/-- For all bytes `bs`: if `readPush` reads an instruction from `r`, its bytes and the bytes after them make `header ++ r`. -/
+theorem readPush_op_append {opcode o : UInt8} {header r b rest : List UInt8} {size : Nat}
+    (h : readPush opcode header size r = .op o b rest) : b ++ rest = header ++ r := by
+  unfold readPush at h
+  split at h
+  · cases h
+  · cases h
+    rw [List.append_assoc, List.take_append_drop]
+
+/-- For all bytes `bs`: if `readOp` reads an instruction, its bytes and the bytes after them make `bs`. -/
+theorem readOp_op_append {bs : List UInt8} {o : UInt8} {b r : List UInt8}
+    (h : readOp bs = .op o b r) : b ++ r = bs := by
+  match bs with
+  | [] => simp [readOp] at h
+  | op :: t =>
+    simp only [readOp] at h
+    split at h
+    · exact readPush_op_append h
+    · split at h
+      · split at h
+        · rw [readPush_op_append h]; rfl
+        · cases h
+      · split at h
+        · split at h
+          · rw [readPush_op_append h]; rfl
+          · cases h
+        · split at h
+          · split at h
+            · rw [readPush_op_append h]; rfl
+            · cases h
+          · cases h; rfl
+
 /--
 The instructions that the loop `while (scriptCode.GetOp(it, opcode))` reads, each with its bytes, and the bytes that the final, failing call passed.
 The final bytes are empty exactly when no instruction failed to parse.

@@ -32,6 +32,26 @@ lean_lib «Proofs» where
     `DogeLib.Serialization.Proofs, `DogeLib.Transaction.Proofs, `DogeLib.Work.Proofs]
   precompileModules := false
 
+/-- The oracle and its operations, in a separate library rooted at
+`DogeLib/Exports.lean`, so that a project that imports the specification
+gets no IO code. Each layer's export tree is also a root, so that its
+modules belong to this library rather than to `DogeLib`.
+
+`precompileModules` is off. With it on, Lake v4.35.0 reports a build cycle,
+because the library's shared object contains the executable's root module.
+No module evaluates oracle code during elaboration, and the executable
+compiles the code itself. -/
+@[default_target]
+lean_lib «Exports» where
+  requiresModuleSystem := true
+  roots := #[`DogeLib.Exports, `DogeLib.Serialization.Exports, `DogeLib.Transaction.Exports]
+  precompileModules := false
+
+/-- The oracle: answers requests in the record format of `docs/oracle.md`,
+one JSON object per line on standard input and output. -/
+lean_exe «dogelib-oracle» where
+  root := `DogeLib.Exports.Main
+
 /-- Checks the compiled declarations of every library: their axioms, and any
 construct the kernel cannot unfold or the compiler runs differently. Run it
 after `lake build` with `lake exe check-decls`. -/

@@ -311,7 +311,7 @@ unsafe def run (args : List String) : IO UInt32 := do
     | .error e => do
       IO.eprintln s!"check-decls: {e}\n{usage}"
       return 2
-  let mods := if mods.isEmpty then [`DogeLib, `DogeLib.Proofs] else mods
+  let mods := if mods.isEmpty then [`DogeLib, `DogeLib.Proofs, `DogeLib.Exports] else mods
   initSearchPath (← findSysroot)
   -- `loadExts := true` is essential: without it the `@[csimp]` table, among others, stays empty.
   -- Lean v4.35.0 `Lean.importModules`: `.private` loads every private proof body.

@@ -9,12 +9,13 @@ The package has no dependencies beyond Lean core, so no Mathlib cache is needed.
 lake build --wfail
 lake exe check-decls
 lake test
+bash scripts/test_oracle.sh
 ```
 
 `lake build --wfail` compiles the specification and checks every proof.
 An unfinished proof only warns, so `--wfail` turns every warning into an error.
 
-`lake exe check-decls` reads the compiled declarations of the `DogeLib` and `Proofs` libraries.
+`lake exe check-decls` reads the compiled declarations of the `DogeLib`, `Proofs` and `Exports` libraries.
 It reports any axiom beyond `propext`, `Classical.choice` and `Quot.sound`, and any `partial`, `opaque`, `unsafe`, `@[extern]`, `@[implemented_by]` or `@[csimp]` declaration.
 It also reports a specification definition that reaches an opaque constant, so that the kernel cannot unfold it.
 `scripts/check_decls_baseline.txt` lists the findings that exist today.
@@ -28,6 +29,10 @@ Three directories hold vendored files, each with a README that gives their prove
 - `tests/transaction/corpus/`: Dogecoin Core's transaction corpus, for the base-mode reader and codecs.
 
 The other known answers, and their provenance, are in `tests/KnownAnswers.lean`.
+
+`bash scripts/test_oracle.sh` builds the oracle, `dogelib-oracle`, and tests it through its standard input and output.
+It needs Python 3.10 or later, with only the standard library.
+[docs/oracle.md](docs/oracle.md) defines the oracle's record format, and `tests/oracle/README.md` gives the provenance of its fixtures.
 Dogecoin Core's own test cases test the compact target encoding and the difficulty retarget.
 `tests/KnownAnswers.lean` gives the file and line of each case.
 

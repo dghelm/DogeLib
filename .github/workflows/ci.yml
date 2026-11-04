@@ -57,6 +57,12 @@ jobs:
         if: ${{ !cancelled() }}
         run: lake test
 
+      # The oracle through its standard input and output: fixtures, Core's
+      # signature-hash and transaction corpora, and line-by-line answers.
+      - name: oracle
+        if: ${{ !cancelled() }}
+        run: bash scripts/test_oracle.sh
+
   tools:
     runs-on: ubuntu-24.04
     timeout-minutes: 5

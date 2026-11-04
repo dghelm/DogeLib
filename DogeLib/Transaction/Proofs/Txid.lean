@@ -10,7 +10,8 @@ public import DogeLib.Transaction.Txid
 
 - `digestToHash256_val`: for a digest of 32 bytes, the bytes of `digestToHash256 d` are the bytes of `d`.
 - `Transaction.txid_val`: the bytes of the transaction ID are the bytes of the double SHA-256 digest of the base serialization.
-  So the fallback `Hash256.zero` of `digestToHash256` is never the result of `txid`.
+  So `txid` never takes the fallback branch of `digestToHash256`, whose result is `Hash256.zero`.
+  The theorem does not say that a digest differs from `Hash256.zero`.
 -/
 
 @[expose] public section

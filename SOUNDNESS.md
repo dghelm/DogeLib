@@ -275,7 +275,8 @@ For all bytes, transactions and remainders:
 - `Transaction.decodeBaseComplete_eq_ok_iff`: the complete reader returns `tx` exactly when `readBase` returns `tx` with no remainder.
 
 `Transaction.txid_val` says that the bytes of the transaction ID are the double SHA-256 digest of the base serialization.
-So the fallback value of `digestToHash256` is never the ID.
+So `txid` never takes the fallback branch of `digestToHash256`.
+This says nothing about which values a digest can take.
 
 These theorems relate the reader to the codec, and the codec to a reading of D4 (A1).
 No theorem says which error the reader reports, or that the order of reads is Core's.

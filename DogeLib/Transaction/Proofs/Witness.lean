@@ -91,6 +91,66 @@ theorem readStacks_length (flag : Bool) (n : Nat) (bs : List UInt8) (ws : List W
   · simp only [Except.ok.injEq, Prod.mk.injEq] at h
     rw [← h.1, List.length_replicate]
 
+/-! ## Bounds after a successful read -/
+
+/-- Successful sections contain input and output lists, including their scripts, within `MAX_SIZE`. -/
+private theorem readSections_withinMaxSize (bs : List UInt8) (flags : UInt8)
+    (vin : CountedList TxIn) (vout : CountedList TxOut) (rest : List UInt8)
+    (h : readSections bs = .ok ((flags, vin, vout), rest)) :
+    (vin.val.length ≤ 0x02000000 ∧ ∀ i ∈ vin.val, i.WithinMaxSize) ∧
+      (vout.val.length ≤ 0x02000000 ∧ ∀ o ∈ vout.val, o.WithinMaxSize) := by
+  unfold readSections at h
+  split at h
+  · cases h
+  · next ins r hin =>
+    have hi := ((CountedList.decodeBounded_agrees TxIn.read_agrees _ _ _).mp hin).2
+    split at h
+    · split at h
+      · cases h
+      · split at h
+        · cases h
+          exact ⟨hi, by simp⟩
+        · split at h
+          · cases h
+          · next ins' outs r' hpair =>
+            have hb := ((readPair_agrees
+              (CountedList.decodeBounded_agrees TxIn.read_agrees)
+              (CountedList.decodeBounded_agrees TxOut.read_agrees) _ _ _).mp hpair).2
+            cases h
+            exact hb
+    · split at h
+      · cases h
+      · next outs r' hout =>
+        have ho := ((CountedList.decodeBounded_agrees TxOut.read_agrees _ _ _).mp hout).2
+        cases h
+        exact ⟨hi, ho⟩
+
+/--
+A successful witness-allowed read returns base fields whose input, output and script counts are within `MAX_SIZE`.
+This bound concerns the serialization format and does not establish consensus acceptance of witness data.
+-/
+theorem Transaction.readAllowWitness_withinMaxSize (bs : List UInt8)
+    (w : WitnessTransaction) (rest : List UInt8)
+    (hRead : Transaction.readAllowWitness bs = .ok (w, rest)) : w.tx.WithinMaxSize := by
+  unfold Transaction.readAllowWitness at hRead
+  split at hRead
+  · cases hRead
+  · split at hRead
+    · cases hRead
+    · next _ _ flags vin vout r2 hsections =>
+      have hb := readSections_withinMaxSize _ _ _ _ _ hsections
+      split at hRead
+      · cases hRead
+      · split at hRead
+        · cases hRead
+        · split at hRead
+          · cases hRead
+          · dsimp only at hRead
+            split at hRead
+            · cases hRead
+              exact ⟨hb.1.1, hb.1.2, hb.2.1, hb.2.2⟩
+            · cases hRead
+
 /-! ## Agreement with the base mode -/
 
 /-- The fixed-length reader returns the value that the codec wrote, and the bytes after it. -/

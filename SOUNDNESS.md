@@ -562,9 +562,9 @@ A user of the comparison trusts these parts of it:
   The build script passes only `-O2` as compiler flags, and Core's configure selects C++11.
 - The harness's own code. It converts hexadecimal text and JSON numbers to Core's arguments, writes Core's results as JSON, and maps three exception messages to read errors.
   Any other exception from Core stops the harness, so it cannot pass as a result.
-- The `plan` label of `sighash.legacy`. The harness computes it from Core's conditions instead of observing it, and stops if the label disagrees with whether Core's digest is the value one.
+- The `plan` label of `sighash.legacy`. The harness computes it from Core's conditions instead of observing it. It stops if the label is `fixed_digest` and Core's digest is not the value one.
 - The comparator, `scripts/compare_core.py`.
-  Its self-test, `scripts/test_compare_core.py`, requires a passing control, and 17 mutations that each fail with the code they target.
+  Its self-test, `scripts/test_compare_core.py`, requires a passing control, and 22 mutations that each fail with the code they target.
 - For `sighash.legacy`, the oracle's preimage is checked by hashing it, not byte by byte: Core does not expose its preimage.
 
 Both programs could be wrong in the same way on an input that the comparison does not send.

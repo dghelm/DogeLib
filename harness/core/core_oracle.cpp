@@ -337,8 +337,10 @@ UniValue run(const UniValue& req)
         // The label of Core's two early returns (interpreter.cpp lines 1225 to 1235).
         bool fixed = nIn >= tx.vin.size() || ((nHashType & 0x1f) == SIGHASH_SINGLE && nIn >= tx.vout.size());
         static const uint256 one(uint256S("0000000000000000000000000000000000000000000000000000000000000001"));
-        if (fixed != (digest == one)) {
-            throw UnmappedCoreError{"the plan label disagrees with Core's digest"};
+        // Core returns one on both early returns. A hash of a preimage could
+        // equal one too, so only this direction is checked.
+        if (fixed && digest != one) {
+            throw UnmappedCoreError{"plan fixed_digest, but Core's digest is not one"};
         }
         ok.pushKV("plan", fixed ? "fixed_digest" : "hash_bytes");
         pushHash(ok, "digest", digest);

@@ -34,6 +34,9 @@ MUTATIONS = {
     "reason": ("core", "MISMATCH"),
     "ok_to_error": ("core", "MISMATCH"),
     "consumed": ("core", "MISMATCH"),
+    "consumed_bool": ("core", "MISMATCH"),
+    "rest_hex": ("core", "MISMATCH"),
+    "error_to_ok": ("core", "MISMATCH"),
     "request_error": ("core", "REQUEST_ERROR"),
     "core_preimage": ("core", "PROJECTION"),
     "drop": ("core", "COUNT"),
@@ -45,6 +48,8 @@ MUTATIONS = {
     "version": ("core", "VERSION"),
     "oracle_no_preimage": ("oracle", "PREIMAGE"),
     "oracle_fixed_preimage": ("oracle", "PREIMAGE"),
+    "oracle_preimage_bytes": ("oracle", "PREIMAGE"),
+    "oracle_preimage_malformed": ("oracle", "PREIMAGE"),
 }
 
 
@@ -109,6 +114,15 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
     elif mode == "consumed":
         mutate_first(responses, lambda r: "consumed" in r.get("ok", {}),
                      lambda r: r["ok"].__setitem__("consumed", r["ok"]["consumed"] + 1))
+    elif mode == "consumed_bool":
+        # Python's == treats True as 1; the comparison must not.
+        mutate_first(responses, lambda r: r.get("ok", {}).get("consumed") == 1, set_ok("consumed", True))
+    elif mode == "rest_hex":
+        mutate_first(responses, lambda r: r.get("ok", {}).get("rest_hex"),
+                     lambda r: r["ok"].__setitem__("rest_hex", r["ok"]["rest_hex"][:-2]))
+    elif mode == "error_to_ok":
+        mutate_first(responses, lambda r: r.get("error", {}).get("kind") == "read",
+                     lambda r: (r.pop("error"), r.__setitem__("ok", {"value": "0", "consumed": 1, "rest_hex": ""})))
     elif mode == "request_error":
         mutate_first(responses, lambda r: "ok" in r and "format" not in r["ok"],
                      lambda r: replace_ok(r, {"kind": "request", "message": "test"}))
@@ -124,6 +138,13 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
         mutate_first(responses, is_plan("hash_bytes"), lambda r: r["ok"].pop("preimage_hex"))
     elif mode == "oracle_fixed_preimage":
         mutate_first(responses, is_plan("fixed_digest"), set_ok("preimage_hex", "00"))
+    elif mode == "oracle_preimage_bytes":
+        def flip_last(r):
+            p = r["ok"]["preimage_hex"]
+            r["ok"]["preimage_hex"] = p[:-2] + ("00" if p[-2:] != "00" else "01")
+        mutate_first(responses, is_plan("hash_bytes"), flip_last)
+    elif mode == "oracle_preimage_malformed":
+        mutate_first(responses, is_plan("hash_bytes"), set_ok("preimage_hex", "zz"))
     lines = [json.dumps(r, separators=(",", ":")) for r in responses]
     if mode == "malformed":
         lines[len(lines) // 2] = "{"

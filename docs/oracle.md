@@ -162,7 +162,7 @@ The harness answers a projection of `dogelib-oracle/1`, not the format itself:
   `SignatureHash` hashes its preimage as it writes it and does not return it.
 - `plan` is a label that the harness computes from the conditions of Core's two early returns, in `src/script/interpreter.cpp` lines 1225 to 1235.
   It is not observed from Core.
-  If the label is `fixed_digest` and Core's digest is not the value one, or the reverse, the harness stops with exit status 3.
+  If the label is `fixed_digest` and Core's digest is not the value one, the harness stops with exit status 3.
 - The harness passes the hash type to Core's `int nHashType` as the same 32 bits, read as a two's complement value.
   It passes `input_index` to `unsigned int nIn` unchanged.
 - Core reports a read error as a `std::ios_base::failure`.
@@ -198,6 +198,6 @@ The request stream is deterministic, and the random sets use a fixed seed:
 
 `scripts/test_compare_core.py` checks that the comparison can fail.
 A wrapper around the oracle stands in for the harness.
-Unchanged, it must pass on the full stream. Each of 17 mutations must fail with the failure code that it targets.
+Unchanged, it must pass on the full stream. Each of 22 mutations must fail with the failure code that it targets.
 
 Agreement covers the requests in the stream and nothing more.

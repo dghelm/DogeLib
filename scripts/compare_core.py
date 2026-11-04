@@ -404,6 +404,21 @@ def request_sets() -> tuple[list[tuple[str, list[dict]]], list[str]]:
 # Comparison
 
 
+def json_equal(a, b) -> bool:
+    """Equality of JSON values. Unlike Python's `==`, `true` is not `1` and `1.0` is not `1`."""
+    if type(a) is not type(b):
+        return False
+    if isinstance(a, dict):
+        return a.keys() == b.keys() and all(json_equal(a[k], b[k]) for k in a)
+    if isinstance(a, list):
+        return len(a) == len(b) and all(json_equal(x, y) for x, y in zip(a, b))
+    return a == b
+
+
+def is_hex(s) -> bool:
+    return isinstance(s, str) and len(s) % 2 == 0 and all(c in "0123456789abcdefABCDEF" for c in s)
+
+
 def first_difference(a, b, path="") -> str:
     if type(a) is not type(b):
         return path or "/"
@@ -411,13 +426,13 @@ def first_difference(a, b, path="") -> str:
         for k in sorted(set(a) | set(b)):
             if k not in a or k not in b:
                 return f"{path}/{k}"
-            if a[k] != b[k]:
+            if not json_equal(a[k], b[k]):
                 return first_difference(a[k], b[k], f"{path}/{k}")
     if isinstance(a, list):
         if len(a) != len(b):
             return f"{path} (length)"
         for i, (x, y) in enumerate(zip(a, b)):
-            if x != y:
+            if not json_equal(x, y):
                 return first_difference(x, y, f"{path}/{i}")
     return path or "/"
 
@@ -444,12 +459,14 @@ def compare(req: dict, ours: dict, core: dict) -> tuple[str, str] | None:
             if "preimage_hex" not in ok:
                 return "PREIMAGE", "oracle response has no preimage_hex for plan hash_bytes"
             preimage = ok.pop("preimage_hex")
+            if not is_hex(preimage):
+                return "PREIMAGE", "oracle preimage_hex is not a string of hexadecimal digits"
             if sha256d(bytes.fromhex(preimage)).hex() != core["ok"].get("digest_hex"):
                 return "PREIMAGE", "oracle preimage does not hash to Core's digest"
         elif "preimage_hex" in ok:
             return "PREIMAGE", "oracle response has preimage_hex for plan fixed_digest"
         ours = {**ours, "ok": ok}
-    if ours != core:
+    if not json_equal(ours, core):
         return "MISMATCH", f"first difference at {first_difference(ours, core)}"
     return None
 

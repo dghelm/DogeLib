@@ -78,3 +78,9 @@ lean_exe «known-answers» where
   srcDir := "tests"
   root := `KnownAnswers
   allowNonModules := true
+
+/-- Generated transaction workloads for reader timing, outside the default targets. -/
+lean_exe «bench-transaction-reader» where
+  srcDir := "scripts"
+  root := `BenchTransactionReader
+  allowNonModules := true

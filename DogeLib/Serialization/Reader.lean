@@ -1,5 +1,6 @@
 module
 
+public import DogeLib.Serialization.PackedCodec
 public import DogeLib.Serialization.Codec
 public import DogeLib.Serialization.CompactSize
 
@@ -60,6 +61,31 @@ def readPair {α β : Type} (r1 : List UInt8 → Except ReadError (α × List UI
 def readMap {α β : Type} (f : β → α) (r : List UInt8 → Except ReadError (β × List UInt8))
     (bs : List UInt8) : Except ReadError (α × List UInt8) :=
   match r bs with
+  | .error e => .error e
+  | .ok (b, rest) => .ok (f b, rest)
+
+/-- The packed form of `readFixed`, with `truncated` for a rejected input. -/
+def readFixedSlice {α : Type} [PackedCodec α] (s : ByteSlice) :
+    Except ReadError (α × ByteSlice) :=
+  match PackedCodec.decodeSlice s with
+  | some p => .ok p
+  | none => .error .truncated
+
+/-- Read two fields from a slice in order, with the first error as the result. -/
+def readPairSlice {α β : Type} (r1 : ByteSlice → Except ReadError (α × ByteSlice))
+    (r2 : ByteSlice → Except ReadError (β × ByteSlice)) (s : ByteSlice) :
+    Except ReadError ((α × β) × ByteSlice) :=
+  match r1 s with
+  | .error e => .error e
+  | .ok (a, rest) =>
+    match r2 rest with
+    | .error e => .error e
+    | .ok (b, rest') => .ok ((a, b), rest')
+
+/-- Convert the value of a slice reader with `f`, and keep its error and remainder. -/
+def readMapSlice {α β : Type} (f : β → α) (r : ByteSlice → Except ReadError (β × ByteSlice))
+    (s : ByteSlice) : Except ReadError (α × ByteSlice) :=
+  match r s with
   | .error e => .error e
   | .ok (b, rest) => .ok (f b, rest)
 

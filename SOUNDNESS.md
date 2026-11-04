@@ -147,6 +147,40 @@ By `#print axioms` with Lean `v4.35.0`:
 
 The source files are adapted from btc-verified at commit `ecf4f0d`. None of them uses `bv_decide` (C2).
 
+### Packed base-mode transaction reader
+
+`Transaction.readBaseSlice` implements the base-mode prefix reader over `ByteSlice`.
+`Transaction.abstractRead_readBaseSlice` states, for every slice `s`:
+
+```lean
+abstractRead (Transaction.readBaseSlice s) = Transaction.readBase s.toList
+```
+
+The equality preserves every error, every transaction field and every remainder byte.
+It has no success hypothesis or bound on the input slice.
+The theorem composes complete-result agreement for fixed fields, reader combinators, bounded vectors and script bytes.
+
+The bounded vector theorem assumes complete-result agreement of the element readers.
+Its loop theorem covers every element count and every array accumulator.
+The script reader checks `s.size` before it copies the consumed bytes.
+The list reader remains the specification.
+
+`lake test` exercises the slice reader on the genesis coinbase, signed fields, every proper genesis prefix and count errors at each field.
+It compares complete base-mode results on the 159 base-mode and 39 witness-format corpus records.
+These comparisons use nonzero slice offsets with bytes outside both bounds.
+A base-mode read of a witness-format record does not establish witness parsing.
+
+The benchmark in BUILDING.md measures generated workloads separately from this conformance evidence.
+There is no theorem about execution time, allocation or stack use.
+Core's compiled byte-array operations remain trusted (B1, B2).
+
+By `#print axioms` with Lean `v4.35.0`:
+
+| Theorem | Axioms |
+| --- | --- |
+| `abstractRead_readFixedSlice`, `abstractRead_readPairSlice`, `abstractRead_readMapSlice`, `CountedList.abstractRead_readElemsBoundedSliceLoop` | `propext` |
+| `CountedList.abstractRead_decodeBoundedSlice`, `CountedList.abstractRead_readBytesSlice`, `CountedList.abstractRead_decodeBoundedBytesSlice`, `OutPoint.abstractRead_readSlice`, `Script.abstractRead_readSlice`, `TxIn.abstractRead_readSlice`, `TxOut.abstractRead_readSlice`, `Transaction.abstractRead_readBaseSlice` | `propext`, `Classical.choice`, `Quot.sound` |
+
 ### CompactSize
 
 `DogeLib.Serialization.CompactSize` defines two decoders of the CompactSize format.
@@ -291,7 +325,7 @@ So `txid` never takes the fallback branch of `digestToHash256`.
 This says nothing about which values a digest can take.
 
 These theorems relate the reader to the codec, and the codec to a reading of D4 (A1).
-No theorem says which error the reader reports, or that the order of reads is Core's.
+No theorem classifies every error against an independent Core error relation, or proves that the order of reads is Core's.
 `lake test` checks the errors and their order on short inputs.
 It also reads the genesis coinbase, whose ID must be the merkle root that Core asserts (D9).
 Core itself does not run.
@@ -729,6 +763,15 @@ Lean core is a declared trusted baseline.
 The packed encoders and decoders run two `@[extern]` operations of core: `ByteArray.push` and `ByteArray.get`.
 `ByteSlice.toList` and the tests that call it also run `ByteArray.copySlice`, through `ByteArray.extract`.
 The packed decoders of byte lists and of `Bytes n`, `instPackedCodecCountedListBytes` and `instPackedCodecBytes`, call `ByteSlice.toList` to read their bytes, so they run `ByteArray.copySlice` too.
+
+The base-mode slice reader uses `ByteArray.size` (`lean_sarray_size`) for the bounds checks of `ByteSlice.slice` and `ByteArray.toList`.
+Its fixed integer reads use `ByteArray.get` (`lean_byte_array_fget`) through `ByteSlice.get`.
+Its hash and script reads use `ByteArray.copySlice` (`lean_byte_array_copy_slice`) through `ByteArray.extract` and `ByteSlice.toList`.
+`ByteArray.toList` also calls `ByteArray.get!` (`lean_byte_array_get`).
+
+`ByteSlice.size` subtracts its offsets, and `ByteSlice.take` and `ByteSlice.drop` use `ByteSlice.slice` to construct views.
+Those slice operations have no separate `@[extern]` or `@[implemented_by]` body in Lean `v4.35.0`.
+Only conversion of consumed hash or script bytes to a list copies bytes in this reader.
 
 ### B3. Native code during elaboration
 

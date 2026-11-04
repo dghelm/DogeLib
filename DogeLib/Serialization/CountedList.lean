@@ -66,6 +66,8 @@ These are the changes:
 - The namespace, the module header and the doc comments are DogeLib's.
 
 `readElemsBounded`, `readByte`, `readBytes`, `decodeBounded` and `decodeBoundedBytes` are DogeLib's.
+Their slice forms are `readElemsBoundedSliceLoop`, `readBytesSlice`, `decodeBoundedSlice` and `decodeBoundedBytesSlice`.
+The proof library relates each slice form to its list reader, including errors and remainder bytes.
 They follow `Unserialize_impl` for `std::vector` and `prevector` of Dogecoin Core `v1.14.9`, commit `e0a1c15`, `src/serialize.h`, lines 592 to 624 and 660 to 692 (D1).
 -/
 
@@ -320,6 +322,45 @@ def decodeBoundedBytes (bs : List UInt8) : Except ReadError (CountedList UInt8 �
   | .error e => .error e
   | .ok (count, rest) =>
     match readBytes count.toNat rest with
+    | .error e => .error e
+    | .ok (xs, rest') =>
+      match ofList? xs with
+      | none => .error .tooLarge
+      | some cl => .ok (cl, rest')
+
+/-- The packed loop of `readElemsBoundedLoop`, with the values read so far in `acc`. -/
+def readElemsBoundedSliceLoop {α : Type} (elem : ByteSlice → Except ReadError (α × ByteSlice)) :
+    Nat → ByteSlice → Array α → Except ReadError (List α × ByteSlice)
+  | 0, s, acc => .ok (acc.toList, s)
+  | n + 1, s, acc =>
+    match elem s with
+    | .error e => .error e
+    | .ok (x, rest) => readElemsBoundedSliceLoop elem n rest (acc.push x)
+
+/-- The packed form of `decodeBounded`, with the same count bound and first element error. -/
+def decodeBoundedSlice {α : Type} (elem : ByteSlice → Except ReadError (α × ByteSlice))
+    (s : ByteSlice) : Except ReadError (CountedList α × ByteSlice) :=
+  match CompactSize.decodeBoundedSlice s with
+  | .error e => .error e
+  | .ok (count, rest) =>
+    match readElemsBoundedSliceLoop elem count.toNat rest #[] with
+    | .error e => .error e
+    | .ok (xs, rest') =>
+      match ofList? xs with
+      | none => .error .tooLarge
+      | some cl => .ok (cl, rest')
+
+/-- Read the first `n` bytes of a slice, or return `truncated` when fewer remain.
+The length check uses the slice size and copies only the consumed bytes. -/
+def readBytesSlice (n : Nat) (s : ByteSlice) : Except ReadError (List UInt8 × ByteSlice) :=
+  if n ≤ s.size then .ok ((s.take n).toList, s.drop n) else .error .truncated
+
+/-- The packed form of `decodeBoundedBytes`, with a slice size check for the script bytes. -/
+def decodeBoundedBytesSlice (s : ByteSlice) : Except ReadError (CountedList UInt8 × ByteSlice) :=
+  match CompactSize.decodeBoundedSlice s with
+  | .error e => .error e
+  | .ok (count, rest) =>
+    match readBytesSlice count.toNat rest with
     | .error e => .error e
     | .ok (xs, rest') =>
       match ofList? xs with

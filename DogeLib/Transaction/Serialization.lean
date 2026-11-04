@@ -48,7 +48,7 @@ These are the changes:
 - Upstream puts the codec laws in the instances. Here they are in the proof library.
 - The namespace, the module header and the doc comments are DogeLib's.
 
-The readers, `CompleteReadError` and `decodeBaseComplete` are DogeLib's.
+The list readers, their `readSlice` and `readBaseSlice` forms, `CompleteReadError` and `decodeBaseComplete` are DogeLib's.
 They follow `UnserializeTransaction` and the `SerializationOp` methods of `COutPoint`, `CTxIn` and `CTxOut` of Dogecoin Core `v1.14.9`, commit `e0a1c15` (D4).
 -/
 
@@ -170,6 +170,31 @@ def Transaction.readBase : List UInt8 → Except ReadError (Transaction × List 
     (readPair readFixed
       (readPair (CountedList.decodeBounded TxIn.read)
         (readPair (CountedList.decodeBounded TxOut.read) readFixed)))
+
+/-- The packed form of `OutPoint.read`: the hash bytes, then the output index. -/
+def OutPoint.readSlice : ByteSlice → Except ReadError (OutPoint × ByteSlice) :=
+  readMapSlice OutPoint.ofProd (readPairSlice readFixedSlice readFixedSlice)
+
+/-- The packed form of `Script.read`, with Core's count bound and a block read of script bytes. -/
+def Script.readSlice : ByteSlice → Except ReadError (Script × ByteSlice) :=
+  readMapSlice Script.mk CountedList.decodeBoundedBytesSlice
+
+/-- The packed form of `TxIn.read`, with fields and errors in the same order. -/
+def TxIn.readSlice : ByteSlice → Except ReadError (TxIn × ByteSlice) :=
+  readMapSlice TxIn.ofProd (readPairSlice OutPoint.readSlice (readPairSlice Script.readSlice readFixedSlice))
+
+/-- The packed form of `TxOut.read`, with the amount bits before the script. -/
+def TxOut.readSlice : ByteSlice → Except ReadError (TxOut × ByteSlice) :=
+  readMapSlice TxOut.ofProd (readPairSlice readFixedSlice Script.readSlice)
+
+/-- The packed form of Core's base-mode prefix reader `Transaction.readBase` (D4).
+It preserves errors, transaction fields and remainder bytes, as `abstractRead_readBaseSlice` proves for every slice.
+The reader checks lengths through slice sizes and copies only consumed field bytes. -/
+def Transaction.readBaseSlice : ByteSlice → Except ReadError (Transaction × ByteSlice) :=
+  readMapSlice Transaction.ofProd
+    (readPairSlice readFixedSlice
+      (readPairSlice (CountedList.decodeBoundedSlice TxIn.readSlice)
+        (readPairSlice (CountedList.decodeBoundedSlice TxOut.readSlice) readFixedSlice)))
 
 /-- The reasons that `decodeBaseComplete` rejects an input. -/
 inductive CompleteReadError where

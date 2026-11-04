@@ -659,4 +659,67 @@ theorem decode_maxSize_succ :
   rw [CountedList.decode, CompactSize.decode_maxSize_succ]
   simp [decodeElemsLoop_nil, decodeElems_uint8]
 
+/-- For every count, slice and accumulator, agreeing element readers give the same loop error, values and remainder bytes. -/
+theorem abstractRead_readElemsBoundedSliceLoop {α : Type}
+    (p : ByteSlice → Except ReadError (α × ByteSlice))
+    (r : List UInt8 → Except ReadError (α × List UInt8))
+    (h : ∀ s, abstractRead (p s) = r s.toList) (n : Nat) (s : ByteSlice) (acc : Array α) :
+    abstractRead (readElemsBoundedSliceLoop p n s acc) = readElemsBoundedLoop r n s.toList acc := by
+  induction n generalizing s acc with
+  | zero => rfl
+  | succ n ih =>
+    have hs := h s
+    cases hp : p s with
+    | error e => simp [hp] at hs; simp [readElemsBoundedSliceLoop, hp, readElemsBoundedLoop, ← hs]
+    | ok q =>
+      obtain ⟨a, rest⟩ := q
+      simp [hp] at hs
+      simp [readElemsBoundedSliceLoop, hp, readElemsBoundedLoop, ← hs, ih]
+
+/-- For every slice, agreeing element readers give the same bounded vector error, values and remainder bytes. -/
+theorem abstractRead_decodeBoundedSlice {α : Type}
+    (p : ByteSlice → Except ReadError (α × ByteSlice))
+    (r : List UInt8 → Except ReadError (α × List UInt8))
+    (h : ∀ s, abstractRead (p s) = r s.toList) (s : ByteSlice) :
+    abstractRead (decodeBoundedSlice p s) = decodeBounded r s.toList := by
+  have hc := CompactSize.abstractRead_decodeBoundedSlice s
+  cases hp : CompactSize.decodeBoundedSlice s with
+  | error e => simp [hp] at hc; simp [decodeBoundedSlice, hp, decodeBounded, ← hc]
+  | ok q =>
+    obtain ⟨count, rest⟩ := q
+    simp [hp] at hc
+    have hl := abstractRead_readElemsBoundedSliceLoop p r h count.toNat rest #[]
+    cases hq : readElemsBoundedSliceLoop p count.toNat rest #[] with
+    | error e => simp [hq] at hl; simp [decodeBoundedSlice, hp, hq, decodeBounded, ← hc, ← hl]
+    | ok q =>
+      obtain ⟨xs, rest'⟩ := q
+      simp [hq] at hl
+      simp only [decodeBoundedSlice, hp, hq, decodeBounded, ← hc, ← hl]
+      cases ofList? xs <;> rfl
+
+/-- For every length and slice, the block reader preserves its bytes, remainder and truncation error. -/
+theorem abstractRead_readBytesSlice (n : Nat) (s : ByteSlice) :
+    abstractRead (readBytesSlice n s) = readBytes n s.toList := by
+  by_cases h : n ≤ s.size
+  · simp [readBytesSlice, readBytes, h]
+  · simp [readBytesSlice, readBytes, h]
+
+/-- For every slice, the packed bounded byte vector reader preserves the complete result of the list reader. -/
+theorem abstractRead_decodeBoundedBytesSlice (s : ByteSlice) :
+    abstractRead (decodeBoundedBytesSlice s) = decodeBoundedBytes s.toList := by
+  have hc := CompactSize.abstractRead_decodeBoundedSlice s
+  cases hp : CompactSize.decodeBoundedSlice s with
+  | error e => simp [hp] at hc; simp [decodeBoundedBytesSlice, hp, decodeBoundedBytes, ← hc]
+  | ok q =>
+    obtain ⟨count, rest⟩ := q
+    simp [hp] at hc
+    have hl := abstractRead_readBytesSlice count.toNat rest
+    cases hq : readBytesSlice count.toNat rest with
+    | error e => simp [hq] at hl; simp [decodeBoundedBytesSlice, hp, hq, decodeBoundedBytes, ← hc, ← hl]
+    | ok q =>
+      obtain ⟨xs, rest'⟩ := q
+      simp [hq] at hl
+      simp only [decodeBoundedBytesSlice, hp, hq, decodeBoundedBytes, ← hc, ← hl]
+      cases ofList? xs <;> rfl
+
 end DogeLib.Serialization.CountedList

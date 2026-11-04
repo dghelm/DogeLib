@@ -96,7 +96,7 @@ Report only the checks you ran, with the exact command, revision, and result ([C
 | Refinement | `lake build --wfail`: the `LawfulPackedCodec` instances prove that the packed codecs agree with the codec specification | Yes, for the packed fixed-width and fixed-length codecs, the packed CompactSize codec and bounded reader (`abstractRead_decodeBoundedSlice`), the packed counted-list codecs and the packed transaction codecs | `ci` / `lean` |
 | Soundness review | Manual review of SOUNDNESS.md | Manual | No |
 | Writing | `uv run --no-project --python 3.12 python scripts/check_writing.py --base main` | Yes. Its findings are advice and never fail the check. | `writing`, as annotations |
-| Oracle | `bash scripts/test_oracle.sh`: builds `dogelib-oracle` and checks its responses to `tests/oracle/`, to Core's `sighash.json` and to the base-mode records of Core's transaction corpus | Yes | `ci` / `lean` |
+| Oracle | `bash scripts/test_oracle.sh`: builds `dogelib-oracle` and checks fixtures, Core's `sighash.json`, base-mode corpus records and every corpus record through both witness operations | Yes | `ci` / `lean` |
 | Core comparison | `scripts/build_core_harness.sh <dogecoin-git-clone> build/core-harness && python3 -I scripts/compare_core.py .lake/build/bin/dogelib-oracle build/core-harness/core-oracle`: Dogecoin Core's code and the oracle on the same requests ([docs/oracle.md](docs/oracle.md#the-core-harness)) | Yes | `core` / `compare` |
 | Comparator self-test | `python3 -I scripts/test_compare_core.py .lake/build/bin/dogelib-oracle` | Yes | `core` / `compare` |
 | Writing checker tests | `uv run --no-project --python 3.12 python -m unittest scripts/test_check_writing.py` | Yes | `writing` |

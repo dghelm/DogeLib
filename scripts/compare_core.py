@@ -3,7 +3,7 @@
 Usage: python3 -I scripts/compare_core.py [--timeout SECONDS] [--quick] <dogelib-oracle> <core-oracle>
 
 The harness, harness/core/core_oracle.cpp, runs Dogecoin Core's own code and
-answers a projection of dogelib-oracle/1 (docs/oracle.md, "The Core harness").
+answers a projection of dogelib-oracle/2 (docs/oracle.md, "The Core harness").
 This script builds a deterministic stream of well-formed requests, runs each
 program once on the whole stream, and requires the two responses to every
 request to be equal as JSON values, with one exception: Core does not expose
@@ -28,8 +28,8 @@ import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-ORACLE_FORMAT = "dogelib-oracle/1"
-HARNESS_FORMAT = "dogelib-oracle/1-core-projection"
+ORACLE_FORMAT = "dogelib-oracle/2"
+HARNESS_FORMAT = "dogelib-oracle/2-core-projection"
 MAX_SIZE = 0x02000000
 SEED = 20261104
 MAX_REPORTS = 10
@@ -110,8 +110,8 @@ def read_compact_size(b: bytes, pos: int) -> tuple[int, int]:
     return int.from_bytes(b[pos + 1:pos + 1 + size], "little"), pos + 1 + size
 
 
-def walk_tx(b: bytes) -> dict:
-    """Field offsets of a base-format transaction that is known to parse.
+def walk_tx(b: bytes, witness: bool = False) -> dict:
+    """Field offsets of a transaction known to parse in the selected format.
 
     Returns `counts`: (offset, end, value) of each CompactSize field, and
     `fixed`: (offset, size, name) of the version, each sequence, each output
@@ -121,6 +121,14 @@ def walk_tx(b: bytes) -> dict:
     start = pos
     n_in, pos = read_compact_size(b, pos)
     counts.append((start, pos, n_in))
+    flags = 0
+    if witness and n_in == 0:
+        flags = b[pos]
+        pos += 1
+        if flags:
+            start = pos
+            n_in, pos = read_compact_size(b, pos)
+            counts.append((start, pos, n_in))
     for _ in range(n_in):
         pos += 36
         start = pos
@@ -130,8 +138,11 @@ def walk_tx(b: bytes) -> dict:
         fixed.append((pos, 4, "sequence"))
         pos += 4
     start = pos
-    n_out, pos = read_compact_size(b, pos)
-    counts.append((start, pos, n_out))
+    if witness and n_in == 0 and flags == 0:
+        n_out = 0
+    else:
+        n_out, pos = read_compact_size(b, pos)
+        counts.append((start, pos, n_out))
     for _ in range(n_out):
         fixed.append((pos, 8, "value"))
         pos += 8
@@ -139,11 +150,24 @@ def walk_tx(b: bytes) -> dict:
         length, pos = read_compact_size(b, pos)
         counts.append((start, pos, length))
         pos += length
+    stacks = []
+    if witness and flags & 1:
+        for _ in range(n_in):
+            stack_start = pos
+            start = pos
+            n_items, pos = read_compact_size(b, pos)
+            counts.append((start, pos, n_items))
+            for _ in range(n_items):
+                start = pos
+                length, pos = read_compact_size(b, pos)
+                counts.append((start, pos, length))
+                pos += length
+            stacks.append((stack_start, pos))
     fixed.append((pos, 4, "lock_time"))
     pos += 4
     if pos != len(b):
-        raise ValueError("not a complete base-format transaction")
-    return {"counts": counts, "fixed": fixed, "inputs": n_in, "outputs": n_out}
+        raise ValueError("not a complete transaction in the selected format")
+    return {"counts": counts, "fixed": fixed, "inputs": n_in, "outputs": n_out, "stacks": stacks}
 
 
 # ---------------------------------------------------------------------------
@@ -187,30 +211,32 @@ def sighash_records() -> list[list]:
     return [r for r in records if len(r) == 5]
 
 
-def corpus_txs() -> list[bytes]:
+def corpus_txs(witness: bool = False) -> list[bytes]:
     txs = []
     for name in ("tx_valid.json", "tx_invalid.json"):
         records = json.loads((ROOT / "tests/transaction/corpus" / name).read_text())
         # Base mode: the byte after the version is not the zero marker of the extended format.
-        txs += [bytes.fromhex(r[1]) for r in records if len(r) == 3 and r[1][8:10] != "00"]
+        txs += [bytes.fromhex(r[1]) for r in records if len(r) == 3 and (witness or r[1][8:10] != "00")]
     return txs
 
 
-def tx_requests(b: bytes) -> list[dict]:
-    return [{"op": "tx.read_base", "bytes_hex": b.hex()}, {"op": "tx.decode_base", "bytes_hex": b.hex()}]
+def tx_requests(b: bytes, witness: bool = False) -> list[dict]:
+    mode = "witness" if witness else "base"
+    return [{"op": f"tx.read_{mode}", "bytes_hex": b.hex()}, {"op": f"tx.decode_{mode}", "bytes_hex": b.hex()}]
 
 
-def set_corpus(txs: list[bytes]) -> list[dict]:
-    return [r for b in txs for r in tx_requests(b)]
+def set_corpus(txs: list[bytes], witness: bool = False) -> list[dict]:
+    return [r for b in txs for r in tx_requests(b, witness)]
 
 
-def set_prefixes(txs: list[bytes]) -> list[dict]:
-    return [{"op": "tx.read_base", "bytes_hex": b[:n].hex()} for b in txs for n in range(len(b))]
+def set_prefixes(txs: list[bytes], witness: bool = False) -> list[dict]:
+    return [r for b in txs for n in range(len(b)) for r in
+            (tx_requests(b[:n], True) if witness else tx_requests(b[:n])[:1])]
 
 
-def set_suffixes(txs: list[bytes]) -> list[dict]:
+def set_suffixes(txs: list[bytes], witness: bool = False) -> list[dict]:
     suffixes = [b"\x00", b"\xfd\x01\x02", bytes(range(40))]
-    return [r for b in txs for s in suffixes for r in tx_requests(b + s)]
+    return [r for b in txs for s in suffixes for r in tx_requests(b + s, witness)]
 
 
 def count_variants(value: int) -> list[bytes]:
@@ -224,16 +250,20 @@ def count_variants(value: int) -> list[bytes]:
     return [v for v in out if v != compact_size(value)]
 
 
-def set_fields(txs: list[bytes]) -> list[dict]:
+def set_fields(txs: list[bytes], witness: bool = False) -> list[dict]:
     reqs = []
     for b in txs:
-        w = walk_tx(b)
+        w = walk_tx(b, witness)
         for start, end, value in w["counts"]:
             for v in count_variants(value):
                 mutated = b[:start] + v + b[end:]
-                reqs += tx_requests(mutated)
+                reqs += tx_requests(mutated, witness)
                 # The replaced field followed by nothing: an error in the field, then the end of input.
-                reqs += tx_requests(b[:start] + v)
+                reqs += tx_requests(b[:start] + v, witness)
+        for start, end in w["stacks"]:
+            # Empty stack, one empty item, two empty items and one byte item.
+            for stack in (b"\x00", b"\x01\x00", b"\x02\x00\x00", b"\x01\x01\xab"):
+                reqs += tx_requests(b[:start] + stack + b[end:], witness)
         for start, size, name in w["fixed"]:
             if name == "value":
                 values = [0, (1 << 63) - 1, 1 << 63, (1 << 64) - 1]
@@ -241,7 +271,7 @@ def set_fields(txs: list[bytes]) -> list[dict]:
                 values = [0, 0x7fffffff, 0x80000000, 0xffffffff]
             for value in values:
                 mutated = b[:start] + value.to_bytes(size, "little") + b[start + size:]
-                reqs.append({"op": "tx.decode_base", "bytes_hex": mutated.hex()})
+                reqs.append(tx_requests(mutated, witness)[1])
     return reqs
 
 
@@ -364,17 +394,39 @@ def set_sighash_random(records: list[list], rng: random.Random, count: int) -> l
     return reqs
 
 
-def set_flips(txs: list[bytes], rng: random.Random, count: int) -> list[dict]:
+def set_flips(txs: list[bytes], rng: random.Random, count: int, witness: bool = False) -> list[dict]:
     reqs = []
     for _ in range(count):
         b = bytearray(rng.choice(txs))
         for _ in range(rng.randrange(1, 4)):
             b[rng.randrange(len(b))] = rng.randrange(256)
-        reqs.append({"op": "tx.read_base", "bytes_hex": bytes(b).hex()})
+        reqs += tx_requests(bytes(b), True) if witness else tx_requests(bytes(b))[:1]
     return reqs
 
 
-QUICK_SETS = ("fixtures", "compactsize", "sighash endpoints")
+def set_witness_cases() -> list[dict]:
+    """Source-derived flag and stack cases from tests/KnownAnswers.lean, Witness.cases."""
+    version, lock = bytes.fromhex("01000000"), bytes(4)
+    txin = bytes(36) + b"\x00" + bytes.fromhex("ffffffff")
+    txout = bytes(9)
+
+    def extended(flags, stack):
+        return version + bytes([0, flags, 1]) + txin + b"\x01" + txout + stack
+
+    cases = [version + b"\x00\x00" + lock, version + b"\x00\x00", version + b"\x00",
+             version + b"\x00\x01\x00\x01" + txout + lock]
+    for flags in (1, 2, 3, 0xff):
+        stacks = (b"",) if flags == 2 else (b"\x01\x01\xab", b"\x00", b"\x01\x00",
+                  b"\x01\x05\xab", b"\xfd\x01\x00\x01\xab", compact_size(MAX_SIZE + 1),
+                  b"\x01" + compact_size(MAX_SIZE + 1))
+        for stack in stacks:
+            cases += [extended(flags, stack), extended(flags, stack) + lock]
+    cases.append(version + b"\x00\x02\x01" + txin + b"\x01" + txout[:4])
+    cases.append(extended(1, b"\x01\x01\xab") + lock + b"\x00")
+    return [r for b in cases for r in tx_requests(b, True)]
+
+
+QUICK_SETS = ("fixtures", "compactsize", "sighash endpoints", "witness flags and stacks")
 
 
 def request_sets() -> tuple[list[tuple[str, list[dict]]], list[str]]:
@@ -384,6 +436,8 @@ def request_sets() -> tuple[list[tuple[str, list[dict]]], list[str]]:
     corpus = corpus_txs()
     sighash_txs = [bytes.fromhex(r[0]) for r in records]
     all_txs = corpus + sighash_txs
+    witness_corpus = corpus_txs(True)
+    extended = [b for b in witness_corpus if b[4] == 0]
     sets = [
         ("fixtures", fixtures),
         ("sighash.json", set_sighash_corpus(records)),
@@ -396,6 +450,13 @@ def request_sets() -> tuple[list[tuple[str, list[dict]]], list[str]]:
         ("sighash endpoints", set_sighash_endpoints(records)),
         ("sighash random", set_sighash_random(records, rng, 2000)),
         ("byte flips", set_flips(all_txs, rng, 5000)),
+        ("witness corpus (all records)", set_corpus(witness_corpus, True)),
+        ("witness corpus (extended records)", set_corpus(extended, True)),
+        ("witness prefixes", set_prefixes(extended, True)),
+        ("witness suffixes", set_suffixes(extended, True)),
+        ("witness counts, lengths and stacks", set_fields(witness_corpus, True)),
+        ("witness flags and stacks", set_witness_cases()),
+        ("witness byte flips", set_flips(witness_corpus, rng, 5000, True)),
     ]
     return sets, excluded
 

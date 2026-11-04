@@ -1,7 +1,7 @@
-// The Dogecoin Core harness: answers dogelib-oracle/1 requests by running
+// The Dogecoin Core harness: answers dogelib-oracle/2 requests by running
 // Dogecoin Core's own code, so that scripts/compare_core.py can check the
 // oracle against Core. docs/oracle.md, section "The Core harness", describes
-// its responses, a projection of dogelib-oracle/1.
+// its responses, a projection of dogelib-oracle/2.
 //
 // scripts/build_core_harness.sh builds it against Core's libraries at the
 // commit that SOURCES.md pins.
@@ -11,7 +11,7 @@
 // Core's conditions, and sighash.legacy has no `preimage_hex`, because Core
 // hashes its preimage without exposing it.
 //
-// An exception from Core that is not one of the three mapped read errors ends
+// An exception from Core that is not one of the four mapped read errors ends
 // the program with status 3, so it shows as a failed comparison.
 
 #include "primitives/transaction.h"
@@ -40,7 +40,7 @@ static_assert(std::numeric_limits<unsigned int>::max() == UINT32_MAX, "unsigned 
 
 namespace {
 
-const char* const FORMAT = "dogelib-oracle/1-core-projection";
+const char* const FORMAT = "dogelib-oracle/2-core-projection";
 
 // The stream version of Core's base mode: the reader allows no witness data.
 const int BASE_VERSION = PROTOCOL_VERSION | SERIALIZE_TRANSACTION_NO_WITNESS;
@@ -81,6 +81,7 @@ UniValue mapCoreFailure(const std::exception& e)
     if (what == "CDataStream::read(): end of data") return readError("truncated");
     if (what == "non-canonical ReadCompactSize()") return readError("non_canonical");
     if (what == "ReadCompactSize(): size too large") return readError("too_large");
+    if (what == "Unknown transaction optional data") return readError("unknown_optional_data");
     throw UnmappedCoreError{e.what()};
 }
 
@@ -235,7 +236,7 @@ UniValue txJson(const CMutableTransaction& tx)
 }
 
 // Core's reader on `bytes`: the transaction and the stream after it.
-CMutableTransaction readBase(CDataStream& ds)
+CMutableTransaction readTransaction(CDataStream& ds)
 {
     CMutableTransaction tx;
     try {
@@ -250,7 +251,7 @@ CMutableTransaction readBase(CDataStream& ds)
 CMutableTransaction decodeBaseComplete(const std::vector<unsigned char>& bytes)
 {
     CDataStream ds(bytes, SER_NETWORK, BASE_VERSION);
-    CMutableTransaction tx = readBase(ds);
+    CMutableTransaction tx = readTransaction(ds);
     if (!ds.empty()) {
         UniValue e(UniValue::VOBJ);
         e.pushKV("kind", "trailing_bytes");
@@ -303,7 +304,7 @@ UniValue run(const UniValue& req)
         checkArgs(req, op, {"bytes_hex"});
         std::vector<unsigned char> bytes = argHex(req, "bytes_hex");
         CDataStream ds(bytes, SER_NETWORK, BASE_VERSION);
-        CMutableTransaction tx = readBase(ds);
+        CMutableTransaction tx = readTransaction(ds);
         ok.pushKV("tx", txJson(tx));
         ok.pushKV("consumed", static_cast<uint64_t>(bytes.size() - ds.size()));
         ok.pushKV("rest_hex", HexStr(ds.begin(), ds.end()));
@@ -316,6 +317,36 @@ UniValue run(const UniValue& req)
         ok.pushKV("tx", txJson(tx));
         ok.pushKV("serialized_hex", HexStr(out.begin(), out.end()));
         pushHash(ok, "txid", CTransaction(tx).GetHash());
+    } else if (op == "tx.read_witness" || op == "tx.decode_witness") {
+        checkArgs(req, op, {"bytes_hex"});
+        std::vector<unsigned char> bytes = argHex(req, "bytes_hex");
+        CDataStream ds(bytes, SER_NETWORK, PROTOCOL_VERSION);
+        CMutableTransaction tx = readTransaction(ds);
+        if (op == "tx.decode_witness" && !ds.empty()) {
+            UniValue e(UniValue::VOBJ);
+            e.pushKV("kind", "trailing_bytes");
+            e.pushKV("count", static_cast<uint64_t>(ds.size()));
+            throw SpecError{e};
+        }
+        CDataStream out(SER_NETWORK, PROTOCOL_VERSION);
+        out << tx;
+        UniValue witnesses(UniValue::VARR);
+        for (const CTxIn& in : tx.vin) {
+            UniValue stack(UniValue::VARR);
+            for (const auto& item : in.scriptWitness.stack) stack.push_back(UniValue(hexOf(item)));
+            witnesses.push_back(stack);
+        }
+        const CTransaction immutable(tx);
+        ok.pushKV("tx", txJson(tx));
+        ok.pushKV("witnesses", witnesses);
+        ok.pushKV("has_witness", immutable.HasWitness());
+        ok.pushKV("serialized_hex", HexStr(out.begin(), out.end()));
+        pushHash(ok, "txid", immutable.GetHash());
+        pushHash(ok, "wtxid", immutable.GetWitnessHash());
+        if (op == "tx.read_witness") {
+            ok.pushKV("consumed", static_cast<uint64_t>(bytes.size() - ds.size()));
+            ok.pushKV("rest_hex", HexStr(ds.begin(), ds.end()));
+        }
     } else if (op == "sighash.legacy") {
         checkArgs(req, op, {"tx_hex", "script_code_hex", "input_index", "hash_type"});
         std::vector<unsigned char> txBytes = argHex(req, "tx_hex");

@@ -31,7 +31,7 @@ Gap D asks whether the use of DogeLib holds together.
 
 | ID | Risk | Mitigation in place | Applies to |
 |----|------|---------------------|------------|
-| A1 | A definition does not match the pinned Dogecoin behavior | Source mapping in `SOURCES.md`, by review only. The 256-bit word models have arithmetic equivalence proofs, including division and its comparison and subtraction dependencies. The division model represents Core's zero-divisor exception. The compact, uint64 construction, byte conversion and composed retarget models also have arithmetic equivalence proofs. Their correspondence to Core remains by review. SHA-256 has a proof against a FIPS 180-4 model, and NIST CAVP known answers. Known answers from Core's genesis data test the integer codecs. Core's own test cases are known answers for CompactSize, the legacy signature hash, the compact encoding and the difficulty retarget. The scripts of the genesis coinbase are known answers for counted lists. The genesis coinbase is a known answer for the transaction codec, reader and ID. `scripts/compare_core.py` runs the oracle and Core's own code at the pin on 179,556 requests. They cover CompactSize, the base-mode transaction reader, serialization and ID, and the legacy signature hash. | P R I F |
+| A1 | A definition does not match the pinned Dogecoin behavior | Source mapping in `SOURCES.md`, by review only. The 256-bit word models have arithmetic equivalence proofs, including division and its comparison and subtraction dependencies. The division model represents Core's zero-divisor exception. The compact, uint64 construction, byte conversion and composed retarget models also have arithmetic equivalence proofs. Their correspondence to Core remains by review. SHA-256 has a proof against a FIPS 180-4 model, and NIST CAVP known answers. Known answers from Core's genesis data test the integer codecs. Core's own test cases are known answers for CompactSize, the legacy signature hash, the compact encoding and the difficulty retarget. The scripts of the genesis coinbase are known answers for counted lists. The genesis coinbase is a known answer for the transaction codec, reader and ID. `scripts/compare_core.py` runs the oracle and Core's own code at the pin on 267,800 requests. They cover CompactSize, both transaction reader modes, serialization, transaction and witness hashes, and the legacy signature hash. | P R I F |
 | A2 | A theorem holds only under a hypothesis | Policy: each conditional theorem lists its hypotheses here and in `COVERAGE.md` | P I |
 | A3 | Timing reveals secret data | None: no constant-time claim | R I |
 | A4 | A security theorem idealises a primitive | None: no security theorem yet | P |
@@ -39,7 +39,7 @@ Gap D asks whether the use of DogeLib holds together.
 | B1 | The Lean compiler, the C compiler or the Lean runtime is wrong | `lake test` runs the NIST CAVP SHA-256 vectors, Core's compact-encoding and retarget test cases, and the codec known answers through the compiled code. `scripts/compare_core.py` runs the compiled oracle against Core | R |
 | B2 | Lean core runs code other than its definitions | Lean core is a declared baseline | R |
 | B3 | Elaboration runs native code | None yet | P |
-| B4 | The oracle's IO adapter or a foreign boundary is wrong | `scripts/test_oracle.sh` runs fixtures with independent expected values, Core's `sighash.json` and the base-mode records of Core's transaction corpus through the oracle. `lake exe check-decls` checks the `Exports` library. `scripts/compare_core.py` compares the oracle with the Core harness, and `scripts/test_compare_core.py` checks that the comparison can fail. | R F |
+| B4 | The oracle's IO adapter or a foreign boundary is wrong | `scripts/test_oracle.sh` runs fixtures with independent expected values, Core's `sighash.json` and all transaction corpus records through the witness operations, plus the base-mode records through `tx.decode_base`. `lake exe check-decls` checks the `Exports` library. `scripts/compare_core.py` compares the oracle with the Core harness, and `scripts/test_compare_core.py` checks that the comparison can fail. | R F |
 | B5 | This repository substitutes compiled code | `lake exe check-decls` fails on any new substitution | R |
 | B6 | Extraction or the Rust toolchain is wrong | None: no extraction yet | I |
 | C1 | The Lean kernel or its axioms are unsound | `lake exe check-decls` rejects transitive axiom dependencies outside the allowed set, including imported unfinished proofs. Kernel soundness and axiom consistency remain trusted. | P I |
@@ -388,8 +388,9 @@ The lists and stacks fail first, the other flag bits next, and the lock time las
 
 `lake test` also reads and writes again the 39 witness-format records of Core's corpus.
 Each of them has witness data, so the writer uses the extended form.
-Core itself does not run, and no known answer gives the witness hash of a transaction with witness data.
-The oracle operations and the comparison with Core are issue #36.
+`lake test` does not run Core.
+`bash scripts/test_oracle.sh` checks both hashes against Python hashlib on all 198 corpus records, including the 39 with witness data.
+`scripts/compare_core.py` compares both witness operations with pinned Core, including those 39 records and their malformed variants.
 
 By `#print axioms` with Lean `v4.35.0`:
 
@@ -918,12 +919,17 @@ The oracle reads fixture records and writes results through IO.
 That adapter is outside the specification library, and no theorem covers it.
 
 The oracle is `dogelib-oracle`, in the `Exports` library ([docs/oracle.md](docs/oracle.md)).
-Each operation calls one function of the specification. The adapter converts its arguments and its result:
+The adapter calls specification functions and converts their arguments and results:
 
 - Lean core's `Json.parse` reads each request, and `Json.compress` writes each response. Both are trusted as Lean core is (B2).
 - The adapter's own code converts hexadecimal text to bytes and back, JSON numbers and decimal strings to integers, and the specification's errors to JSON objects.
   The tests check these conversions at their boundaries, against expected values from Core's files, Core's source and Python's `hashlib`.
 - The loop over standard input uses `repeat`, which Lean core defines with `partial`. `lake exe check-decls` exempts the `Exports` modules from its check of reachable opaque constants, and checks their axioms and their own declarations.
+
+The witness operations convert `WitnessTransaction` stacks to arrays of item hex strings.
+They expose `hasWitness`, witness-allowed serialization, the transaction ID and the witness hash.
+No theorem covers these JSON conversions.
+Core comparisons check these fields, consumption and errors on the recorded requests only.
 
 A wrong conversion could make the oracle and Core disagree, or agree, for a reason outside the specification.
 
@@ -933,11 +939,11 @@ A user of the comparison trusts these parts of it:
 - Core's libraries at the pin, compiled by the compiler of the machine that runs the comparison: GCC 13 in CI, on `ubuntu-24.04`.
   Core v1.14.9 was released for older compilers.
   The build script passes only `-O2` as compiler flags, and Core's configure selects C++11.
-- The harness's own code. It converts hexadecimal text and JSON numbers to Core's arguments, writes Core's results as JSON, and maps three exception messages to read errors.
+- The harness's own code. It converts hexadecimal text and JSON numbers to Core's arguments, writes Core's results as JSON, and maps four exception messages to read errors.
   Any other exception from Core stops the harness, so it cannot pass as a result.
 - The `plan` label of `sighash.legacy`. The harness computes it from Core's conditions instead of observing it. It stops if the label is `fixed_digest` and Core's digest is not the value one.
 - The comparator, `scripts/compare_core.py`.
-  Its self-test, `scripts/test_compare_core.py`, requires a passing control, and 22 mutations that each fail with the code they target.
+  Its self-test, `scripts/test_compare_core.py`, requires a passing control, and 25 mutations that each fail with the code they target.
 - For `sighash.legacy`, the oracle's preimage is checked by hashing it, not byte by byte: Core does not expose its preimage.
 
 Both programs could be wrong in the same way on an input that the comparison does not send.

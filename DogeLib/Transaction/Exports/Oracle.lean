@@ -2,6 +2,7 @@ module
 
 public import DogeLib.Serialization.Exports.Oracle
 public import DogeLib.Transaction.LegacySighash
+public import DogeLib.Transaction.Witness
 
 /-!
 # `Transaction.Exports.Oracle`
@@ -10,9 +11,11 @@ The transaction and signature-hash operations of the oracle. `docs/oracle.md` de
 
 - `tx.read_base` runs `Transaction.readBase`, the prefix reader of Core's base mode.
 - `tx.decode_base` runs `Transaction.decodeBaseComplete`, then the base encoder and `Transaction.txid`.
+- `tx.read_witness` and `tx.decode_witness` run the witness-allowed readers, writer and hashes.
 - `sighash.legacy` reads its transaction with `decodeBaseComplete`, then runs `legacySignatureHashPlan` and `LegacyHashPlan.digest`.
 
-These operations model Core's serialization in base mode only. No operation reads witness data.
+The witness operations model serialization only.
+Core rejects blocks with witness data on main and test at the pin (SOURCES.md D36).
 -/
 
 @[expose] public section
@@ -73,6 +76,46 @@ def txDecodeBase : Operation where
       return Json.mkObj ([("tx", transactionJson tx), ("serialized_hex", .str (hexOf (Codec.encode tx)))] ++
         hashFields "txid" tx.txid)
 
+/-- The read error of the witness-allowed format, including unknown optional data. -/
+def witnessReadErrorJson : WitnessReadError → Json
+  | .read e => readErrorJson e
+  | .unknownOptionalData => Json.mkObj [("kind", "read"), ("reason", "unknown_optional_data")]
+
+/-- The complete witness reader's error, including trailing bytes. -/
+def completeWitnessReadErrorJson : CompleteWitnessReadError → Json
+  | .read e => witnessReadErrorJson e
+  | .trailingBytes n => Json.mkObj [("kind", "trailing_bytes"), ("count", natJson n)]
+
+/-- The base fields, witness stacks, witness-allowed serialization and both transaction hashes. -/
+def witnessFields (w : WitnessTransaction) : List (String × Json) :=
+  [("tx", transactionJson w.tx),
+    ("witnesses", .arr (w.witnesses.map fun s =>
+      Json.arr (s.items.val.map fun i => Json.str (hexOf i.val)).toArray).toArray),
+    ("has_witness", .bool w.hasWitness), ("serialized_hex", .str (hexOf w.encode))] ++
+    hashFields "txid" w.tx.txid ++ hashFields "wtxid" w.wtxid
+
+/-- `tx.read_witness`: witness-allowed prefix reading, its serialization, hashes, consumed count and remainder. -/
+def txReadWitness : Operation where
+  name := "tx.read_witness"
+  args := ["bytes_hex"]
+  run args := do
+    let bs ← argHex args "bytes_hex"
+    match Transaction.readAllowWitness bs with
+    | .error e => throw (.spec (witnessReadErrorJson e))
+    | .ok (w, rest) =>
+      return Json.mkObj (witnessFields w ++ [("consumed", natJson (bs.length - rest.length)),
+        ("rest_hex", .str (hexOf rest))])
+
+/-- `tx.decode_witness`: a witness-allowed transaction that fills the input, its serialization and hashes. -/
+def txDecodeWitness : Operation where
+  name := "tx.decode_witness"
+  args := ["bytes_hex"]
+  run args := do
+    let bs ← argHex args "bytes_hex"
+    match Transaction.decodeAllowWitnessComplete bs with
+    | .error e => throw (.spec (completeWitnessReadErrorJson e))
+    | .ok w => return Json.mkObj (witnessFields w)
+
 /-- `hash_type` as Core's `int nHashType` reaches `SignatureHash`: an integer from -2^31 to 2^32 - 1, modulo 2^32. -/
 def argHashType (args : Args) : Except Failure UInt32 := do
   let i ← argInt args "hash_type" (-2 ^ 31) (2 ^ 32 - 1)
@@ -99,6 +142,6 @@ def sighashLegacy : Operation where
     return Json.mkObj (planFields ++ hashFields "digest" plan.digest)
 
 /-- The operations of this layer. -/
-def operations : List Operation := [txReadBase, txDecodeBase, sighashLegacy]
+def operations : List Operation := [txReadBase, txDecodeBase, txReadWitness, txDecodeWitness, sighashLegacy]
 
 end DogeLib.Transaction.Exports

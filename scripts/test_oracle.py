@@ -2,7 +2,7 @@
 
 Usage: python3 -I scripts/test_oracle.py <path to dogelib-oracle>
 
-`scripts/test_oracle.sh` builds the oracle and runs this file. It checks four things:
+`scripts/test_oracle.sh` builds the oracle and runs this file. It checks five things:
 
 1. Each request of `tests/oracle/requests.jsonl` gets the response on the same line of
    `tests/oracle/expected.jsonl`. Two parts of a response are not compared exactly:
@@ -11,7 +11,9 @@ Usage: python3 -I scripts/test_oracle.py <path to dogelib-oracle>
 2. Every record of Core's `sighash.json` gets Core's digest from `sighash.legacy`.
 3. Every base-mode record of Core's `tx_valid.json` and `tx_invalid.json` gets its own bytes back
    from `tx.decode_base`, and a transaction ID equal to the double SHA-256 that `hashlib` computes.
-4. The process answers each line before it reads the next, keeps going after a malformed line,
+4. Every transaction corpus record passes both witness operations. Its stacks and base bytes follow
+   D4's field layout. Its witness serialization and both hashes agree with those bytes and `hashlib`.
+5. The process answers each line before it reads the next, keeps going after a malformed line,
    skips blank lines, and answers a final line that has no newline.
 
 The expected values come from Core's files, Core's source and `hashlib`, never from the oracle.
@@ -65,7 +67,9 @@ def matches(got, want) -> bool:
             got = {k: v for k, v in got.items() if k != "preimage_hex"}
             want = {k: v for k, v in want.items() if k != "preimage_hex"}
         return set(got) == set(want) and all(matches(got[k], want[k]) for k in want)
-    return got == want
+    if isinstance(want, list) and isinstance(got, list):
+        return len(got) == len(want) and all(matches(g, w) for g, w in zip(got, want))
+    return type(got) is type(want) and got == want
 
 
 def check_fixtures(oracle: str) -> int:
@@ -126,8 +130,77 @@ def check_tx_corpus(oracle: str) -> int:
     return failures
 
 
+def witness_corpus_fields(raw: bytes) -> tuple[bytes, list[list[str]]]:
+    """Separate base bytes and stacks in a known corpus record, by D4's field layout."""
+    def count(pos):
+        first = raw[pos]
+        size = {253: 2, 254: 4, 255: 8}.get(first, 0)
+        return ((int.from_bytes(raw[pos + 1:pos + 1 + size], "little"), pos + 1 + size)
+                if size else (first, pos + 1))
+
+    extended = raw[4] == 0
+    if extended:
+        assert raw[5] == 1, "corpus witness records must use flag 01"
+    start = 6 if extended else 4
+    inputs, pos = count(start)
+    for _ in range(inputs):
+        length, pos = count(pos + 36)
+        pos += length + 4
+    outputs, pos = count(pos)
+    for _ in range(outputs):
+        length, pos = count(pos + 8)
+        pos += length
+    end = pos
+    stacks = []
+    for _ in range(inputs):
+        stack = []
+        if extended:
+            items, pos = count(pos)
+            for _ in range(items):
+                length, pos = count(pos)
+                stack.append(raw[pos:pos + length].hex())
+                pos += length
+        stacks.append(stack)
+    if pos + 4 != len(raw):
+        raise ValueError("corpus record does not match D4's layout")
+    return raw[:4] + raw[start:end] + raw[pos:], stacks
+
+
+def check_witness_corpus(oracle: str) -> int:
+    """Check both witness operations against corpus bytes and Python's hashlib."""
+    failures = 0
+    for name in ("tx_valid.json", "tx_invalid.json"):
+        records = json.loads((ROOT / "tests/transaction/corpus" / name).read_text())
+        txs = [bytes.fromhex(r[1]) for r in records if len(r) == 3]
+        requests = [{"id": f"{i}-{op}", "op": op, "bytes_hex": tx.hex()}
+                    for i, tx in enumerate(txs) for op in ("tx.read_witness", "tx.decode_witness")]
+        responses = run_requests(oracle, name + " witness", requests)
+        if responses is None:
+            failures += 1
+            continue
+        bad = 0
+        for req, resp in zip(requests, responses):
+            raw = bytes.fromhex(req["bytes_hex"])
+            base, stacks = witness_corpus_fields(raw)
+            has_witness = any(stacks)
+            encoded = raw if has_witness else base
+            txid, wtxid = sha256d(base), sha256d(encoded)
+            expected = {"serialized_hex": encoded.hex(), "witnesses": stacks, "has_witness": has_witness,
+                        "txid_hex": txid.hex(), "txid_display": txid[::-1].hex(),
+                        "wtxid_hex": wtxid.hex(), "wtxid_display": wtxid[::-1].hex()}
+            if req["op"] == "tx.read_witness":
+                expected.update(consumed=len(raw), rest_hex="")
+            ok = resp.get("ok", {})
+            if not all(matches(ok.get(k), v) for k, v in expected.items()):
+                bad += 1
+                print(f"FAIL {name} witness record {req['id']}: {json.dumps(resp)[:200]}")
+        print(f"{name}: {len(txs)} records through both witness operations, {bad} failures")
+        failures += bad
+    return failures
+
+
 def check_process(oracle: str) -> int:
-    """Item 4: line-by-line answers from a process whose input stays open."""
+    """Item 5: line-by-line answers from a process whose input stays open."""
     proc = subprocess.Popen([oracle], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
     failures = 0
 
@@ -148,21 +221,21 @@ def check_process(oracle: str) -> int:
             print(f"FAIL process, {step}: {resp}")
 
     expect("one request, input open", '{"id":1,"op":"oracle.version"}\n',
-           lambda r: r == {"id": 1, "ok": {"format": "dogelib-oracle/1"}})
+           lambda r: r == {"id": 1, "ok": {"format": "dogelib-oracle/2"}})
     expect("malformed line", '{"id":2,\n', lambda r: r["id"] is None and r["error"]["kind"] == "request")
     expect("blank lines, then a request", '\n  \n{"id":"three","op":"oracle.version"}\n',
-           lambda r: r == {"id": "three", "ok": {"format": "dogelib-oracle/1"}})
+           lambda r: r == {"id": "three", "ok": {"format": "dogelib-oracle/2"}})
     proc.stdin.write('{"id":null,"op":"oracle.version"}')
     proc.stdin.close()
     resp = read_line()
-    if resp != {"id": None, "ok": {"format": "dogelib-oracle/1"}}:
+    if resp != {"id": None, "ok": {"format": "dogelib-oracle/2"}}:
         failures += 1
         print(f"FAIL process, final line without newline: {resp}")
     if proc.wait(TIMEOUT) != 0 or proc.stdout.read() != "":
         failures += 1
         print("FAIL process: exit status or output after the last response")
     version = subprocess.run([oracle, "--version"], capture_output=True, text=True, timeout=TIMEOUT)
-    if version.returncode != 0 or json.loads(version.stdout) != {"format": "dogelib-oracle/1"}:
+    if version.returncode != 0 or json.loads(version.stdout) != {"format": "dogelib-oracle/2"}:
         failures += 1
         print(f"FAIL --version: {version.stdout!r}")
     print(f"process: {failures} failures")
@@ -175,7 +248,7 @@ def main() -> int:
         return 2
     oracle = sys.argv[1]
     failures = (check_fixtures(oracle) + check_sighash_corpus(oracle) + check_tx_corpus(oracle)
-                + check_process(oracle))
+                + check_witness_corpus(oracle) + check_process(oracle))
     print("PASS" if failures == 0 else f"FAIL: {failures} failures")
     return 0 if failures == 0 else 1
 

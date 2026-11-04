@@ -46,6 +46,11 @@ grep -vE '^(check-decls:|stale )' "$WORK/out" | cut -d: -f1 | LC_ALL=C sort -u >
 if [ "$got" -ne 1 ]; then
   echo "FAIL: exit $got with an empty baseline, expected 1"; FAIL=1
 fi
+if grep -q '^check-decls: .*production inventory and full Refinement coverage NOT checked' "$WORK/out"; then
+  echo "ok:   explicit module checks disclose the omitted production coverage"
+else
+  echo "FAIL: the explicit module check omitted its coverage notice"; cat "$WORK/out"; FAIL=1
+fi
 if diff -u "$WORK/expected" "$WORK/found"; then
   echo "ok:   every planted finding is reported, and nothing else"
 else
@@ -178,7 +183,9 @@ namespace DogeLib.CheckDeclsPlatform
 def platform := System.Platform.numBits
 end DogeLib.CheckDeclsPlatform
 EOF
-lake env lean -o .lake/build/lib/lean/DogeLib/CheckDeclsPlatform.olean "$SPEC_PLANTED" >"$WORK/platform-build" 2>&1
+if ! lake env lean -o .lake/build/lib/lean/DogeLib/CheckDeclsPlatform.olean "$SPEC_PLANTED" >"$WORK/platform-build" 2>&1; then
+  echo "FAIL: the specification platform fixture does not compile"; cat "$WORK/platform-build"; exit 1
+fi
 if lake exe check-decls --scope DogeLib --baseline /dev/null DogeLib.CheckDeclsPlatform >"$WORK/platform" 2>&1; then
   echo "FAIL: the specification reached the opaque platform word size"; FAIL=1
 elif grep -q '^reaches-opaque DogeLib.CheckDeclsPlatform.platform: unfolds to \[System.Platform.getNumBits\]' "$WORK/platform"; then

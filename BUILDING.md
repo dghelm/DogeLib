@@ -31,6 +31,9 @@ lake exe check-decls
 The default declaration check fails if the refinement package is absent, unbuilt or cannot load every requested module.
 It names the reason and never silently checks fewer modules.
 Production CI uses the default command.
+The check inspects the built Refinement oleans.
+After local edits, run `lake -d Refinement build --wfail` before running the declaration check.
+
 Do not build Mathlib from source on a shared machine.
 Its cached dependency directory occupies about 7.2 GiB per worktree, measured with this toolchain.
 Aeneas and extraction tools need additional disk space ([Rust instructions](Refinement/Rust/README.md)).

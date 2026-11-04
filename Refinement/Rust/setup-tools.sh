@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install the pinned extraction tools inside this lane, without system packages.
+# Install the pinned extraction tools without system packages.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
 tools_dir="$repo_root/build/tools"

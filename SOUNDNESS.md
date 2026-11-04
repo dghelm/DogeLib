@@ -978,7 +978,8 @@ Any later foreign boundary, such as a C or Rust binding, is listed here with its
 `@[implemented_by]` and `@[extern]` make the compiled code run something other than the definition, with no proof that the two agree.
 `@[csimp]` replaces a function with one proved equal to it, so it adds no logical trust. The code that runs is still not the definition a reader reads.
 
-The `DogeLib`, `Proofs` and `Refinement` libraries have none of the three, by `lake exe check-decls`.
+The `DogeLib`, `Proofs` and `Refinement` libraries have no `@[extern]`, `@[implemented_by]` or `@[csimp]` declarations, by `lake exe check-decls`.
+Their safe declarations depend on at most `propext`, `Classical.choice` and `Quot.sound`.
 The fixtures in `scripts/CheckDeclsTest` contain them on purpose, to test the check, and no library imports them.
 
 | Declaration | Kind | Proof-backed | Justification |

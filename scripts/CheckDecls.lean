@@ -410,7 +410,8 @@ unsafe def run (args : List String) : IO UInt32 := do
     IO.println s!"stale baseline entry, no longer found: {kind} {decl}"
   let nDecls := env.constants.toList.countP fun (n, _) => scopes.any (fun s => inScope env s n)
   let scopeLabel := if checkProduction then
-    (if skipRefinement then "DogeLib (Refinement NOT checked)" else "DogeLib and Refinement") else toString scope
+    (if skipRefinement then "DogeLib (Refinement NOT checked)" else "DogeLib and Refinement")
+    else s!"{scope} (production inventory and full Refinement coverage NOT checked)"
   IO.println s!"check-decls: {nDecls} declarations under {scopeLabel}, {findings.size} findings, {findings.size - fresh.size} in the baseline, {fresh.size} new, {stale.length} stale"
   return if missing.isEmpty && fresh.isEmpty && stale.isEmpty then 0 else 1
 

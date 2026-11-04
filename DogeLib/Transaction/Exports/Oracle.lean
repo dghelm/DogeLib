@@ -9,12 +9,12 @@ public import DogeLib.Transaction.Witness
 
 The transaction and signature-hash operations of the oracle. `docs/oracle.md` defines their arguments and results.
 
-- `tx.read_base` runs `Transaction.readBase`, the prefix reader of Core's base mode.
-- `tx.decode_base` runs `Transaction.decodeBaseComplete`, then the base encoder and `Transaction.txid`.
+- `tx.read_base` runs `Transaction.readBaseSlice`, the prefix reader of Core's base mode.
+- `tx.decode_base` runs `Transaction.decodeBaseCompleteSlice`, then the base encoder and `Transaction.txid`.
 - `tx.read_witness` and `tx.decode_witness` run the witness-allowed readers, writer and hashes.
-- `sighash.legacy` reads its transaction with `decodeBaseComplete`, then runs `legacySignatureHashPlan` and `LegacyHashPlan.digest`.
+- `sighash.legacy` reads its transaction with `decodeBaseCompleteSlice`, then runs `legacySignatureHashPlan` and `LegacyHashPlan.digest`.
 
-The witness operations model serialization only.
+The witness operations use list readers and model serialization only.
 Core rejects blocks with witness data on main and test at the pin (SOURCES.md D36).
 -/
 
@@ -57,20 +57,20 @@ def txReadBase : Operation where
   name := "tx.read_base"
   args := ["bytes_hex"]
   run args := do
-    let bs ← argHex args "bytes_hex"
-    match Transaction.readBase bs with
+    let bs := ByteSlice.ofByteArray (ByteArray.mk (← argHex args "bytes_hex").toArray)
+    match Transaction.readBaseSlice bs with
     | .error e => throw (.spec (readErrorJson e))
     | .ok (tx, rest) =>
-      return Json.mkObj [("tx", transactionJson tx), ("consumed", natJson (bs.length - rest.length)),
-        ("rest_hex", .str (hexOf rest))]
+      return Json.mkObj [("tx", transactionJson tx), ("consumed", natJson (bs.size - rest.size)),
+        ("rest_hex", .str (hexOf rest.toList))]
 
 /-- `tx.decode_base`: the transaction that is all of `bytes_hex`, its base serialization and its ID. -/
 def txDecodeBase : Operation where
   name := "tx.decode_base"
   args := ["bytes_hex"]
   run args := do
-    let bs ← argHex args "bytes_hex"
-    match Transaction.decodeBaseComplete bs with
+    let bs := ByteSlice.ofByteArray (ByteArray.mk (← argHex args "bytes_hex").toArray)
+    match Transaction.decodeBaseCompleteSlice bs with
     | .error e => throw (.spec (completeReadErrorJson e))
     | .ok tx =>
       return Json.mkObj ([("tx", transactionJson tx), ("serialized_hex", .str (hexOf (Codec.encode tx)))] ++
@@ -126,11 +126,11 @@ def sighashLegacy : Operation where
   name := "sighash.legacy"
   args := ["tx_hex", "script_code_hex", "input_index", "hash_type"]
   run args := do
-    let txBytes ← argHex args "tx_hex"
+    let txBytes := ByteSlice.ofByteArray (ByteArray.mk (← argHex args "tx_hex").toArray)
     let codeBytes ← argHex args "script_code_hex"
     let nIn ← argU32 args "input_index"
     let hashType ← argHashType args
-    let tx ← match Transaction.decodeBaseComplete txBytes with
+    let tx ← match Transaction.decodeBaseCompleteSlice txBytes with
       | .ok tx => pure tx
       | .error e => throw (.spec ((completeReadErrorJson e).setObjVal! "argument" "tx_hex"))
     let some code := CountedList.ofList? codeBytes

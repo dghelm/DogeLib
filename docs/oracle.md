@@ -241,6 +241,10 @@ The request stream is deterministic, and the random sets use a fixed seed:
 - Hand-built cases from the known answers in `tests/KnownAnswers.lean` (`Witness.cases`).
   They cover flags `02`, `03`, `ff`, zero flags, flags `01` with zero inputs, and errors before the flag check.
 - 5,000 seeded byte mutations of the 198 records, each through both witness operations.
+- The `large structured base` set, through both base operations and the transaction argument of `sighash.legacy`.
+  It includes transactions with 253 or 254 inputs and outputs, 1000 inputs or outputs, and scripts of 4096 or 16384 bytes.
+  Variants replace both vector counts, the first input script length and the first output script length with malformed encodings.
+  They also truncate fields and scripts, and append trailing bytes.
 
 `scripts/test_compare_core.py` checks that the comparison can fail.
 A wrapper around the oracle stands in for the harness.

@@ -761,10 +761,15 @@ def noInputs (v : Nat) (value : Nat) : List UInt8 :=
 def readSlice (s : ByteSlice) : Except CompactSize.ReadError (Transaction × List UInt8) :=
   (Transaction.readBaseSlice s).map fun (tx, rest) => (tx, rest.toList)
 
-/-- Compare complete base-mode results at a nonzero offset, with bytes outside both slice bounds. -/
+/-- Compare prefix and complete base-mode readers at a nonzero offset, with bytes outside both slice bounds. -/
 def sliceAgrees (bs : List UInt8) : Bool :=
   let bytes : ByteArray := ⟨(0xaa :: 0xbb :: bs ++ [0xcc]).toArray⟩
-  match readSlice ((ByteSlice.ofByteArray bytes).drop 2 |>.take bs.length), Transaction.readBase bs with
+  let s := (ByteSlice.ofByteArray bytes).drop 2 |>.take bs.length
+  let complete := match Transaction.decodeBaseCompleteSlice s, Transaction.decodeBaseComplete bs with
+    | .error e, .error e' => decide (e = e')
+    | .ok a, .ok b => a == b
+    | _, _ => false
+  complete && match readSlice s, Transaction.readBase bs with
   | .error e, .error e' => decide (e = e')
   | .ok a, .ok b => a == b
   | _, _ => false

@@ -1531,7 +1531,8 @@ def checkCompact : IO Nat := do
 The cases of `arith_uint256_tests.cpp` (D16) that use the operators the retarget uses: `operator*` by a 32-bit value, `operator/` and `GetLow64`.
 The inputs and expected values are copied from the test file, with the line of each case.
 Two `divide` cases, lines 362 and 368, expect an exception for a zero divisor. `ArithUint256.div` takes a proof that the divisor is not zero, so it has no such case.
-These cases check the definitions, which are stated as `Nat` arithmetic. They do not relate Core's word loops to that arithmetic (issue #16).
+The multiply and `GetLow64` cases also run through the word models.
+The division cases run through the arithmetic definition only (issue #16).
 -/
 
 /-- The value of a string of hexadecimal digits, or `none` for another character. -/
@@ -1587,7 +1588,17 @@ def operatorCases : Except String (List (Nat × Bool)) := do
     (367, divIs mx r2 one),
     (394, ArithUint256.getLow64 r1 == 0x121156cfdb4a529c),
     (395, ArithUint256.getLow64 (ArithUint256.shiftLeft one 255) == 0),
-    (396, ArithUint256.getLow64 one == 1)]
+    (396, ArithUint256.getLow64 one == 1),
+    (347, ArithUint256.Words.toArith (ArithUint256.Words.mulUInt32 (ArithUint256.Words.ofArith r1) 0) == zero),
+    (348, ArithUint256.Words.toArith (ArithUint256.Words.mulUInt32 (ArithUint256.Words.ofArith r1) 1) == r1),
+    (349, ← is (ArithUint256.Words.toArith (ArithUint256.Words.mulUInt32 (ArithUint256.Words.ofArith r1) 3))
+      "7759b1c0ed14047f961ad09b20ff83687876a0181a367b813634046f91def7d4"),
+    (350, ← is (ArithUint256.Words.toArith (ArithUint256.Words.mulUInt32 (ArithUint256.Words.ofArith r2) 0x87654321))
+      "23f7816e30c4ae2017257b7a0fa64d60402f5234d46e746b61c960d09a26d070"),
+    (394, (ArithUint256.Words.getLow64 (ArithUint256.Words.ofArith r1)).toNat == 0x121156cfdb4a529c),
+    (395, (ArithUint256.Words.getLow64
+      (ArithUint256.Words.shiftLeft (ArithUint256.Words.ofArith one) 255)).toNat == 0),
+    (396, (ArithUint256.Words.getLow64 (ArithUint256.Words.ofArith one)).toNat == 1)]
 
 /-- Every operator case. Returns the number of failures. -/
 def checkOperators : IO Nat := do
@@ -1742,6 +1753,97 @@ def checkNextWork : IO Nat := do
   IO.println s!"next-work selection: {cases.length} cases, {failures} failures"
   return failures
 
+/-!
+### Shifts
+
+The byte helpers and cases below adapt `src/test/arith_uint256_tests.cpp` lines 125-197 at Core `e0a1c15` (D16).
+The adaptation uses total byte lookup and natural shifts before truncation to a byte.
+The expected bytes come from Core's byte helpers, independently of the arithmetic and word models.
+This adapted section is under the MIT licence in `LICENSES/dogecoin-core-MIT.txt`.
+
+Original notice:
+
+Copyright (c) 2011-2016 The Bitcoin Core developers
+Distributed under the MIT software license, see the accompanying
+file COPYING or http://www.opensource.org/licenses/mit-license.php.
+-/
+
+/-- Core's byte-array left shift, lines 139-154, with zero for an absent byte. -/
+def coreBytesLeft (bytes : List UInt8) (shift : Nat) : List UInt8 :=
+  (List.range 32).map fun t =>
+    if t ≥ shift / 8 then
+      let f := t - shift / 8
+      UInt8.ofNat (((bytes[f]?.getD 0).toNat <<< (shift % 8)) |||
+        (if t ≥ shift / 8 + 1 then (bytes[f - 1]?.getD 0).toNat >>> (8 - shift % 8) else 0))
+    else 0
+
+/-- Core's byte-array right shift, lines 125-137, with zero for an absent byte. -/
+def coreBytesRight (bytes : List UInt8) (shift : Nat) : List UInt8 :=
+  (List.range 32).map fun t =>
+    let f := t + shift / 8
+    UInt8.ofNat (((bytes[f]?.getD 0).toNat >>> (shift % 8)) |||
+      ((bytes[f + 1]?.getD 0).toNat <<< (8 - shift % 8)))
+
+/-- Interpret Core's little-endian byte array as a natural number. -/
+def coreBytesValue (bytes : List UInt8) : Nat := bytes.foldr (fun byte acc => byte.toNat + 256 * acc) 0
+
+/-- Run Core's shift cases, lines 159-196, against the arithmetic and word models.
+Extra word-loop cases at shifts of at least 256 expect zero from Core's index guards (D13 lines 30-33 and 47-50). -/
+def checkShifts : IO Nat := do
+  let some r1 := hexNat? r1Hex | throw (IO.userError "bad R1 hex")
+  let some mx := hexNat? maxHex | throw (IO.userError "bad Max hex")
+  let .ok r1Bytes := KnownAnswers.Sha256Cavp.parseHex r1Hex | throw (IO.userError "bad R1 bytes")
+  let inputs := [(1, (1 : UInt8) :: List.replicate 31 0),
+    (r1, r1Bytes.toList.reverse), (mx, List.replicate 32 (255 : UInt8))]
+  let mut failures := 0
+  let mut count := 0
+  for shift in [:256] do
+    for (input, bytes) in inputs do
+      let a := ArithUint256.ofNat input
+      let w := ArithUint256.Words.ofArith a
+      let left := coreBytesValue (coreBytesLeft bytes shift)
+      let right := coreBytesValue (coreBytesRight bytes shift)
+      -- Core lines 162, 170, 175, 180 and 185 use the byte-array helpers.
+      -- Core lines 165-167 use HalfL >> (255-i) = OneL << i.
+      let checks := if input == 1 then
+        [(162, (ArithUint256.shiftLeft a shift).val == left &&
+          (ArithUint256.Words.toArith (ArithUint256.Words.shiftLeft w shift)).val == left),
+         (165, (ArithUint256.Words.toArith
+            (ArithUint256.Words.shiftRight (ArithUint256.Words.ofArith (ArithUint256.ofNat (2 ^ 255))) (255 - shift))).val == left &&
+          (ArithUint256.shiftRight (ArithUint256.ofNat (2 ^ 255)) (255 - shift)).val == left)]
+        else
+          [(if input == r1 then 170 else 180,
+            (ArithUint256.shiftLeft a shift).val == left &&
+              (ArithUint256.Words.toArith (ArithUint256.Words.shiftLeft w shift)).val == left),
+           (if input == r1 then 175 else 185,
+            (ArithUint256.shiftRight a shift).val == right &&
+              (ArithUint256.Words.toArith (ArithUint256.Words.shiftRight w shift)).val == right)]
+      for (line, ok) in checks do
+        count := count + 1
+        unless ok do
+          failures := failures + 1
+          IO.eprintln s!"FAIL arith_uint256_tests.cpp:{line}, shift {shift}"
+    -- Core lines 189-196 fix c1L and place c2L 128 bits higher.
+    let c1 := ArithUint256.Words.ofArith (ArithUint256.ofNat 0x0123456789abcdef)
+    let c2 := ArithUint256.Words.ofArith (ArithUint256.ofNat (0x0123456789abcdef * 2 ^ 128))
+    let lhs := ArithUint256.Words.toArith (ArithUint256.Words.shiftLeft c1 shift)
+    let rhs := ArithUint256.Words.toArith (if shift < 128 then ArithUint256.Words.shiftRight c2 (128 - shift)
+      else ArithUint256.Words.shiftLeft c2 (shift - 128))
+    count := count + 1
+    unless lhs == rhs do
+      failures := failures + 1
+      IO.eprintln s!"FAIL arith_uint256_tests.cpp:192/195, shift {shift}"
+  for shift in [256, 257, 511, 512, 0xffffffff] do
+    for (input, _) in inputs do
+      let w := ArithUint256.Words.ofArith (ArithUint256.ofNat input)
+      count := count + 2
+      unless (ArithUint256.Words.toArith (ArithUint256.Words.shiftLeft w shift)).val == 0 &&
+          (ArithUint256.Words.toArith (ArithUint256.Words.shiftRight w shift)).val == 0 do
+        failures := failures + 1
+        IO.eprintln s!"FAIL word shift at {shift}, expected zero"
+  IO.println s!"arith_uint256_tests.cpp shifts and zero boundaries: {count} cases, {failures} failures"
+  return failures
+
 end KnownAnswers.Work
 
 /-- Entry point of `lake test`. -/
@@ -1761,4 +1863,5 @@ def main : IO UInt32 := do
   let retarget ← KnownAnswers.Work.checkRetarget
   let nextWork ← KnownAnswers.Work.checkNextWork
   let operators ← KnownAnswers.Work.checkOperators
-  return if short + long + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + operators == 0 then 0 else 1
+  let shifts ← KnownAnswers.Work.checkShifts
+  return if short + long + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + operators + shifts == 0 then 0 else 1

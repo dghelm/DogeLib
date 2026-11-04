@@ -31,7 +31,7 @@ Gap D asks whether the use of DogeLib holds together.
 
 | ID | Risk | Mitigation in place | Applies to |
 |----|------|---------------------|------------|
-| A1 | A definition does not match the pinned Dogecoin behavior | Source mapping in `SOURCES.md`, by review only. SHA-256 has a proof against a FIPS 180-4 model, and NIST CAVP known answers. Known answers from Core's genesis data test the integer codecs. Core's own test cases are known answers for CompactSize, the legacy signature hash, the compact encoding and the difficulty retarget. The scripts of the genesis coinbase are known answers for counted lists. The genesis coinbase is a known answer for the transaction codec, reader and ID. `scripts/compare_core.py` runs the oracle and Core's own code at the pin on 179,556 requests. They cover CompactSize, the base-mode transaction reader, serialization and ID, and the legacy signature hash. | P R I F |
+| A1 | A definition does not match the pinned Dogecoin behavior | Source mapping in `SOURCES.md`, by review only. Five 256-bit word models have arithmetic equivalence proofs. Division and `operator-=` remain by review only, including Core's zero-divisor `uint_error` branch. SHA-256 has a proof against a FIPS 180-4 model, and NIST CAVP known answers. Known answers from Core's genesis data test the integer codecs. Core's own test cases are known answers for CompactSize, the legacy signature hash, the compact encoding and the difficulty retarget. The scripts of the genesis coinbase are known answers for counted lists. The genesis coinbase is a known answer for the transaction codec, reader and ID. `scripts/compare_core.py` runs the oracle and Core's own code at the pin on 179,556 requests. They cover CompactSize, the base-mode transaction reader, serialization and ID, and the legacy signature hash. | P R I F |
 | A2 | A theorem holds only under a hypothesis | Policy: each conditional theorem lists its hypotheses here and in `COVERAGE.md` | P I |
 | A3 | Timing reveals secret data | None: no constant-time claim | R I |
 | A4 | A security theorem idealises a primitive | None: no security theorem yet | P |
@@ -480,24 +480,70 @@ The 256-bit product at line 80 is reduced modulo 2^256, as Core reduces it.
 No theorem shows that a valid chain never reaches such a target, because header validity is not specified.
 The finite-view caller checks coherent heights without establishing a target bound.
 
-The axioms of the 45 arithmetic and retarget theorems, by `#print axioms` with Lean `v4.35.0`:
+The axioms of the 45 theorems in `Work.Proofs.ArithUint256` and `Work.Proofs.Retarget`, by `#print axioms` with Lean `v4.35.0`:
 
 | Axioms | Theorems |
 | --- | --- |
 | None | `mainnet_limit`, `filteredTimespan_rounding` |
 | `propext` | `pow256`, `getCompact_setCompact_zero_mantissa`, `getCompact_setCompact_negative`, `setCompact_overflow_example`, `retargetTimespan_pos` |
 | `propext`, `Quot.sound` | `byteLength_bounds`, `byteLength_eq`, `byteLength_le`, `and_two_pow_ne_zero`, `sign_bit`, `tdiv_eq`, `timespanLimits_le` |
-| `propext`, `Classical.choice`, `Quot.sound` | every other theorem of the layer, including `modulatedTimespan_mem`, `retarget_decoded_le_powLimit`, `setCompact_getCompact_le`, `getCompact_setCompact_iff`, `setCompact_fOverflow`, `signedSteps_fit`, `retarget_eq_of_no_wrap` and `no_wrap_of_le_powLimit` |
+| `propext`, `Classical.choice`, `Quot.sound` | Every other theorem in `Work.Proofs.ArithUint256` and `Work.Proofs.Retarget`, including `modulatedTimespan_mem`, `retarget_decoded_le_powLimit`, `setCompact_getCompact_le`, `getCompact_setCompact_iff`, `setCompact_fOverflow`, `signedSteps_fit`, `retarget_eq_of_no_wrap` and `no_wrap_of_le_powLimit` |
 Some concrete examples use `decide +kernel`, which the kernel checks without compiled code.
 
 These parts are not proved and not specified:
 
 - Header validity, including `CheckProofOfWork`, and AuxPoW.
 
-The relation between Core's word-by-word loops in `arith_uint256.cpp` and the arithmetic results that the definitions state is checked by review (A1).
+The word-model refinements below cover multiplication, both shifts, bit length and low-64-bit extraction.
+Division and its `operator-=` dependency remain by review only (A1, issue #16).
 `lake test` runs the six `get_next_work_*` cases of `dogecoin_tests.cpp` and the 21 steps of `bignum_SetCompact` through the compiled code (B1).
 It also runs 17 cases of the `multiply`, `divide` and `methods` tests of `arith_uint256_tests.cpp` (D16) through `mulUInt32`, `div` and `getLow64`.
-Those cases check the stated arithmetic on Core's values. They do not relate the word loops to it (issue #16).
+Seven of those cases also run through the multiplication and low-64-bit word models.
+The division cases test only the arithmetic definition.
+
+### 256-bit word arithmetic
+
+`ArithUint256.Words` models Core's eight little-endian `UInt32` words as a function from `Fin 8`.
+`ofArith_toArith` and `toArith_ofArith` prove that the word and arithmetic representations have inverse conversions.
+The model follows the pinned loops in `arith_uint256.cpp` and the `GetLow64()` expression in `arith_uint256.h` (D12, D13).
+
+`mulUInt32_toArith`, `shiftLeft_toArith`, `shiftRight_toArith`, `bits_toArith` and `getLow64_toArith` relate the word models to the arithmetic definitions.
+They quantify over every eight-word input.
+Multiplication also quantifies over every `UInt32` multiplier, and both shift theorems cover every natural shift.
+Core takes an unsigned 32-bit shift, so that domain is included.
+The corresponding `*_ofArith` theorems start from every `ArithUint256` value.
+`bits_le` bounds the scan's result by 256.
+
+`mul_intermediate_lt` proves that `carry + b32 * pn[i]` fits in 64 bits when the carry fits in 32 bits.
+`mul_step` proves that the `UInt64` operations preserve that exact value.
+`mulLoop_value` accounts for the full product, including the final carry, for every word count and initial carry below 2^32.
+The exported multiplication theorem discards that carry modulo 2^256.
+
+The axioms of the 24 public theorems in `Work.Proofs.ArithUint256Words`, by `#print axioms` with Lean `v4.35.0`:
+All theorem names in this table are in `DogeLib.Work.ArithUint256.Words`.
+
+| Axioms | Theorems |
+| --- | --- |
+| `propext`, `Quot.sound` | `eval_lt`, `digits_eval`, `value_lt`, `ofArith_toArith`, `mul_intermediate_lt`, `mul_step`, `mulLoop_value`, `mulUInt32_toArith`, `getLow64_toArith`, `eval_high`, `eval_testBit`, `shiftRight_toArith` |
+| `propext`, `Classical.choice`, `Quot.sound` | `eval_digits`, `toArith_ofArith`, `mulUInt32_ofArith`, `getLow64_ofArith`, `bitScan_eq`, `bitsLoop_eq`, `bits_toArith`, `bits_ofArith`, `bits_le`, `shiftLeft_toArith`, `shiftLeft_ofArith`, `shiftRight_ofArith` |
+
+`lake test` runs the four multiply and three low-64-bit cases from D16 through both representations.
+It also runs 1,792 shift cases from D16 lines 159-196 and 30 zero-result cases at shifts of at least 256.
+Core's independent byte helpers (D16 lines 125-154) supply expected bytes for the shift cases.
+The boundary cases expect zero from Core's word-index guards (D13 lines 30-33 and 47-50).
+
+These theorems relate Lean models, rather than Core's compiled code.
+The correspondence between Core's source and each word model remains subject to review (A1).
+Core's bit scan tests `pn[pos] & 1 << bits` with a signed `int` literal.
+For a 32-bit `int`, N3337 section 5.8 paragraph 2 leaves `1 << 31` undefined (S1).
+The model expresses the intended `0x80000000` mask with `testBit`.
+No theorem assigns semantics to undefined C++ execution.
+
+Division, word comparison and word subtraction have no word model or equivalence theorem (issue #16).
+Their arithmetic correspondence remains by review only.
+Core throws `uint_error("Division by zero")` when the divisor has zero bits (D13 line 92).
+The arithmetic `div` takes a nonzero proof, so it does not specify that exception branch.
+No proof covers Lean's compiler or runtime (B1, B2).
 
 ### Next-work selection and work parameters
 
@@ -577,6 +623,11 @@ Core comparisons run the compiled oracle against the pinned Core revision.
 The source registry exists. The fixtures are listed per operation in the *Comparison* column of [COVERAGE.md](COVERAGE.md), and each records its provenance.
 The Core comparison runs the compiled oracle and Core's own code at the pin on the same requests, for the operations of the oracle ([docs/oracle.md](docs/oracle.md#the-core-harness)).
 It shows agreement on the requests it sends, and nothing about other inputs.
+
+The multiplication, shift, bit-length and low-64-bit models have arithmetic equivalence proofs, as the *256-bit word arithmetic* subsection states.
+A reader still checks their correspondence to Core's source.
+Division and its `operator-=` dependency remain by review only (issue #16).
+Core's zero-divisor `uint_error` branch has no counterpart in the arithmetic definition, which takes a nonzero proof.
 
 A Dogecoin rule can differ from the Bitcoin rule it descends from.
 A definition or proof adopted from btc-verified is evidence to investigate, not a compatibility proof for Dogecoin.

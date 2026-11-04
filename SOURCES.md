@@ -46,7 +46,7 @@ Design records and module documentation cite these identifiers.
 | D13 | [Dogecoin 256-bit arithmetic: multiplication, division, shifts, `bits()`, `SetCompact`, `GetCompact`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/arith_uint256.cpp) |
 | D14 | [Dogecoin chain parameters: `powLimit`, `nPowTargetTimespan`, DigiShield flags, `GetConsensus`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/chainparams.cpp) |
 | D15 | [Dogecoin consensus parameter fields](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/consensus/params.h) |
-| D16 | [Dogecoin 256-bit arithmetic tests: `bignum_SetCompact`, `multiply`, `divide`, `methods`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/test/arith_uint256_tests.cpp) |
+| D16 | [Dogecoin 256-bit arithmetic tests: `bignum_SetCompact`, `multiply`, `divide`, `methods`, `shifts`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/test/arith_uint256_tests.cpp) |
 | D17 | [Dogecoin proof-of-work rules: `GetNextWorkRequired`, `CheckProofOfWork`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/pow.cpp) |
 | D18 | [Dogecoin block index: `nHeight`, `nTime`, `nBits`, `GetBlockTime`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/chain.h) |
 | D19 | [Dogecoin build configuration: C++ standard selection](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/configure.ac) |
@@ -90,7 +90,7 @@ Design records and module documentation cite these identifiers.
 | B15 | [btc-verified transaction body without witness](https://github.com/ProofOfKeags/btc-verified/blob/ecf4f0d2c5ab4df84f2595ca60ba2e1fd62d1bce/BtcVerified/Transaction/TxBody.lean) |
 | B16 | [btc-verified raw scripts](https://github.com/ProofOfKeags/btc-verified/blob/ecf4f0d2c5ab4df84f2595ca60ba2e1fd62d1bce/BtcVerified/Script/Script.lean) |
 | R1 | [Aeneas documentation](https://github.com/AeneasVerif/aeneas) (for discovery only: pin a revision before use) |
-| S1 | [C++11 working draft N3337](https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2012/n3337.pdf): [expr.mul] 5.6 paragraph 4, [conv.integral] 4.7 paragraph 2, [over.ics.rank] 13.3.3.2 paragraph 2 |
+| S1 | [C++11 working draft N3337](https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2012/n3337.pdf): [expr.mul] 5.6 paragraph 4, [conv.integral] 4.7 paragraph 2, [over.ics.rank] 13.3.3.2 paragraph 2, [expr.shift] 5.8 paragraph 2 |
 
 ## Operation-to-source mapping
 
@@ -98,6 +98,11 @@ One row per public operation. Add rows in sorted order by operation name.
 
 | Operation | DogeLib declaration | Source (ID, file, function) | Mode / context | Notes |
 | --- | --- | --- | --- | --- |
+| 256-bit arithmetic, bit length | `Work.ArithUint256.Words.bits`, `bitsLoop`, `bitScan` | D13 `src/arith_uint256.cpp`, `base_uint::bits`, lines 171-184 | Eight little-endian 32-bit words | Descending word and bit scans. Zero returns zero. The result is at most 256. |
+| 256-bit arithmetic, low 64 bits | `Work.ArithUint256.Words.getLow64` | D12 `src/arith_uint256.h`, `base_uint::GetLow64`, lines 245-249 | Eight little-endian 32-bit words | OR of word zero and word one shifted left by 32 bits after conversion to 64 bits. |
+| 256-bit arithmetic, multiplication | `Work.ArithUint256.Words.mulUInt32`, `mulLoop` | D13 `src/arith_uint256.cpp`, `base_uint::operator*=(uint32_t)`, lines 55-65 | Eight little-endian 32-bit words and a `UInt32` multiplier | Low word first, with a 64-bit intermediate and carry. Discards the final carry. |
+| 256-bit arithmetic, representation | `Work.ArithUint256.Words`, `Words.eval`, `value`, `digits`, `ofArith`, `toArith` | D12 `src/arith_uint256.h`, `base_uint::pn` and `WIDTH`, lines 28-29 | Eight little-endian 32-bit words | Radix-2^32 value and inverse conversions to `ArithUint256`. |
+| 256-bit arithmetic, shifts | `Work.ArithUint256.Words.shiftLeft`, `shiftRight`, `leftStep`, `rightStep`, `orAt` | D13 `src/arith_uint256.cpp`, `base_uint::operator<<=` and `operator>>=`, lines 21-53 | Eight little-endian 32-bit words. Core takes an unsigned 32-bit shift. | Zero output, followed by eight ascending source-word iterations. The Lean models extend the arithmetic meaning to every natural shift. |
 | Byte slice reads | `ByteSlice.toList`, `ByteSlice.take`, `ByteSlice.drop`, `ByteSlice.uncons` | B4, `BtcVerified/Ext/ByteSlice.lean`, the same four functions | No Dogecoin context | Over core's `Std.Data.ByteSlice`. Lemmas in `DogeLib.Base.Proofs.ByteSlice`, and `ByteArray.toList` lemmas from B5. |
 | Codec composition | `DogeLib.Serialization.instCodecProd`, `DogeLib.Serialization.Codec.ofEquiv` | B2, `BtcVerified/Serialize/Codec.lean`, `instCodecProd` and `Codec.ofEquiv` | No Dogecoin context | Laws in `DogeLib.Serialization.Proofs.Codec`. `Codec.ofEquiv` takes two functions instead of a Mathlib `Equiv`. |
 | Compact target decoding | `DogeLib.Work.ArithUint256.setCompact` | D13 `src/arith_uint256.cpp`, `arith_uint256::SetCompact`, lines 204-222 | No context | Returns the value modulo 2^256 and both flags. The retarget ignores the flags. |

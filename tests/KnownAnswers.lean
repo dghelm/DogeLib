@@ -944,6 +944,7 @@ def cases (coinbase : ByteArray) : Except String (List (String × Bool)) := do
     ("flags 02, outputs truncated: truncated, before the flags",
       isError (ver ++ [0x00, 0x02, 0x01] ++ input0 ++ [0x01] ++ output0.take 4) (.read .truncated)),
     ("flags 03, complete with a stack: unknownOptionalData", isError (extended 0x03 stack1 ++ lock) .unknownOptionalData),
+    ("flags 03, a stack, lock time missing: unknownOptionalData", isError (extended 0x03 stack1) .unknownOptionalData),
     ("flags ff, complete with a stack: unknownOptionalData", isError (extended 0xff stack1 ++ lock) .unknownOptionalData),
     ("flags 03, stack truncated: truncated, before the flags",
       isError (extended 0x03 [0x01, 0x05, 0xab]) (.read .truncated)),

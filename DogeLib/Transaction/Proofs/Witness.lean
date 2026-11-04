@@ -17,6 +17,7 @@ Segregated witness is not active on Dogecoin's main or test network at the pin (
 - `Transaction.readAllowWitness_flags_zero`: a zero input count and zero flags give a transaction with no inputs and no outputs.
 - `noInputsExample_not_roundTrip`: a transaction with no inputs and one output is not read back.
   Its base serialization reads as a different transaction, with bytes left over.
+- `readAllowWitness_flags_two`, `readAllowWitness_flags_three`: complete transactions with flags `02` and `03` fail with `unknownOptionalData`.
 - `readStacks_length`: `readStacks` returns one stack per input, so the last check of the reader never fails.
 - `WitnessTransaction.wtxid_of_hasWitness_false`: without witness data, the witness hash is the transaction ID.
 
@@ -180,7 +181,8 @@ The round trip of Core's reader of the witness-allowed format.
 Let `w` be a transaction whose counts are within `MAX_SIZE`, and `rest` any bytes.
 If `w` has witness data, or has an input, or has no output, then `readAllowWitness (w.encode ++ rest) = ok (w, rest)`.
 
-A transaction with no inputs, some outputs and no witness data is excluded: its base serialization reads as a different transaction (`noInputsExample_not_roundTrip`).
+A transaction with no inputs, some outputs and no witness data is excluded. Its base serialization is not guaranteed to be read back.
+`noInputsExample_not_roundTrip` gives one such transaction.
 -/
 theorem WitnessTransaction.readAllowWitness_encode (w : WitnessTransaction) (hm : w.WithinMaxSize)
     (hshape : w.hasWitness = true ∨ w.tx.inputs.val ≠ [] ∨ w.tx.outputs.val = [])
@@ -285,6 +287,28 @@ Seven bytes remain, so the complete reader reports them.
 -/
 theorem noInputsExample_not_roundTrip :
     Transaction.decodeAllowWitnessComplete (Codec.encode noInputsExample) = .error (.trailingBytes 7) := by
+  rfl
+
+/-! ## Flags other than bit 0 -/
+
+/-- One input with a zero outpoint, an empty script and sequence `0xffffffff`. Then one output of value 0 with an empty script. -/
+def oneInputOneOutput : List UInt8 :=
+  [0x01] ++ List.replicate 36 0 ++ [0x00, 0xff, 0xff, 0xff, 0xff] ++ [0x01] ++ List.replicate 8 0 ++ [0x00]
+
+/--
+Flags `02`, with complete lists and a lock time: Core reads the lists, and then fails with "Unknown transaction optional data" (D4, lines 238 to 241).
+-/
+theorem readAllowWitness_flags_two :
+    Transaction.readAllowWitness ([0x01, 0, 0, 0, 0x00, 0x02] ++ oneInputOneOutput ++ [0, 0, 0, 0]) =
+      .error .unknownOptionalData := by
+  rfl
+
+/--
+Flags `03`, with complete lists, a stack and a lock time: Core clears bit 0, reads the stack, and then fails on bit 1.
+-/
+theorem readAllowWitness_flags_three :
+    Transaction.readAllowWitness ([0x01, 0, 0, 0, 0x00, 0x03] ++ oneInputOneOutput ++ [0x01, 0x01, 0xab] ++ [0, 0, 0, 0]) =
+      .error .unknownOptionalData := by
   rfl
 
 /-! ## The witness hash -/

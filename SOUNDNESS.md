@@ -337,6 +337,7 @@ Then come the lists, the stacks, the check of the other flag bits, and the lock 
 - `WitnessTransaction.readAllowWitness_encode`: for every `w` with `WithinMaxSize`, `readAllowWitness (w.encode ++ rest) = ok (w, rest)`, if `w` has witness data, or an input, or no output.
 - `noInputsExample_not_roundTrip`: a transaction with no inputs, one output and no witness data is not read back. The complete reader reports 7 bytes left over.
 - `Transaction.readAllowWitness_flags_zero`: a zero input count and zero flags give a transaction with no inputs and no outputs.
+- `readAllowWitness_flags_two`, `readAllowWitness_flags_three`: two complete transactions with flags `02` and `03` fail with `unknownOptionalData`.
 - `readStacks_length`: the reader finds one stack per input, so its last check never fails.
 - `WitnessTransaction.wtxid_of_hasWitness_false`: without witness data, the witness hash is the transaction ID.
 
@@ -354,7 +355,7 @@ By `#print axioms` with Lean `v4.35.0`:
 | Theorem | Axioms |
 | --- | --- |
 | `readElemsBounded_length`, `WitnessStack.isEmpty_iff` | `propext` |
-| `instLawfulCodecWitnessStack`, `readStacks_length`, `Transaction.readAllowWitness_eq_readBase`, `noInputsExample_not_roundTrip`, `WitnessTransaction.wtxid_of_hasWitness_false` | `propext`, `Quot.sound` |
+| `instLawfulCodecWitnessStack`, `readStacks_length`, `Transaction.readAllowWitness_eq_readBase`, `noInputsExample_not_roundTrip`, `readAllowWitness_flags_two`, `readAllowWitness_flags_three`, `WitnessTransaction.wtxid_of_hasWitness_false` | `propext`, `Quot.sound` |
 | `WitnessStack.read_agrees`, `WitnessTransaction.readAllowWitness_encode`, `Transaction.readAllowWitness_flags_zero` | `propext`, `Classical.choice`, `Quot.sound` |
 
 ### Legacy signature hash

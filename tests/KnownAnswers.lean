@@ -1,6 +1,7 @@
 import DogeLib.Cryptography.Hash.Sha256
 import DogeLib.Cryptography.Hash.Sha256d
 import DogeLib.Serialization
+import DogeLib.Transaction
 import DogeLib.Work
 
 /-!
@@ -645,6 +646,159 @@ def check : IO Nat := do
 end KnownAnswers.CountedList
 
 /-!
+## Transactions: the genesis coinbase, and Core's base-mode reader
+
+Known answers for the base serialization of a transaction, its packed codec, Core's base-mode reader `readBase`, the complete reader, and the transaction ID.
+
+The genesis coinbase is the literal of the codec section, which that section checks against the merkle root that Core asserts (SOURCES.md, D9).
+Its expected fields are the arguments of `CreateGenesisBlock` in `src/chainparams.cpp` (D9):
+
+- Version 1 and lock time 0.
+- One input with the null outpoint (`COutPoint::SetNull`, D4), the scriptSig of the coinbase, and sequence `0xffffffff`.
+- One output of `88 * COIN` with the scriptPubKey.
+
+Its transaction ID must be the merkle root, because a block with one transaction has that transaction's ID as its merkle root.
+
+The short inputs are built by hand.
+Their expected results come from a reading of `UnserializeTransaction` and the `SerializationOp` methods in `src/primitives/transaction.h` (D4), with `ReadCompactSize` (D1) and `CDataStream::read` (D21).
+In base mode Core reads `nVersion`, `vin`, `vout` and `nLockTime` in this order, and stops at the first failure:
+
+- A transaction with no inputs is read as such. In base mode there is no flags byte.
+- Counts above `MAX_SIZE` are `tooLarge`, and non-canonical counts are `nonCanonical`, for the inputs, the outputs and both scripts.
+- When a script count is non-canonical and the output count after it is too large, the error is `nonCanonical`, the first in read order.
+- Input that ends inside the outpoint, or before the lock time, is `truncated`.
+- Versions and amounts with the high bit set are read and written again without change. Their signed values are the two's-complement values.
+-/
+
+namespace KnownAnswers.Transactions
+
+open DogeLib DogeLib.Serialization DogeLib.Transaction
+open DogeLib.Serialization.CompactSize (ReadError)
+open KnownAnswers.Sha256Cavp (parseHex)
+open KnownAnswers.Codec (coinbaseHex)
+open KnownAnswers.Genesis (ofDisplay merkleRoot)
+open KnownAnswers.CountedList (isError)
+
+/-- A list as a counted list. The lists here are short, so the check never fails. -/
+def countedOf {α : Type} (l : List α) : CountedList α :=
+  match CountedList.ofList? l with
+  | some cl => cl
+  | none => ⟨[], by simp⟩
+
+/-- A script with these bytes. -/
+def script (bs : List UInt8) : Script := ⟨countedOf bs⟩
+
+/-- `n` as `w` little-endian bytes. -/
+def le (w : Nat) (n : Nat) : List UInt8 := (List.range w).map fun i => (n >>> (8 * i)).toUInt8
+
+/-- The 36 bytes of an outpoint with hash bytes `1, 2, …, 32` and index 7. -/
+def outpointBytes : List UInt8 := (List.range 32).map (fun i => (i + 1).toUInt8) ++ le 4 7
+
+/-- Version 1. -/
+def ver : List UInt8 := le 4 1
+
+/-- The count `0x02000001`, one above `MAX_SIZE`. -/
+def tooBig : List UInt8 := [0xfe, 0x01, 0x00, 0x00, 0x02]
+
+/-- A transaction with version bits `v`, no inputs, one output of value bits `value` with an empty script, and lock time 0. -/
+def noInputs (v : Nat) (value : Nat) : List UInt8 :=
+  le 4 v ++ [0x00] ++ [0x01] ++ le 8 value ++ [0x00] ++ le 4 0
+
+/-- Whether `readBase` reads all of `bs` as a transaction that `check` accepts, and the codec writes `bs` again. -/
+def readsBack (bs : List UInt8) (check : Transaction → Bool) : Bool :=
+  match Transaction.readBase bs with
+  | .ok (tx, []) => check tx && Codec.encode tx == bs
+  | _ => false
+
+/-- The checks on the genesis coinbase and on short inputs, each with its name and whether it holds. -/
+def cases (coinbase : ByteArray) : Except String (List (String × Bool)) := do
+  let c := coinbase.toList
+  let root ← ofDisplay merkleRoot
+  let scriptSig := (← parseHex "04ffff001d0104084e696e746f6e646f").toList
+  let key ← parseHex "040184710fa689ad5023690c80f3a49c8f13f8d45b8c857fbcbc8bc4a8e4d3eb4b10f4d4604fa08dce601aaf0f470216fe1b51850b4acf21b179c45070ac7b03a9"
+  let scriptPubKey := [0x41] ++ key.toList ++ [0xac]
+  let genesis : Transaction := {
+    version := 1
+    inputs := countedOf [{ prevout := OutPoint.null, scriptSig := script scriptSig, sequence := 0xffffffff }]
+    outputs := countedOf [{ value := 8800000000, scriptPubKey := script scriptPubKey }]
+    lockTime := 0 }
+  let padded : ByteArray := ⟨#[0xaa, 0xbb, 0xcc]⟩ ++ coinbase
+  return [
+    -- The genesis coinbase.
+    ("generic codec reads the genesis coinbase", Codec.decode c == some (genesis, [])),
+    ("generic codec writes the genesis coinbase", Codec.encode genesis == c),
+    ("readBase reads the genesis coinbase", (Transaction.readBase c).toOption == some (genesis, [])),
+    ("complete reader reads the genesis coinbase", (Transaction.decodeBaseComplete c).toOption == some genesis),
+    ("packed codec reads the genesis coinbase at offset 3",
+      ((PackedCodec.decodeSlice (α := Transaction) ((ByteSlice.ofByteArray padded).drop 3)).map
+        fun p => (p.1, p.2.toList)) == some (genesis, [])),
+    ("packed codec writes the genesis coinbase", (PackedCodec.encode genesis).toList == c),
+    ("txid of the genesis coinbase is the merkle root", genesis.txid.val == root.toList),
+    ("txid in display order", genesis.txid.displayBytes == root.toList.reverse),
+    ("genesis amount is 88 * COIN", genesis.outputs.val.map (·.amount) == [8800000000]),
+    ("complete reader reports one trailing byte",
+      match Transaction.decodeBaseComplete (c ++ [0x00]) with
+      | .error (.trailingBytes 1) => true
+      | _ => false),
+    ("readBase keeps one trailing byte", (Transaction.readBase (c ++ [0x00])).toOption == some (genesis, [0x00])),
+    ("genesis coinbase without its last byte is truncated", isError (Transaction.readBase (c.take 142)) .truncated),
+    -- No inputs, base mode.
+    ("a transaction with no inputs is read in base mode",
+      readsBack (noInputs 1 0) fun tx => tx.inputs.val.isEmpty && tx.outputs.val.length == 1),
+    -- Counts, in read order.
+    ("input count above MAX_SIZE is tooLarge", isError (Transaction.readBase (ver ++ tooBig)) .tooLarge),
+    ("input count non-canonical", isError (Transaction.readBase (ver ++ [0xfd, 0x01, 0x00])) .nonCanonical),
+    ("scriptSig count above MAX_SIZE is tooLarge",
+      isError (Transaction.readBase (ver ++ [0x01] ++ outpointBytes ++ tooBig)) .tooLarge),
+    ("scriptSig count non-canonical",
+      isError (Transaction.readBase (ver ++ [0x01] ++ outpointBytes ++ [0xfd, 0x00, 0x00])) .nonCanonical),
+    ("output count above MAX_SIZE is tooLarge", isError (Transaction.readBase (ver ++ [0x00] ++ tooBig)) .tooLarge),
+    ("output count non-canonical",
+      isError (Transaction.readBase (ver ++ [0x00] ++ [0xfd, 0x02, 0x00])) .nonCanonical),
+    ("scriptPubKey count above MAX_SIZE is tooLarge",
+      isError (Transaction.readBase (ver ++ [0x00, 0x01] ++ le 8 0 ++ tooBig)) .tooLarge),
+    ("scriptPubKey count non-canonical",
+      isError (Transaction.readBase (ver ++ [0x00, 0x01] ++ le 8 0 ++ [0xfd, 0x00, 0x00])) .nonCanonical),
+    ("non-canonical scriptSig before a too-large output count is nonCanonical",
+      isError (Transaction.readBase
+        (ver ++ [0x01] ++ outpointBytes ++ [0xfd, 0x00, 0x00] ++ le 4 0 ++ tooBig)) .nonCanonical),
+    ("input that ends inside the outpoint is truncated",
+      isError (Transaction.readBase (ver ++ [0x01] ++ outpointBytes.take 20)) .truncated),
+    ("missing lock time is truncated", isError (Transaction.readBase ((noInputs 1 0).take 15)) .truncated),
+    ("three bytes of lock time is truncated", isError (Transaction.readBase ((noInputs 1 0).take 18)) .truncated),
+    -- Signed fields: the bits are kept.
+    ("version 0xffffffff is read and written again, signed -1",
+      readsBack (noInputs 0xffffffff 0) fun tx => tx.signedVersion == -1),
+    ("version 0x80000000 is read and written again, signed -2^31",
+      readsBack (noInputs 0x80000000 0) fun tx => tx.signedVersion.toInt == -2147483648),
+    ("amount 0xffffffffffffffff is read and written again, signed -1",
+      readsBack (noInputs 1 0xffffffffffffffff) fun tx => tx.outputs.val.map (·.amount) == [-1]),
+    ("amount 0x8000000000000000 is read and written again, signed -2^63",
+      readsBack (noInputs 1 0x8000000000000000) fun tx =>
+        tx.outputs.val.map (·.amount.toInt) == [-9223372036854775808])]
+
+/-- Every transaction known answer. Returns the number of failures. -/
+def check : IO Nat := do
+  let result := do
+    let coinbase ← parseHex coinbaseHex
+    if coinbase.size != 143 then throw s!"coinbase literal has {coinbase.size} bytes, expected 143"
+    cases coinbase
+  match result with
+  | .error e =>
+    IO.eprintln s!"FAIL transactions: {e}"
+    return 1
+  | .ok cs =>
+    let mut failures := 0
+    for (name, ok) in cs do
+      if !ok then
+        IO.eprintln s!"FAIL transactions {name}"
+        failures := failures + 1
+    IO.println s!"transactions: {cs.length} checks, {failures} failures"
+    return failures
+
+end KnownAnswers.Transactions
+
+/-!
 ## Difficulty retarget
 
 Runs every `get_next_work_*` case of Dogecoin Core's `src/test/dogecoin_tests.cpp` at commit `e0a1c15` (SOURCES.md, D7) through the compiled `calculateDogecoinNextWorkRequired`.
@@ -812,6 +966,7 @@ def main : IO UInt32 := do
   let codec ← KnownAnswers.Codec.check
   let compactSize ← KnownAnswers.CompactSize.check
   let countedList ← KnownAnswers.CountedList.check
+  let transactions ← KnownAnswers.Transactions.check
   let compact ← KnownAnswers.Work.checkCompact
   let retarget ← KnownAnswers.Work.checkRetarget
-  return if short + long + genesis + codec + compactSize + countedList + compact + retarget == 0 then 0 else 1
+  return if short + long + genesis + codec + compactSize + countedList + transactions + compact + retarget == 0 then 0 else 1

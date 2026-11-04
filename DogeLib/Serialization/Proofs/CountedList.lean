@@ -6,6 +6,7 @@ public import DogeLib.Serialization.CountedList
 public import DogeLib.Serialization.Proofs.Codec
 public import DogeLib.Serialization.Proofs.CompactSize
 public import DogeLib.Serialization.Proofs.PackedCodec
+public import DogeLib.Serialization.Proofs.Reader
 
 /-!
 # Proofs: `Serialization.CountedList`
@@ -465,6 +466,104 @@ theorem decodeBoundedBytes_eq (bs : List UInt8) :
       obtain ⟨xs, r'⟩ := q
       dsimp only
       cases ofList? xs <;> rfl
+
+/-! ## Element readers with a condition -/
+
+/--
+For every element reader `elem` that agrees with the element codec under a condition `P`:
+`readElemsBounded elem n bs = ok (xs, r)` exactly when `decodeElems n bs = some (xs, r)` and every element of `xs` satisfies `P`.
+-/
+theorem readElemsBounded_eq_ok_iff_of_agrees {α : Type} [c : Codec α]
+    {elem : List UInt8 → Except ReadError (α × List UInt8)} {P : α → Prop}
+    (h : ReaderAgrees c elem P) (n : Nat) (bs : List UInt8) (xs : List α) (r : List UInt8) :
+    readElemsBounded elem n bs = .ok (xs, r) ↔ decodeElems n bs = some (xs, r) ∧ ∀ x ∈ xs, P x := by
+  induction n generalizing bs xs r with
+  | zero =>
+    simp only [readElemsBounded, decodeElems, Except.ok.injEq, Option.some.injEq]
+    constructor
+    · intro he
+      simp only [Prod.mk.injEq] at he
+      obtain ⟨rfl, rfl⟩ := he
+      exact ⟨rfl, by simp⟩
+    · exact fun ⟨he, _⟩ => he
+  | succ n ih =>
+    constructor
+    · intro he
+      unfold readElemsBounded at he
+      split at he
+      · cases he
+      · next x r1 hx =>
+        split at he
+        · cases he
+        · next xs' r2 hxs =>
+          simp only [Except.ok.injEq, Prod.mk.injEq] at he
+          obtain ⟨rfl, rfl⟩ := he
+          obtain ⟨dx, px⟩ := (h _ _ _).mp hx
+          obtain ⟨dxs, pxs⟩ := (ih _ _ _).mp hxs
+          refine ⟨?_, ?_⟩
+          · simp only [decodeElems, Option.bind_eq_bind, Option.pure_def]
+            rw [show Codec.decode bs = some (x, r1) from dx, Option.bind_some]
+            dsimp only
+            rw [dxs, Option.bind_some]
+          · intro y hy
+            rcases List.mem_cons.mp hy with rfl | hy
+            · exact px
+            · exact pxs y hy
+    · rintro ⟨hd, hp⟩
+      simp only [decodeElems, Option.bind_eq_bind, Option.pure_def,
+        Option.bind_eq_some_iff, Option.some.injEq, Prod.mk.injEq] at hd
+      obtain ⟨⟨x, r1⟩, dx, ⟨xs', r2⟩, dxs, rfl, rfl⟩ := hd
+      have hx := (h _ _ _).mpr ⟨dx, hp x List.mem_cons_self⟩
+      have hxs := (ih _ _ _).mpr ⟨dxs, fun y hy => hp y (List.mem_cons_of_mem x hy)⟩
+      unfold readElemsBounded
+      rw [hx]
+      dsimp only
+      rw [hxs]
+
+/--
+The contract of Core's vector reader, for an element reader with a condition.
+Let `elem` be an element reader that agrees with the element codec under a condition `P`.
+Then `decodeBounded elem` agrees with the codec of counted lists under this condition: the list has at most `0x02000000` elements, and each element satisfies `P`.
+
+`decodeBounded_eq_ok_iff` is the case where `P` holds for every element.
+A transaction needs this form, because Core's reader of an input rejects a script that the generic codec accepts.
+-/
+theorem decodeBounded_agrees {α : Type} [c : Codec α]
+    {elem : List UInt8 → Except ReadError (α × List UInt8)} {P : α → Prop}
+    (h : ReaderAgrees c elem P) :
+    ReaderAgrees (instCodecCountedList (α := α)) (decodeBounded elem)
+      (fun cl => cl.val.length ≤ 0x02000000 ∧ ∀ x ∈ cl.val, P x) := by
+  intro bs cl rest
+  show _ ↔ CountedList.decode bs = some (cl, rest) ∧ _
+  rw [decodeBounded_eq_ok_iff_parts, decode_eq_some_iff]
+  constructor
+  · rintro ⟨count, r, hc, he⟩
+    obtain ⟨hcd, hle⟩ := (CompactSize.decodeBounded_eq_ok_iff_decode bs count r).mp hc
+    obtain ⟨hde, hp⟩ := (readElemsBounded_eq_ok_iff_of_agrees h _ _ _ _).mp he
+    have hlen := decodeElems_length count.toNat r cl.val rest hde
+    exact ⟨⟨count, r, hcd, hde⟩, hlen ▸ hle, hp⟩
+  · rintro ⟨⟨count, r, hcd, hde⟩, hle, hp⟩
+    have hlen := decodeElems_length count.toNat r cl.val rest hde
+    exact ⟨count, r, (CompactSize.decodeBounded_eq_ok_iff_decode bs count r).mpr ⟨hcd, hlen ▸ hle⟩,
+      (readElemsBounded_eq_ok_iff_of_agrees h _ _ _ _).mpr ⟨hde, hp⟩⟩
+
+/-- `readByte` agrees with the codec of `UInt8` with no condition. -/
+theorem readByte_agrees : ReaderAgrees instCodecUInt8 readByte (fun _ => True) := by
+  intro bs a rest
+  rw [except_eq_ok_iff, readByte_toOption]
+  simp
+
+/--
+Core's reader of a vector of bytes agrees with the codec of counted lists of bytes, under the condition that the list has at most `0x02000000` bytes.
+-/
+theorem decodeBoundedBytes_agrees :
+    ReaderAgrees (instCodecCountedList (α := UInt8)) decodeBoundedBytes
+      (fun cl => cl.val.length ≤ 0x02000000) := by
+  have h := (decodeBounded_agrees readByte_agrees).congr
+    (Q := fun cl => cl.val.length ≤ 0x02000000) (fun cl => by simp)
+  intro bs cl rest
+  rw [decodeBoundedBytes_eq]
+  exact h bs cl rest
 
 /-! ## The distinguishing input -/
 

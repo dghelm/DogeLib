@@ -240,7 +240,7 @@ private theorem div_step_arith (b n q d s : Nat) (hd : d = b * 2 ^ s)
 /-- The division loop preserves numerator plus quotient times divisor and leaves a remainder below the divisor.
 The hypotheses give alignment, the next numerator bound, and zero low quotient bits at every natural loop count. -/
 theorem divLoop_spec (remaining : Nat) (st : DivisionState) (b : Nat)
-    (_hb : 0 < b) (hr : remaining ≤ 256)
+    (hr : remaining ≤ 256)
     (hd : remaining ≠ 0 → value st.divisor = b * 2 ^ (remaining - 1))
     (hn : value st.num < b * 2 ^ remaining)
     (hq : value st.quotient % 2 ^ remaining = 0) :
@@ -348,7 +348,7 @@ theorem divide_value (a b : Words) (hb : value b ≠ 0) :
       let st : DivisionState := { num := a, divisor := shiftLeft b s, quotient := fun _ => 0 }
       have hdiv : value st.divisor = value b * 2 ^ s := by
         exact (shiftLeft_value b s).trans (Nat.mod_eq_of_lt halign)
-      have hi := divLoop_spec (s + 1) st (value b) hbpos hsbound
+      have hi := divLoop_spec (s + 1) st (value b) hsbound
         (fun _ => by simpa only [Nat.add_sub_cancel] using hdiv) hnum (by rw [show st.quotient = (fun _ => 0) from rfl, hz]; rfl)
       have he : value (divLoop (s + 1) st).quotient = value a / value b := by
         have heq : value (divLoop (s + 1) st).num + value (divLoop (s + 1) st).quotient * value b = value a := by

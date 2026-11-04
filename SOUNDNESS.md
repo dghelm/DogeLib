@@ -31,7 +31,7 @@ Gap D asks whether the use of DogeLib holds together.
 
 | ID | Risk | Mitigation in place | Applies to |
 |----|------|---------------------|------------|
-| A1 | A definition does not match the pinned Dogecoin behavior | Source mapping in `SOURCES.md`, by review only. The 256-bit word models have arithmetic equivalence proofs, including division and its comparison and subtraction dependencies. The division model represents Core's zero-divisor exception. SHA-256 has a proof against a FIPS 180-4 model, and NIST CAVP known answers. Known answers from Core's genesis data test the integer codecs. Core's own test cases are known answers for CompactSize, the legacy signature hash, the compact encoding and the difficulty retarget. The scripts of the genesis coinbase are known answers for counted lists. The genesis coinbase is a known answer for the transaction codec, reader and ID. `scripts/compare_core.py` runs the oracle and Core's own code at the pin on 179,556 requests. They cover CompactSize, the base-mode transaction reader, serialization and ID, and the legacy signature hash. | P R I F |
+| A1 | A definition does not match the pinned Dogecoin behavior | Source mapping in `SOURCES.md`, by review only. The 256-bit word models have arithmetic equivalence proofs, including division and its comparison and subtraction dependencies. The division model represents Core's zero-divisor exception. The remaining retarget paths stay by review only (issue #48). SHA-256 has a proof against a FIPS 180-4 model, and NIST CAVP known answers. Known answers from Core's genesis data test the integer codecs. Core's own test cases are known answers for CompactSize, the legacy signature hash, the compact encoding and the difficulty retarget. The scripts of the genesis coinbase are known answers for counted lists. The genesis coinbase is a known answer for the transaction codec, reader and ID. `scripts/compare_core.py` runs the oracle and Core's own code at the pin on 179,556 requests. They cover CompactSize, the base-mode transaction reader, serialization and ID, and the legacy signature hash. | P R I F |
 | A2 | A theorem holds only under a hypothesis | Policy: each conditional theorem lists its hypotheses here and in `COVERAGE.md` | P I |
 | A3 | Timing reveals secret data | None: no constant-time claim | R I |
 | A4 | A security theorem idealises a primitive | None: no security theorem yet | P |
@@ -729,6 +729,10 @@ A reader still checks their correspondence to Core's source.
 The division, comparison and subtraction models also have arithmetic equivalence proofs, as the *256-bit word division* subsection states.
 The word division model represents Core's zero-divisor exception.
 The arithmetic definition takes a nonzero proof.
+
+The retarget's `SetCompact`, `GetCompact`, uint64 constructors and `UintToArith256` still have no word models (issue #48).
+Its powLimit comparison uses the arithmetic definition rather than the proved `CompareTo` model.
+The correspondence of these retarget paths to Core remains by review only (issue #48).
 
 A Dogecoin rule can differ from the Bitcoin rule it descends from.
 A definition or proof adopted from btc-verified is evidence to investigate, not a compatibility proof for Dogecoin.

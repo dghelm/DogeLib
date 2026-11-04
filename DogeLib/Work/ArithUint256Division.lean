@@ -46,14 +46,16 @@ def addLoop : (n : Nat) → (Fin n → UInt32) → (Fin n → UInt32) → UInt64
 /-- Core's eight-word `operator+=`, with its final carry discarded (D12 lines 135-145). -/
 def add (a b : Words) : Words := (addLoop 8 a b 0).1
 
-/-- Core's prefix increment (D12 lines 173-180), with carry propagation only after a word wraps. -/
+/-- Core's prefix increment (D12 lines 173-180), with carry propagation only after a word wraps.
+Unary negation calls this loop through postfix increment (D12 lines 77-84 and 182-188). -/
 def incrementLoop : (n : Nat) → (Fin n → UInt32) → (Fin n → UInt32)
   | 0, _ => Fin.elim0
   | n + 1, a =>
     let w := a 0 + 1
     Fin.cases w (if w == 0 then incrementLoop n (fun i => a i.succ) else fun i => a i.succ)
 
-/-- Core's word complement followed by prefix increment (D12 lines 77-84). -/
+/-- Core's word complement followed by increment (D12 lines 77-84).
+Its postfix increment (D12 lines 182-188) delegates to prefix increment (D12 lines 173-180), and negation discards the postfix result. -/
 def neg (a : Words) : Words := incrementLoop 8 (fun i => ~~~a i)
 
 /-- Core's `operator-=` is addition of the negated operand (D12 lines 147-151). -/

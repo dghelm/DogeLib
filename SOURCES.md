@@ -173,6 +173,7 @@ The Core harness, `harness/core/core_oracle.cpp`, calls these functions of Core 
 | --- | --- |
 | `compactsize.encode`, `compactsize.read` | D1, `WriteCompactSize` and `ReadCompactSize`. D21, `CDataStream` |
 | `tx.read_base`, `tx.decode_base` | D4, `UnserializeTransaction` and `SerializeTransaction`, with `SERIALIZE_TRANSACTION_NO_WITNESS`. D23, `CTransaction::ComputeHash`. D11, `base_blob::GetHex` |
+| `tx.read_witness`, `tx.decode_witness` | D4, `UnserializeTransaction`, `SerializeTransaction` and `CTransaction::HasWitness`, without `SERIALIZE_TRANSACTION_NO_WITNESS`. D23, `CTransaction::GetHash` and `GetWitnessHash`. D11, `base_blob::GetHex` |
 | `sighash.legacy` | D3, `SignatureHash` with `SIGVERSION_BASE` |
 | Requests and the build | D31, UniValue, to read requests. D32, `memory_cleanse`. D19, `configure.ac`: without the daemon, utilities, GUI, tests and benchmarks, configure needs no Boost (line 683) and builds no UniValue (line 939) |
 

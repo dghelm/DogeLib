@@ -1,12 +1,17 @@
 # The oracle and its record format
 
 `dogelib-oracle` runs DogeLib's specification on requests from another program, such as a harness that runs Dogecoin Core on the same inputs.
-This document defines its record format, `dogelib-oracle/1`.
+This document defines its record format, `dogelib-oracle/2`.
+The oracle supports only this format.
+Compared with `dogelib-oracle/1`, prior operations keep their request fields, response shapes and behavior, and only the version string changes.
 A change to the format needs a maintainer's approval ([AGENTS.md](../AGENTS.md#changes-that-need-a-maintainer)) and a new format name.
 
 The oracle models Core's serialization and its legacy signature hash.
-It reads transactions in base mode only, the format without witness data.
-The specification also defines the witness-allowed serialization format, outside this oracle format (issue #36).
+It reads transactions in base mode or with witness data allowed.
+The witness operations model a serialization format only.
+Segregated witness is not active on Dogecoin at the pin.
+`IsWitnessEnabled` returns false, and main and test reject blocks with witness data (SOURCES.md D36).
+
 Its [protocol context](../SOUNDNESS.md#transactions-the-witness-allowed-format) separates witness script verification from the commitment checks in Core.
 It checks no consensus rule. Its output says what Core's code computes for an input, not that the input is valid on any network.
 
@@ -15,7 +20,7 @@ It checks no consensus rule. Its output says what Core's code computes for an in
 ```bash
 lake build dogelib-oracle
 .lake/build/bin/dogelib-oracle             # answer requests on standard input
-.lake/build/bin/dogelib-oracle --version   # print {"format":"dogelib-oracle/1"}
+.lake/build/bin/dogelib-oracle --version   # print {"format":"dogelib-oracle/2"}
 ```
 
 The oracle reads one request per line of standard input and writes one response per line of standard output.
@@ -79,7 +84,7 @@ Results use these types:
 | Kind | Meaning | Other fields |
 | --- | --- | --- |
 | `request` | The oracle could not interpret the request. Examples: invalid JSON, an unknown `op`, a missing or unknown argument, or a value out of range. | `message`, free text for a person. It is not part of the format. |
-| `read` | The reader of the specification rejects the bytes, as Core's stream would. | `reason`: `truncated` (the input ends early), `non_canonical` (a CompactSize value in a longer form than needed) or `too_large` (a CompactSize value above `MAX_SIZE`, `0x02000000`). For `sighash.legacy`, `argument` names the argument that failed. |
+| `read` | The reader of the specification rejects the bytes, as Core's stream would. | `reason`: `truncated` (the input ends early), `non_canonical` (a CompactSize value in a longer form than needed), `too_large` (a CompactSize value above `MAX_SIZE`, `0x02000000`), or `unknown_optional_data` (a transaction flag bit other than bit 0 remains after the input and output lists and any stacks). For `sighash.legacy`, `argument` names the argument that failed. |
 | `trailing_bytes` | A transaction was read and bytes remain. | `count`: the number of bytes after the transaction. For `sighash.legacy`, `argument`. |
 
 Only `request` errors come from the oracle itself. The other kinds are results of the specification.
@@ -88,11 +93,13 @@ Only `request` errors come from the oracle itself. The other kinds are results o
 
 | `op` | Arguments | `ok` fields | Specification |
 | --- | --- | --- | --- |
-| `oracle.version` | none | `format`: `"dogelib-oracle/1"` | none |
+| `oracle.version` | none | `format`: `"dogelib-oracle/2"` | none |
 | `compactsize.encode` | `value`: `u64` | `bytes_hex` | `CompactSize.encode`, Core's `WriteCompactSize` |
 | `compactsize.read` | `bytes_hex` | `value` (`u64`), `consumed`, `rest_hex` | `CompactSize.decodeBounded`, Core's `ReadCompactSize` with its `MAX_SIZE` check |
 | `tx.read_base` | `bytes_hex` | `tx`, `consumed`, `rest_hex` | `Transaction.readBase`: a transaction at the start of the bytes, as Core reads the next transaction of a stream |
 | `tx.decode_base` | `bytes_hex` | `tx`, `serialized_hex`, `txid_hex`, `txid_display` | `Transaction.decodeBaseComplete`: a transaction that is all of the bytes. Then its base serialization and its ID, `Transaction.txid` |
+| `tx.read_witness` | `bytes_hex` | Witness result, `consumed`, `rest_hex` | `Transaction.readAllowWitness`: a prefix with witness data allowed |
+| `tx.decode_witness` | `bytes_hex` | Witness result | `Transaction.decodeAllowWitnessComplete`: the whole input with witness data allowed |
 | `sighash.legacy` | `tx_hex`, `script_code_hex`, `input_index` (`u32`), `hash_type` | `plan`, `preimage_hex` (for `hash_bytes` only), `digest_hex`, `digest_display` | `tx_hex` is read as by `tx.decode_base`. Then `legacySignatureHashPlan` and `LegacyHashPlan.digest`: Core's `SignatureHash` with `SIGVERSION_BASE` |
 
 The `tx` object holds every field as it was read:
@@ -108,6 +115,40 @@ The `tx` object holds every field as it was read:
 `version` and `value` are the bits of Core's signed `int32_t` and `int64_t` fields, as unsigned numbers.
 `serialized_hex` lets a caller check that the bytes it sent are the bytes the specification writes back.
 
+The *witness result* contains these fields:
+
+| Field | Meaning |
+| --- | --- |
+| `tx` | The same transaction fields as the base operations |
+| `witnesses` | One array per input, in input order. Each array holds the stack items as lowercase hexadecimal strings, in stack order. |
+| `has_witness` | Core's `CTransaction::HasWitness`: some input's stack is not empty |
+| `serialized_hex` | `WitnessTransaction.encode`, Core's writer with witness data allowed |
+| `txid_hex`, `txid_display` | The transaction ID, from the base serialization |
+| `wtxid_hex`, `wtxid_display` | `WitnessTransaction.wtxid`, Core's `GetWitnessHash`, in both byte orders |
+
+`witnesses` is always present.
+With zero inputs it is `[]`.
+In base form it has one empty array per input.
+
+For example, `witnesses: [["", "ab"], []]` means two inputs.
+The first input has two stack items, an empty byte string and `ab`.
+The second input has an empty stack.
+`has_witness` is true in this example.
+
+A stack with one empty item counts as witness data.
+A section of empty stacks does not, so the writer uses base serialization and `wtxid` equals `txid`.
+Thus `serialized_hex` can differ from the consumed input bytes.
+The prefix operation reports consumption of the original input, before that normalization.
+
+After a zero input count, the witness reader reads a flags byte.
+Zero flags give no inputs and no outputs, without another output count.
+Nonzero flags precede the input and output lists.
+Bit 0 requests one stack per input.
+
+The reader checks unknown flag bits after the input and output lists and any stacks, before the lock time.
+Thus a list or stack error takes precedence over `unknown_optional_data`.
+The complete operation checks for trailing bytes only after a successful read.
+
 `plan` is `fixed_digest` or `hash_bytes`.
 `fixed_digest` is Core's early return of the value one, when `input_index` names no input, or names no output under `SIGHASH_SINGLE`.
 `hash_bytes` gives the preimage that Core hashes, so that a mismatch can be traced to its first differing byte.
@@ -115,11 +156,7 @@ The `tx` object holds every field as it was read:
 
 ## Not in this format
 
-These operations are planned, and each would need a new format name:
-
-- The witness-allowed format of Core's transaction reader (issue #36). The specification defines it in `Transaction.Witness`.
-  It models a serialization format that Core's code can read. It does not mean that segregated witness is active on any Dogecoin network.
-- Building a transaction from its fields.
+A request to build a transaction from its fields would need another format name.
 
 ## Tests
 
@@ -153,13 +190,14 @@ It needs autoconf, automake, libtool, pkg-config and OpenSSL's development files
 | `compactsize.read` | `ReadCompactSize` from a `CDataStream` |
 | `tx.read_base` | `CMutableTransaction` read from a `CDataStream` whose version has `SERIALIZE_TRANSACTION_NO_WITNESS`, so `UnserializeTransaction` reads base mode |
 | `tx.decode_base` | The same read, then a check that the stream is empty. The transaction written back to a stream of the same version, and `CTransaction::GetHash` |
+| `tx.read_witness`, `tx.decode_witness` | `CMutableTransaction` read from a `CDataStream` without `SERIALIZE_TRANSACTION_NO_WITNESS`. The complete operation requires an empty stream. Both write with witness data allowed and call `CTransaction::HasWitness`, `GetHash` and `GetWitnessHash`. |
 | `sighash.legacy` | `tx_hex` read as by `tx.decode_base`. Then `SignatureHash` with amount 0 and `SIGVERSION_BASE` |
 
 ### How its responses differ
 
-The harness answers a projection of `dogelib-oracle/1`, not the format itself:
+The harness answers a projection of `dogelib-oracle/2`, not the format itself:
 
-- `--version` and `oracle.version` give the format `dogelib-oracle/1-core-projection`.
+- `--version` and `oracle.version` give the format `dogelib-oracle/2-core-projection`.
 - `sighash.legacy` has no `preimage_hex`.
   `SignatureHash` hashes its preimage as it writes it and does not return it.
 - `plan` is a label that the harness computes from the conditions of Core's two early returns, in `src/script/interpreter.cpp` lines 1225 to 1235.
@@ -168,7 +206,7 @@ The harness answers a projection of `dogelib-oracle/1`, not the format itself:
 - The harness passes the hash type to Core's `int nHashType` as the same 32 bits, read as a two's complement value.
   It passes `input_index` to `unsigned int nIn` unchanged.
 - Core reports a read error as a `std::ios_base::failure`.
-  The harness maps three messages to `read` errors: `CDataStream::read(): end of data` to `truncated`, `non-canonical ReadCompactSize()` to `non_canonical`, and `ReadCompactSize(): size too large` to `too_large`.
+  The harness maps four messages to `read` errors: `CDataStream::read(): end of data` to `truncated`, `non-canonical ReadCompactSize()` to `non_canonical`, `ReadCompactSize(): size too large` to `too_large`, and `Unknown transaction optional data` to `unknown_optional_data`.
   It accepts each message alone or followed by `: iostream error`, which libstdc++ appends.
   Any other exception stops the harness with exit status 3, so it fails the comparison.
 
@@ -197,9 +235,16 @@ The request stream is deterministic, and the random sets use a fixed seed:
 - `sighash.legacy` on the first 25 transactions of `sighash.json`, at the boundaries of the input index and the hash type.
   Also transaction arguments that fail to read, and random script codes on all of its transactions.
 - Random byte changes in the transactions of both corpora.
+- All 198 transaction corpus records through both witness operations, with the 39 extended records also reported as a separate set.
+- Every proper prefix of those 39 records through both witness operations, and each record with 1, 3 and 40 suffix bytes.
+- Count, length and fixed-field changes in all 198 records through the witness operations, plus empty stacks, empty items and replacement stack contents.
+- Hand-built cases from the known answers in `tests/KnownAnswers.lean` (`Witness.cases`).
+  They cover flags `02`, `03`, `ff`, zero flags, flags `01` with zero inputs, and errors before the flag check.
+- 5,000 seeded byte mutations of the 198 records, each through both witness operations.
 
 `scripts/test_compare_core.py` checks that the comparison can fail.
 A wrapper around the oracle stands in for the harness.
-Unchanged, it must pass on the full stream. Each of 22 mutations must fail with the failure code that it targets.
+Unchanged, it must pass on the full stream. Each of 25 mutations must fail with the failure code that it targets.
+The witness mutations change `wtxid_hex`, a stack and `has_witness`.
 
 Agreement covers the requests in the stream and nothing more.

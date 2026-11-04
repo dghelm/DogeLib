@@ -22,12 +22,15 @@ import time
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 COMPARE = ROOT / "scripts" / "compare_core.py"
-ORACLE_FORMAT = "dogelib-oracle/1"
-HARNESS_FORMAT = "dogelib-oracle/1-core-projection"
+ORACLE_FORMAT = "dogelib-oracle/2"
+HARNESS_FORMAT = "dogelib-oracle/2-core-projection"
 
 # mode: (role of the wrapper, expected failure code). The role "core" stands
 # in for the harness, "oracle" for dogelib-oracle.
 MUTATIONS = {
+    "wtxid": ("core", "MISMATCH"),
+    "witnesses": ("core", "MISMATCH"),
+    "has_witness": ("core", "MISMATCH"),
     "digest_display": ("core", "MISMATCH"),
     "digest_hex": ("core", "PREIMAGE"),
     "plan": ("core", "MISMATCH"),
@@ -99,7 +102,15 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
     def set_ok(field, value):
         return lambda r: r["ok"].__setitem__(field, value)
 
-    if mode == "digest_display":
+    if mode == "wtxid":
+        mutate_first(responses, lambda r: "wtxid_hex" in r.get("ok", {}), set_ok("wtxid_hex", "00" * 32))
+    elif mode == "witnesses":
+        mutate_first(responses, lambda r: r.get("ok", {}).get("has_witness") is True,
+                     lambda r: r["ok"]["witnesses"][0].append("ff"))
+    elif mode == "has_witness":
+        mutate_first(responses, lambda r: "has_witness" in r.get("ok", {}),
+                     lambda r: r["ok"].__setitem__("has_witness", not r["ok"]["has_witness"]))
+    elif mode == "digest_display":
         mutate_first(responses, is_plan("hash_bytes"), set_ok("digest_display", "00" * 32))
     elif mode == "digest_hex":
         mutate_first(responses, is_plan("hash_bytes"), set_ok("digest_hex", "00" * 32))

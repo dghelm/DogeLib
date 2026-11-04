@@ -6,7 +6,7 @@ public import DogeLib.Base.Bytes
 /-!
 # `Exports.Json`
 
-The conversions between JSON values and the arguments and results of the oracle, `dogelib-oracle/1`.
+The conversions between JSON values and the arguments and results of the oracle, `dogelib-oracle/2`.
 
 `docs/oracle.md` defines the record format. This module implements its rules for arguments:
 

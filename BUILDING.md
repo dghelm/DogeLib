@@ -107,7 +107,7 @@ The self-test also plants an unimported production file and requires a failure t
 
 The optional package build checks the committed generated model and its complete-result proof.
 CI uses the Mathlib cache in the separate package and caches Aeneas backend artifacts by pin and toolchain.
-The `rust` job installs the pinned extraction tools and runs native Rust tests and extraction freshness on every pull request.
+The `rust` job installs the pinned extraction tools and runs native Rust tests and extraction freshness on every pull request and push to `main`.
 Release validation runs both Rust gates.
 Run the same checks locally:
 

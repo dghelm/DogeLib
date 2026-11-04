@@ -41,7 +41,8 @@ The intermediate LLBC file stays in `.lane/`.
 
 The generated file is `../Refinement/Rust/Generated/DogelibCompactsize.lean`.
 Do not edit it by hand.
-The check extracts into a temporary lane directory and compares the full generated directory with the committed files.
+The check extracts into a temporary lane directory and compares the full generated directory with the model files in the working tree.
+Check mode also puts the intermediate LLBC file in that temporary directory.
 
 CI builds the committed Lean model with the Mathlib cache.
 The `ci` workflow also runs native Rust tests and extraction freshness on every pull request and push to `main`.

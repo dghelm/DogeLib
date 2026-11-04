@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Regenerate the Lean model, or compare a fresh extraction with the committed file.
+# Regenerate the Lean model, or compare a fresh extraction with the working-tree model.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
 tools_dir="$repo_root/build/tools"
 output_dir="$repo_root/Refinement/Refinement/Rust/Generated"
+extraction_dir="$repo_root/.lane/extraction"
 check=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -14,13 +15,15 @@ while [[ $# -gt 0 ]]; do
 done
 if "$check"; then
   mkdir -p "$repo_root/.lane"
-  output_dir=$(mktemp -d "$repo_root/.lane/extraction.XXXXXX")
-  trap 'rm -rf "$output_dir"' EXIT
+  check_dir=$(mktemp -d "$repo_root/.lane/extraction.XXXXXX")
+  trap 'rm -rf "$check_dir"' EXIT
+  output_dir="$check_dir/generated"
+  extraction_dir="$check_dir/llbc"
 fi
-mkdir -p "$output_dir" "$repo_root/.lane/extraction"
+mkdir -p "$output_dir" "$extraction_dir"
 cd "$repo_root/Refinement/Rust"
-RUSTUP_TOOLCHAIN=nightly-2026-09-17 "$tools_dir/charon/charon/target/release/charon" cargo --preset=aeneas --dest "$repo_root/.lane/extraction"
-"$tools_dir/aeneas-dist/aeneas" -backend lean -namespace DogeLibRust -dest "$output_dir" "$repo_root/.lane/extraction/dogelib_compactsize.llbc"
+RUSTUP_TOOLCHAIN=nightly-2026-09-17 "$tools_dir/charon/charon/target/release/charon" cargo --preset=aeneas --dest "$extraction_dir"
+"$tools_dir/aeneas-dist/aeneas" -backend lean -namespace DogeLibRust -dest "$output_dir" "$extraction_dir/dogelib_compactsize.llbc"
 if "$check"; then
   diff -ru "$repo_root/Refinement/Refinement/Rust/Generated" "$output_dir"
 fi

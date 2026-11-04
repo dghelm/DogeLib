@@ -1,5 +1,5 @@
 # Build the specification and its proofs, check their compiled declarations,
-# and run the tests of the repository tools.
+# run native Rust tests and extraction freshness, and test repository tools.
 #
 # Adapted from EthLib's ci.yml at commit 6a93711 (CC0 1.0), with the same
 # pinned actions. Mathlib supplies cached artifacts for the Rust refinement.
@@ -95,6 +95,7 @@ jobs:
           path: |
             build/tools
             ~/.rustup/toolchains/nightly-2026-09-17-x86_64-unknown-linux-gnu
+            ~/.rustup/update-hashes/nightly-2026-09-17-x86_64-unknown-linux-gnu
           key: rust-extraction-${{ runner.os }}-${{ runner.arch }}-nightly-2026-09-17-${{ hashFiles('Refinement/Rust/setup-tools.sh') }}
 
       - name: pinned extraction tools

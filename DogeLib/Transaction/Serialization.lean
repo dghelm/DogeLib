@@ -217,4 +217,13 @@ def Transaction.decodeBaseComplete (bs : List UInt8) : Except CompleteReadError 
   | .ok (tx, []) => .ok tx
   | .ok (_, rest) => .error (.trailingBytes rest.length)
 
+/-- The complete base-mode slice reader.
+For every slice, it preserves `decodeBaseComplete` errors and transaction fields.
+Trailing-byte errors count the bytes remaining in the slice. -/
+def Transaction.decodeBaseCompleteSlice (s : ByteSlice) : Except CompleteReadError Transaction :=
+  match Transaction.readBaseSlice s with
+  | .error e => .error (.read e)
+  | .ok (tx, rest) =>
+    if rest.size = 0 then .ok tx else .error (.trailingBytes rest.size)
+
 end DogeLib.Transaction

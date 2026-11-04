@@ -426,6 +426,39 @@ def set_witness_cases() -> list[dict]:
     return [r for b in cases for r in tx_requests(b, True)]
 
 
+def set_large_base() -> list[dict]:
+    """Structured base requests across count widths and larger script lengths.
+
+    Core supplies the comparison results for successes and malformed variants.
+    """
+    requests = []
+    for inputs, outputs, script_size in ((253, 253, 0), (254, 254, 1),
+                                          (1000, 1, 0), (1, 1000, 0),
+                                          (2, 2, 4096), (1, 4, 16384)):
+        script = b"\x51" * script_size
+        txin = bytes(36) + compact_size(script_size) + script + b"\xff" * 4
+        txout = (1).to_bytes(8, "little") + compact_size(script_size) + script
+        tx = build_tx((1).to_bytes(4, "little"), [txin] * inputs,
+                      [txout] * outputs, bytes(4))
+        fields = walk_tx(tx)
+        # Select both vector counts and the first script length of each kind.
+        selected = [fields["counts"][i] for i in (0, 1, inputs + 1, inputs + 2)]
+        variants = [tx, tx + b"\x00", tx + b"\xfd\x01\x02", tx + bytes(range(40))]
+        for start, end, value in selected:
+            variants.extend(tx[:start] + replacement + tx[end:]
+                            for replacement in count_variants(value))
+            variants.extend(tx[:n] for n in range(start, end))
+        # End within a script, a sequence, an amount and the lock time.
+        variants.extend(tx[:n] for n in (selected[1][1] + script_size // 2,
+                                         4 + len(compact_size(inputs)) + len(txin) - 1,
+                                         selected[2][1] + 7,
+                                         selected[3][1] + script_size // 2, len(tx) - 1))
+        for data in variants:
+            requests.extend(tx_requests(data))
+            requests.append(sighash_request(data.hex(), "51", 0, 1))
+    return requests
+
+
 QUICK_SETS = ("fixtures", "compactsize", "sighash endpoints", "witness flags and stacks")
 
 
@@ -457,6 +490,7 @@ def request_sets() -> tuple[list[tuple[str, list[dict]]], list[str]]:
         ("witness counts, lengths and stacks", set_fields(witness_corpus, True)),
         ("witness flags and stacks", set_witness_cases()),
         ("witness byte flips", set_flips(witness_corpus, rng, 5000, True)),
+        ("large structured base", set_large_base()),
     ]
     return sets, excluded
 

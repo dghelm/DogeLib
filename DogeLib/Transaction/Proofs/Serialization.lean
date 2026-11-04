@@ -236,4 +236,20 @@ theorem Transaction.abstractRead_readBaseSlice (s : ByteSlice) :
         (CountedList.abstractRead_decodeBoundedSlice _ _ TxOut.abstractRead_readSlice)
         abstractRead_readFixedSlice))
 
+/-- For every slice, the complete slice reader equals the list specification, including every error and trailing-byte count. -/
+theorem Transaction.decodeBaseCompleteSlice_eq (s : ByteSlice) :
+    Transaction.decodeBaseCompleteSlice s = Transaction.decodeBaseComplete s.toList := by
+  unfold Transaction.decodeBaseCompleteSlice Transaction.decodeBaseComplete
+  rw [← Transaction.abstractRead_readBaseSlice s]
+  cases h : Transaction.readBaseSlice s with
+  | error e => rfl
+  | ok p =>
+    obtain ⟨tx, rest⟩ := p
+    simp only [abstractRead_ok]
+    have hn := ByteSlice.length_toList rest
+    cases hr : rest.toList with
+    | nil => simp_all
+    | cons b bs =>
+      simp [hr, ← hn]
+
 end DogeLib.Transaction

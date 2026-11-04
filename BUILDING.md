@@ -192,6 +192,32 @@ taskset -c 4-7 nice -n 10 .lake/build/bin/bench-transaction-reader --slice-large
 
 This command measures 4000, 8000, 16000 and 32000 empty-script inputs.
 
+## Oracle operation measurements
+
+`scripts/bench_oracle.py` measures three exported operations from a hex request through the serialized response line.
+It uses persistent oracle processes and includes request IO, JSON parsing, hex conversion, parsing and response IO.
+The complete decoder also serializes and hashes the transaction.
+The legacy operation constructs and hashes its preimage.
+Python checks responses after the timer stops.
+
+Build both variants from the same commit with identical flags.
+For the before variant, use main's list-reader selection in `Transaction/Exports/Oracle.lean`.
+For the after variant, use the slice readers.
+Keep the reader-selection patch and the two binaries under `.lane/`, and restore the committed source after building:
+
+```bash
+taskset -c 4-7 nice -n 10 lake build dogelib-oracle
+# Save each variant as .lane/oracle-list or .lane/oracle-slice.
+taskset -c 4-7 nice -n 10 python3 -I scripts/bench_oracle.py .lane/oracle-list .lane/oracle-slice
+```
+
+The fixed workloads have 253 or 1000 inputs, 253 or 1000 outputs, or four output scripts of 4096 or 16384 bytes.
+Each workload runs through `tx.read_base`, `tx.decode_base` and `sighash.legacy`.
+Each process warms once per point, then runs five times with alternating variant order.
+The output gives all five elapsed times and their median in nanoseconds.
+Generated workloads supply timing evidence only.
+The measurements establish neither an asymptotic bound nor a comparison with Core's speed.
+
 ## Validation reports
 
 Produce a report of all automated gates in the [AGENTS.md checks table](AGENTS.md#checks):

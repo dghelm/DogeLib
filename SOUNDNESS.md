@@ -950,6 +950,16 @@ The adapter calls specification functions and converts their arguments and resul
   The tests check these conversions at their boundaries, against expected values from Core's files, Core's source and Python's `hashlib`.
 - The loop over standard input uses `repeat`, which Lean core defines with `partial`. `lake exe check-decls` exempts the `Exports` modules from its check of reachable opaque constants, and checks their axioms and their own declarations.
 
+The base operations and the transaction argument of `sighash.legacy` convert hex bytes to a slice once.
+`tx.read_base` uses `Transaction.readBaseSlice`.
+`tx.decode_base` and `sighash.legacy` use `Transaction.decodeBaseCompleteSlice`.
+`Transaction.abstractRead_readBaseSlice` preserves errors, fields and remainder bytes for every slice.
+`Transaction.decodeBaseCompleteSlice_eq` preserves the complete reader's result, including errors and trailing-byte counts, for every slice.
+The list readers remain the specification.
+
+These equalities do not cover the hex or JSON conversions.
+The witness operations use list readers.
+
 The witness operations convert `WitnessTransaction` stacks to arrays of item hex strings.
 They expose `hasWitness`, witness-allowed serialization, the transaction ID and the witness hash.
 No theorem covers these JSON conversions.

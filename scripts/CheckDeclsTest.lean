@@ -1,4 +1,5 @@
 import CheckDeclsTest.Good
+import CheckDeclsTest.ImportedSorry
 import CheckDeclsTest.Bad
 import CheckDeclsTest.Proofs.Native
 import CheckDeclsTest.Exports

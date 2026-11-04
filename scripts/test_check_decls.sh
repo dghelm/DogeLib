@@ -64,4 +64,17 @@ else
   echo "FAIL: a stale baseline entry is not handled"; cat "$WORK/out"; FAIL=1
 fi
 
+# `lake exe check-decls` imports the library roots, so every layer's proof
+# and export root must be imported by DogeLib/Proofs.lean and
+# DogeLib/Exports.lean. A root left out is never checked.
+for kind in Proofs Exports; do
+  for f in DogeLib/*/"$kind".lean; do
+    mod=$(echo "${f%.lean}" | tr / .)
+    if ! grep -qx "public import $mod" "DogeLib/$kind.lean"; then
+      echo "FAIL: DogeLib/$kind.lean does not import $mod"; FAIL=1
+    fi
+  done
+done
+[ "$FAIL" -eq 0 ] && echo "ok:   DogeLib/Proofs.lean and DogeLib/Exports.lean import every layer root"
+
 exit "$FAIL"

@@ -561,8 +561,10 @@ The 256-bit product at line 80 is reduced modulo 2^256, as Core reduces it.
 `retarget_eq_of_no_wrap` gives the exact result when the product does not wrap.
 `no_wrap_of_le_powLimit` and `mainnet_limit` say that it does not wrap for the mainnet parameters when the old target is at most `powLimit`.
 `retarget_wrap_example` shows a wrap for an old target of 2^255: a longer actual timespan gives a smaller target.
-No theorem shows that a valid chain never reaches such a target, because header validity is not specified.
-The finite-view caller checks coherent heights without establishing a target bound.
+
+`validProofOfWorkTarget_iff` supplies the old-target bound from Core's separate target check, as the supplied-hash subsection explains.
+The finite-view caller checks coherent heights without establishing target validity.
+A claim about a validated chain still assumes that the previous block passed the required check.
 
 The axioms of the 45 theorems in `Work.Proofs.ArithUint256` and `Work.Proofs.Retarget`, by `#print axioms` with Lean `v4.35.0`:
 
@@ -576,7 +578,8 @@ Some concrete examples use `decide +kernel`, which the kernel checks without com
 
 These parts are not proved and not specified:
 
-- Header validity, including `CheckProofOfWork`, and AuxPoW.
+- Scrypt, full header validity and AuxPoW.
+  The supplied-hash check is specified separately below.
 
 The word-model refinements below cover multiplication, division, both shifts, bit length and low-64-bit extraction.
 They also cover division's comparison, addition, negation and subtraction dependencies.
@@ -586,6 +589,55 @@ The correspondence between Core's source and the Lean models remains subject to 
 It also runs 17 cases of the `multiply`, `divide` and `methods` tests of `arith_uint256_tests.cpp` (D16) through `mulUInt32`, `div` and `getLow64`.
 All 17 cases also run through the corresponding word models.
 The word division model also runs the two zero-divisor cases.
+
+### Target validity and supplied-hash proof of work
+
+`Work.ProofOfWork` specifies `CheckProofOfWork` at D17, `src/pow.cpp` lines 115-132.
+The inputs are a supplied `Hash256`, a UInt32 compact target and a parameter record, of which only `powLimit` is read.
+`hashToArith256` uses the eight little-endian `UintToArith256` word reads.
+`hashToArith256_eq` proves equality to the independent radix-256 interpretation for every supplied hash.
+The input bytes have Core's internal order, with byte zero least significant for the arithmetic comparison.
+
+`validProofOfWorkTarget_iff` characterizes acceptance of the target check for every compact and parameter record.
+The decoded target must be nonzero, at most `powLimit`, and have neither the negative nor overflow flag set.
+The check permits noncanonical compacts, such as `0x04000001`, which decodes to 256.
+`checkProofOfWork_iff` adds the condition that the supplied hash is at most the target.
+`validProofOfWorkTarget_iff_exists_hash` proves that target validity is equivalent to acceptance of some supplied hash, with zero as a witness.
+`checkProofOfWork_mono` proves that a smaller hash remains accepted for a fixed compact and parameter record.
+
+`no_wrap_of_validProofOfWorkTarget` supplies the previous-target bound to `no_wrap_of_le_powLimit`.
+It retains the numerical hypothesis `powLimit * 4T < 2^256`, where `T` is the target timespan.
+`retarget_eq_of_validProofOfWorkTarget` also assumes `T < 2^30`, and gives the existing exact closed form for all retarget inputs.
+The mainnet and testnet `*_proofOfWork_bounds` theorems discharge both numerical hypotheses at every UInt32 parameter-selection height.
+They cover every selected record, including the AuxPoW eras, by kernel computation on the records after the selection proof.
+Their `*_no_wrap_of_validProofOfWorkTarget` and `*_retarget_eq_of_validProofOfWorkTarget` corollaries retain only previous-target validity.
+
+Selection height and retarget height remain explicit independent inputs.
+
+Both regtest records fail the conservative `powLimit * 4T` bound, because their limit is `2^255 - 1`.
+`regtestDigishield_modulatedTimespan` proves that the DigiShield record's multiplier is exactly one for every height and actual timespan.
+`regtest_no_wrap` and `regtest_retarget_eq` therefore cover every compact at all regtest selection heights from ten, without a target-validity hypothesis.
+
+`legacy_regtest_wrap_example` records a valid compact `0x207fffff`, actual timespan 901 and retarget height one.
+The isolated retarget with the legacy regtest record returns `0x1f02467a`, after the product exceeds 2^256.
+This wrap is Core's own behavior: `src/dogecoin.cpp` line 80 calls multiplication modulo 2^256 in `src/arith_uint256.cpp` lines 55-65.
+DogeLib models that behavior.
+The example is reachable through the isolated `CalculateDogecoinNextWorkRequired` API with that record.
+The normally selected regtest `GetNextWorkRequired` caller cannot reach a legacy retarget: the legacy record applies below height ten, with interval 14400.
+
+`lake test` runs 20 synthetic branch and boundary cases derived from D17 lines 124-129.
+It also requires target validity for all 312 pinned mainnet headers.
+Core's `src/test/auxpow_tests.cpp` lines 333-355 mines passing and failing digests at runtime, rather than supplies fixed digest fixtures.
+The Lean tests do not compute scrypt or compare with compiled Core.
+A supplied-hash check does not establish that the hash is the correct scrypt digest, or that a header or AuxPoW is valid.
+
+By `#print axioms` with Lean `v4.35.0`:
+
+| Axioms | Theorems in `Work.Proofs.ProofOfWork` |
+| --- | --- |
+| None | `mainnet_proofOfWork_bounds` |
+| `propext`, `Quot.sound` | `hashToArith256_eq`, `hashToArith256_zero`, `testnet_proofOfWork_bounds` |
+| `propext`, `Classical.choice`, `Quot.sound` | All other theorems, including the target characterizations, monotonicity, retarget corollaries and legacy regtest example |
 
 ### 256-bit word arithmetic
 
@@ -781,8 +833,8 @@ The UInt32 times widen to Int, and the fixed network spacings of 1 or 60 keep th
 `getNextWorkRequired_genesis` proves the null-tip result for every record and candidate time.
 `getNextWorkRequired_minDifficulty` proves the minimum result when validation succeeds and the all-block minimum condition holds.
 `recoverLastNonMinDifficulty_mem` proves that a successful recovery returns a supplied entry's compact, without a header-validity hypothesis.
-None of these claims establishes `CheckProofOfWork` or the old-target bound required by `no_wrap_of_le_powLimit`.
-That bound remains a hypothesis.
+These caller claims do not establish target validity.
+The separate target-check theorem supplies the old-target bound when target validity is assumed.
 
 `lake test` includes source-derived network and branch examples and all six D7 retarget answers through synthetic contiguous views.
 The intermediate entries are synthetic, not historical headers.
@@ -796,7 +848,8 @@ The substantive retarget evidence is 144960 plus those 31 DigiShield blocks.
 
 The first header supplies context.
 Retarget 144720 lacks an ancestor, so the test requires `missingAncestor` there.
-These known answers establish neither proof of work nor AuxPoW validity, and do not discharge the old-target bound.
+The test also requires target validity for all 312 headers with the selected mainnet parameters.
+Those finite checks establish the old-target bound for these inputs, but neither proof of work nor AuxPoW validity.
 They do not run Core or prove equivalence on other inputs.
 
 By `#print axioms` with Lean `v4.35.0`:
@@ -858,8 +911,18 @@ It requires fully parsed script code, fewer than 2^32 inputs and fewer than 2^32
 The transformation-reference subsection states these hypotheses and explains the short-push difference.
 Whatever those hypotheses leave unproved is part of what a reader trusts.
 
-The next-work view checks heights but does not discharge the old-target bound of `no_wrap_of_le_powLimit`.
-A proof about an accepted header chain still needs header validity.
+`no_wrap_of_validProofOfWorkTarget` discharges the old-target bound of `no_wrap_of_le_powLimit` from Core's target-validity predicate.
+Its numerical bound holds for every selected mainnet and testnet record.
+Regtest DigiShield uses a separate exact-multiplier argument, and legacy regtest permits wrap in the isolated retarget.
+The supplied-hash subsection states the network corollaries and the caller boundary.
+
+A chain-level application still assumes that the previous block passed Core's check with the relevant `powLimit`.
+The header path supplies `GetConsensus(0)` to `CheckAuxPowProofOfWork` (D33, `src/validation.cpp` line 2933).
+That function passes the record to `CheckProofOfWork` (D6, `src/dogecoin.cpp` lines 107 and 118).
+Every record within a network has the same `powLimit` (D14, the record copies at lines 126-136, 282-300 and 425-432).
+
+The chain-level application also requires that the supplied hash is the correct scrypt digest.
+No theorem here establishes that digest computation, AuxPoW validity or full header validity.
 
 ### A3. Side channels
 

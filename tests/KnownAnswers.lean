@@ -1806,6 +1806,66 @@ def checkNextWork : IO Nat := do
   return failures
 
 /-!
+### Supplied-hash proof of work
+
+These synthetic known answers derive from D17, `src/pow.cpp` lines 124-129 at `e0a1c15`.
+`0x03000100` decodes to 256, so little-endian hashes 255 and 256 pass and 257 fails.
+`0x04000001` also decodes to 256, despite its noncanonical encoding.
+
+The custom limit of 256 isolates equality and the above-limit branch.
+The full 256-bit limit isolates overflow even when the wrapped target is nonzero and below the limit.
+`0x22000101` encodes `257 * 2^248`, which wraps to `2^248` and reports overflow.
+These expectations follow from the source's arithmetic and comparisons, not this implementation's output.
+
+Core's `src/test/pow_tests.cpp` has no direct `CheckProofOfWork` cases at this pin.
+`src/test/auxpow_tests.cpp` lines 333-355 mines both passing and failing scrypt digests at runtime.
+Those tests supply no fixed digest to copy here.
+The cases below do not compute scrypt or run Core.
+-/
+
+/-- Synthetic internal-order hash with two explicit low bytes and thirty zero bytes. -/
+def lowHash (lo hi : UInt8) : DogeLib.Hash256 :=
+  ⟨[lo, hi] ++ List.replicate 30 0, by simp⟩
+
+/-- Source-derived branch and boundary cases for the supplied-hash check. -/
+def proofOfWorkCases : List (String × Bool) :=
+  let params := mainnetParams
+  let exactLimit := { params with powLimit := ArithUint256.ofNat 256 }
+  let fullLimit := { params with powLimit := ArithUint256.ofNat (2 ^ 256 - 1) }
+  [("zero target", !validProofOfWorkTarget 0 params),
+   ("shifted zero mantissa", !validProofOfWorkTarget 0x01000001 params),
+   ("signed shifted zero", !validProofOfWorkTarget 0x01800001 params),
+   ("negative target", !validProofOfWorkTarget 0x03800100 params),
+   ("overflow with zero wrapped target", !validProofOfWorkTarget 0x23000001 params),
+   ("overflow with nonzero wrapped target", !validProofOfWorkTarget 0x22000101 fullLimit),
+   ("above mainnet limit", !validProofOfWorkTarget 0x1f00ffff params),
+   ("target equals custom limit", validProofOfWorkTarget 0x03000100 exactLimit),
+   ("target exceeds custom limit", !validProofOfWorkTarget 0x03000100
+      { params with powLimit := ArithUint256.ofNat 255 }),
+   ("zero hash accepted", checkProofOfWork DogeLib.Hash256.zero 0x03000100 params),
+   ("hash below target", checkProofOfWork (lowHash 255 0) 0x03000100 params),
+   ("hash equals target", checkProofOfWork (lowHash 0 1) 0x03000100 params),
+   ("hash above target", !checkProofOfWork (lowHash 1 1) 0x03000100 params),
+   ("reversed equality bytes fail", !checkProofOfWork
+      ⟨List.replicate 30 0 ++ [1, 0], by decide⟩ 0x03000100 params),
+   ("noncanonical positive target accepted", checkProofOfWork (lowHash 0 1) 0x04000001 params),
+   ("zero hash cannot rescue negative target", !checkProofOfWork DogeLib.Hash256.zero 0x03800100 params),
+   ("zero hash cannot rescue overflow", !checkProofOfWork DogeLib.Hash256.zero 0x22000101 fullLimit),
+   ("zero hash cannot rescue zero target", !checkProofOfWork DogeLib.Hash256.zero 0 params),
+   ("zero hash cannot rescue above-limit target", !checkProofOfWork DogeLib.Hash256.zero 0x1f00ffff params),
+   ("mainnet genesis target in range", validProofOfWorkTarget 0x1e0ffff0 params)]
+
+/-- Runs the supplied-hash check on source-derived known answers and returns the failure count. -/
+def checkProofOfWorkCases : IO Nat := do
+  let mut failures := 0
+  for (name, ok) in proofOfWorkCases do
+    if !ok then
+      IO.eprintln s!"FAIL proof of work: {name}"
+      failures := failures + 1
+  IO.println s!"proof-of-work check: {proofOfWorkCases.length} cases, {failures} failures"
+  return failures
+
+/-!
 ### Mainnet headers
 
 The raw fixture and its Electrum provenance are in `tests/work/mainnet-headers/README.md`.
@@ -1855,7 +1915,7 @@ def parseHeaders (text : String) : Except String (Array Header) := do
   if headers.size != 312 then throw s!"expected 312 headers, got {headers.size}"
   return headers
 
-/-- Checks every hash link, checkpoint 145000 and next-work result with sufficient prior history.
+/-- Checks every target range, hash link, checkpoint 145000 and next-work result with sufficient prior history.
 Only the initial context header and the incomplete retarget at 144720 lack known answers. -/
 def check : IO Nat := do
   let headers ← match parseHeaders (← IO.FS.readFile "tests/work/mainnet-headers/headers.txt") with
@@ -1870,6 +1930,9 @@ def check : IO Nat := do
   let mut legacyRetargets := 0
   let mut digiRetargets := 0
   for header in headers do
+    unless validProofOfWorkTarget header.bits (getConsensus .mainnet (UInt32.ofNat header.height)).toRetargetParams do
+      IO.eprintln s!"FAIL mainnet target range {header.height}"
+      failures := failures + 1
     if let some prev := previous then
       unless header.prev.val == prev.digest.toList do
         IO.eprintln s!"FAIL mainnet header {header.height}: predecessor hash"
@@ -1898,6 +1961,7 @@ def check : IO Nat := do
     IO.eprintln "FAIL mainnet headers: unexpected branch counts"
     failures := failures + 1
   IO.println s!"mainnet headers: {headers.size} hashes, 311 links, checkpoint 145000; {failures} failures"
+  IO.println s!"mainnet target validity: {headers.size} targets checked"
   IO.println s!"mainnet next work: {copies} legacy copies, {legacyRetargets} interval-240 retarget, {digiRetargets} DigiShield retargets"
   return failures
 
@@ -2012,7 +2076,8 @@ def main : IO UInt32 := do
   let compact ← KnownAnswers.Work.checkCompact
   let retarget ← KnownAnswers.Work.checkRetarget
   let mainnetHeaders ← KnownAnswers.Work.MainnetHeaders.check
+  let proofOfWork ← KnownAnswers.Work.checkProofOfWorkCases
   let nextWork ← KnownAnswers.Work.checkNextWork
   let operators ← KnownAnswers.Work.checkOperators
   let shifts ← KnownAnswers.Work.checkShifts
-  return if short + long + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts == 0 then 0 else 1
+  return if short + long + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts + proofOfWork == 0 then 0 else 1

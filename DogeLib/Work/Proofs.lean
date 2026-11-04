@@ -7,6 +7,7 @@ public import DogeLib.Work.Proofs.ArithUint256Division
 public import DogeLib.Work.Proofs.ArithUint256Words
 public import DogeLib.Work.Proofs.Consensus
 public import DogeLib.Work.Proofs.NextWork
+public import DogeLib.Work.Proofs.ProofOfWork
 public import DogeLib.Work.Proofs.Retarget
 public import DogeLib.Work.Proofs.RetargetWords
 

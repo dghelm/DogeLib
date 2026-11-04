@@ -15,7 +15,7 @@ This roadmap is the living plan. The reasoning behind it is in [design record 00
 | 2 | Bounded CompactSize reader and proofs | Accepted-prefix relation, bounded round trip, Core comparisons | Reader, relation, soundness and completeness, bounded round trip, and known answers from Core's tests done in `feat/compactsize`. A packed form of the reader is done in `feat/packed-bounded-compactsize`. The comparison with Core's `ReadCompactSize` and `WriteCompactSize` is done in `test/core-harness`. |
 | 3 | Raw transaction types and base codecs | Exact field preservation, explicit parse mode, parser obligations | Fixed-length byte strings and `Hash256` done in `feat/fixed-bytes`. Transaction types, base codecs, Core's base-mode reader, the complete reader and the transaction ID done in `feat/transaction-base`. The base-mode records of Core's transaction corpus are known answers (issue #22). The witness-allowed format, as a serialization format only, done in `feat/transaction-witness-format`. Its oracle operations and comparison with Core are issue #36. |
 | 4 | Legacy hash-plan specification | Declared lower-level modes and special cases are covered | Done in `feat/legacy-sighash`: `legacySignatureHashPlan` for `SIGVERSION_BASE`, Core's `sighash.json` corpus and hand-derived preimages as known answers. The witness v0 digest and the `CheckSig` wrapper are not specified. |
-| 5 | Streaming preimage implementation and proof | Exact plan equality on the recorded domain | Done in `proof/legacy-sighash-reference`. `legacySignatureHashPlan_eq_reference` proves the production plan equal to the `SignatureHashOld` transformation. It needs a fully parsed script code and counts below 2^32. The two differ on a script that ends in a short push. |
+| 5 | Field-by-field preimage construction proved equal to the transaction-transformation reference | Exact plan equality on the recorded domain | Done in `proof/legacy-sighash-reference`. `legacySignatureHashPlan_eq_reference` proves the production plan equal to the `SignatureHashOld` transformation. It needs a fully parsed script code and counts below 2^32. The two differ on a script that ends in a short push. |
 | 6 | Rust refinement experiment | One extracted implementation matches an independent contract | Not started |
 
 The steps are units of review, not one pull request each.
@@ -51,7 +51,11 @@ The oracle, `dogelib-oracle`, exists ([docs/oracle.md](docs/oracle.md)). The Cor
 
 ### C: one meaningful implementation equivalence (step 5)
 
-A streaming preimage constructor proved equal to an independently reviewed transformation specification, over a documented domain. The first domain may require fully parsed script code. That restriction appears in the theorem, in COVERAGE.md, and in the release description.
+The field-by-field preimage construction is proved equal to the transaction-transformation reference by `legacySignatureHashPlan_eq_reference`.
+The theorem requires fully parsed script code, fewer than 2^32 inputs and fewer than 2^32 outputs.
+It holds for every input index and hash type on that domain.
+The implementation constructs the whole preimage as a byte list before hashing.
+An incremental hash sink and measured memory or speed gains are later work.
 
 ### D: the Rust refinement path (step 6)
 

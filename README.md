@@ -6,13 +6,15 @@ It makes existing Dogecoin consensus behavior precise, and states proposed proto
 
 ## Status
 
-The build skeleton and the first specifications exist. [COVERAGE.md](COVERAGE.md) records what is implemented, per operation and per kind of evidence. No comparison against a running Dogecoin Core and no Rust extraction exist yet.
+DogeLib defines transaction serialization formats and legacy signing commitments, with proofs and known answers.
+[COVERAGE.md](COVERAGE.md) records the implemented coverage, per operation and per kind of evidence.
+The [Core harness](docs/oracle.md#the-core-harness) compares selected operations with the pinned Dogecoin Core libraries.
+Rust refinement and full-node validation are not implemented.
 
-The first release target is:
-
-> DogeLib defines Dogecoin's base transaction encodings and legacy signing commitments, provides an executable comparison oracle, and proves a streaming commitment implementation equivalent to its specification over a documented input domain.
-
-That sentence describes the goal, not the current state.
+The field-by-field preimage construction is proved equal to the transaction-transformation reference under the hypotheses of `legacySignatureHashPlan_eq_reference`.
+The theorem requires fully parsed script code, fewer than 2^32 inputs and fewer than 2^32 outputs.
+The implementation constructs the whole preimage as a byte list before hashing.
+An incremental hash sink and measured memory or speed gains are later work ([ROADMAP.md](ROADMAP.md)).
 
 ## Documents
 

@@ -26,5 +26,8 @@ sha256sum -c SHA256SUMS
 
 `lake test` reads and writes every base-mode transaction, from `tests/KnownAnswers.lean`, through the compiled base-mode reader and codecs.
 It also reads every record of both kinds with the reader of the witness-allowed format, `Transaction.readAllowWitness`, and writes each one again.
-That format is only a serialization format here. Segregated witness is not active on Dogecoin's main or test network at the pin.
+
+The format models serialization only.
+Core rejects blocks with witness data on main and test at the pin (D9, D36).
+The module documentation of `DogeLib.Transaction.Witness` records the separate consensus mechanisms.
 The checks use Core's bytes as known answers. Core itself does not run.

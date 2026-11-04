@@ -653,9 +653,9 @@ Known answers for the base serialization of a transaction, its packed codec, Cor
 The genesis coinbase is the literal of the codec section, which that section checks against the merkle root that Core asserts (SOURCES.md, D9).
 Its expected fields are the arguments of `CreateGenesisBlock` in `src/chainparams.cpp` (D9):
 
-- version 1 and lock time 0;
-- one input with the null outpoint (`COutPoint::SetNull`, D4), the scriptSig of the coinbase, and sequence `0xffffffff`;
-- one output of `88 * COIN` with the scriptPubKey.
+- Version 1 and lock time 0.
+- One input with the null outpoint (`COutPoint::SetNull`, D4), the scriptSig of the coinbase, and sequence `0xffffffff`.
+- One output of `88 * COIN` with the scriptPubKey.
 
 Its transaction ID must be the merkle root, because a block with one transaction has that transaction's ID as its merkle root.
 

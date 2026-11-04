@@ -282,7 +282,15 @@ These theorems relate the reader to the codec, and the codec to a reading of D4 
 No theorem says which error the reader reports, or that the order of reads is Core's.
 `lake test` checks the errors and their order on short inputs.
 It also reads the genesis coinbase, whose ID must be the merkle root that Core asserts (D9).
-Core itself does not run, and its corpus `tx_valid.json` is not yet a known answer (issue #22).
+Core itself does not run.
+
+`lake test` also runs the base-mode records of Core's `tx_valid.json` and `tx_invalid.json` (D28, D29): 159 transactions.
+For each one, `readBase` reads the whole transaction and `decodeBaseComplete` accepts it.
+The codec writes the same bytes again, and the packed codec reads the same transaction.
+Core's own tests check scripts, not these four properties, so these are DogeLib's checks on Core's bytes.
+
+A record is in base mode when byte 4, the first byte of its input count, is not `00`. Then Core never reads a flags byte (D4, lines 218 to 241).
+The 39 other records use the witness serialization and are not checked (issue #23).
 
 The reader is the base mode only.
 Without `SERIALIZE_TRANSACTION_NO_WITNESS`, Core reads an empty input list as a marker and then a flags byte (A5).

@@ -180,6 +180,9 @@ class Reports(unittest.TestCase):
             'oracle': 'bash scripts/test_oracle.sh',
             'core-comparison': 'scripts/build_core_harness.sh <dogecoin-git-clone> build/core-harness && '
                                'python3 -I scripts/compare_core.py .lake/build/bin/dogelib-oracle build/core-harness/core-oracle',
+            'rust-compactsize-comparison': 'cargo +nightly-2026-09-17 build --locked --manifest-path Refinement/Rust/Cargo.toml --example compactsize_oracle --jobs 4 && '
+                                           'scripts/build_core_harness.sh <dogecoin-git-clone> build/core-harness && '
+                                           'python3 -I scripts/compare_core.py --rust-compactsize Refinement/Rust/target/debug/examples/compactsize_oracle .lake/build/bin/dogelib-oracle build/core-harness/core-oracle',
             'comparator-self-test': 'python3 -I scripts/test_compare_core.py .lake/build/bin/dogelib-oracle',
             'writing-checker-tests': 'uv run --no-project --python 3.12 python -m unittest scripts/test_check_writing.py',
             'validation-report-tests': 'python3 -I scripts/test_validation_report.py',

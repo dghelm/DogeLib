@@ -251,4 +251,17 @@ A wrapper around the oracle stands in for the harness.
 Unchanged, it must pass on the full stream. Each of 25 mutations must fail with the failure code that it targets.
 The witness mutations change `wtxid_hex`, a stack and `has_witness`.
 
+### Compiled Rust CompactSize
+
+With `--rust-compactsize PATH`, the comparator selects only `compactsize.read` from the fixtures and CompactSize boundary set.
+It sends all three programs the same 404 reader requests and compares their full responses.
+The Rust crate has no encoder.
+The comparator reads the oracle's version at runtime and passes it to the adapter.
+The adapter identifies its projection as `FORMAT-rust-compactsize`.
+[BUILDING.md](../BUILDING.md#compiled-rust-compactsize-comparison) gives the commands.
+
+The comparator self-test also includes a three-way positive control and eight Rust-side mutations.
+These mutations change consumption, the read error, the remainder, request acceptance, response count, response ID, JSON syntax and the version label.
+Each mutation must fail with its expected code.
+
 Agreement covers the requests in the stream and nothing more.

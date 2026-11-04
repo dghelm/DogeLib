@@ -1010,6 +1010,15 @@ Charon and Aeneas at the pins in SOURCES.md produce `Refinement/Refinement/Rust/
 The refinement theorem is about that Lean model, not a proof of the extractors or compiled Rust.
 The Rust compiler, standard-library models, extraction tools and runtime remain trusted.
 
+The native example `Refinement/Rust/examples/compactsize_oracle.rs` calls the public Rust reader through a JSON Lines adapter.
+`scripts/compare_core.py --rust-compactsize PATH` compares it with the oracle and Core at the pinned revision.
+The three programs agree on 404 CompactSize reads: seven existing fixtures and 397 generated boundary, truncation, non-canonical and suffix cases.
+The comparison preserves errors, values, consumed counts and remainders on these inputs.
+
+The comparison provides evidence about the compiled binary on these inputs.
+No theorem covers the compiled binary or its JSON adapter.
+The adapter's `serde_json` development dependency remains outside the extracted library model.
+
 Aeneas represents each input byte with an eight-bit vector and each decoded value with a 64-bit vector.
 The abstraction maps those vectors directly to Lean `UInt8` and `UInt64`.
 Aeneas slices carry a proof that their length fits Rust `usize`.

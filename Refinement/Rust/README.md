@@ -66,3 +66,37 @@ They include all three errors, size boundaries and unread trailing bytes.
 The second test repeats Core's 52-value power-of-two sweep through `MAX_SIZE`.
 The Rust tests compare the value and consumed count, including the resulting remainder position.
 These tests do not run Dogecoin Core or validate Charon and Aeneas on arbitrary Rust programs.
+
+## Native oracle adapter
+
+`examples/compactsize_oracle.rs` adapts the public reader to the oracle's JSON Lines interface.
+The library has no encoder, so the adapter supports `compactsize.read` and `oracle.version` only.
+Other operations return request errors.
+The adapter flushes each response before it reads the next line.
+Blank lines have no response, and a final line without a newline has a response.
+
+The example uses `serde_json` 1.0.154 under its MIT or Apache-2.0 licence.
+Cargo.lock pins this development dependency and its transitive dependencies.
+Cargo fetches the transitive crates under their own licences, without vendored copies in this repository.
+The library itself has no dependencies.
+The example does not form part of the extracted model.
+
+Build the adapter and compare it with the oracle and pinned Core harness:
+
+```bash
+cargo +nightly-2026-09-17 build --locked --manifest-path Refinement/Rust/Cargo.toml --example compactsize_oracle --jobs 4
+python3 -I scripts/compare_core.py --rust-compactsize Refinement/Rust/target/debug/examples/compactsize_oracle .lake/build/bin/dogelib-oracle build/core-harness/core-oracle
+```
+
+[BUILDING.md](../../BUILDING.md#comparison-with-dogecoin-core) gives the oracle and Core build commands.
+The comparator reads the oracle format at runtime and passes `--oracle-format FORMAT` to the adapter.
+Both version interfaces report `FORMAT-rust-compactsize`.
+For example, `dogelib-oracle/2` selects `dogelib-oracle/2-rust-compactsize`.
+This projection label describes CompactSize reads only.
+
+The three programs agree on 404 reader requests: seven existing fixtures and 397 generated cases at encoding and size boundaries.
+These cases include truncation, non-canonical forms, values above MAX_SIZE and trailing bytes.
+The comparison checks errors, values, consumed counts and remainders.
+It provides evidence about compiled Rust on these inputs, without a proof about the binary or its JSON adapter.
+The Core CI job builds the example and runs the comparison.
+The ordinary Cargo test command also tests the adapter's request checks and result conversion.

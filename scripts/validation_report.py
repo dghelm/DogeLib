@@ -54,26 +54,32 @@ def fence(text):
     return f'{marker}text\n{text}\n{marker}\n'
 
 
-def write_report(path, metadata, gates, results, dirty):
+def write_report(path, metadata, gates, results, dirty, final_status=None):
     """Replace the report after each completed gate."""
     lines = ['**Dirty working tree.**' if dirty else 'Clean working tree.', '',
              '# Validation report', '', fence(metadata),
              'The summaries contain the last 20 output lines of each command.',
              'A zero exit status records command success, not a proof or a manual review.',
              'The Writing gate is advisory. Its output can contain findings with exit status zero.',
+             'Build and Refinement execute the same command. They are not independent evidence.',
              '', '## Core harness stamp', '']
     stamp = ROOT / 'build/core-harness/core.stamp'
     lines.append(fence(stamp.read_text() if stamp.exists() else 'not available'))
     lines.append('The stamp describes existing Core libraries. It does not establish that this run built the harness.\n')
+    if final_status is not None:
+        lines += ['## Final tree status', '', fence(final_status),
+                  'Compare this status with the initial tree-status log. A gate may have changed the tree.', '']
     for gate in gates:
         result = results.get(gate['slug'], dict(status='not run', reason='not selected or not reached'))
         lines += [f"## {gate['name']}", '', f"Status: **{result['status']}**", '']
         lines.append(fence(result.get('command') or gate['command'] or gate['description']))
         if 'reason' in result:
             lines.append(result['reason'] + '\n')
+        if 'log' in result:
+            lines += [f"Full log: [{result['log']}]({result['log']})", '']
         if 'exit' in result:
             lines += [f"Exit status: {result['exit']}", '', f"Duration: {result['duration']:.3f} seconds", '',
-                      f"Full log: [{result['log']}]({result['log']})", '', fence(result['summary'])]
+                      fence(result['summary'])]
             if 'findings' in result:
                 lines.append(f"Writing findings: {result['findings']} (advisory).\n")
     temp = path.with_suffix('.tmp')
@@ -111,7 +117,10 @@ def main(argv=None):
         parser.error('--output must name an untracked file in a gitignored directory')
     output.parent.mkdir(parents=True, exist_ok=True)
     logs = output.parent / (output.stem + '-logs')
-    logs.mkdir(exist_ok=False)
+    try:
+        logs.mkdir(exist_ok=False)
+    except FileExistsError:
+        parser.error(f'log directory already exists: {logs}. Choose a different --output path.')
     status = subprocess.check_output(['git', 'status', '--porcelain=v1', '--untracked-files=all'], cwd=ROOT, text=True)
     dirty = bool(status)
     (logs / 'tree-status.txt').write_text(status)
@@ -123,7 +132,7 @@ def main(argv=None):
         f'Date (UTC): {datetime.now(timezone.utc).isoformat()}', f'DogeLib commit: {commit}',
         f'Tree: {"dirty" if dirty else "clean"}', f'Tree status: {logs.name}/tree-status.txt',
         f'Tracked diff: {logs.name}/tree.diff', 'Untracked files are listed but are not included in the diff.',
-        f'Invocation: {shlex.join([sys.executable, "-I", *sys.argv])}', f'Working directory: {ROOT}',
+        f'Invocation: {shlex.join([sys.executable, "-I", *sys.argv])}', f'Working directory: {ROOT}', 'Shell wrapper: bash -o pipefail -c <command>',
         f'Registry: {args.registry.resolve()}',
         f'Registry SHA-256: {hashlib.sha256(args.registry.read_bytes()).hexdigest()}',
         f'lean-toolchain: {(ROOT / "lean-toolchain").read_text().strip()}',
@@ -160,6 +169,10 @@ def main(argv=None):
         print(f'Running {slug}: {command}', flush=True)
         log = logs / f'{slug}.log'
         start = time.monotonic()
+        results[slug] = dict(status='running/incomplete', command=command,
+                             log=f'{logs.name}/{log.name}',
+                             reason='Gate launch began. No completed result has been recorded.')
+        write_report(output, metadata, gates, results, dirty)
         interrupted = False
         try:
             with log.open('w') as handle:
@@ -201,6 +214,17 @@ def main(argv=None):
         print(f'{slug}: exit {code}', flush=True)
         if interrupted:
             return 130
+    final_status = subprocess.check_output(
+        ['git', 'status', '--porcelain=v1', '--untracked-files=all'], cwd=ROOT, text=True)
+    (logs / 'tree-status-final.txt').write_text(final_status)
+    with (logs / 'tree-final.diff').open('w') as handle:
+        subprocess.run(['git', 'diff', 'HEAD', '--binary'], cwd=ROOT, stdout=handle, check=True)
+    tree_changed = (final_status != status or
+                    (logs / 'tree.diff').read_bytes() != (logs / 'tree-final.diff').read_bytes())
+    final_note = ('Tree status or tracked diff changed during the run.\n' if tree_changed else
+                  'Tree status and tracked diff at completion match their initial values.\n')
+    final_note += f'Final tracked diff: {logs.name}/tree-final.diff\n' + final_status
+    write_report(output, metadata, gates, results, dirty, final_note)
     print(f'Report: {output}')
     return int(failed)
 

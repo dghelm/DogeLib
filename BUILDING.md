@@ -100,7 +100,7 @@ Lake v4.35.0 has no option to limit its parallel jobs.
 On a machine that other builds share, limit the CPUs of the process instead:
 
 ```bash
-taskset -c 0-7 nice -n 10 lake build --wfail
+taskset -c 0-7 nice -n 19 lake build --wfail
 ```
 
 ## Validation reports
@@ -134,15 +134,19 @@ The runner shell-quotes the Core clone path before it replaces the table's place
 Any remaining placeholder also leaves the gate **not run**.
 A failed gate does not stop later gates, but makes the runner exit with status 1.
 
-The report updates after each completed gate.
+The report records a gate as running before its launch, then records the completed result.
+A hard kill can leave a gate marked running/incomplete.
 An interrupt stops the gate's process group and records its partial output.
 The Writing gate is advisory, and its findings can accompany a zero exit status.
 
 The header records the commit, tree status, toolchain, compiler versions, Core pin, Core stamp, platform and UTC date.
 A dirty tree has a warning on the first line, a status log and a separate tracked diff.
 The status log lists untracked files, but the diff does not contain their contents.
+The runner also saves the final status and tracked diff, and notes a change in tree status.
+
 Each gate records its exact command, exit status, duration, final output lines and full log path.
-The Core stamp records existing libraries, so the Core gate's result determines whether this run built the harness successfully.
+The Core stamp records existing libraries.
+The Core result records whether the harness step and comparison succeeded, possibly with reuse of existing libraries.
 
 The `validation` workflow runs on manual dispatch and tag pushes, and uploads the report and logs even after gate failures.
 A report records checks on one machine at one commit.

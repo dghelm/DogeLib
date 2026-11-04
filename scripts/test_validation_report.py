@@ -127,6 +127,27 @@ class Reports(unittest.TestCase):
         state = subprocess.run(['ps', '-p', pid, '-o', 'stat='], capture_output=True, text=True).stdout.strip()
         self.assertTrue(not state or state.startswith('Z'), state)
 
+    def test_running_checkpoint(self):
+        code, _ = self.run_report([('Snapshot', '`cp build/report.md build/checkpoint.md`', 'Yes')])
+        self.assertEqual(code, 0)
+        checkpoint = (self.root / 'build/checkpoint.md').read_text()
+        self.assertIn('**running/incomplete**', checkpoint)
+        self.assertIn('snapshot.log', checkpoint)
+        self.assertNotIn('**passed**', checkpoint)
+
+    def test_repeated_output_has_clear_error(self):
+        self.run_report([('Pass', '`true`', 'Yes')])
+        with self.assertRaises(SystemExit) as error:
+            runner.main(['--output', str(self.root / 'build/report.md')])
+        self.assertEqual(error.exception.code, 2)
+
+    def test_gate_tree_change_is_recorded(self):
+        code, text = self.run_report([('Change', '`echo changed >> lean-toolchain`', 'Yes')])
+        self.assertEqual(code, 0)
+        self.assertIn('Tree status or tracked diff changed during the run.', text)
+        self.assertIn('M lean-toolchain', (self.root / 'build/report-logs/tree-status-final.txt').read_text())
+        self.assertIn('+changed', (self.root / 'build/report-logs/tree-final.diff').read_text())
+
     def test_rejects_nonignored_output(self):
         with self.assertRaises(SystemExit) as error:
             runner.main(['--registry', str(ROOT / 'AGENTS.md'), '--output', str(self.root / 'report.md')])
@@ -140,8 +161,27 @@ class Reports(unittest.TestCase):
 
     def test_real_registry(self):
         gates = runner.read_gates(ROOT / 'AGENTS.md')
-        self.assertGreaterEqual(len(gates), 15)
-        self.assertIn('validation-report-tests', {g['slug'] for g in gates})
+        expected = {
+            'build': 'lake build --wfail',
+            'declaration-check': 'lake exe check-decls',
+            'declaration-check-self-test': 'bash scripts/test_check_decls.sh',
+            'source-and-coverage-review': None,
+            'conformance': 'lake test',
+            'pinned-vectors': '(cd tests/cryptography/sha256/cavp && sha256sum -c SHA256SUMS) && '
+                              '(cd tests/transaction/sighash && sha256sum -c SHA256SUMS) && '
+                              '(cd tests/transaction/corpus && sha256sum -c SHA256SUMS)',
+            'refinement': 'lake build --wfail',
+            'soundness-review': None,
+            'writing': 'uv run --no-project --python 3.12 python scripts/check_writing.py --base main',
+            'oracle': 'bash scripts/test_oracle.sh',
+            'core-comparison': 'scripts/build_core_harness.sh <dogecoin-git-clone> build/core-harness && '
+                               'python3 -I scripts/compare_core.py .lake/build/bin/dogelib-oracle build/core-harness/core-oracle',
+            'comparator-self-test': 'python3 -I scripts/test_compare_core.py .lake/build/bin/dogelib-oracle',
+            'writing-checker-tests': 'uv run --no-project --python 3.12 python -m unittest scripts/test_check_writing.py',
+            'validation-report-tests': 'python3 -I scripts/test_validation_report.py',
+            'lane-tool': 'bash scripts/test_lane.sh',
+        }
+        self.assertEqual({g['slug']: g['command'] for g in gates}, expected)
         for gate in gates:
             if gate['command']:
                 result = subprocess.run(['bash', '-n', '-c', gate['command'].replace('<dogecoin-git-clone>', 'core')])

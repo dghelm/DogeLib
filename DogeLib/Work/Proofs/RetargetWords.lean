@@ -3,6 +3,7 @@ module
 public import DogeLib.Work.RetargetWords
 public import DogeLib.Work.Proofs.ArithUint256Compact
 public import DogeLib.Work.Proofs.ArithUint256Bytes
+public import DogeLib.Work.Proofs.Consensus
 
 /-! # Agreement of the word retarget with the arithmetic specification -/
 
@@ -74,5 +75,64 @@ theorem calculateDogecoinNextWorkRequiredBytes_eq (params : RetargetParams) (lim
   simpa only [calculateDogecoinNextWorkRequiredBytes, Words.readWords_ofFn, Words.uintToArith256_toArith]
     using calculateDogecoinNextWorkRequiredWithWords_eq params
       (Words.readWords (Vector.ofFn (Words.uintToArith256 limit))) height last first compact
+
+private theorem retarget_literal (params : RetargetParams) (literal : String)
+    (h : (targetBytesOfHex literal).map (Words.toArith ∘ Words.uintToArith256) = some params.powLimit) :
+    ∃ bs, targetBytesOfHex literal = some bs ∧
+      ∀ (height : Int32) (last first : Int64) (compact : UInt32),
+        calculateDogecoinNextWorkRequiredBytes params bs height last first compact =
+          some (calculateDogecoinNextWorkRequired params height last first compact) := by
+  cases hp : targetBytesOfHex literal with
+  | none => simp [hp] at h
+  | some bs =>
+    have hlimit : ofTargetBytes bs = params.powLimit := by
+      simpa only [hp, Option.map_some, Option.some.injEq, Function.comp_def, Words.uintToArith256_toArith] using h
+    refine ⟨bs, rfl, ?_⟩
+    intro height last first compact
+    rw [calculateDogecoinNextWorkRequiredBytes_eq, hlimit]
+
+/-- At every mainnet selection height, Core's literal parses and its bytes give the specified retarget for every retarget input. -/
+theorem retarget_mainnet_literal (selectionHeight : UInt32) :
+    ∃ bs, targetBytesOfHex mainnetPowLimitHex = some bs ∧
+      ∀ (height : Int32) (last first : Int64) (compact : UInt32),
+        calculateDogecoinNextWorkRequiredBytes (getConsensus .mainnet selectionHeight).toRetargetParams
+          bs height last first compact =
+          some (calculateDogecoinNextWorkRequired (getConsensus .mainnet selectionHeight).toRetargetParams
+            height last first compact) := by
+  apply retarget_literal
+  rw [getConsensus_mainnet]
+  split
+  · exact mainnet_powLimit_literal
+  · exact mainnet_digishield_powLimit_literal
+
+/-- At every testnet selection height, Core's literal parses and its bytes give the specified retarget for every retarget input. -/
+theorem retarget_testnet_literal (selectionHeight : UInt32) :
+    ∃ bs, targetBytesOfHex mainnetPowLimitHex = some bs ∧
+      ∀ (height : Int32) (last first : Int64) (compact : UInt32),
+        calculateDogecoinNextWorkRequiredBytes (getConsensus .testnet selectionHeight).toRetargetParams
+          bs height last first compact =
+          some (calculateDogecoinNextWorkRequired (getConsensus .testnet selectionHeight).toRetargetParams
+            height last first compact) := by
+  apply retarget_literal
+  rw [getConsensus_testnet]
+  split
+  · exact testnet_powLimit_literal
+  · split
+    · exact testnet_digishield_powLimit_literal
+    · exact testnet_minDifficulty_powLimit_literal
+
+/-- At every regtest selection height, Core's literal parses and its bytes give the specified retarget for every retarget input. -/
+theorem retarget_regtest_literal (selectionHeight : UInt32) :
+    ∃ bs, targetBytesOfHex regtestPowLimitHex = some bs ∧
+      ∀ (height : Int32) (last first : Int64) (compact : UInt32),
+        calculateDogecoinNextWorkRequiredBytes (getConsensus .regtest selectionHeight).toRetargetParams
+          bs height last first compact =
+          some (calculateDogecoinNextWorkRequired (getConsensus .regtest selectionHeight).toRetargetParams
+            height last first compact) := by
+  apply retarget_literal
+  rw [getConsensus_regtest]
+  split
+  · exact regtest_powLimit_literal
+  · exact regtest_digishield_powLimit_literal
 
 end DogeLib.Work

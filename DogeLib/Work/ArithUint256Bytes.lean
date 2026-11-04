@@ -8,7 +8,8 @@ public import DogeLib.Work.ArithUint256Words
 The grouped reads model `UintToArith256` in Dogecoin Core `e0a1c15`,
 `src/arith_uint256.cpp` lines 254-260 (SOURCES.md, D13).
 `ReadLE32` interprets four bytes in little-endian order (SOURCES.md, D37, `src/crypto/common.h` lines 24-29).
-The hex parser restricts `base_blob::SetHex` (D11 lines 30-56) to an `0x` prefix and exactly 64 hexadecimal digits.
+Core's `uint256S` (D22 lines 151-156) calls `base_blob::SetHex` (D11 lines 30-56).
+The hex parser restricts this call to an `0x` prefix and exactly 64 hexadecimal digits.
 It rejects other inputs instead of modeling Core's whitespace, prefix and truncation cases.
 
 The adapted code is under the MIT licence in `LICENSES/dogecoin-core-MIT.txt`.

@@ -25,8 +25,10 @@ namespace DogeLib.Work.ArithUint256.Words
 def ofUInt64 (b : UInt64) : Words :=
   fun i => if i.val = 0 then b.toUInt32 else if i.val = 1 then (b >>> 32).toUInt32 else 0
 
-/-- Core's uint64 assignment overwrites all eight words (D12 lines 88-96).
-The previous words do not affect the result. -/
+/-- Core's explicit base-class uint64 assignment (D12 lines 88-95).
+The derived class hides this overload.
+Assignment of a uint64 to `arith_uint256` instead constructs a temporary (D12 line 257) and copies its words (D12 lines 44-49).
+The previous words do not affect either result. -/
 def assignUInt64 (_old : Words) (b : UInt64) : Words := ofUInt64 b
 
 /-- The stored words and both output flags of Core's `SetCompact` (D13 lines 204-222). -/
@@ -38,12 +40,14 @@ structure CompactResult where
   /-- The overflow flag, after any right shift of the mantissa. -/
   fOverflow : Bool
 
-/-- Core's `SetCompact`, including both flags, for every 32-bit compact (D13 lines 204-222). -/
+/-- Core's `SetCompact`, including both flags, for every 32-bit compact (D13 lines 204-222).
+Its `*this = nWord` constructs an `arith_uint256` through D12 line 257, then copies it through the implicit derived assignment.
+The base copy assignment (D12 lines 44-49) copies the eight constructed words. -/
 def setCompact (nCompact : UInt32) : CompactResult :=
   let nSize := (nCompact >>> 24).toNat
   let nWord := nCompact &&& 0x007fffff
   let nWord := if nSize ≤ 3 then nWord >>> UInt32.ofNat (8 * (3 - nSize)) else nWord
-  let pn := assignUInt64 (fun _ => 0) nWord.toUInt64
+  let pn := ofUInt64 nWord.toUInt64
   let value := if nSize ≤ 3 then pn else shiftLeft pn (8 * (nSize - 3))
   { value
     fNegative := nWord != 0 && (nCompact &&& 0x00800000) != 0

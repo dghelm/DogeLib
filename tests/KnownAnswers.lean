@@ -1549,8 +1549,7 @@ def checkCompact : IO Nat := do
       | some n =>
         let r := ArithUint256.Words.setCompact n
         (r.value, some (r.fNegative, r.fOverflow))
-      | none => (ArithUint256.Words.assignUInt64 (fun _ => 0xffffffff)
-          (UInt64.ofNat (c.value.getD 0)), none)
+      | none => (ArithUint256.Words.ofUInt64 (UInt64.ofNat (c.value.getD 0)), none)
     let mut ok := true
     if let some v := c.value then
       if value.val != v || ArithUint256.Words.value wordValue != v then ok := false

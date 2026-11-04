@@ -55,11 +55,11 @@ theorem setCompact_toArith (c : UInt32) : (setCompact c).toArith = ArithUint256.
     rw [Nat.mod_eq_of_lt (show 8 * (3 - (c.toNat >>> 24)) < 2 ^ 32 by omega), Nat.mod_eq_of_lt hs]
   simp only [setCompact, CompactResult.toArith, hsize]
   split <;> rename_i h
-  · simp only [assignUInt64_toArith, UInt32.toNat_toUInt64, hshift h,
+  · simp only [ofUInt64_toArith, UInt32.toNat_toUInt64, hshift h,
       ArithUint256.setCompact, h, ite_true]
     congr 1 <;> simp only [ne_zero_nat, hshift h, UInt32.toNat_and, UInt32.reduceToNat,
       UInt32.lt_iff_toNat_lt]
-  · simp only [assignUInt64_toArith, UInt32.toNat_toUInt64, shiftLeft_toArith, hword,
+  · simp only [ofUInt64_toArith, UInt32.toNat_toUInt64, shiftLeft_toArith, hword,
       ArithUint256.setCompact, h, ite_false]
     congr 1 <;> simp only [ne_zero_nat, hword, UInt32.toNat_and, UInt32.reduceToNat,
       UInt32.lt_iff_toNat_lt]

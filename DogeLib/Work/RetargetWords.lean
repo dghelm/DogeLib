@@ -8,7 +8,7 @@ public import DogeLib.Work.ArithUint256Bytes
 # Retarget arithmetic over Core's words
 
 This model follows Dogecoin Core `e0a1c15`, `src/dogecoin.cpp` lines 75-86 (SOURCES.md, D6).
-It reuses the timespan specification and its signed-arithmetic domain from `Work.Retarget`.
+Core's lines 41-74 come through the timespan specification and its signed-arithmetic domain in `Work.Retarget`.
 All target operations use word models, including the divisor constructor and the limit comparison.
 The byte entry point includes Core's `UintToArith256` conversion of `powLimit`.
 The arithmetic entry point accepts the existing `RetargetParams` representation.

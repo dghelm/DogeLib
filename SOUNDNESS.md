@@ -650,7 +650,11 @@ All names in this table are in `DogeLib.Work.ArithUint256.Words`.
 `Work.ArithUint256Compact` models Core's uint64 constructor, assignment, `SetCompact` and `GetCompact` over eight words (D12, D13).
 `Words.ofUInt64_value` proves that construction stores every input exactly.
 `ofUInt64_toArith` and `assignUInt64_toArith` equate construction and assignment with the arithmetic embedding, for every uint64 input and previous word array.
-Assignment overwrites all eight words.
+`assignUInt64` describes the explicit base-class overload at D12 lines 88-95, which sets every word.
+
+The implicit `arith_uint256` copy assignment hides this base overload.
+Thus `*this = nWord` in `SetCompact` and `num = 0x80` in D16 construct a temporary through D12 line 257, then copy it.
+The temporary uses the uint64 constructor at D12 lines 51-57, and the base copy assignment copies its words at lines 44-49.
 
 `Words.setCompact_toArith` equates the complete decoder result with `ArithUint256.setCompact` for every compact input.
 The conclusion includes the magnitude and both flags.
@@ -669,9 +673,10 @@ It rejects every other format.
 It does not specify Core's general whitespace, prefix and truncation behavior.
 
 Seven `*_powLimit_literal` theorems start from Core's literal strings at D14 lines 88, 248 and 392.
-They prove the resulting word values equal the existing mainnet, testnet and regtest parameter limits, including inherited DigiShield and AuxPoW limits.
+They prove the resulting `Words.toArith` interpretations equal the existing network parameter limits, including inherited DigiShield and AuxPoW limits.
 The kernel checks these concrete computations with `decide +kernel`.
 The literals come from Core, rather than from the arithmetic values under test.
+The hex parser is checked only on the three concrete network strings, with two distinct spellings.
 
 `calculateDogecoinNextWorkRequiredWords_eq` proves that word retarget returns `some` of the arithmetic target for every existing parameter record and input.
 The executable model preserves division's `Option`, and the proof uses the positive-timespan field to exclude the exception.
@@ -679,7 +684,11 @@ It includes the divisor constructor, compact operations, multiplication, divisio
 `calculateDogecoinNextWorkRequiredWithWords_eq` covers every explicit word limit, with that limit's arithmetic interpretation.
 `calculateDogecoinNextWorkRequiredBytes_eq` also covers every 32-byte limit, through `UintToArith256` and its independent interpretation.
 
-The signed timespan calculation reuses `Work.Retarget`.
+`retarget_mainnet_literal`, `retarget_testnet_literal` and `retarget_regtest_literal` connect each literal directly to the byte retarget.
+At every network selection height, each corollary exhibits parsed bytes and proves retarget equality for every retarget input.
+These corollaries cover all ten tree records, including the records that share work fields.
+
+The signed timespan calculation reuses Core's lines 41-74 through `Work.Retarget`.
 The equality of the Lean retargets has no additional signed-arithmetic hypothesis.
 Agreement with Core's signed execution retains the existing block-time and target-timespan bounds from `signedSteps_fit` and `modulatedTimespan_eq_int64`.
 The inherited bit-scan and division-mask models retain their intended-unsigned-mask boundary under S1.
@@ -690,20 +699,20 @@ The retarget materialises intermediate words with the vector copy from the divis
 The copy avoids repeated computation of earlier word operations and retains the Lean core array execution boundary (B2).
 
 `lake test` runs all 21 D16 compact cases through both arithmetic and word models, including both flags.
-The assignment case at line 490 starts with nonzero previous words, so the expected value also checks their replacement.
+The derived assignment case at line 490 exercises uint64 construction, followed by a copy whose value is unchanged.
 All six D7 retarget cases run through the arithmetic function and both word entry points.
 The byte entry point starts from Core's mainnet hexadecimal limit.
 These expectations come from Core's tests and are not a comparison with Core's compiled code.
 
-The axioms of all 19 public theorems in `Work.Proofs.ArithUint256Compact`, `Work.Proofs.ArithUint256Bytes` and `Work.Proofs.RetargetWords`, by `#print axioms` with Lean `v4.35.0`:
+The axioms of all 22 public theorems in `Work.Proofs.ArithUint256Compact`, `Work.Proofs.ArithUint256Bytes` and `Work.Proofs.RetargetWords`, by `#print axioms` with Lean `v4.35.0`:
 
 | Axioms | Theorems |
 | --- | --- |
 | `propext`, `Quot.sound` | `Words.ofUInt64_value`, `Words.ofUInt64_toArith`, `Words.assignUInt64_toArith`, `Words.readLE32_toNat`, `Words.uintToArith256_value`, `Words.uintToArith256_toArith` |
-| `propext`, `Classical.choice`, `Quot.sound` | `Words.setCompact_toArith`, `Words.getCompact_toArith`, all seven `*_powLimit_literal` theorems, `Words.compareTo_gt`, `calculateDogecoinNextWorkRequiredWithWords_eq`, `calculateDogecoinNextWorkRequiredWords_eq`, `calculateDogecoinNextWorkRequiredBytes_eq` |
+| `propext`, `Classical.choice`, `Quot.sound` | `Words.setCompact_toArith`, `Words.getCompact_toArith`, all seven `*_powLimit_literal` theorems, `Words.compareTo_gt`, `calculateDogecoinNextWorkRequiredWithWords_eq`, `calculateDogecoinNextWorkRequiredWords_eq`, `calculateDogecoinNextWorkRequiredBytes_eq`, `retarget_mainnet_literal`, `retarget_testnet_literal`, `retarget_regtest_literal` |
 
 The `Words` and literal theorem names are in `DogeLib.Work.ArithUint256`.
-The three retarget theorem names are in `DogeLib.Work`.
+The retarget and network corollary names are in `DogeLib.Work`.
 
 ### Next-work selection and work parameters
 

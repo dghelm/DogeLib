@@ -6,7 +6,8 @@
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 FAIL=0
-WORK=$(mktemp -d)
+mkdir -p .lane
+WORK=$(mktemp -d .lane/check-decls.XXXXXX)
 trap 'rm -rf "$WORK"' EXIT
 
 # The fixtures contain `sorry` on purpose, so they are built without --wfail.
@@ -91,12 +92,101 @@ mod=${mod//\//.}
 if lake exe check-decls >"$WORK/unreachable" 2>&1; then
   echo "FAIL: an unreachable production module passed"; FAIL=1
 elif grep -qx "unreachable-module $mod: not imported by the default production roots" "$WORK/unreachable" \
-    && grep -q '^check-decls: .* declarations under DogeLib,' "$WORK/unreachable"; then
+    && grep -q '^check-decls: .* declarations under DogeLib and Refinement,' "$WORK/unreachable"; then
   echo "ok:   an unreachable production leaf is named and fails the check"
 else
   echo "FAIL: the unreachable production module was not named"; cat "$WORK/unreachable"; FAIL=1
 fi
 rm -f "$ORPHAN"
+
+# The refinement namespace must reject local and imported trust violations.
+PLANTED=Refinement/CheckDeclsPlanted.lean
+if [[ -e "$PLANTED" ]]; then
+  echo "FAIL: refinement fixture path already exists"; exit 1
+fi
+trap 'rm -rf "$WORK"; rm -f "$ORPHAN" "$PLANTED"' EXIT
+cat >"$PLANTED" <<'EOF'
+module
+public import Aeneas
+public import CheckDeclsForeign
+@[expose] public section
+namespace Refinement.CheckDeclsPlanted
+axiom assumed : False
+def importedAeneas := Aeneas.Std.core.pin.Pin Unit
+theorem native : 1 + 1 = 2 := by native_decide
+def reachesHidden := CheckDeclsForeign.hiddenNat
+def platform := System.Platform.numBits
+end Refinement.CheckDeclsPlanted
+EOF
+mkdir -p .lake/build/lib/lean/Refinement
+if ! lake env lean -o .lake/build/lib/lean/Refinement/CheckDeclsPlanted.olean "$PLANTED" >"$WORK/refinement-build" 2>&1; then
+  echo "FAIL: refinement fixture does not compile"; cat "$WORK/refinement-build"; exit 1
+fi
+if lake exe check-decls --scope Refinement --baseline /dev/null Refinement.CheckDeclsPlanted >"$WORK/refinement" 2>&1; then
+  echo "FAIL: refinement trust violations passed"; FAIL=1
+elif grep -q '^axiom Refinement.CheckDeclsPlanted.assumed:' "$WORK/refinement" \
+    && grep -q '^axioms Refinement.CheckDeclsPlanted.importedAeneas: depends on Aeneas.Std.core.pin.Pin, from a dependency' "$WORK/refinement" \
+    && grep -q '^native Refinement.CheckDeclsPlanted.native:' "$WORK/refinement" \
+    && grep -q '^reaches-opaque Refinement.CheckDeclsPlanted.reachesHidden:' "$WORK/refinement" \
+    && ! grep -q '^reaches-opaque Refinement.CheckDeclsPlanted.platform:' "$WORK/refinement"; then
+  echo "ok:   refinement rejects prohibited axioms, native proofs and other opaque dependencies"
+else
+  echo "FAIL: refinement trust violations were not reported"; cat "$WORK/refinement"; FAIL=1
+fi
+if lake exe check-decls >"$WORK/refinement-unreachable" 2>&1; then
+  echo "FAIL: an unreachable refinement module passed"; FAIL=1
+elif grep -q '^unreachable-module Refinement.CheckDeclsPlanted:' "$WORK/refinement-unreachable"; then
+  echo "ok:   an unreachable refinement leaf is named and fails the check"
+else
+  echo "FAIL: the unreachable refinement module was not named"; cat "$WORK/refinement-unreachable"; FAIL=1
+fi
+# Import the planted module through the actual library root to test default scope.
+cp Refinement.lean "$WORK/refinement-root"
+trap 'cp "$WORK/refinement-root" Refinement.lean; rm -rf "$WORK"; rm -f "$ORPHAN" "$PLANTED"' EXIT
+printf '\npublic import Refinement.CheckDeclsPlanted\n' >> Refinement.lean
+if ! lake build Refinement >"$WORK/planted-root-build" 2>&1; then
+  echo "FAIL: the planted refinement library does not build"; cat "$WORK/planted-root-build"; exit 1
+fi
+if lake exe check-decls >"$WORK/planted-production" 2>&1; then
+  echo "FAIL: the default check ignored a bad refinement declaration"; FAIL=1
+elif grep -q '^axiom Refinement.CheckDeclsPlanted.assumed:' "$WORK/planted-production" \
+    && grep -q '^axioms Refinement.CheckDeclsPlanted.importedAeneas:' "$WORK/planted-production" \
+    && grep -q '^native Refinement.CheckDeclsPlanted.native:' "$WORK/planted-production" \
+    && grep -q '^reaches-opaque Refinement.CheckDeclsPlanted.reachesHidden:' "$WORK/planted-production"; then
+  echo "ok:   the default production check includes bad refinement declarations"
+else
+  echo "FAIL: the default refinement findings were not reported"; cat "$WORK/planted-production"; FAIL=1
+fi
+cp "$WORK/refinement-root" Refinement.lean
+if ! lake build Refinement >"$WORK/restored-root-build" 2>&1; then
+  echo "FAIL: the restored refinement library does not build"; cat "$WORK/restored-root-build"; exit 1
+fi
+rm -f "$PLANTED"
+trap 'rm -rf "$WORK"; rm -f "$ORPHAN" "$PLANTED"' EXIT
+
+# The platform allowance must never apply to the specification namespace.
+SPEC_PLANTED=DogeLib/CheckDeclsPlatform.lean
+if [[ -e "$SPEC_PLANTED" ]]; then
+  echo "FAIL: specification fixture path already exists"; exit 1
+fi
+trap 'rm -rf "$WORK"; rm -f "$ORPHAN" "$PLANTED" "$SPEC_PLANTED"' EXIT
+cat >"$SPEC_PLANTED" <<'EOF'
+module
+public import Init.System.Platform
+@[expose] public section
+namespace DogeLib.CheckDeclsPlatform
+def platform := System.Platform.numBits
+end DogeLib.CheckDeclsPlatform
+EOF
+lake env lean -o .lake/build/lib/lean/DogeLib/CheckDeclsPlatform.olean "$SPEC_PLANTED" >"$WORK/platform-build" 2>&1
+if lake exe check-decls --scope DogeLib --baseline /dev/null DogeLib.CheckDeclsPlatform >"$WORK/platform" 2>&1; then
+  echo "FAIL: the specification reached the opaque platform word size"; FAIL=1
+elif grep -q '^reaches-opaque DogeLib.CheckDeclsPlatform.platform: unfolds to \[System.Platform.getNumBits\]' "$WORK/platform"; then
+  echo "ok:   the platform allowance applies only to refinement modules"
+else
+  echo "FAIL: the specification platform dependency was not reported"; cat "$WORK/platform"; FAIL=1
+fi
+rm -f "$SPEC_PLANTED"
 
 # The default check needs the production file inventory from the repository root.
 exe="$PWD/.lake/build/bin/check-decls"

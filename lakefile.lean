@@ -4,10 +4,14 @@ open Lake DSL System
 /-!
 Lake build for `DogeLib`.
 
-The package is pure Lean, with no dependencies beyond Lean core.
+The specification uses Lean core.
+The Rust refinement library also uses the pinned Aeneas backend and Mathlib.
 ARCHITECTURE.md describes the libraries and what each may import.
 The layout follows EthLib's `lakefile.lean` at commit `6a93711`.
 -/
+
+require aeneas from git
+  "https://github.com/AeneasVerif/aeneas.git" @ "d1e177bb9fdc17fa62e730d524ac905ba19776ed" / "backends/lean"
 
 package «DogeLib» where
 
@@ -45,6 +49,12 @@ compiles the code itself. -/
 lean_lib «Exports» where
   requiresModuleSystem := true
   roots := #[`DogeLib.Exports, `DogeLib.Serialization.Exports, `DogeLib.Transaction.Exports]
+  precompileModules := false
+
+/-- The extracted Rust model and its complete-result refinement proof. -/
+@[default_target]
+lean_lib «Refinement» where
+  requiresModuleSystem := true
   precompileModules := false
 
 /-- The oracle: answers requests in the record format of `docs/oracle.md`,

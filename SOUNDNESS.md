@@ -237,6 +237,29 @@ By `#print axioms` with Lean `v4.35.0`:
 
 Upstream proves two small facts in `decode_encode` and `encode_head` with `bv_decide`.
 Here `toUInt8_lt_fd` and `toUInt8_ne_zero` prove them: each converts the bytes to natural numbers and closes the goal with `omega` (C2).
+### Rust bounded CompactSize reader
+
+`Refinement.Rust.CompactSize.decode_refines` compares the extracted Rust model `DogeLibRust.decode` with `CompactSize.decodeBounded`.
+For every Rust-representable byte slice, the abstraction equals `some` of the specification's complete result.
+The abstraction preserves `truncated`, `nonCanonical`, `tooLarge`, the decoded value and the remainder after the consumed count.
+It maps a Rust panic or divergence to `none`, so the theorem also excludes those outcomes.
+The theorem has no acceptance precondition.
+
+`consumed_bounds` says that a successful consumed count is at most the input length and belongs to 1, 3, 5 or 9.
+Both theorems hold on 32- and 64-bit platforms.
+Their proofs do not select a platform word size.
+B6 records the slice representation and extraction boundaries.
+
+The Rust integration tests run the 20 bounded cases from `tests/KnownAnswers.lean` and Core's 52-value power-of-two sweep.
+The expected values and errors come from Core's assertions and a reading of D1 and D21.
+These tests run the compiled Rust reader, without running Core or the generated Lean model.
+
+By `#print axioms` with Lean `v4.35.0`:
+
+| Declaration | Axioms |
+| --- | --- |
+| `DogeLibRust.join`, `DogeLibRust.decode`, `Refinement.Rust.CompactSize.abstractResult`, `Refinement.Rust.CompactSize.decode_refines`, `Refinement.Rust.CompactSize.consumed_bounds` | `propext`, `Classical.choice`, `Quot.sound` |
+
 ### Counted lists
 
 `DogeLib.Serialization.CountedList` defines a counted list: a CompactSize count, then that many elements.
@@ -955,7 +978,7 @@ Any later foreign boundary, such as a C or Rust binding, is listed here with its
 `@[implemented_by]` and `@[extern]` make the compiled code run something other than the definition, with no proof that the two agree.
 `@[csimp]` replaces a function with one proved equal to it, so it adds no logical trust. The code that runs is still not the definition a reader reads.
 
-The `DogeLib` and `Proofs` libraries have none of the three, by `lake exe check-decls`.
+The `DogeLib`, `Proofs` and `Refinement` libraries have none of the three, by `lake exe check-decls`.
 The fixtures in `scripts/CheckDeclsTest` contain them on purpose, to test the check, and no library imports them.
 
 | Declaration | Kind | Proof-backed | Justification |
@@ -965,7 +988,23 @@ The fixtures in `scripts/CheckDeclsTest` contain them on purpose, to test the ch
 
 A refinement theorem about extracted Rust is about the Lean model that Charon and Aeneas produce.
 It trusts the extraction, any manually modeled dependency, and the Rust compiler and runtime.
-The extracted model is an implementation artifact. It never becomes the specification.
+The extracted model is an implementation artifact.
+It never becomes the specification.
+
+`Refinement/Rust/src/lib.rs` implements the bounded CompactSize reader.
+Charon and Aeneas at the pins in SOURCES.md produce `Refinement/Rust/Generated/DogelibCompactsize.lean`.
+`Refinement/Rust/regenerate.sh --check` compares a fresh extraction with the committed model.
+The refinement theorem is about that Lean model, not a proof of the extractors or compiled Rust.
+The Rust compiler, standard-library models, extraction tools and runtime remain trusted.
+
+Aeneas represents each input byte with an eight-bit vector and each decoded value with a 64-bit vector.
+The abstraction maps those vectors directly to Lean `UInt8` and `UInt64`.
+Aeneas slices carry a proof that their length fits Rust `usize`.
+This length bound limits the input representation, not the acceptance behavior of the reader.
+
+Rust usize is modeled through Lean core's opaque platform word size.
+The refinement holds on both 32- and 64-bit platforms.
+The proof does not case on that word size, and it assumes neither 32 nor 64 separately.
 
 ## Gap C: is the proof itself sound?
 
@@ -974,11 +1013,18 @@ The extracted model is an implementation artifact. It never becomes the specific
 Every theorem trusts the Lean kernel, and whichever of the three standard axioms it uses: `propext`, `Classical.choice` and `Quot.sound`.
 Those three are the allowed set. A theorem may use fewer.
 
-`lake exe check-decls` checks the transitive axiom dependencies of safe declarations under `DogeLib`, including private proof bodies.
+`lake exe check-decls` checks the transitive axiom dependencies of safe declarations under `DogeLib` and `Refinement`, including private proof bodies.
 It rejects `sorryAx` even when an unfinished proof comes from an imported module outside that scope.
 Unsafe declarations are reported separately.
 Detection does not require attribution to a declaration that uses the axiom directly.
 It does not check the kernel, and it does not show that the axioms are consistent.
+
+The named platform-size exception permits exactly `System.Platform.getNumBits` as a reachable opaque from `Refinement` modules.
+This Lean core parameter supplies the word size of Rust `usize`.
+The exception does not permit an opaque declaration in either library, another reachable opaque, or this parameter in a `DogeLib` specification definition.
+The self-test rejects those cases, imported Aeneas axioms and native proofs.
+The allowed axioms remain the same three standard axioms.
+Aeneas and Mathlib are dependencies outside the checked module namespaces, but their transitive axiom dependencies remain checked at each in-scope use.
 
 ### C2. Tactics that trust compiled code
 
@@ -991,7 +1037,7 @@ btc-verified allows the axioms that `bv_decide` records, and its `CompactSize.de
 A proof adopted from btc-verified has those steps replaced by proofs the kernel checks alone (design record 0002, section 5).
 In `DogeLib.Serialization.Proofs.CompactSize`, `toUInt8_lt_fd` and `toUInt8_ne_zero` replace them.
 
-No theorem in the `DogeLib` and `Proofs` libraries uses them, by `lake exe check-decls`.
+No theorem in the `DogeLib`, `Proofs` and `Refinement` libraries uses them, by `lake exe check-decls`.
 The fixtures in `scripts/CheckDeclsTest` use them on purpose.
 
 ### C3. Declarations the kernel did not check
@@ -999,11 +1045,11 @@ The fixtures in `scripts/CheckDeclsTest` use them on purpose.
 A metaprogram can add a declaration to the environment without the kernel checking it.
 An independent checker that replays the environment, such as `lean4checker`, would catch it, but none runs yet.
 
-The default declaration check loads `DogeLib`, `DogeLib.Proofs` and `DogeLib.Exports` with their private proof bodies.
-It requires every `.lean` file under `DogeLib/`, and `DogeLib.lean`, to appear in that imported environment.
+The default declaration check loads `DogeLib`, `DogeLib.Proofs`, `DogeLib.Exports` and `Refinement` with their private proof bodies.
+It requires every `.lean` file under `DogeLib/` and `Refinement/`, plus both library roots, to appear in that imported environment.
 An unreachable module fails the check, including a leaf omitted from its layer root.
 This reachability check does not replay kernel checks or detect a metaprogram that bypassed them.
-A future `Refinement/` library must extend the default imports, checked scope and file inventory together.
+The default imports, checked namespaces and file inventory include the extracted model and its proof.
 
 ## Gap D: does the use of DogeLib hold together?
 

@@ -24,6 +24,9 @@ Such a definition cannot be unfolded either.
 Proofs are exempt, because nothing unfolds them.
 The `Exports` modules are exempt, because IO belongs there.
 
+Only `Refinement` modules may reach `System.Platform.getNumBits`, the opaque platform word size used to model Rust `usize`.
+Every other reachable opaque remains a finding.
+
 A finding is reported once, at the declaration in scope that first brings it in.
 A theorem proved by `native_decide` is reported, and the theorems that use it are not.
 
@@ -279,7 +282,8 @@ def check (env : Environment) (scope : Name) : Array Finding := Id.run do
   for (n, c) in spec do
     if let .defnInfo v := c then
       let reached := (opaqueMemo.find? n).getD {}
-      let fresh := frontier env scope opaqueMemo (dropPanicMessages v.value).getUsedConstants reached
+      let fresh := (frontier env scope opaqueMemo (dropPanicMessages v.value).getUsedConstants reached).filter
+        fun o => !(o == `System.Platform.getNumBits && inScope env `Refinement n)
       unless fresh.isEmpty do
         out := out.push ⟨"reaches-opaque", n, s!"unfolds to {fresh.take 3}"⟩
   for (thm, target) in csimpTheorems env do
@@ -290,14 +294,18 @@ def check (env : Environment) (scope : Name) : Array Finding := Id.run do
 /-! ## Production module reachability -/
 
 /-- The roots that load every production module.
-A future `Refinement/` library must extend these imports, the checked scope and the file inventory together. -/
-def defaultModules : List Name := [`DogeLib, `DogeLib.Proofs, `DogeLib.Exports]
+Both the specification libraries and the Rust refinement library belong to the production check. -/
+def defaultModules : List Name := [`DogeLib, `DogeLib.Proofs, `DogeLib.Exports, `Refinement]
+
+/-- The production module namespaces, excluding dependency libraries. -/
+def defaultScopes : List Name := [`DogeLib, `Refinement]
 
 /-- Production modules on disk that the imported environment does not contain.
 The inventory includes leaf files, even when a library root omits them. -/
 def unreachableModules (env : Environment) : IO (Array Name) := do
   let files ← (System.FilePath.walkDir "DogeLib")
-  let files := files.push "DogeLib.lean"
+  let rustFiles ← System.FilePath.walkDir "Refinement"
+  let files := (files ++ rustFiles).push "DogeLib.lean" |>.push "Refinement.lean"
   let imported : NameSet := env.header.modules.foldl (fun s m => s.insert m.module) {}
   let mut missing := #[]
   for path in files do
@@ -354,7 +362,8 @@ unsafe def run (args : List String) : IO UInt32 := do
   for m in missing do
     IO.eprintln s!"unreachable-module {m}: not imported by the default production roots"
   let baseline ← readBaseline baselinePath
-  let findings := check env scope
+  let scopes := if checkProduction then defaultScopes else [scope]
+  let findings := scopes.foldl (fun acc s => acc ++ check env s) #[]
   let isListed (f : Finding) := baseline.contains (f.kind, f.decl)
   let fresh := findings.filter (!isListed ·)
   for f in fresh do
@@ -362,8 +371,9 @@ unsafe def run (args : List String) : IO UInt32 := do
   let stale := baseline.filter fun (kind, decl) => !findings.any (fun f => f.kind == kind && f.decl == decl)
   for (kind, decl) in stale do
     IO.println s!"stale baseline entry, no longer found: {kind} {decl}"
-  let nDecls := env.constants.toList.countP fun (n, _) => inScope env scope n
-  IO.println s!"check-decls: {nDecls} declarations under {scope}, {findings.size} findings, {findings.size - fresh.size} in the baseline, {fresh.size} new, {stale.length} stale"
+  let nDecls := env.constants.toList.countP fun (n, _) => scopes.any (fun s => inScope env s n)
+  let scopeLabel := if checkProduction then "DogeLib and Refinement" else toString scope
+  IO.println s!"check-decls: {nDecls} declarations under {scopeLabel}, {findings.size} findings, {findings.size - fresh.size} in the baseline, {fresh.size} new, {stale.length} stale"
   return if missing.isEmpty && fresh.isEmpty && stale.isEmpty then 0 else 1
 
 end CheckDecls

@@ -37,14 +37,18 @@ The implementation never becomes the specification.
 | `DogeLib` | The specification | On |
 | `Proofs` | Properties, rooted at each layer's `Proofs` tree | Off |
 | `Exports` | The oracle, `dogelib-oracle`, and later binding-facing code | Off: with it on, Lake reports a build cycle, because the library contains the executable's root module |
-| `Refinement` | Extracted implementation models and their refinement proofs. Added with the first refinement. | Off |
+| `Refinement` | Extracted Rust implementation models and their refinement proofs. Imports the pinned Aeneas backend and Mathlib. | Off |
 | `check-decls` | An executable that checks the axioms and substitutions of every compiled declaration | — |
 
 Each library uses the Lean module system (`requiresModuleSystem := true`), as EthLib does.
 Proofs live in their own library, so the specification builds and links without them.
 The oracle lives in `Exports`, so a Lean project that imports the specification gets no IO adapter.
 [docs/oracle.md](docs/oracle.md) defines its record format.
-Heavy mathematical and probabilistic dependencies stay in `Proofs` and in model code.
+
+The `Refinement` library imports Aeneas and Mathlib.
+The specification, `Proofs` and `Exports` import neither dependency.
+`scripts/CheckRefinementImports.lean` checks those transitive import boundaries.
+Heavy mathematical and probabilistic dependencies stay outside the specification.
 
 ## Layout
 

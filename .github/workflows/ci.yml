@@ -2,8 +2,7 @@
 # and run the tests of the repository tools.
 #
 # Adapted from EthLib's ci.yml at commit 6a93711 (CC0 1.0), with the same
-# pinned actions. The build has no dependencies and takes seconds, so this
-# workflow keeps no build cache and records no timing.
+# pinned actions. Mathlib supplies cached artifacts for the Rust refinement.
 
 name: ci
 
@@ -33,12 +32,15 @@ jobs:
       - uses: leanprover/lean-action@50fcf42d2e460296f1a34b402e990d1b24f8b596 # v1.6.0
         with:
           auto-config: false
-          use-mathlib-cache: false
+          use-mathlib-cache: true
           use-github-cache: false
 
       # An unfinished proof only warns, so warnings have to be fatal.
       - name: build
         run: lake build --wfail
+
+      - name: import boundaries
+        run: lake env lean --run scripts/CheckRefinementImports.lean
 
       # Every compiled declaration: its axioms, and anything the kernel cannot
       # unfold or the compiler runs differently. Only the findings listed in

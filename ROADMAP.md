@@ -78,7 +78,10 @@ From design record 0001, section 9. A first release has:
 - A statement of proof assumptions, execution boundaries, and unsupported areas.
 - Validation reports identifying the exact revisions and commands actually run ([report command](BUILDING.md#validation-reports)).
 
-If the Rust refinement is not in the first release, the release says so and makes no Rust verification claim.
+The Rust bounded-reader implementation and its extracted model are in `Refinement/Rust/`.
+`decode_refines` proves complete-result agreement with `CompactSize.decodeBounded` for every Rust-representable slice.
+The theorem includes failures and the remaining input, and it holds on 32- and 64-bit platforms.
+Charon, Aeneas and the Rust compiler remain trusted boundaries (SOUNDNESS.md, B6).
 
 ## Decisions
 

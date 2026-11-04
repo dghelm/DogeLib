@@ -320,8 +320,8 @@ theorem take_one_set_zero {α : Type} {l : List α} (x : α) (h : l ≠ []) : (l
   | cons y ys => rfl
 
 /--
-Hypotheses: every instruction of the script code parses, and the transaction has fewer than 2^32 inputs.
-Then for every input index `nIn` and both flags, the inputs of the copy encode as `legacyInputsBytes`.
+Hypotheses: every instruction of the script code parses, the transaction has fewer than 2^32 inputs, and `nIn` is the index of an input.
+Then for both flags, the inputs of the copy encode as `legacyInputsBytes`.
 -/
 theorem encode_referenceInputs (sc : Script) (hParse : (scanOps sc.bytes.val).2 = []) (tx : Transaction)
     (nIn : UInt32) (z a : Bool) (hLen : tx.inputs.val.length < 2 ^ 32)

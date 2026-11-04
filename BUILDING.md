@@ -19,7 +19,8 @@ bash scripts/test_oracle.sh
 The explicit `--skip-refinement` flag prints `Refinement NOT checked` in the declaration-check summary.
 It does not establish any result for the Rust refinement library.
 
-For the full production checks, fetch the optional package's cache and build both packages:
+Use this recommended local sequence for the full production checks.
+Fetch the optional package's cache, then build both packages before the default declaration check:
 
 ```bash
 lake -d Refinement exe cache get
@@ -32,7 +33,8 @@ The default declaration check fails if the refinement package is absent, unbuilt
 It names the reason and never silently checks fewer modules.
 Production CI uses the default command.
 The check inspects the built Refinement oleans.
-After local edits, run `lake -d Refinement build --wfail` before running the declaration check.
+After local edits, rebuild both packages in this order before running the default declaration check.
+This sequence prevents the check from reading stale refinement artifacts.
 
 Do not build Mathlib from source on a shared machine.
 Its cached dependency directory occupies about 7.2 GiB per worktree, measured with this toolchain.

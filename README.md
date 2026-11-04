@@ -6,15 +6,14 @@ It makes existing Dogecoin consensus behavior precise, and states proposed proto
 
 ## Status
 
-DogeLib defines transaction serialization formats and legacy signing commitments, with proofs and known answers.
-[COVERAGE.md](COVERAGE.md) records the implemented coverage, per operation and per kind of evidence.
-The [Core harness](docs/oracle.md#the-core-harness) compares selected operations with the pinned Dogecoin Core libraries.
-Rust refinement and full-node validation are not implemented.
+DogeLib defines transaction serialization formats, legacy signing commitments and proof-of-work arithmetic, with proofs and known answers.
+The bounded CompactSize reader has a refinement proof for a Lean model extracted from Rust.
+Full-node validation is not implemented.
 
-The field-by-field preimage construction is proved equal to the transaction-transformation reference under the hypotheses of `legacySignatureHashPlan_eq_reference`.
-The theorem requires fully parsed script code, fewer than 2^32 inputs and fewer than 2^32 outputs.
-The implementation constructs the whole preimage as a byte list before hashing.
-An incremental hash sink and measured memory or speed gains are later work ([ROADMAP.md](ROADMAP.md)).
+[COVERAGE.md](COVERAGE.md) records the detailed evidence per operation.
+[SOUNDNESS.md](SOUNDNESS.md) explains theorem hypotheses, assumptions and execution boundaries, including extraction trust.
+The [Core harness](docs/oracle.md#the-core-harness) compares selected operations with the pinned Dogecoin Core libraries.
+[ROADMAP.md](ROADMAP.md) records completed milestones and next work.
 
 ## Documents
 

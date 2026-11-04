@@ -31,22 +31,22 @@ Gap D asks whether the use of DogeLib holds together.
 
 | ID | Risk | Mitigation in place | Applies to |
 |----|------|---------------------|------------|
-| A1 | A definition does not match the pinned Dogecoin behavior | Source mapping in `SOURCES.md`, by review only. The 256-bit word models have arithmetic equivalence proofs, including division and its comparison and subtraction dependencies. The division model represents Core's zero-divisor exception. The compact, uint64 construction, byte conversion and composed retarget models also have arithmetic equivalence proofs. Their correspondence to Core remains by review. SHA-256 has a proof against a FIPS 180-4 model, and NIST CAVP known answers. Known answers from Core's genesis data test the integer codecs. Core's own test cases are known answers for CompactSize, the legacy signature hash, the compact encoding and the difficulty retarget. The scripts of the genesis coinbase are known answers for counted lists. The genesis coinbase is a known answer for the transaction codec, reader and ID. `scripts/compare_core.py` runs the oracle and Core's own code at the pin on 267,800 requests. They cover CompactSize, both transaction reader modes, serialization, transaction and witness hashes, and the legacy signature hash. | P R I F |
+| A1 | A definition does not match the pinned Dogecoin behavior | Source mappings, independent known answers and comparisons with pinned Core guard against a wrong definition. Lean model equivalence still requires source review. See [A1](#a1-a-wrong-definition) and [operation evidence](COVERAGE.md#operations). | P R I F |
 | A2 | A theorem holds only under a hypothesis | Policy: each conditional theorem lists its hypotheses here and in `COVERAGE.md` | P I |
 | A3 | Timing reveals secret data | None: no constant-time claim | R I |
 | A4 | A security theorem idealises a primitive | None: no security theorem yet | P |
 | A5 | A rule depends on a protocol context that the definition does not model | Policy: each operation records its mode, network and era in `SOURCES.md` | P R I F |
-| B1 | The Lean compiler, the C compiler or the Lean runtime is wrong | `lake test` runs the NIST CAVP SHA-256 vectors, Core's compact-encoding and retarget test cases, and the codec known answers through the compiled code. `scripts/compare_core.py` runs the compiled oracle against Core | R |
+| B1 | The Lean compiler, the C compiler or the Lean runtime is wrong | Known answers and Core comparisons exercise the compiled specification on finite inputs. They do not prove compiler or runtime correctness. See [B1](#b1-the-compilers-and-the-runtime) and [operation evidence](COVERAGE.md#operations). | R |
 | B2 | Lean core runs code other than its definitions | Lean core is a declared baseline | R |
 | B3 | Elaboration runs native code | None yet | P |
-| B4 | The oracle's IO adapter or a foreign boundary is wrong | `scripts/test_oracle.sh` runs fixtures with independent expected values, Core's `sighash.json` and all transaction corpus records through the witness operations, plus the base-mode records through `tx.decode_base`. `lake exe check-decls` checks the `Exports` library. `scripts/compare_core.py` compares the oracle with the Core harness, and `scripts/test_compare_core.py` checks that the comparison can fail. | R F |
+| B4 | The oracle's IO adapter or a foreign boundary is wrong | Oracle fixtures and Core comparisons check adapter results on the recorded inputs, and the declaration check includes `Exports`. See [B4](#b4-the-oracle-and-foreign-boundaries) for the trusted conversions and harness boundaries. | R F |
 | B5 | This repository substitutes compiled code | `lake exe check-decls` fails on any new substitution | R |
-| B6 | Extraction or the Rust toolchain is wrong | None: no extraction yet | I |
+| B6 | Extraction or the Rust toolchain is wrong | `decode_refines` relates the extracted Rust reader model to `decodeBounded`. Charon, Aeneas, library models, the Rust compiler and runtime remain trusted. See [B6](#b6-extraction-and-the-rust-toolchain). | I |
 | C1 | The Lean kernel or its axioms are unsound | `lake exe check-decls` rejects transitive axiom dependencies outside the allowed set, including imported unfinished proofs. Kernel soundness and axiom consistency remain trusted. | P I |
 | C2 | A proof trusts compiled code | `lake exe check-decls` fails on any use | P I |
 | C3 | A declaration reached the environment unchecked | No kernel replay. The declaration check requires every production module to be reachable from its default roots. | P I |
 | D1 | A client misuses an operation, such as a prefix decoder where complete consumption is required | Policy: each public operation documents its input domain and consumption contract | R I |
-| D2 | A dependency changes | Pins in `SOURCES.md` and `lean-toolchain`. The package has no Lake dependencies. | P R I |
+| D2 | A dependency changes | Source and toolchain pins constrain dependency changes. The root package has no Lake dependencies, while the separate refinement package owns Aeneas and Mathlib. See [D2](#d2-dependency-changes). | P R I |
 | D3 | The fixtures are wrong | Each fixture records its provenance. The NIST CAVP files and Core's `sighash.json` are pinned by digest, and CI checks the pins. Core's test cases are copied into `tests/KnownAnswers.lean` with their file and line. | F |
 
 ## What the proofs say
@@ -894,7 +894,8 @@ Script and ledger work will need explicit context.
 ## Gap B: does the code that runs match the definitions?
 
 DogeLib's theorems are about the Lean definitions, and everything between them and the running code is trusted.
-A proof about extracted Rust narrows that gap for the extracted code only.
+A refinement proof relates the extracted functional Lean model to the specification.
+Extraction and compiled Rust remain trusted boundaries (B6).
 
 ```text
  Dogecoin behavior --A-- Lean definition == proof == theorem
@@ -1070,6 +1071,9 @@ Each public operation documents its input domain, its failure behavior and wheth
 
 A change to a pinned dependency can change a definition or a proof that DogeLib relies on.
 `SOURCES.md` records the pins, and a pin changes only in a reviewed change of its own.
+The root DogeLib package has no Lake dependencies.
+The separate package under `Refinement/` requires DogeLib and the pinned Aeneas backend, which brings Mathlib.
+[ARCHITECTURE.md](ARCHITECTURE.md#lake-libraries) explains the import boundaries, and [BUILDING.md](BUILDING.md#build-and-check) gives the build sequence.
 
 ### D3. Wrong fixtures
 

@@ -360,12 +360,15 @@ The equality is between two Lean definitions. It says nothing about memory use o
 
 Each hypothesis is needed for a reason.
 The production serializer reduces the counts modulo 2^32, and `SignatureHashOld` does not.
-On a script that ends in a short push, the serializer drops the rest of the push and `FindAndDelete` keeps it.
+On a script that ends in a short push, the serializer writes the bytes up to the cursor of the failed `GetOp` and omits the unread rest. `FindAndDelete` keeps the rest.
 `legacyPlans_differ_shortPush` shows this on the script `4c 05 aa`.
 So for such a script the two Core functions commit to different bytes, and only the production function is consensus code.
 
 `lake test` runs Core's 500 corpus records and the hand-derived preimages through both plans.
 Every corpus script parses fully, so the corpus does not test the difference.
+
+Core's `FindAndDelete` counts the copies it removes in an `int`, and `findAndDelete` counts them in a `Nat`.
+The Core compatibility of `findAndDelete` excludes a count that overflows an `int`.
 
 By `#print axioms` with Lean `v4.35.0`:
 

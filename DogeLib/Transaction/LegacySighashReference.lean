@@ -26,10 +26,12 @@ The counts are `Nat` values, not `unsigned int` values.
 `findAndDelete` follows `CScript::FindAndDelete`, `src/script/script.h` lines 570 to 596 (D24).
 It removes copies of a pattern that start at an instruction boundary.
 When `GetOp` fails, it keeps every byte from the start of the failed instruction to the end.
-The serializer of `legacySignatureHashPlan` drops those bytes, so the two definitions differ on a script that ends in a short push.
+The serializer of `legacySignatureHashPlan` writes the bytes up to the cursor of the failed `GetOp`, and omits the unread rest of the push.
+So the two definitions differ on a script that ends in a short push.
 
 Core's `FindAndDelete` counts the copies in an `int`. Here the count is a `Nat`.
-They differ only for a script with at least 2^31 copies, which is longer than any `CScript`.
+The Core compatibility of `findAndDelete` excludes a count that overflows an `int`.
+The equality of the two plans is between Lean definitions, so it needs no hypothesis about the count.
 
 `DogeLib.Transaction.Proofs.LegacySighashReference` proves that the two plans are equal when no instruction of the script code fails to parse and the transaction has fewer than 2^32 inputs and 2^32 outputs.
 -/

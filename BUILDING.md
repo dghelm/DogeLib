@@ -102,3 +102,47 @@ On a machine that other builds share, limit the CPUs of the process instead:
 ```bash
 taskset -c 0-7 nice -n 10 lake build --wfail
 ```
+
+## Validation reports
+
+Produce a report of all automated gates in the [AGENTS.md checks table](AGENTS.md#checks):
+
+```bash
+python3 -I scripts/validation_report.py --core-clone <dogecoin-git-clone>
+```
+
+The runner needs Python 3.10 or later and only the standard library.
+Install the tools required by the selected gates, including `uv` for the writing checks.
+On a shared machine, prefix the command with `taskset -c 0-7 nice -n 19`.
+The gates run one at a time from the repository root.
+The runner executes the table's commands with Bash, so review table edits as code.
+
+The default output is `build/validation/<commit>/report.md`, with the commit shortened to 12 characters.
+Use `--output .lane/validation/report.md` to choose another ignored destination.
+Each report has an adjacent log directory, which must not exist before the run.
+Keep the report and its logs together, and do not commit them.
+
+List the gate names and commands, or select gates by their names:
+
+```bash
+python3 -I scripts/validation_report.py --list
+python3 -I scripts/validation_report.py --gates build,declaration-check --output .lane/subset/report.md
+```
+
+Every gate that the runner skips is **not run**, including manual reviews and the Core comparison without `--core-clone`.
+The runner shell-quotes the Core clone path before it replaces the table's placeholder.
+Any remaining placeholder also leaves the gate **not run**.
+A failed gate does not stop later gates, but makes the runner exit with status 1.
+The report updates after each completed gate.
+An interrupt stops the gate's process group and records its partial output.
+The Writing gate is advisory, and its findings can accompany a zero exit status.
+
+The header records the commit, tree status, toolchain, compiler versions, Core pin, Core stamp, platform and UTC date.
+A dirty tree has a warning on the first line, a status log and a separate tracked diff.
+The status log lists untracked files, but the diff does not contain their contents.
+Each gate records its exact command, exit status, duration, final output lines and full log path.
+The Core stamp records existing libraries, so the Core gate's result determines whether this run built the harness successfully.
+
+The `validation` workflow runs on manual dispatch and tag pushes, and uploads the report and logs even after gate failures.
+A report records checks on one machine at one commit.
+It is not a proof, and CI results on other commits are separate evidence.

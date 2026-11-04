@@ -1399,13 +1399,15 @@ end KnownAnswers.LegacySighash
 /-!
 ## Difficulty retarget
 
-Runs every `get_next_work_*` case of Dogecoin Core's `src/test/dogecoin_tests.cpp` at commit `e0a1c15` (SOURCES.md, D7) through the compiled `calculateDogecoinNextWorkRequired`.
+The six `get_next_work_*` cases come from Dogecoin Core `e0a1c15`, `src/test/dogecoin_tests.cpp` (SOURCES.md, D7).
+They run through the arithmetic retarget and both word entry points.
 Each case gives the last block's height, time and `nBits`, the first block time, the parameter set, and the expected `nBits`.
 The inputs and the expected values are copied from the test file, with the line of each value.
 
 ## Compact encoding
 
-Runs Core's `bignum_SetCompact` test of `src/test/arith_uint256_tests.cpp` at the same commit (SOURCES.md, D16) through the compiled `setCompact` and `getCompact`.
+The `bignum_SetCompact` cases come from `src/test/arith_uint256_tests.cpp` at the same commit (SOURCES.md, D16).
+They run through the arithmetic and word compact models.
 Each case gives the compact input, the value that `GetHex` shows, the expected `GetCompact` result and the two flags.
 -/
 
@@ -1476,8 +1478,11 @@ def checkRetarget : IO Nat := do
     failures := failures + 1
   for c in retargetCases do
     let got := calculateDogecoinNextWorkRequired c.params c.nHeight c.nLastBlockTime c.nFirstBlockTime c.nBits
-    if got != c.expected then
-      IO.eprintln s!"FAIL dogecoin_tests.cpp:{c.line} {c.name}: got {hex32 got}, expected {hex32 c.expected}"
+    let wordGot := calculateDogecoinNextWorkRequiredWords c.params c.nHeight c.nLastBlockTime c.nFirstBlockTime c.nBits
+    let byteGot := (ArithUint256.targetBytesOfHex ArithUint256.mainnetPowLimitHex).bind fun limit =>
+      calculateDogecoinNextWorkRequiredBytes c.params limit c.nHeight c.nLastBlockTime c.nFirstBlockTime c.nBits
+    if got != c.expected || wordGot != some c.expected || byteGot != some c.expected then
+      IO.eprintln s!"FAIL dogecoin_tests.cpp:{c.line} {c.name}: got {hex32 got}, words {wordGot}, bytes {byteGot}, expected {hex32 c.expected}"
       failures := failures + 1
   IO.println s!"dogecoin_tests.cpp get_next_work_*: {retargetCases.size} cases, {failures} failures"
   return failures
@@ -1540,15 +1545,24 @@ def checkCompact : IO Nat := do
         let r := ArithUint256.setCompact n
         (r.value, some (r.fNegative, r.fOverflow))
       | none => (ArithUint256.ofNat (c.value.getD 0), none)
+    let (wordValue, wordFlags) := match c.nCompact with
+      | some n =>
+        let r := ArithUint256.Words.setCompact n
+        (r.value, some (r.fNegative, r.fOverflow))
+      | none => (ArithUint256.Words.assignUInt64 (fun _ => 0xffffffff)
+          (UInt64.ofNat (c.value.getD 0)), none)
     let mut ok := true
     if let some v := c.value then
-      if value.val != v then ok := false
+      if value.val != v || ArithUint256.Words.value wordValue != v then ok := false
     if let some e := c.compact then
-      if ArithUint256.getCompact value c.negativeArgument != e then ok := false
+      if ArithUint256.getCompact value c.negativeArgument != e ||
+          ArithUint256.Words.getCompact wordValue c.negativeArgument != e then ok := false
     if let some (neg, ovf) := flags then
       if c.fNegative != some neg || c.fOverflow != some ovf then ok := false
+    if let some (neg, ovf) := wordFlags then
+      if c.fNegative != some neg || c.fOverflow != some ovf then ok := false
     if !ok then
-      IO.eprintln s!"FAIL arith_uint256_tests.cpp:{c.line}: value {value.val}, flags {flags}"
+      IO.eprintln s!"FAIL arith_uint256_tests.cpp:{c.line}: value {value.val}, flags {flags}, word value {ArithUint256.Words.value wordValue}, word flags {wordFlags}"
       failures := failures + 1
   IO.println s!"arith_uint256_tests.cpp bignum_SetCompact: {compactCases.size} cases, {failures} failures"
   return failures

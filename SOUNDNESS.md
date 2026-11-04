@@ -31,7 +31,7 @@ Gap D asks whether the use of DogeLib holds together.
 
 | ID | Risk | Mitigation in place | Applies to |
 |----|------|---------------------|------------|
-| A1 | A definition does not match the pinned Dogecoin behavior | Source mapping in `SOURCES.md`, by review only. SHA-256 has a proof against a FIPS 180-4 model, and NIST CAVP known answers. Known answers from Core's genesis data test the integer codecs. Core's own test cases are known answers for CompactSize, the compact encoding and the difficulty retarget. The scripts of the genesis coinbase are known answers for counted lists. No comparison against a running Core yet. | P R I F |
+| A1 | A definition does not match the pinned Dogecoin behavior | Source mapping in `SOURCES.md`, by review only. SHA-256 has a proof against a FIPS 180-4 model, and NIST CAVP known answers. Known answers from Core's genesis data test the integer codecs. Core's own test cases are known answers for CompactSize, the compact encoding and the difficulty retarget. The scripts of the genesis coinbase are known answers for counted lists. The genesis coinbase is a known answer for the transaction codec, reader and ID. No comparison against a running Core yet. | P R I F |
 | A2 | A theorem holds only under a hypothesis | Policy: each conditional theorem lists its hypotheses here and in `COVERAGE.md` | P I |
 | A3 | Timing reveals secret data | None: no constant-time claim | R I |
 | A4 | A security theorem idealises a primitive | None: no security theorem yet | P |
@@ -251,6 +251,54 @@ By `#print axioms` with Lean `v4.35.0`:
 
 The upstream file uses no `bv_decide` (C2).
 
+### Transactions
+
+`DogeLib.Transaction` defines the fields of a transaction and its base serialization, the format without witness data (SOURCES.md, D4).
+The types keep the raw bits of every field and check nothing.
+`TxOut.value` and `Transaction.version` are the bits of Core's `int64_t` and `int32_t`.
+`TxOut.toInt_amount` and `Transaction.toInt_signedVersion` say that the signed values are their two's-complement readings.
+The theorems are in `DogeLib.Transaction.Proofs` and `DogeLib.Serialization.Proofs.Reader`.
+
+Each codec is the codec of the tuple of its fields, carried to the structure by `Codec.ofEquiv`.
+So the codec laws (`instLawfulCodecOutPoint` to `instLawfulCodecTransaction`) and the packed agreement (`instLawfulPackedCodecOutPoint` to `instLawfulPackedCodecTransaction`) follow by composition.
+The codec reads counts with the generic CompactSize decoder, so it is not Core's reader.
+
+`Transaction.readBase` is Core's `UnserializeTransaction` with `SERIALIZE_TRANSACTION_NO_WITNESS`.
+It is built from readers of the fields with `readFixed`, `readPair`, `readMap` and `CountedList.decodeBounded`.
+`ReaderAgrees c r P` says that the reader `r` accepts exactly what the codec `c` accepts with a value that satisfies `P`, with the same value and remainder.
+Each construction preserves it (`readFixed_agrees`, `readPair_agrees`, `readMap_agrees`, `CountedList.decodeBounded_agrees`).
+`Transaction.WithinMaxSize` says that the number of inputs, the number of outputs and the length of each script are at most `0x02000000`.
+For all bytes, transactions and remainders:
+
+- `Transaction.readBase_eq_ok_iff`: `readBase bs = ok (tx, rest)` exactly when the codec decodes `bs` as `(tx, rest)` and `tx.WithinMaxSize`.
+- `Transaction.readBase_encode`: for every `tx` with `WithinMaxSize`, `readBase (encode tx ++ rest) = ok (tx, rest)`.
+- `Transaction.decodeBaseComplete_eq_ok_iff`: the complete reader returns `tx` exactly when `readBase` returns `tx` with no remainder.
+
+`Transaction.txid_val` says that the bytes of the transaction ID are the double SHA-256 digest of the base serialization.
+So the fallback value of `digestToHash256` is never the ID.
+
+These theorems relate the reader to the codec, and the codec to a reading of D4 (A1).
+No theorem says which error the reader reports, or that the order of reads is Core's.
+`lake test` checks the errors and their order on short inputs.
+It also reads the genesis coinbase, whose ID must be the merkle root that Core asserts (D9).
+Core itself does not run, and its corpus `tx_valid.json` is not yet a known answer (issue #22).
+
+The reader is the base mode only.
+Without `SERIALIZE_TRANSACTION_NO_WITNESS`, Core reads an empty input list as a marker and then a flags byte (A5).
+A transaction with no inputs, `01000000 00 01 …`, has a different reading in that mode.
+Issue #23 tracks that mode.
+
+By `#print axioms` with Lean `v4.35.0`:
+
+| Theorem | Axioms |
+| --- | --- |
+| `TxOut.toInt_amount`, `Transaction.toInt_signedVersion` | None |
+| `ReaderAgrees.congr`, `readFixed_agrees`, `readMap_agrees` | `propext` |
+| `readPair_agrees`, `CountedList.readElemsBounded_eq_ok_iff_of_agrees`, `CountedList.readByte_agrees`, `instLawfulCodecOutPoint`, `instLawfulCodecScript`, `instLawfulCodecTxIn`, `instLawfulCodecTxOut`, `instLawfulCodecTransaction`, `OutPoint.read_agrees`, `Transaction.decodeBaseComplete_eq_ok_iff`, `digestToHash256_val`, `Transaction.txid_val` | `propext`, `Quot.sound` |
+| `CountedList.decodeBounded_agrees`, `CountedList.decodeBoundedBytes_agrees`, `instLawfulPackedCodecOutPoint` to `instLawfulPackedCodecTransaction`, `Script.read_agrees`, `TxIn.read_agrees`, `TxOut.read_agrees`, `Transaction.readBase_agrees`, `Transaction.readBase_eq_ok_iff`, `Transaction.readBase_encode`, `Transaction.decodeBaseComplete_encode` | `propext`, `Classical.choice`, `Quot.sound` |
+
+The upstream files use no `bv_decide` (C2).
+
 ### Compact encoding and difficulty retarget
 
 The `Work` layer specifies Core's `SetCompact`, `GetCompact` and `CalculateDogecoinNextWorkRequired` (SOURCES.md, D6, D12, D13).
@@ -344,6 +392,7 @@ A claim that different preimages give different digests needs a named collision 
 Some rules apply only under a serialization mode, a network, an activation state or a historical era.
 A definition that leaves out its context can be right in one era and wrong in another.
 The first operations, base codecs and legacy signature hashing, have few context dependencies.
+The transaction reader is the base mode of Core's reader only, and the witness-allowed mode reads some inputs differently (issue #23).
 Script, ledger and activation work will need explicit context.
 
 ## Gap B: does the code that runs match the definitions?

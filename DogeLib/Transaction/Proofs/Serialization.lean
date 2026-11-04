@@ -100,6 +100,18 @@ def Transaction.WithinMaxSize (tx : Transaction) : Prop :=
   tx.inputs.val.length ≤ 0x02000000 ∧ (∀ i ∈ tx.inputs.val, i.WithinMaxSize) ∧
     tx.outputs.val.length ≤ 0x02000000 ∧ ∀ o ∈ tx.outputs.val, o.WithinMaxSize
 
+/-- A transaction within `MAX_SIZE` has fewer than 2^32 inputs. -/
+theorem Transaction.WithinMaxSize.inputs_lt {tx : Transaction}
+    (h : tx.WithinMaxSize) : tx.inputs.val.length < 2 ^ 32 := by
+  have := h.1
+  omega
+
+/-- A transaction within `MAX_SIZE` has fewer than 2^32 outputs. -/
+theorem Transaction.WithinMaxSize.outputs_lt {tx : Transaction}
+    (h : tx.WithinMaxSize) : tx.outputs.val.length < 2 ^ 32 := by
+  have := h.2.2.1
+  omega
+
 /-! ## Agreement of the readers -/
 
 /-- `OutPoint.read` agrees with the codec of an outpoint, with no condition. -/

@@ -426,6 +426,22 @@ The two definitions share `readOp`, `Script.empty`, `TxOut.null`, `legacyOne`, t
 `legacySignatureHash_eq_reference` gives the equality of the digests.
 The equality is between two Lean definitions. It says nothing about memory use or speed, and nothing about C++ object code.
 
+`DogeLib.Transaction.Proofs.LegacySighashReader` connects successful Core-compatible reads to these equalities.
+`Transaction.WithinMaxSize.inputs_lt` and `Transaction.WithinMaxSize.outputs_lt` turn the reader bound `0x02000000` into the required strict bound 2^32.
+`Transaction.readBase_eq_ok_iff` supplies `WithinMaxSize` for a successful base read.
+`Transaction.decodeBaseComplete_eq_ok_iff` supplies the base read with an empty remainder for a successful complete read.
+`Transaction.readAllowWitness_withinMaxSize` supplies the same bounds on `w.tx` after a successful witness-allowed read.
+Its private helper `readSections_withinMaxSize` covers the ordinary input list, the lists after nonzero flags, and the zero-flags branch with empty lists.
+
+For each reader, `legacySignatureHashPlan_eq_reference_of_readBase`, `legacySignatureHashPlan_eq_reference_of_decodeBaseComplete` and `legacySignatureHashPlan_eq_reference_of_readAllowWitness` equate the plans.
+The corresponding digest theorems are `legacySignatureHash_eq_reference_of_readBase`, `legacySignatureHash_eq_reference_of_decodeBaseComplete` and `legacySignatureHash_eq_reference_of_readAllowWitness`.
+Each corollary holds for every input index and hash type, including fixed-digest cases.
+The caller must still establish `hParse`: `(scanOps sc.bytes.val).2 = []`.
+A successful transaction read does not establish this condition on the supplied script code.
+
+The witness-reader corollaries apply `SIGVERSION_BASE` hashing to `w.tx`, the base fields only.
+They establish nothing about segregated witness or consensus acceptance of witness data.
+
 Each hypothesis is needed for a reason.
 The production serializer reduces the counts modulo 2^32, and `SignatureHashOld` does not.
 
@@ -448,6 +464,16 @@ By `#print axioms` with Lean `v4.35.0`:
 | `CountedList.encodeElems_eq_flatten`, `CountedList.encode_eq_flatten`, `readOp_separator`, `readOp_cons_opcode` | `propext` |
 | `dropMatches_length_le`, `findAndDeleteLoop_length_le`, `findAndDelete_length_le`, `referenceInputs_length_le`, `referenceOutputs_length_le`, `TxIn.encode_eq`, `Transaction.encode_eq`, `Script.encode_eq`, `scanOps_of_op`, `scanOps_of_stop`, `dropMatches_nil`, `dropMatches_separator_cons`, `dropMatches_separator_of_ne`, `findAndDeleteLoop_of_op`, `findAndDeleteLoop_of_stop`, `findAndDeleteLoop_separator_cons`, `legacyPlans_differ_shortPush` | `propext`, `Quot.sound` |
 | `findAndDeleteLoop_separator`, `keptBytes_length_add`, `findAndDelete_separator`, `encode_referenceScriptCode`, `referenceSequencedInputs_map_encode`, `encode_referenceInputs`, `encode_referenceOutputs`, `legacySignatureHashPlan_eq_reference`, `legacySignatureHash_eq_reference` | `propext`, `Classical.choice`, `Quot.sound` |
+
+The reader corollaries and their supporting bounds have these axiom dependencies, by `#print axioms` with Lean `v4.35.0`:
+
+| Theorem | Axioms |
+| --- | --- |
+| `Transaction.WithinMaxSize.inputs_lt`, `Transaction.WithinMaxSize.outputs_lt` | `propext`, `Quot.sound` |
+| `readSections_withinMaxSize` (private), `Transaction.readAllowWitness_withinMaxSize` | `propext`, `Classical.choice`, `Quot.sound` |
+| `legacySignatureHashPlan_eq_reference_of_readBase`, `legacySignatureHash_eq_reference_of_readBase` | `propext`, `Classical.choice`, `Quot.sound` |
+| `legacySignatureHashPlan_eq_reference_of_decodeBaseComplete`, `legacySignatureHash_eq_reference_of_decodeBaseComplete` | `propext`, `Classical.choice`, `Quot.sound` |
+| `legacySignatureHashPlan_eq_reference_of_readAllowWitness`, `legacySignatureHash_eq_reference_of_readAllowWitness` | `propext`, `Classical.choice`, `Quot.sound` |
 
 ### Compact encoding and difficulty retarget
 

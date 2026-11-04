@@ -61,6 +61,8 @@ Design records and module documentation cite these identifiers.
 | D28 | [Dogecoin valid-transaction corpus: `tx_valid.json`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/test/data/tx_valid.json) |
 | D29 | [Dogecoin invalid-transaction corpus: `tx_invalid.json`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/test/data/tx_invalid.json) |
 | D30 | [Dogecoin transaction tests: `tx_valid` and `tx_invalid`, which read D28 and D29](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/test/transaction_tests.cpp) |
+| D31 | [Dogecoin's bundled UniValue: the JSON reader of the Core harness](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/univalue/sources.mk) |
+| D32 | [Dogecoin `memory_cleanse`, which the allocator of `CDataStream` calls](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/support/cleanse.cpp) |
 | E1 | [EthLib build definition](https://github.com/ethereum/EthLib/blob/6a93711e7cc062e787fff6747e4101a141d38b7a/lakefile.lean) |
 | E2 | [EthLib architecture](https://github.com/ethereum/EthLib/blob/6a93711e7cc062e787fff6747e4101a141d38b7a/ARCHITECTURE.md) |
 | E3 | [EthLib contribution policy](https://github.com/ethereum/EthLib/blob/6a93711e7cc062e787fff6747e4101a141d38b7a/CONTRIBUTING.md) |
@@ -121,6 +123,17 @@ One row per public operation. Add rows in sorted order by operation name.
 | Transaction ID | `DogeLib.Transaction.Transaction.txid`, `digestToHash256` | D23, `src/primitives/transaction.cpp`, `CTransaction::ComputeHash` (lines 65 to 68). D8, `SerializeHash` | Base serialization: `SERIALIZE_TRANSACTION_NO_WITNESS` | Double SHA-256 of the base serialization, as a `Hash256` in digest order. `txid_val` shows that the fallback of `digestToHash256` is never used. |
 | Transactions, Core's base-mode reader | `DogeLib.Transaction.Transaction.readBase`, `decodeBaseComplete`, `CompleteReadError`, `OutPoint.read`, `Script.read`, `TxIn.read`, `TxOut.read` | D4, `src/primitives/transaction.h`, `UnserializeTransaction` (lines 210 to 243) with `SERIALIZE_TRANSACTION_NO_WITNESS`, and the `SerializationOp` methods of `COutPoint` (lines 36 and 37), `CTxIn` (lines 113 to 115) and `CTxOut` (lines 153 and 154). D1 for the vectors and `ReadCompactSize` | Base mode only. The witness-allowed mode is not specified (issue #23). | Prefix reader. `decodeBaseComplete` requires an empty remainder and reports `trailingBytes`. Theorems in `DogeLib.Transaction.Proofs.Serialization`. |
 | Transactions, base serialization codec | `DogeLib.Transaction.OutPoint`, `Script`, `TxIn`, `TxOut`, `Transaction`, `instCodecOutPoint`, `instCodecScript`, `instCodecTxIn`, `instCodecTxOut`, `instCodecTransaction` | B12 to B16. D4, `COutPoint`, `CTxIn`, `CTxOut`, `CTransaction` and `SerializeTransaction` with `SERIALIZE_TRANSACTION_NO_WITNESS` | Base serialization | Raw fields, no validation. `value` and `version` keep the bits of Core's `int64_t` and `int32_t`, and `TxOut.amount` and `Transaction.signedVersion` give the signed values. Laws in `DogeLib.Transaction.Proofs.Serialization`. |
+
+## The Core harness
+
+The Core harness, `harness/core/core_oracle.cpp`, calls these functions of Core at the pin ([docs/oracle.md](docs/oracle.md#the-core-harness)):
+
+| Operation of the harness | Core functions |
+| --- | --- |
+| `compactsize.encode`, `compactsize.read` | D1, `WriteCompactSize` and `ReadCompactSize`. D21, `CDataStream` |
+| `tx.read_base`, `tx.decode_base` | D4, `UnserializeTransaction` and `SerializeTransaction`, with `SERIALIZE_TRANSACTION_NO_WITNESS`. D23, `CTransaction::ComputeHash`. D11, `base_blob::GetHex` |
+| `sighash.legacy` | D3, `SignatureHash` with `SIGVERSION_BASE` |
+| Requests and the build | D31, UniValue, to read requests. D32, `memory_cleanse`. D19, `configure.ac`: without the daemon, utilities, GUI, tests and benchmarks, configure needs no Boost (line 683) and builds no UniValue (line 939) |
 
 ## Known differences
 

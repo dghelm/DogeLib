@@ -187,7 +187,7 @@ The [maintainer-only list](#changes-that-need-a-maintainer) still applies.
 
 Every pull request needs an independent review before merge.
 Use a Codex review or a separate review agent that did not write the change.
-Record the reviewer’s verdict and findings in the pull request or lane.
+Record the reviewer's verdict and findings in the pull request or lane.
 
 Each lane ends in one pull request against `main` on GitHub.
 Follow [CONTRIBUTING.md](CONTRIBUTING.md#branches-commits-and-pull-requests) for the title and the body.
@@ -213,9 +213,10 @@ Record the pull request number and its state in `STATUS.md`.
 
 ### Changes that need a maintainer
 
-Scope approval does not waive the requirements for these changes.
+Scope approval does not let an implementer settle a listed change in the pull request.
 Label their pull requests `needs-maintainer`.
-An agent merges a listed change only when the maintainer explicitly authorizes that specific pull request’s merge.
+An agent never rewrites or force-pushes `main` on general authority.
+An agent merges a listed change only when the maintainer explicitly authorizes that specific pull request's merge.
 CI must pass, and an independent review must approve before merge.
 General merge authority never covers these changes:
 

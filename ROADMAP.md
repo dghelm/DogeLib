@@ -68,7 +68,7 @@ An incremental hash sink and measured memory or speed gains are later work.
 ### D: the Rust refinement path (step 6)
 
 The bounded Rust CompactSize decoder and its extracted Lean model are in `Refinement/Rust/` and `Refinement/Refinement/Rust/` (#51).
-`decode_refines` proves agreement with the independent bounded-reader specification.
+`decode_refines` proves complete-result agreement with the independent bounded-reader specification.
 [SOUNDNESS.md](SOUNDNESS.md#rust-bounded-compactsize-reader) explains the theorem's domain, complete-result equality and extraction boundaries.
 [COVERAGE.md](COVERAGE.md#operations) records its proof and fixture evidence.
 [Refinement/Rust/README.md](Refinement/Rust/README.md) gives the regeneration and test commands.

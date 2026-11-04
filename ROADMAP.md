@@ -28,7 +28,12 @@ The DigiShield retarget arithmetic is a parallel lane that must not delay the tr
 The `Work` layer specifies the arithmetic as an isolated function, with Core's `get_next_work_*` cases as known answers.
 `Work.Consensus` specifies the work-field projection of height-based parameter selection.
 `Work.NextWork` specifies `GetNextWorkRequired` on a checked finite view, including minimum-difficulty rules.
-Header validity is not specified.
+
+`Work.ProofOfWork` specifies Core's compact-target range check and supplied-hash comparison.
+Target validity discharges the retarget old-target bound, with numerical bounds proved for every mainnet and testnet parameter selection.
+Regtest DigiShield has multiplier one and cannot wrap.
+The isolated retarget can wrap with the legacy regtest record, which the normally selected caller never uses at a retarget.
+Scrypt, AuxPoW and full header validity are not specified.
 
 The word-arithmetic proofs cover division and its dependencies (#47), as well as multiplication, shifts, bit length and low-64-bit extraction (#42).
 The compact, constructor and byte-conversion paths and the composed word retarget also have arithmetic equivalence proofs (#50).

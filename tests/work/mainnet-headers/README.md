@@ -37,9 +37,11 @@ Core `v1.14.9`, commit `e0a1c157791544e818c901bd9341896965afbf9d`, supplies thes
 - D10, `src/primitives/pureheader.h`, lines 29–54: version, previous hash, Merkle root, time, bits and nonce, in serialization order.
 - D9, `src/chainparams.cpp`, line 184: mainnet checkpoint 145000, `cc47cae70d7c5c92828d3214a266331dde59087d4a39071fa76ddfff9b7bde72`.
 - D17, `src/pow.cpp`, lines 32–88: next-work selection, including the full interval lookback after the first retarget.
+- D17, `src/pow.cpp`, lines 124–128: target range check, without the supplied-hash comparison.
 
 `lake test` requires exactly these heights and record count.
 It parses every header field, hashes each header, checks all 311 predecessor links and compares the checkpoint hash in reversed display order.
+It requires target validity for every header with the mainnet parameters selected at that header's height.
 It then calls `nextWorkRequired .mainnet` with a newest-first view of earlier headers and the candidate's own time.
 The expected result is that candidate's `nBits` from the fixture.
 

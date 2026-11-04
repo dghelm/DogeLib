@@ -46,7 +46,7 @@ Design records and module documentation cite these identifiers.
 | D13 | [Dogecoin 256-bit arithmetic: multiplication, division, shifts, `bits()`, `SetCompact`, `GetCompact`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/arith_uint256.cpp) |
 | D14 | [Dogecoin chain parameters: `powLimit`, `nPowTargetTimespan`, DigiShield flags, `GetConsensus`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/chainparams.cpp) |
 | D15 | [Dogecoin consensus parameter fields](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/consensus/params.h) |
-| D16 | [Dogecoin 256-bit arithmetic tests: `bignum_SetCompact`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/test/arith_uint256_tests.cpp) |
+| D16 | [Dogecoin 256-bit arithmetic tests: `bignum_SetCompact`, `multiply`, `divide`, `methods`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/test/arith_uint256_tests.cpp) |
 | D17 | [Dogecoin proof-of-work rules: `GetNextWorkRequired`, `CheckProofOfWork`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/pow.cpp) |
 | D18 | [Dogecoin block index: `nHeight`, `nTime`, `nBits`, `GetBlockTime`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/chain.h) |
 | D19 | [Dogecoin build configuration: C++ standard selection](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/configure.ac) |

@@ -31,7 +31,7 @@ Gap D asks whether the use of DogeLib holds together.
 
 | ID | Risk | Mitigation in place | Applies to |
 |----|------|---------------------|------------|
-| A1 | A definition does not match the pinned Dogecoin behavior | Source mapping in `SOURCES.md`, by review only. SHA-256 has a proof against a FIPS 180-4 model, and NIST CAVP known answers. Known answers from Core's genesis data test the integer codecs. Core's own test cases are known answers for CompactSize, the compact encoding and the difficulty retarget. The scripts of the genesis coinbase are known answers for counted lists. The genesis coinbase is a known answer for the transaction codec, reader and ID. No comparison against a running Core yet. | P R I F |
+| A1 | A definition does not match the pinned Dogecoin behavior | Source mapping in `SOURCES.md`, by review only. SHA-256 has a proof against a FIPS 180-4 model, and NIST CAVP known answers. Known answers from Core's genesis data test the integer codecs. Core's own test cases are known answers for CompactSize, the legacy signature hash, the compact encoding and the difficulty retarget. The scripts of the genesis coinbase are known answers for counted lists. The genesis coinbase is a known answer for the transaction codec, reader and ID. No comparison against a running Core yet. | P R I F |
 | A2 | A theorem holds only under a hypothesis | Policy: each conditional theorem lists its hypotheses here and in `COVERAGE.md` | P I |
 | A3 | Timing reveals secret data | None: no constant-time claim | R I |
 | A4 | A security theorem idealises a primitive | None: no security theorem yet | P |
@@ -47,7 +47,7 @@ Gap D asks whether the use of DogeLib holds together.
 | C3 | A declaration reached the environment unchecked | None | P I |
 | D1 | A client misuses an operation, such as a prefix decoder where complete consumption is required | Policy: each public operation documents its input domain and consumption contract | R I |
 | D2 | A dependency changes | Pins in `SOURCES.md` and `lean-toolchain`. The package has no Lake dependencies. | P R I |
-| D3 | The fixtures are wrong | Each fixture records its provenance. The NIST CAVP files are pinned by digest, and CI checks the pin. Core's test cases are copied into `tests/KnownAnswers.lean` with their file and line. | F |
+| D3 | The fixtures are wrong | Each fixture records its provenance. The NIST CAVP files and Core's `sighash.json` are pinned by digest, and CI checks the pins. Core's test cases are copied into `tests/KnownAnswers.lean` with their file and line. | F |
 
 ## What the proofs say
 
@@ -300,6 +300,47 @@ By `#print axioms` with Lean `v4.35.0`:
 
 The upstream files use no `bv_decide` (C2).
 
+### Legacy signature hash
+
+`DogeLib.Transaction.LegacySighash` specifies Core's `SignatureHash` with `SIGVERSION_BASE` (SOURCES.md, D3).
+`legacySignatureHashPlan` returns a `LegacyHashPlan`: the fixed digest `legacyOne`, or the bytes to hash with double SHA-256.
+The preimage is written field by field after `CTransactionSignatureSerializer`, not by transforming a transaction and serializing it.
+The theorems are in `DogeLib.Transaction.Proofs.LegacySighash`.
+For every script code, transaction, input index and hash type:
+
+- `legacySignatureHashPlan_eq_fixedDigest_iff`: the plan is `fixedDigest legacyOne` exactly when `nIn` is at least the number of inputs. With SINGLE, it is also `legacyOne` when `nIn` is at least the number of outputs.
+- `legacySignatureHashPlan_eq_hashBytes`: otherwise the plan is `hashBytes (legacyPreimage …)`.
+- `legacyPreimage_eq`: the preimage is a body, then the 4 bytes of the hash type. The body depends on the hash type only through its ANYONECANPAY, NONE and SINGLE flags. `HashType.flags_eq_of_and` says that the flags depend only on the bits `0x9f`.
+- `scriptCodeBytes_eq_encode`: when no instruction parse failed and no instruction is `OP_CODESEPARATOR`, the script code is written as the ordinary encoding of the script.
+
+Two plans that are equal give equal digests for any hash function, so no collision assumption is needed for that equality.
+No theorem says anything about which digests a plan can produce.
+
+These theorems relate parts of the definition to each other. That the definition is Core's rests on a reading of D3 and D24 (A1) and on the known answers.
+`lake test` runs all 500 records of Core's `sighash.json` (D26), which give digests only.
+No record reaches the fixed digest. The generator in `sighash_tests.cpp` (D2, line 104) gives a SINGLE transaction as many outputs as inputs.
+
+Hand-derived preimages cover the fixed digest, the other cases, and scripts that end in a short push, which the corpus does not contain.
+Core itself does not run.
+
+The definition makes three choices where Core's types decide the result.
+`nIn`, the input count, the output count and `nIn + 1` are reduced modulo 2^32, as Core's `unsigned int` variables are.
+That changes the result only for a transaction with 2^32 inputs or outputs, or for SINGLE with `nIn = 0xffffffff`.
+The script-code count is computed in `Nat`. A `CScript` cannot hold 2^32 bytes, so that case has no Core counterpart.
+
+Not specified: the `SIGVERSION_WITNESS_V0` branch, and `TransactionSignatureChecker::CheckSig`, which takes the hash type from the last byte of a signature.
+The caller prepares the script code. Core's interpreter passes the script after the last executed `OP_CODESEPARATOR`, with the signature removed by `FindAndDelete`.
+A theorem about a supplied script code says nothing about that preparation (A5).
+
+By `#print axioms` with Lean `v4.35.0`:
+
+| Theorem | Axioms |
+| --- | --- |
+| `readPush_stop` | None |
+| `readPush_op_append`, `readOp_op_append`, `readOp_stop_nil` | `propext` |
+| `readOp_rest_length`, `readOp_stop_prefix`, `scanOps_prefix`, `scanOps_eq_of_complete`, `legacySignatureHashPlan_eq_fixedDigest_iff`, `legacySignatureHashPlan_eq_hashBytes`, `legacyPreimage_eq`, `HashType.flags_eq_of_and`, `LegacyHashPlan.digest_fixedDigest`, `LegacyHashPlan.digest_hashBytes_val` | `propext`, `Quot.sound` |
+| `scriptCodeBytes_eq_encode` | `propext`, `Classical.choice`, `Quot.sound` |
+
 ### Compact encoding and difficulty retarget
 
 The `Work` layer specifies Core's `SetCompact`, `GetCompact` and `CalculateDogecoinNextWorkRequired` (SOURCES.md, D6, D12, D13).
@@ -394,6 +435,7 @@ Some rules apply only under a serialization mode, a network, an activation state
 A definition that leaves out its context can be right in one era and wrong in another.
 The first operations, base codecs and legacy signature hashing, have few context dependencies.
 The transaction reader is the base mode of Core's reader only, and the witness-allowed mode reads some inputs differently (issue #23).
+The legacy signature hash is the `SIGVERSION_BASE` mode of `SignatureHash`, and its script code is an input: the interpreter's preparation of it is not specified.
 Script, ledger and activation work will need explicit context.
 
 ## Gap B: does the code that runs match the definitions?

@@ -58,6 +58,9 @@ Design records and module documentation cite these identifiers.
 | D25 | [Dogecoin Script interpreter interface: the `SIGHASH_*` constants and `SigVersion`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/script/interpreter.h) |
 | D26 | [Dogecoin signature-hash corpus: `sighash.json`, read by `sighash_from_data`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/test/data/sighash.json) |
 | D27 | [Dogecoin Core licence: MIT, `COPYING`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/COPYING) |
+| D28 | [Dogecoin valid-transaction corpus: `tx_valid.json`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/test/data/tx_valid.json) |
+| D29 | [Dogecoin invalid-transaction corpus: `tx_invalid.json`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/test/data/tx_invalid.json) |
+| D30 | [Dogecoin transaction tests: `tx_valid` and `tx_invalid`, which read D28 and D29](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/test/transaction_tests.cpp) |
 | E1 | [EthLib build definition](https://github.com/ethereum/EthLib/blob/6a93711e7cc062e787fff6747e4101a141d38b7a/lakefile.lean) |
 | E2 | [EthLib architecture](https://github.com/ethereum/EthLib/blob/6a93711e7cc062e787fff6747e4101a141d38b7a/ARCHITECTURE.md) |
 | E3 | [EthLib contribution policy](https://github.com/ethereum/EthLib/blob/6a93711e7cc062e787fff6747e4101a141d38b7a/CONTRIBUTING.md) |

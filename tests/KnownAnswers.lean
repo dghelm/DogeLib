@@ -800,6 +800,91 @@ def check : IO Nat := do
 end KnownAnswers.Transactions
 
 /-!
+## Core's transaction corpus
+
+Runs the serialized transactions of Core's `src/test/data/tx_valid.json` and `tx_invalid.json` at commit `e0a1c15` (SOURCES.md, D28 and D29), vendored in `tests/transaction/corpus/`, through the compiled base-mode reader and codec.
+
+Core's `transaction_tests.cpp` (D30, lines 151 and 236) reads each one with witness data allowed, and then checks the scripts.
+So a record of `tx_invalid.json` is a transaction that Core reads and then rejects for another reason. It is not a parser rejection.
+Script validity is not checked here.
+
+A record is in base mode when byte 4 of its transaction, the first byte of the input count, is not `00`.
+`UnserializeTransaction` (D4, lines 218 to 241) reads a flags byte only after an empty input list.
+So for these records, Core's reading with witness data allowed is the base reading.
+The rule reads raw bytes, not DogeLib's reader. The other records use the witness serialization (issue #23), and are counted.
+
+For each base-mode record, the test checks four things. `readBase` reads the whole transaction, `decodeBaseComplete` accepts it, the codec writes the same bytes again, and the packed codec reads the same transaction.
+Core's harness checks none of these four directly. They are DogeLib's checks on Core's bytes.
+-/
+
+namespace KnownAnswers.TxCorpus
+
+open DogeLib DogeLib.Serialization DogeLib.Transaction
+open KnownAnswers.Sha256Cavp (parseHex toHex)
+
+/-- The serialized transactions of the records of a corpus file. Fails on a record of another shape or on bad hexadecimal digits. -/
+def parseCorpus (text : String) : Except String (Array (List UInt8)) := do
+  let json ← Lean.Json.parse text
+  let rows ← json.getArr?
+  let mut out := #[]
+  for row in rows do
+    let fields ← row.getArr?
+    if fields.size == 1 then
+      let _ ← fields[0]!.getStr?
+      continue
+    if fields.size != 3 then throw s!"record with {fields.size} fields: {row.compress}"
+    let _ ← fields[0]!.getArr?
+    let _ ← fields[2]!.getStr?
+    out := out.push (← parseHex (← fields[1]!.getStr?)).toList
+  return out
+
+/-- Checks one corpus file, which must hold `base` base-mode records and `witness` other records. Returns the number of failures. -/
+def checkFile (path : System.FilePath) (base witness : Nat) : IO Nat := do
+  let txs ← match parseCorpus (← IO.FS.readFile path) with
+    | .ok r => pure r
+    | .error e => throw (IO.userError s!"{path}: {e}")
+  let mut failures := 0
+  let mut nBase := 0
+  let mut nWitness := 0
+  for bs in txs do
+    if bs.length < 5 then
+      IO.eprintln s!"FAIL {path}: transaction shorter than 5 bytes: {toHex ⟨bs.toArray⟩}"
+      failures := failures + 1
+    else if bs[4]! == 0x00 then
+      nWitness := nWitness + 1
+    else
+      nBase := nBase + 1
+      let read := match Transaction.readBase bs with
+        | .ok (tx, []) => some tx
+        | _ => none
+      match read with
+      | none =>
+        IO.eprintln s!"FAIL {path}: readBase does not read the whole transaction {toHex ⟨bs.toArray⟩}"
+        failures := failures + 1
+      | some tx =>
+        let complete := match Transaction.decodeBaseComplete bs with
+          | .ok tx' => tx' == tx
+          | .error _ => false
+        let packed := (PackedCodec.decodeSlice (α := Transaction) (ByteSlice.ofByteArray ⟨bs.toArray⟩)).map
+          fun p => (p.1, p.2.toList)
+        if !complete || Codec.encode tx != bs || packed != some (tx, []) then
+          IO.eprintln s!"FAIL {path}: complete reader, codec or packed codec disagrees on {toHex ⟨bs.toArray⟩}"
+          failures := failures + 1
+  if nBase != base || nWitness != witness then
+    IO.eprintln s!"FAIL {path}: {nBase} base-mode and {nWitness} witness records, expected {base} and {witness}"
+    failures := failures + 1
+  IO.println s!"{path}: {nBase} base-mode records read and written again, {nWitness} witness records skipped, {failures} failures"
+  return failures
+
+/-- Both corpus files. Returns the number of failures. -/
+def check : IO Nat := do
+  let valid ← checkFile "tests/transaction/corpus/tx_valid.json" 91 27
+  let invalid ← checkFile "tests/transaction/corpus/tx_invalid.json" 68 12
+  return valid + invalid
+
+end KnownAnswers.TxCorpus
+
+/-!
 ## Legacy signature hash
 
 Two kinds of known answer, both run through the compiled `legacySignatureHash` and `legacyPreimage`.
@@ -1244,7 +1329,8 @@ def main : IO UInt32 := do
   let compactSize ← KnownAnswers.CompactSize.check
   let countedList ← KnownAnswers.CountedList.check
   let transactions ← KnownAnswers.Transactions.check
+  let txCorpus ← KnownAnswers.TxCorpus.check
   let sighash ← KnownAnswers.LegacySighash.check
   let compact ← KnownAnswers.Work.checkCompact
   let retarget ← KnownAnswers.Work.checkRetarget
-  return if short + long + genesis + codec + compactSize + countedList + transactions + sighash + compact + retarget == 0 then 0 else 1
+  return if short + long + genesis + codec + compactSize + countedList + transactions + txCorpus + sighash + compact + retarget == 0 then 0 else 1

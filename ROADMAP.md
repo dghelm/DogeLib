@@ -16,7 +16,7 @@ This roadmap is the living plan. The reasoning behind it is in [design record 00
 | 3 | Raw transaction types and base codecs | Exact field preservation, explicit parse mode, parser obligations | Fixed-length byte strings and `Hash256` done in `feat/fixed-bytes`. Transaction types, base codecs, Core's base-mode reader, the complete reader and the transaction ID done in `feat/transaction-base`. The base-mode records of Core's transaction corpus are known answers (issue #22). The witness-allowed format, as a serialization format only, done in `feat/transaction-witness-format`. The oracle exposes both witness readers, serialization and hashes. The Core comparison covers all 198 corpus records and malformed variants (issue #36). |
 | 4 | Legacy hash-plan specification | Declared lower-level modes and special cases are covered | Done in `feat/legacy-sighash`: `legacySignatureHashPlan` for `SIGVERSION_BASE`, Core's `sighash.json` corpus and hand-derived preimages as known answers. The witness v0 digest and the `CheckSig` wrapper are not specified. |
 | 5 | Field-by-field preimage construction proved equal to the transaction-transformation reference | Exact plan equality on the recorded domain | Done in `proof/legacy-sighash-reference`. `legacySignatureHashPlan_eq_reference` proves the production plan equal to the `SignatureHashOld` transformation. It needs a fully parsed script code and counts below 2^32. The two differ on a script that ends in a short push. |
-| 6 | Rust refinement experiment | One extracted implementation matches an independent contract | Not started |
+| 6 | Rust refinement experiment | One extracted implementation matches an independent contract | Merged (#51) |
 
 The steps are units of review, not one pull request each.
 Step 6 can start after step 2.
@@ -78,7 +78,10 @@ From design record 0001, section 9. A first release has:
 - A statement of proof assumptions, execution boundaries, and unsupported areas.
 - Validation reports identifying the exact revisions and commands actually run ([report command](BUILDING.md#validation-reports)).
 
-If the Rust refinement is not in the first release, the release says so and makes no Rust verification claim.
+The Rust bounded-reader implementation and its extracted model are in `Refinement/Rust/`.
+`decode_refines` proves complete-result agreement with `CompactSize.decodeBounded` for every Rust-representable slice.
+The theorem includes failures and the remaining input, and it holds on 32- and 64-bit platforms.
+Charon, Aeneas and the Rust compiler remain trusted boundaries (SOUNDNESS.md, B6).
 
 ## Decisions
 
@@ -93,7 +96,7 @@ If the Rust refinement is not in the first release, the release says so and make
 | Oracle record format | JSON Lines, `dogelib-oracle/2`, in [docs/oracle.md](docs/oracle.md) | One request and one response per line, so a harness can keep the oracle open. Hashes in both byte orders, and preimages in the response. | Maintainer asked for the proposal, 2026-11-04 |
 | Core compatibility pin | Dogecoin Core `v1.14.9`, commit `e0a1c15` | The latest Core release on 2026-11-03 | Maintainer, 2026-11-03, issue #5 |
 | First signature-proof domain | Script code with no instruction that fails to parse, in a transaction with fewer than 2^32 inputs and 2^32 outputs | `legacySignatureHashPlan_eq_reference` holds on it. On a script that ends in a short push the two forms differ. | Step 5, `proof/legacy-sighash-reference` (#27) |
-| Rust refinement tools | Aeneas `d1e177b` and Charon `a58d159` (proposed pins in SOURCES.md). Mathlib only in the `Refinement` library. No trust-policy exception for Aeneas's axioms | Both tools target Lean `v4.35.0`. EthLib requires Mathlib. EthLib's trust policy allows only the three standard axioms | Maintainer, 2026-11-04, PR #33 |
+| Rust refinement tools | Aeneas `d1e177b` and Charon `a58d159` (Adopted in SOURCES.md). Mathlib only in the separate `Refinement` Lake package. No trust-policy exception for Aeneas's axioms | Both tools target Lean `v4.35.0`. EthLib requires Mathlib. EthLib's trust policy allows only the three standard axioms | Maintainer, 2026-11-04, PR #33 |
 | Project licence and contributor terms | MIT, in `LICENSE`. A contributor makes a contribution available under the same licence. Material from other projects follows CONTRIBUTING.md. | The most open licence that is compatible with the material DogeLib takes from other projects | Maintainer, 2026-11-04, issue #4 |
 
 ## Open decisions

@@ -61,7 +61,7 @@ def write_report(path, metadata, gates, results, dirty, final_status=None):
              'The summaries contain the last 20 output lines of each command.',
              'A zero exit status records command success, not a proof or a manual review.',
              'The Writing gate is advisory. Its output can contain findings with exit status zero.',
-             'Build and Refinement execute the same command. They are not independent evidence.',
+             'Build checks the root package. Refinement checks the separate package under Refinement/.',
              '', '## Core harness stamp', '']
     stamp = ROOT / 'build/core-harness/core.stamp'
     lines.append(fence(stamp.read_text() if stamp.exists() else 'not available'))

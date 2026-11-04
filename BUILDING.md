@@ -1,33 +1,62 @@
 # Building DogeLib
 
 DogeLib needs [elan](https://github.com/leanprover/elan), which installs the Lean toolchain that `lean-toolchain` pins, `v4.35.0`.
-The package has no dependencies beyond Lean core, so no Mathlib cache is needed.
+The root DogeLib package uses Lean core and has no Lake dependencies.
+Downstream projects that require it do not fetch Aeneas or Mathlib.
+The optional package under `Refinement/` owns those dependencies and the Rust refinement library.
 
 ## Build and check
 
+Build the specification and its proofs without the optional package:
+
 ```bash
 lake build --wfail
-lake exe check-decls
+lake exe check-decls --skip-refinement
 lake test
 bash scripts/test_oracle.sh
 ```
 
-`lake build --wfail` compiles the specification and checks every proof.
+The explicit `--skip-refinement` flag prints `Refinement NOT checked` in the declaration-check summary.
+It does not establish any result for the Rust refinement library.
+
+For the full production checks, fetch the optional package's cache and build both packages:
+
+```bash
+lake -d Refinement exe cache get
+lake build --wfail
+lake -d Refinement build --wfail
+lake exe check-decls
+```
+
+The default declaration check fails if the refinement package is absent, unbuilt or cannot load every requested module.
+It names the reason and never silently checks fewer modules.
+Production CI uses the default command.
+The check inspects the built Refinement oleans.
+After local edits, run `lake -d Refinement build --wfail` before running the declaration check.
+
+Do not build Mathlib from source on a shared machine.
+Its cached dependency directory occupies about 7.2 GiB per worktree, measured with this toolchain.
+Aeneas and extraction tools need additional disk space ([Rust instructions](Refinement/Rust/README.md)).
+
+`lake build --wfail` compiles the specification and checks its proofs.
+The separate refinement build checks the generated model and its proof.
 An unfinished proof only warns, so `--wfail` turns every warning into an error.
 
-`lake exe check-decls` reads the compiled declarations of the `DogeLib`, `Proofs` and `Exports` libraries.
-It requires every `.lean` file under `DogeLib/`, and `DogeLib.lean`, to be reachable from those roots.
+`lake exe check-decls` reads the compiled declarations of `DogeLib`, `Proofs`, `Exports` and `Refinement`.
+It requires every `.lean` source under `DogeLib/` and `Refinement/Refinement/`, plus their roots, to be reachable.
 It names each unreachable module and fails the check.
 
 It reports any axiom beyond `propext`, `Classical.choice` and `Quot.sound` in the transitive dependencies of safe declarations.
 Unsafe declarations are reported as `unsafe` findings.
 It also reports any `partial`, `opaque`, `@[extern]`, `@[implemented_by]` or `@[csimp]` declaration.
-It also reports a specification definition that reaches an opaque constant, so that the kernel cannot unfold it.
+It also reports a definition that reaches an opaque constant.
+Only `Refinement` modules may reach `System.Platform.getNumBits`, which models Rust's platform word size.
+Every other opaque dependency remains a finding ([SOUNDNESS.md](SOUNDNESS.md#c1-the-lean-kernel-and-its-axioms)).
 
 `scripts/check_decls_baseline.txt` lists the findings that exist today.
 It is empty, and a new finding is fixed, never added to it.
 
-`lake test` runs known answers through the compiled code.
+`lake test` runs known answers through the compiled specification.
 Four directories hold vendored files, each with a README that gives their provenance:
 
 - `tests/cryptography/sha256/cavp/`: the NIST CAVP vectors, for SHA-256.
@@ -71,6 +100,23 @@ It builds the fixtures in `scripts/CheckDeclsTest`, which contain `sorry` and ev
 The check must report each planted finding and nothing else, pass with a baseline that lists them, and fail on a stale baseline entry.
 An isolated fixture requires rejection of an imported unfinished proof.
 The self-test also plants an unimported production file and requires a failure that names its module.
+
+## Rust refinement
+
+The optional package build checks the committed generated model and its complete-result proof.
+CI uses the Mathlib cache in the separate package and caches Aeneas backend artifacts by pin and toolchain.
+It does not install extraction tools.
+Regenerate and compare the model locally, and test the compiled Rust reader:
+
+```bash
+Refinement/Rust/setup-tools.sh
+Refinement/Rust/regenerate.sh --check
+cargo +nightly-2026-09-17 test --locked --manifest-path Refinement/Rust/Cargo.toml --jobs 8
+lake env lean --run scripts/CheckRefinementImports.lean
+```
+
+The last command rejects Aeneas, Mathlib or `Refinement` in the specification, proof and oracle libraries' transitive imports.
+[Refinement/Rust/README.md](Refinement/Rust/README.md) records the contract, fixtures, pins and regeneration steps.
 
 ## Module boundaries
 
@@ -190,5 +236,7 @@ The Core stamp records existing libraries.
 The Core result records whether the harness step and comparison succeeded, possibly with reuse of existing libraries.
 
 The `validation` workflow runs on manual dispatch and tag pushes, and uploads the report and logs even after gate failures.
+It excludes the two Rust tool gates and records them as not run.
+The workflow builds the committed Lean model with the Mathlib cache.
 A report records checks on one machine at one commit.
 It is not a proof, and CI results on other commits are separate evidence.

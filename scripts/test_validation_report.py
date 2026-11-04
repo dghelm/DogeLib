@@ -164,6 +164,9 @@ class Reports(unittest.TestCase):
         expected = {
             'build': 'lake build --wfail',
             'declaration-check': 'lake exe check-decls',
+            'import-boundaries': 'lake env lean --run scripts/CheckRefinementImports.lean',
+            'rust-known-answers': 'cargo +nightly-2026-09-17 test --locked --manifest-path Refinement/Rust/Cargo.toml --jobs 8',
+            'rust-extraction-freshness': 'Refinement/Rust/regenerate.sh --check',
             'declaration-check-self-test': 'bash scripts/test_check_decls.sh',
             'source-and-coverage-review': None,
             'conformance': 'lake test',
@@ -171,7 +174,7 @@ class Reports(unittest.TestCase):
                               '(cd tests/transaction/sighash && sha256sum -c SHA256SUMS) && '
                               '(cd tests/transaction/corpus && sha256sum -c SHA256SUMS) && '
                               '(cd tests/work/mainnet-headers && sha256sum -c SHA256SUMS)',
-            'refinement': 'lake build --wfail',
+            'refinement': 'lake -d Refinement build --wfail',
             'soundness-review': None,
             'writing': 'uv run --no-project --python 3.12 python scripts/check_writing.py --base main',
             'oracle': 'bash scripts/test_oracle.sh',

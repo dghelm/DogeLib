@@ -4,7 +4,8 @@ open Lake DSL System
 /-!
 Lake build for `DogeLib`.
 
-The package is pure Lean, with no dependencies beyond Lean core.
+The root package uses Lean core and has no Lake dependencies.
+The optional package under Refinement owns Aeneas and Mathlib.
 ARCHITECTURE.md describes the libraries and what each may import.
 The layout follows EthLib's `lakefile.lean` at commit `6a93711`.
 -/

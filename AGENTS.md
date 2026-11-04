@@ -72,7 +72,7 @@ The branch name is `<type>/<slug>`, using a commit type from [CONTRIBUTING.md](C
 3. Put every lane artifact in `.lane/`: handoff documents, review transcripts, build and test logs, scratch notes. Do not write them next to the repository, in the main checkout, or in a committed path.
 4. Keep `STATUS.md` current. Update it when the state changes, before you stop, and before a handoff. Another agent must be able to continue from it alone.
 5. Register every long-running process in `STATUS.md` under *Running jobs*: PID, command, log path under `.lane/`, start time. Remove the entry when the process ends. Never detach a build with `nohup`, `setsid`, or `&` so that it outlives the session.
-6. Run one heavy build per lane at a time, and limit its CPUs on a shared machine ([BUILDING.md](BUILDING.md#shared-machines)). Each worktree has its own `.lake/` directory. Once the lakefile requires Mathlib, run `lake exe cache get` before the first build in a new worktree.
+6. Run one heavy build per lane at a time, and limit its CPUs on a shared machine ([BUILDING.md](BUILDING.md#shared-machines)). Each worktree has its own `.lake/` directory. Before building the optional refinement package, run `lake -d Refinement exe cache get` in a new worktree.
 7. Rebase onto `main` before review. Do not merge `main` into a lane.
 8. Edit shared registries additively. [COVERAGE.md](COVERAGE.md), [SOURCES.md](SOURCES.md), and the library root import file are conflict points. Add rows in sorted position. Do not reorder, reflow, or reformat rows another lane owns.
 9. Only one lane at a time changes a pin in [SOURCES.md](SOURCES.md), the toolchain, or the trust policy in [SOUNDNESS.md](SOUNDNESS.md). That lane says so in its `STATUS.md` and pull request.
@@ -88,12 +88,15 @@ Report only the checks you ran, with the exact command, revision, and result ([C
 | Gate ([CONTRIBUTING.md](CONTRIBUTING.md#checks)) | Command | Exists | In CI |
 | --- | --- | --- | --- |
 | Build | `lake build --wfail` | Yes | `ci` / `lean` |
+| Refinement | `lake -d Refinement build --wfail`: the Aeneas model of the Rust reader agrees with `decodeBounded` on every Rust-representable slice | Yes. The root Build gate also checks the packed codec refinements. | `ci` / `lean` |
 | Declaration check | `lake exe check-decls` | Yes | `ci` / `lean` |
+| Import boundaries | `lake env lean --run scripts/CheckRefinementImports.lean` | Yes | `ci` / `lean` |
+| Rust known answers | `cargo +nightly-2026-09-17 test --locked --manifest-path Refinement/Rust/Cargo.toml --jobs 8` | Yes | No |
+| Rust extraction freshness | `Refinement/Rust/regenerate.sh --check` | Yes, after `Refinement/Rust/setup-tools.sh` | No |
 | Declaration check self-test | `bash scripts/test_check_decls.sh` | Yes | `ci` / `lean` |
 | Source and coverage review | Manual review of SOURCES.md and COVERAGE.md | Manual | No |
 | Conformance | `lake test`: known answers through the compiled code | Yes, for the operations that [COVERAGE.md](COVERAGE.md) gives a `lake test` comparison | `ci` / `lean` |
 | Pinned vectors | `(cd tests/cryptography/sha256/cavp && sha256sum -c SHA256SUMS) && (cd tests/transaction/sighash && sha256sum -c SHA256SUMS) && (cd tests/transaction/corpus && sha256sum -c SHA256SUMS) && (cd tests/work/mainnet-headers && sha256sum -c SHA256SUMS)` | Yes | `ci` / `tools` |
-| Refinement | `lake build --wfail`: the `LawfulPackedCodec` instances prove that the packed codecs agree with the codec specification | Yes, for the packed fixed-width and fixed-length codecs, the packed CompactSize codec and bounded reader (`abstractRead_decodeBoundedSlice`), the packed counted-list codecs and the packed transaction codecs | `ci` / `lean` |
 | Soundness review | Manual review of SOUNDNESS.md | Manual | No |
 | Writing | `uv run --no-project --python 3.12 python scripts/check_writing.py --base main` | Yes. Its findings are advice and never fail the check. | `writing`, as annotations |
 | Oracle | `bash scripts/test_oracle.sh`: builds `dogelib-oracle` and checks fixtures, Core's `sighash.json`, base-mode corpus records and every corpus record through both witness operations | Yes | `ci` / `lean` |
@@ -102,6 +105,13 @@ Report only the checks you ran, with the exact command, revision, and result ([C
 | Writing checker tests | `uv run --no-project --python 3.12 python -m unittest scripts/test_check_writing.py` | Yes | `writing` |
 | Validation report tests | `python3 -I scripts/test_validation_report.py` | Yes | `ci` / `tools` |
 | Lane tool | `bash scripts/test_lane.sh` | Yes | `ci` / `tools` |
+
+The root DogeLib package has no Lake dependencies.
+The separate package under `Refinement/` owns Aeneas and Mathlib.
+Build both packages before the default declaration check, which fails if the refinement package is absent or unbuilt.
+Contributors without that package can run `lake exe check-decls --skip-refinement`.
+Its summary prints `Refinement NOT checked`, and the refinement gate remains not run.
+Production CI never uses that flag.
 
 The validation report reads this table as executable input.
 The first code span in each automated gate's command cell is its complete command.

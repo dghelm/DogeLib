@@ -24,6 +24,9 @@ Such a definition cannot be unfolded either.
 Proofs are exempt, because nothing unfolds them.
 The `Exports` modules are exempt, because IO belongs there.
 
+Only `Refinement` modules may reach `System.Platform.getNumBits`, the opaque platform word size used to model Rust `usize`.
+Every other reachable opaque remains a finding.
+
 A finding is reported once, at the declaration in scope that first brings it in.
 A theorem proved by `native_decide` is reported, and the theorems that use it are not.
 
@@ -279,7 +282,8 @@ def check (env : Environment) (scope : Name) : Array Finding := Id.run do
   for (n, c) in spec do
     if let .defnInfo v := c then
       let reached := (opaqueMemo.find? n).getD {}
-      let fresh := frontier env scope opaqueMemo (dropPanicMessages v.value).getUsedConstants reached
+      let fresh := (frontier env scope opaqueMemo (dropPanicMessages v.value).getUsedConstants reached).filter
+        fun o => !(o == `System.Platform.getNumBits && inScope env `Refinement n)
       unless fresh.isEmpty do
         out := out.push ⟨"reaches-opaque", n, s!"unfolds to {fresh.take 3}"⟩
   for (thm, target) in csimpTheorems env do
@@ -290,22 +294,44 @@ def check (env : Environment) (scope : Name) : Array Finding := Id.run do
 /-! ## Production module reachability -/
 
 /-- The roots that load every production module.
-A future `Refinement/` library must extend these imports, the checked scope and the file inventory together. -/
-def defaultModules : List Name := [`DogeLib, `DogeLib.Proofs, `DogeLib.Exports]
+Both the specification libraries and the Rust refinement library belong to the production check. -/
+def defaultModules : List Name := [`DogeLib, `DogeLib.Proofs, `DogeLib.Exports, `Refinement]
+
+/-- The production module namespaces, excluding dependency libraries. -/
+def defaultScopes : List Name := [`DogeLib, `Refinement]
 
 /-- Production modules on disk that the imported environment does not contain.
 The inventory includes leaf files, even when a library root omits them. -/
-def unreachableModules (env : Environment) : IO (Array Name) := do
+def unreachableModules (env : Environment) (includeRefinement : Bool) : IO (Array Name) := do
   let files ← (System.FilePath.walkDir "DogeLib")
-  let files := files.push "DogeLib.lean"
+  let rustFiles ← if includeRefinement then
+    System.FilePath.walkDir "Refinement/Refinement" else pure #[]
+  let files := (files.push "DogeLib.lean") ++ rustFiles
+  let files := if includeRefinement then files.push "Refinement/Refinement.lean" else files
   let imported : NameSet := env.header.modules.foldl (fun s m => s.insert m.module) {}
   let mut missing := #[]
   for path in files do
     if path.extension == some "lean" then
-      let n := (path.withExtension "").components.foldl (fun n c => Name.str n c) .anonymous
+      let parts := (path.withExtension "").components
+      let parts := if parts.head? == some "Refinement" then parts.drop 1 else parts
+      let n := parts.foldl (fun n c => Name.str n c) .anonymous
       unless imported.contains n do
         missing := missing.push n
   return missing
+
+/-- Resolve the separate refinement package without fetching its dependencies when it is unbuilt. -/
+def refinementSearchPath : IO (Except String System.SearchPath) := do
+  unless ← System.FilePath.pathExists "Refinement/lakefile.lean" do
+    return .error "refinement package unavailable: Refinement/lakefile.lean is missing"
+  unless ← System.FilePath.pathExists "Refinement/.lake/build/lib/lean/Refinement.olean" do
+    return .error "refinement package unbuilt: run lake -d Refinement exe cache get, then lake -d Refinement build --wfail"
+  try
+    let out ← IO.Process.output { cmd := "lake", args := #["-d", "Refinement", "env", "printenv", "LEAN_PATH"] }
+    if out.exitCode != 0 then
+      return .error s!"refinement package environment unavailable: {out.stderr.trimAscii}"
+    return .ok ([System.FilePath.mk "Refinement/.lake/build/lib/lean"] ++ System.SearchPath.parse out.stdout.trimAscii.toString)
+  catch e =>
+    return .error s!"refinement package environment unavailable: {e}"
 
 /-! ## The baseline -/
 
@@ -317,44 +343,64 @@ def readBaseline (path : System.FilePath) : IO (List (String × Name)) := do
     | [kind, decl] => some (kind, decl.toName)
     | _ => none
 
-/-- Entry point: `check-decls [--scope NAME] [--baseline FILE] [Module ...]`.
+/-- Entry point: `check-decls [--skip-refinement] [--scope NAME] [--baseline FILE] [Module ...]`.
 It is `unsafe` because loading the environment extensions runs their initializers.
 The tool itself is not part of the checked scope. -/
 unsafe def run (args : List String) : IO UInt32 := do
-  let usage := "usage: check-decls [--scope NAME] [--baseline FILE] [Module ...]"
-  let rec parse : List String → Name → System.FilePath → List Name →
-      Except String (Name × System.FilePath × List Name)
-    | [], scope, baseline, mods => .ok (scope, baseline, mods.reverse)
-    | "--scope" :: s :: rest, _, baseline, mods => parse rest s.toName baseline mods
-    | "--baseline" :: b :: rest, scope, _, mods => parse rest scope b mods
-    | a :: rest, scope, baseline, mods =>
-      if a.startsWith "--" then .error s!"unknown option {a}" else parse rest scope baseline (a.toName :: mods)
-  let (scope, baselinePath, mods) ← match parse args `DogeLib "scripts/check_decls_baseline.txt" [] with
+  let usage := "usage: check-decls [--skip-refinement] [--scope NAME] [--baseline FILE] [Module ...]"
+  let rec parse : List String → Name → System.FilePath → List Name → Bool →
+      Except String (Name × System.FilePath × List Name × Bool)
+    | [], scope, baseline, mods, skip => .ok (scope, baseline, mods.reverse, skip)
+    | "--scope" :: s :: rest, _, baseline, mods, skip => parse rest s.toName baseline mods skip
+    | "--baseline" :: b :: rest, scope, _, mods, skip => parse rest scope b mods skip
+    | "--skip-refinement" :: rest, scope, baseline, mods, _ => parse rest scope baseline mods true
+    | a :: rest, scope, baseline, mods, skip =>
+      if a.startsWith "--" then .error s!"unknown option {a}" else parse rest scope baseline (a.toName :: mods) skip
+  let (scope, baselinePath, mods, skipRefinement) ← match parse args `DogeLib "scripts/check_decls_baseline.txt" [] false with
     | .ok r => pure r
     | .error e => do
       IO.eprintln s!"check-decls: {e}\n{usage}"
       return 2
   let checkProduction := mods.isEmpty && scope == `DogeLib
-  let mods := if mods.isEmpty then defaultModules else mods
+  if skipRefinement && !checkProduction then
+    IO.eprintln "check-decls: --skip-refinement applies only to the default production check"
+    return 2
+  let checkRefinement := (checkProduction && !skipRefinement) || Name.isPrefixOf `Refinement scope ||
+    mods.any (Name.isPrefixOf `Refinement ·)
+  let mods := if mods.isEmpty then
+    (if skipRefinement then defaultModules.filter (· != `Refinement) else defaultModules) else mods
   if checkProduction then
     unless (← System.FilePath.pathExists "DogeLib.lean") && (← System.FilePath.isDir "DogeLib") do
       IO.eprintln "check-decls: run the default production check from the repository root (DogeLib.lean and DogeLib/ are required)"
       return 2
-  initSearchPath (← findSysroot)
+  let refinementPaths ← if checkRefinement then
+    match ← refinementSearchPath with
+    | .ok paths => pure paths
+    | .error reason => do
+      IO.eprintln s!"check-decls: {reason}"
+      return 2
+    else pure []
+  initSearchPath (← findSysroot) refinementPaths
   -- `loadExts := true` is essential: without it the `@[csimp]` table, among others, stays empty.
   -- Lean v4.35.0 `Lean.importModules`: `.private` loads every private proof body.
   -- Exported artifacts alone cannot reveal a theorem's full dependencies.
   enableInitializersExecution
-  let env ← importModules (mods.toArray.map fun m => { module := m }) {} (trustLevel := 1024)
-    (loadExts := true) (level := .private)
+  let env ← try
+    importModules (mods.toArray.map fun m => { module := m }) {} (trustLevel := 1024)
+      (loadExts := true) (level := .private)
+  catch e =>
+    IO.eprintln s!"check-decls: cannot import every requested production module: {e}"
+    return 2
   if (csimpTheorems env).isEmpty then
     IO.eprintln "check-decls: no @[csimp] theorems visible, so the extensions did not load"
     return 3
-  let missing ← if checkProduction then unreachableModules env else pure #[]
+  let missing ← if checkProduction then unreachableModules env (!skipRefinement) else pure #[]
   for m in missing do
     IO.eprintln s!"unreachable-module {m}: not imported by the default production roots"
   let baseline ← readBaseline baselinePath
-  let findings := check env scope
+  let scopes := if checkProduction then
+    (if skipRefinement then [`DogeLib] else defaultScopes) else [scope]
+  let findings := scopes.foldl (fun acc s => acc ++ check env s) #[]
   let isListed (f : Finding) := baseline.contains (f.kind, f.decl)
   let fresh := findings.filter (!isListed ·)
   for f in fresh do
@@ -362,8 +408,11 @@ unsafe def run (args : List String) : IO UInt32 := do
   let stale := baseline.filter fun (kind, decl) => !findings.any (fun f => f.kind == kind && f.decl == decl)
   for (kind, decl) in stale do
     IO.println s!"stale baseline entry, no longer found: {kind} {decl}"
-  let nDecls := env.constants.toList.countP fun (n, _) => inScope env scope n
-  IO.println s!"check-decls: {nDecls} declarations under {scope}, {findings.size} findings, {findings.size - fresh.size} in the baseline, {fresh.size} new, {stale.length} stale"
+  let nDecls := env.constants.toList.countP fun (n, _) => scopes.any (fun s => inScope env s n)
+  let scopeLabel := if checkProduction then
+    (if skipRefinement then "DogeLib (Refinement NOT checked)" else "DogeLib and Refinement")
+    else s!"{scope} (production inventory and full Refinement coverage NOT checked)"
+  IO.println s!"check-decls: {nDecls} declarations under {scopeLabel}, {findings.size} findings, {findings.size - fresh.size} in the baseline, {fresh.size} new, {stale.length} stale"
   return if missing.isEmpty && fresh.isEmpty && stale.isEmpty then 0 else 1
 
 end CheckDecls

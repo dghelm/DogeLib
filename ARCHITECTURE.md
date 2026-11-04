@@ -37,14 +37,19 @@ The implementation never becomes the specification.
 | `DogeLib` | The specification | On |
 | `Proofs` | Properties, rooted at each layer's `Proofs` tree | Off |
 | `Exports` | The oracle, `dogelib-oracle`, and later binding-facing code | Off: with it on, Lake reports a build cycle, because the library contains the executable's root module |
-| `Refinement` | Extracted implementation models and their refinement proofs. Added with the first refinement. | Off |
+| `Refinement` | Extracted Rust implementation models and their refinement proofs. Imports the pinned Aeneas backend and Mathlib. | Off |
 | `check-decls` | An executable that checks the axioms and substitutions of every compiled declaration | — |
 
 Each library uses the Lean module system (`requiresModuleSystem := true`), as EthLib does.
 Proofs live in their own library, so the specification builds and links without them.
 The oracle lives in `Exports`, so a Lean project that imports the specification gets no IO adapter.
 [docs/oracle.md](docs/oracle.md) defines its record format.
-Heavy mathematical and probabilistic dependencies stay in `Proofs` and in model code.
+
+The `Refinement` library belongs to a separate Lake package under `Refinement/`, which requires DogeLib, Aeneas and Mathlib.
+The root DogeLib package has no Lake dependencies.
+The specification, `Proofs` and `Exports` import neither dependency.
+`scripts/CheckRefinementImports.lean` checks those transitive import boundaries.
+Heavy mathematical and probabilistic dependencies stay outside the specification.
 
 ## Layout
 
@@ -52,7 +57,9 @@ Heavy mathematical and probabilistic dependencies stay in `Proofs` and in model 
 DogeLib/<Layer>/<Module>             the specification
 DogeLib/<Layer>/Proofs/<Module>      theorems about it
 DogeLib/<Layer>/Exports/             the oracle adapter for that layer
-Refinement/Rust/                     Rust sources, extraction configuration, refinement proofs
+Refinement/                         optional Lake package
+Refinement/Refinement/              extracted Lean models and refinement proofs
+Refinement/Rust/                     Rust sources and extraction scripts
 tests/<layer>/                       fixtures with recorded provenance
 tests/KnownAnswers.lean              the driver that `lake test` runs
 harness/core/                        the Dogecoin Core harness: Core's code on the oracle's requests

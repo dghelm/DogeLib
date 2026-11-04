@@ -2,8 +2,7 @@
 # and run the tests of the repository tools.
 #
 # Adapted from EthLib's ci.yml at commit 6a93711 (CC0 1.0), with the same
-# pinned actions. The build has no dependencies and takes seconds, so this
-# workflow keeps no build cache and records no timing.
+# pinned actions. Mathlib supplies cached artifacts for the Rust refinement.
 
 name: ci
 
@@ -36,9 +35,29 @@ jobs:
           use-mathlib-cache: false
           use-github-cache: false
 
+      - name: refinement dependencies
+        run: |
+          MATHLIB_NO_CACHE_ON_UPDATE=1 lake -d Refinement update
+          git diff --exit-code Refinement/lake-manifest.json
+
+      - name: Aeneas backend cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: Refinement/.lake/packages/aeneas/backends/lean/.lake/build
+          key: aeneas-${{ runner.os }}-${{ runner.arch }}-d1e177bb9fdc17fa62e730d524ac905ba19776ed-${{ hashFiles('lean-toolchain', 'Refinement/lean-toolchain', 'Refinement/lake-manifest.json') }}
+
+      - name: Mathlib cache
+        run: lake -d Refinement exe cache get
+
       # An unfinished proof only warns, so warnings have to be fatal.
       - name: build
         run: lake build --wfail
+
+      - name: refinement build
+        run: lake -d Refinement build --wfail
+
+      - name: import boundaries
+        run: lake env lean --run scripts/CheckRefinementImports.lean
 
       # Every compiled declaration: its axioms, and anything the kernel cannot
       # unfold or the compiler runs differently. Only the findings listed in

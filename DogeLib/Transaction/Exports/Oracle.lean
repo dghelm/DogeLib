@@ -57,7 +57,7 @@ def txReadBase : Operation where
   name := "tx.read_base"
   args := ["bytes_hex"]
   run args := do
-    let bs := (ByteArray.mk (← argHex args "bytes_hex").toArray).toByteSlice
+    let bs := ByteSlice.ofByteArray (ByteArray.mk (← argHex args "bytes_hex").toArray)
     match Transaction.readBaseSlice bs with
     | .error e => throw (.spec (readErrorJson e))
     | .ok (tx, rest) =>
@@ -69,7 +69,7 @@ def txDecodeBase : Operation where
   name := "tx.decode_base"
   args := ["bytes_hex"]
   run args := do
-    let bs := (ByteArray.mk (← argHex args "bytes_hex").toArray).toByteSlice
+    let bs := ByteSlice.ofByteArray (ByteArray.mk (← argHex args "bytes_hex").toArray)
     match Transaction.decodeBaseCompleteSlice bs with
     | .error e => throw (.spec (completeReadErrorJson e))
     | .ok tx =>
@@ -126,7 +126,7 @@ def sighashLegacy : Operation where
   name := "sighash.legacy"
   args := ["tx_hex", "script_code_hex", "input_index", "hash_type"]
   run args := do
-    let txBytes := (ByteArray.mk (← argHex args "tx_hex").toArray).toByteSlice
+    let txBytes := ByteSlice.ofByteArray (ByteArray.mk (← argHex args "tx_hex").toArray)
     let codeBytes ← argHex args "script_code_hex"
     let nIn ← argU32 args "input_index"
     let hashType ← argHashType args

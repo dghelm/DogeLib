@@ -201,15 +201,16 @@ The legacy operation constructs and hashes its preimage.
 Python checks responses after the timer stops.
 
 Build both variants from the same commit with identical flags.
-For the before variant, use the list-reader selection from `cca317b` in `DogeLib/Transaction/Exports/Oracle.lean`.
+For the before variant, use the base commit's `DogeLib/Transaction/Exports/Oracle.lean` file, which selects the list readers.
 For the after variant, use the slice readers.
+Set `base_commit` to that base commit.
 Keep the reader-selection patch and the two binaries under `.lane/`, and restore the committed source after building:
 
 ```bash
 oracle_source=DogeLib/Transaction/Exports/Oracle.lean
 cp "$oracle_source" .lane/oracle-source.lean
 trap 'cp .lane/oracle-source.lean "$oracle_source"' EXIT
-git show "cca317b:$oracle_source" > "$oracle_source"
+git show "$base_commit:$oracle_source" > "$oracle_source"
 git diff -- "$oracle_source" > .lane/list-reader.patch
 taskset -c 4-7 nice -n 10 lake build dogelib-oracle
 cp .lake/build/bin/dogelib-oracle .lane/oracle-list

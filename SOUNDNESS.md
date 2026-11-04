@@ -957,6 +957,7 @@ The base operations and the transaction argument of `sighash.legacy` convert hex
 `Transaction.decodeBaseCompleteSlice_eq` preserves the complete reader's result, including errors and trailing-byte counts, for every slice.
 The list readers remain the specification.
 
+`ByteSlice.toList_ofByteArray` identifies the bytes in each whole-array slice that the adapter constructs with `ByteSlice.ofByteArray`.
 These equalities do not cover the hex or JSON conversions.
 The witness operations use list readers.
 

@@ -8,7 +8,8 @@ public import DogeLib.Transaction.Witness
 # Proofs: `Transaction.Witness`
 
 The contract of Core's reader of the witness-allowed format, which models a serialization format only.
-Segregated witness is not active on Dogecoin's main or test network at the pin (`DogeLib.Transaction.Witness`).
+Core rejects blocks with witness data on main and test at the pin.
+`DogeLib.Transaction.Witness` documents the separate consensus mechanisms and their sources.
 
 - `Transaction.readAllowWitness_eq_readBase`: suppose the first input count reads as a list that is not empty.
   Then the reader returns what the base-mode reader returns, with an empty stack per input, and the same error.

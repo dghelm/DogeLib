@@ -323,7 +323,14 @@ The upstream files use no `bv_decide` (C2).
 
 `DogeLib.Transaction.Witness` models the format that Core reads and writes without `SERIALIZE_TRANSACTION_NO_WITNESS` (D4, lines 211 to 272).
 It models a serialization format only.
-Segregated witness is not active on Dogecoin's main or test network at the pin: `src/chainparams.cpp` gives its deployment the timeout 0 on both (D9, lines 111 and 267).
+At the pinned commit, `IsWitnessEnabled` returns false on every network (`src/validation.cpp`, lines 3002 to 3008, D36).
+`ConnectBlock` uses that function, so it never enables `SCRIPT_VERIFY_WITNESS` (lines 1913 to 1917).
+Separately, `ContextualCheckBlock` checks `DEPLOYMENT_SEGWIT` through versionbits directly for witness commitments (lines 3163 to 3181).
+Without a checked commitment, it rejects witness data as `unexpected-witness` (lines 3183 to 3187).
+
+The deployment timeout is 0 on main and test, and 999999999999 on regtest (`src/chainparams.cpp`, lines 111, 267 and 408, D9).
+Thus main and test reject blocks with witness data.
+Regtest's deployment parameters do not enable witness script verification.
 No definition or theorem here says that a transaction in this format is valid, or that a network accepts it.
 
 `WitnessTransaction` holds a `Transaction` and one `WitnessStack` per input. Its field `witnesses_length` requires the count.
@@ -405,7 +412,10 @@ By `#print axioms` with Lean `v4.35.0`:
 `legacyReferencePlan` follows `SignatureHashOld` (SOURCES.md, D2), Core's copy of the old `SignatureHash`.
 It copies the transaction and removes the separators from the script code with `findAndDelete` (D24).
 Then it blanks scripts, sequences and outputs, and serializes the copy with the base codec.
-The production plan writes the preimage field by field. The two definitions share `readOp`, `Script.empty`, `TxOut.null`, `legacyOne`, the hash-type flags and the field codecs.
+
+The production plan constructs the whole preimage as a byte list, field by field, before hashing.
+An incremental hash sink is later work.
+The two definitions share `readOp`, `Script.empty`, `TxOut.null`, `legacyOne`, the hash-type flags and the field codecs.
 
 `legacySignatureHashPlan_eq_reference` says that the two plans are equal, for every input index and every hash type, under three hypotheses:
 
@@ -574,8 +584,11 @@ A definition or proof adopted from btc-verified is evidence to investigate, not 
 ### A2. Hypotheses inside theorems
 
 A conditional theorem is only as strong as its hypotheses.
-The first planned one is the signature-preimage equivalence, which may require fully parsed script code (ROADMAP.md, milestone C).
+`legacySignatureHashPlan_eq_reference` equates the field-by-field production plan with the transaction-transformation reference for every input index and hash type.
+It requires fully parsed script code, fewer than 2^32 inputs and fewer than 2^32 outputs.
+The transformation-reference subsection states these hypotheses and explains the short-push difference.
 Whatever those hypotheses leave unproved is part of what a reader trusts.
+
 The next-work view checks heights but does not discharge the old-target bound of `no_wrap_of_le_powLimit`.
 A proof about an accepted header chain still needs header validity.
 
@@ -598,7 +611,11 @@ A definition that leaves out its context can be right in one era and wrong in an
 The first operations, base codecs and legacy signature hashing, have few context dependencies.
 
 The transaction readers model two serialization modes of Core's reader: base mode and the witness-allowed format.
-The witness-allowed format is a format only. Segregated witness is not active on Dogecoin's main or test network at the pin, and no theorem says that it is.
+The witness-allowed format models serialization only.
+Core rejects blocks with witness data on main and test at the pin.
+The witness-format subsection records the separate script-verification and commitment mechanisms (D36), with their deployment parameters (D9).
+No DogeLib theorem establishes consensus acceptance of witness data.
+
 The legacy signature hash is the `SIGVERSION_BASE` mode of `SignatureHash`, and its script code is an input: the interpreter's preparation of it is not specified.
 
 The work-parameter search covers each network and height, and the next-work wrapper selects the candidate height.

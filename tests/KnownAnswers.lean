@@ -855,7 +855,9 @@ end KnownAnswers.Transactions
 ## Transactions: the witness-allowed format
 
 Known answers for `Transaction.readAllowWitness`, the complete reader, the writer and the witness hash.
-They model a serialization format only. Segregated witness is not active on Dogecoin's main or test network at the pin.
+The format models serialization only.
+Core rejects blocks with witness data on main and test at the pin (D9, D36).
+The module documentation of `DogeLib.Transaction.Witness` records the separate consensus mechanisms.
 
 The inputs are built by hand.
 Their expected results come from a reading of `UnserializeTransaction` and `SerializeTransaction` in `src/primitives/transaction.h`, lines 211 to 272 (D4), with `ReadCompactSize` (D1) and `CDataStream::read` (D21):
@@ -1004,7 +1006,9 @@ For each base-mode record, the test checks five things. `readBase` reads the who
 
 For each record in the witness-allowed format, `decodeAllowWitnessComplete` must read the whole transaction, and `WitnessTransaction.encode` must write the same bytes again.
 Each of these records has a stack that is not empty, so the writer uses the extended form. The test checks that too.
-The format is only a serialization format here. Segregated witness is not active on Dogecoin's main or test network at the pin.
+The format models serialization only.
+Core rejects blocks with witness data on main and test at the pin (D9, D36).
+The module documentation of `DogeLib.Transaction.Witness` records the separate consensus mechanisms.
 
 Core's harness checks none of these directly. They are DogeLib's checks on Core's bytes, not a comparison with a running Core.
 -/

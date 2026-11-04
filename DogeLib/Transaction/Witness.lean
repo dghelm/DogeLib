@@ -9,9 +9,14 @@ The witness-allowed serialization format of Dogecoin Core `v1.14.9`: its reader,
 
 This module models a serialization format that Core's code reads and writes.
 It does not model segregated witness as a consensus rule.
-At the pinned commit, segregated witness is not active on Dogecoin's main network or test network.
-`src/chainparams.cpp` gives its deployment the timeout 0 on both (lines 111 and 267, SOURCES.md D9).
-Only the regression-test network can activate it (line 408).
+At the pinned commit, `IsWitnessEnabled` returns false on every network (`src/validation.cpp`, lines 3002 to 3008, SOURCES.md D36).
+`ConnectBlock` uses that function, so it never enables `SCRIPT_VERIFY_WITNESS` (lines 1913 to 1917).
+Separately, `ContextualCheckBlock` checks `DEPLOYMENT_SEGWIT` through versionbits directly for witness commitments (lines 3163 to 3181).
+Without a checked commitment, it rejects witness data as `unexpected-witness` (lines 3183 to 3187).
+
+The deployment timeout is 0 on main and test, and 999999999999 on regtest (`src/chainparams.cpp`, lines 111, 267 and 408, D9).
+Thus main and test reject blocks with witness data.
+Regtest's deployment parameters do not enable witness script verification.
 No definition here says that a transaction in this format is valid, or that any network accepts it.
 
 ## Core's format
@@ -136,7 +141,8 @@ Dogecoin Core's reader of a transaction with witness data allowed: `UnserializeT
 It reads the version, the sections of `readSections`, the witness stacks of `readStacks`, checks the flags, and reads the lock time, in this order.
 The result is the first error in this order. So `unknownOptionalData` comes after every list and stack is read, and before the lock time.
 
-It models the format only. Segregated witness is not active on Dogecoin's main or test network at the pin (see the module documentation).
+It models the serialization format only.
+Core rejects blocks with witness data on main and test at the pin (see the module documentation for the separate consensus mechanisms).
 
 The last check, that the reader found one stack per input, never fails: `readStacks` returns `n` stacks for `n` inputs.
 If it failed, the result would be `tooLarge`.

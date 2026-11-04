@@ -6,6 +6,8 @@ A change to the format needs a maintainer's approval ([AGENTS.md](../AGENTS.md#c
 
 The oracle models Core's serialization and its legacy signature hash.
 It reads transactions in base mode only, the format without witness data.
+The specification also defines the witness-allowed serialization format, outside this oracle format (issue #36).
+Its [protocol context](../SOUNDNESS.md#transactions-the-witness-allowed-format) separates witness script verification from the commitment checks in Core.
 It checks no consensus rule. Its output says what Core's code computes for an input, not that the input is valid on any network.
 
 ## Running it

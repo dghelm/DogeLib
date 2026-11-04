@@ -31,7 +31,7 @@ Gap D asks whether the use of DogeLib holds together.
 
 | ID | Risk | Mitigation in place | Applies to |
 |----|------|---------------------|------------|
-| A1 | A definition does not match the pinned Dogecoin behavior | Source mapping in `SOURCES.md`, by review only. The 256-bit word models have arithmetic equivalence proofs, including division and its comparison and subtraction dependencies. The division model represents Core's zero-divisor exception. The remaining retarget paths stay by review only (issue #48). SHA-256 has a proof against a FIPS 180-4 model, and NIST CAVP known answers. Known answers from Core's genesis data test the integer codecs. Core's own test cases are known answers for CompactSize, the legacy signature hash, the compact encoding and the difficulty retarget. The scripts of the genesis coinbase are known answers for counted lists. The genesis coinbase is a known answer for the transaction codec, reader and ID. `scripts/compare_core.py` runs the oracle and Core's own code at the pin on 179,556 requests. They cover CompactSize, the base-mode transaction reader, serialization and ID, and the legacy signature hash. | P R I F |
+| A1 | A definition does not match the pinned Dogecoin behavior | Source mapping in `SOURCES.md`, by review only. The 256-bit word models have arithmetic equivalence proofs, including division and its comparison and subtraction dependencies. The division model represents Core's zero-divisor exception. The compact, uint64 construction, byte conversion and composed retarget models also have arithmetic equivalence proofs. Their correspondence to Core remains by review. SHA-256 has a proof against a FIPS 180-4 model, and NIST CAVP known answers. Known answers from Core's genesis data test the integer codecs. Core's own test cases are known answers for CompactSize, the legacy signature hash, the compact encoding and the difficulty retarget. The scripts of the genesis coinbase are known answers for counted lists. The genesis coinbase is a known answer for the transaction codec, reader and ID. `scripts/compare_core.py` runs the oracle and Core's own code at the pin on 179,556 requests. They cover CompactSize, the base-mode transaction reader, serialization and ID, and the legacy signature hash. | P R I F |
 | A2 | A theorem holds only under a hypothesis | Policy: each conditional theorem lists its hypotheses here and in `COVERAGE.md` | P I |
 | A3 | Timing reveals secret data | None: no constant-time claim | R I |
 | A4 | A security theorem idealises a primitive | None: no security theorem yet | P |
@@ -645,6 +645,75 @@ All names in this table are in `DogeLib.Work.ArithUint256.Words`.
 | `propext`, `Quot.sound` | `add_step`, `addLoop_value`, `add_value`, `shiftRight_value` |
 | `propext`, `Classical.choice`, `Quot.sound` | `readWords_ofFn`, `compareLoop_eq`, `compareTo_eq`, `incrementLoop_digits`, `incrementLoop_value`, `complement_value`, `neg_value`, `sub_value`, `sub_value_of_le`, `shiftLeft_value`, `quotient_mask`, `quotient_or_value`, `quotient_add_value`, `divLoop_spec`, `bits_eq_zero_iff`, `bits_value_bounds`, `divide_eq_none_iff`, `divide_value`, `divide_toArith`, `divide_ofArith` |
 
+### Remaining word paths of the retarget
+
+`Work.ArithUint256Compact` models Core's uint64 constructor, assignment, `SetCompact` and `GetCompact` over eight words (D12, D13).
+`Words.ofUInt64_value` proves that construction stores every input exactly.
+`ofUInt64_toArith` and `assignUInt64_toArith` equate construction and assignment with the arithmetic embedding, for every uint64 input and previous word array.
+`assignUInt64` describes the explicit base-class overload at D12 lines 88-95, which sets every word.
+
+The implicit `arith_uint256` copy assignment hides this base overload.
+Thus `*this = nWord` in `SetCompact` and `num = 0x80` in D16 construct a temporary through D12 line 257, then copy it.
+The temporary uses the uint64 constructor at D12 lines 51-57, and the base copy assignment copies its words at lines 44-49.
+
+`Words.setCompact_toArith` equates the complete decoder result with `ArithUint256.setCompact` for every compact input.
+The conclusion includes the magnitude and both flags.
+For small exponents, both flags read the mantissa after the right shift, as Core does.
+`Words.getCompact_toArith` equates the word encoder with `ArithUint256.getCompact` for every word array and both sign arguments.
+These models use the proved word shifts, bit scan and low-64-bit extraction.
+
+`Work.ArithUint256Bytes` gives an independent radix-256 interpretation of a 32-byte target.
+`Words.uintToArith256_toArith` proves that eight grouped `ReadLE32` reads give that interpretation, for every 32-byte input (D13, D37).
+`Words.readLE32_toNat` proves that each group fits exactly in its word.
+The portable meaning of Core's `memcpy` and `le32toh` remains a source-review boundary.
+Memory layout and Core's compiled code are not proved.
+
+`targetBytesOfHex` models Core's backwards nibble scan for `0x` followed by exactly 64 ASCII hexadecimal digits (D11).
+It rejects every other format.
+It does not specify Core's general whitespace, prefix and truncation behavior.
+
+Seven `*_powLimit_literal` theorems start from Core's literal strings at D14 lines 88, 248 and 392.
+They prove the resulting `Words.toArith` interpretations equal the existing network parameter limits, including inherited DigiShield and AuxPoW limits.
+The kernel checks these concrete computations with `decide +kernel`.
+The literals come from Core, rather than from the arithmetic values under test.
+The hex parser is checked only on the three concrete network strings, with two distinct spellings.
+
+`calculateDogecoinNextWorkRequiredWords_eq` proves that word retarget returns `some` of the arithmetic target for every existing parameter record and input.
+The executable model preserves division's `Option`, and the proof uses the positive-timespan field to exclude the exception.
+It includes the divisor constructor, compact operations, multiplication, division and word comparison with the limit.
+`calculateDogecoinNextWorkRequiredWithWords_eq` covers every explicit word limit, with that limit's arithmetic interpretation.
+`calculateDogecoinNextWorkRequiredBytes_eq` also covers every 32-byte limit, through `UintToArith256` and its independent interpretation.
+
+`retarget_mainnet_literal`, `retarget_testnet_literal` and `retarget_regtest_literal` connect each literal directly to the byte retarget.
+At every network selection height, each corollary exhibits parsed bytes and proves retarget equality for every retarget input.
+These corollaries cover all ten tree records, including the records that share work fields.
+
+The signed timespan calculation reuses Core's lines 41-74 through `Work.Retarget`.
+The equality of the Lean retargets has no additional signed-arithmetic hypothesis.
+Agreement with Core's signed execution retains the existing block-time and target-timespan bounds from `signedSteps_fit` and `modulatedTimespan_eq_int64`.
+The inherited bit-scan and division-mask models retain their intended-unsigned-mask boundary under S1.
+The models' correspondence to Core's source remains subject to review (A1), and compiler and runtime trust remains (B1, B2).
+
+The retarget materialises intermediate words with the vector copy from the division model.
+`readWords_ofFn` proves that each copy preserves the words.
+The copy avoids repeated computation of earlier word operations and retains the Lean core array execution boundary (B2).
+
+`lake test` runs all 21 D16 compact cases through both arithmetic and word models, including both flags.
+The derived assignment case at line 490 exercises uint64 construction, followed by a copy whose value is unchanged.
+All six D7 retarget cases run through the arithmetic function and both word entry points.
+The byte entry point starts from Core's mainnet hexadecimal limit.
+These expectations come from Core's tests and are not a comparison with Core's compiled code.
+
+The axioms of all 22 public theorems in `Work.Proofs.ArithUint256Compact`, `Work.Proofs.ArithUint256Bytes` and `Work.Proofs.RetargetWords`, by `#print axioms` with Lean `v4.35.0`:
+
+| Axioms | Theorems |
+| --- | --- |
+| `propext`, `Quot.sound` | `Words.ofUInt64_value`, `Words.ofUInt64_toArith`, `Words.assignUInt64_toArith`, `Words.readLE32_toNat`, `Words.uintToArith256_value`, `Words.uintToArith256_toArith` |
+| `propext`, `Classical.choice`, `Quot.sound` | `Words.setCompact_toArith`, `Words.getCompact_toArith`, all seven `*_powLimit_literal` theorems, `Words.compareTo_gt`, `calculateDogecoinNextWorkRequiredWithWords_eq`, `calculateDogecoinNextWorkRequiredWords_eq`, `calculateDogecoinNextWorkRequiredBytes_eq`, `retarget_mainnet_literal`, `retarget_testnet_literal`, `retarget_regtest_literal` |
+
+The `Words` and literal theorem names are in `DogeLib.Work.ArithUint256`.
+The retarget and network corollary names are in `DogeLib.Work`.
+
 ### Next-work selection and work parameters
 
 `DogeLib.Work.Consensus` projects the work fields from Core's parameter records (D14, D15).
@@ -748,9 +817,11 @@ The division, comparison and subtraction models also have arithmetic equivalence
 The word division model represents Core's zero-divisor exception.
 The arithmetic definition takes a nonzero proof.
 
-The retarget's `SetCompact`, `GetCompact`, uint64 constructors and `UintToArith256` still have no word models (issue #48).
-Its powLimit comparison uses the arithmetic definition rather than the proved `CompareTo` model.
-The correspondence of these retarget paths to Core remains by review only (issue #48).
+The compact, uint64 construction and byte conversion models have arithmetic equivalence proofs, as the *Remaining word paths of the retarget* subsection states.
+The composed word retarget uses these models and the proved `CompareTo` model.
+Its equality with the arithmetic specification holds for every existing input.
+Network powLimit proofs start from Core's hexadecimal literals, through the restricted hex parser and word conversion.
+A reader still checks the models against Core's source.
 
 A Dogecoin rule can differ from the Bitcoin rule it descends from.
 A definition or proof adopted from btc-verified is evidence to investigate, not a compatibility proof for Dogecoin.

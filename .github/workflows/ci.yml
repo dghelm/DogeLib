@@ -70,4 +70,6 @@ jobs:
       # Every vendored vector file must match its pinned digest.
       - name: pinned vectors
         if: ${{ !cancelled() }}
-        run: cd tests/cryptography/sha256/cavp && sha256sum -c SHA256SUMS
+        run: |
+          (cd tests/cryptography/sha256/cavp && sha256sum -c SHA256SUMS)
+          (cd tests/transaction/sighash && sha256sum -c SHA256SUMS)

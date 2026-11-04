@@ -3,6 +3,7 @@ import DogeLib.Cryptography.Hash.Sha256d
 import DogeLib.Serialization
 import DogeLib.Transaction
 import DogeLib.Work
+import Lean.Data.Json
 
 /-!
 # `KnownAnswers`
@@ -799,6 +800,234 @@ def check : IO Nat := do
 end KnownAnswers.Transactions
 
 /-!
+## Legacy signature hash
+
+Two kinds of known answer, both run through the compiled `legacySignatureHash` and `legacyPreimage`.
+
+The first is Core's corpus `src/test/data/sighash.json` at commit `e0a1c15` (SOURCES.md, D26), vendored in `tests/transaction/sighash/`.
+Core's `sighash_from_data` reads each transaction with witness data allowed.
+Every record's transaction has at least one input, and then that reader reads what the base reader reads (D4, lines 218 to 241).
+The test checks that each transaction has an input and is read whole by `decodeBaseComplete`.
+The corpus gives digests only, so it does not check preimages.
+
+The second is a set of preimages derived by hand from `CTransactionSignatureSerializer` and `SignatureHash` (D3, lines 1054 to 1246) and `GetOp2` (D24).
+Each expected byte string is written out field by field below, not computed with DogeLib's functions.
+-/
+
+namespace KnownAnswers.LegacySighash
+
+open DogeLib DogeLib.Serialization DogeLib.Transaction
+open KnownAnswers.Sha256Cavp (parseHex toHex)
+open KnownAnswers.Transactions (countedOf script le)
+
+/-- One record of the corpus. -/
+structure Record where
+  tx : List UInt8
+  script : List UInt8
+  nIn : Int
+  hashType : Int
+  display : List UInt8
+
+/-- The 32 bits of an `int` value, as Core stores them. -/
+def bits32 (i : Int) : UInt32 := (i % 2 ^ 32).toNat.toUInt32
+
+/-- The records of the corpus, after its comment. Fails on a record that is not a comment or a five-field record. -/
+def parseCorpus (text : String) : Except String (Array Record) := do
+  let json ← Lean.Json.parse text
+  let rows ← json.getArr?
+  let mut out := #[]
+  for row in rows do
+    let fields ← row.getArr?
+    if fields.size == 1 then continue
+    if fields.size != 5 then throw s!"record with {fields.size} fields: {row.compress}"
+    out := out.push {
+      tx := (← parseHex (← fields[0]!.getStr?)).toList
+      script := (← parseHex (← fields[1]!.getStr?)).toList
+      nIn := ← fields[2]!.getInt?
+      hashType := ← fields[3]!.getInt?
+      display := (← parseHex (← fields[4]!.getStr?)).toList }
+  return out
+
+/-- Runs every corpus record. Returns the number of failures. -/
+def checkCorpus (path : System.FilePath) : IO Nat := do
+  let records ← match parseCorpus (← IO.FS.readFile path) with
+    | .ok r => pure r
+    | .error e => throw (IO.userError s!"{path}: {e}")
+  let mut failures := 0
+  let mut fixed := 0
+  if records.size != 500 then
+    IO.eprintln s!"FAIL {path}: {records.size} records, expected 500"
+    failures := failures + 1
+  for r in records do
+    match Transaction.decodeBaseComplete r.tx, CountedList.ofList? r.script with
+    | .ok tx, some sc =>
+      if tx.inputs.val.isEmpty || r.nIn < 0 || r.nIn ≥ 2 ^ 32 then
+        IO.eprintln s!"FAIL {path}: record outside the tested domain: {toHex ⟨r.tx.toArray⟩}"
+        failures := failures + 1
+      else
+        let plan := legacySignatureHashPlan ⟨sc⟩ tx (bits32 r.nIn) (bits32 r.hashType)
+        if plan matches .fixedDigest _ then fixed := fixed + 1
+        let got := (legacySignatureHash ⟨sc⟩ tx (bits32 r.nIn) (bits32 r.hashType)).displayBytes
+        if got != r.display then
+          IO.eprintln s!"FAIL {path}: nIn {r.nIn}, hashType {r.hashType}: got {toHex ⟨got.toArray⟩}, expected {toHex ⟨r.display.toArray⟩}"
+          failures := failures + 1
+    | _, _ =>
+      IO.eprintln s!"FAIL {path}: transaction not read whole: {toHex ⟨r.tx.toArray⟩}"
+      failures := failures + 1
+  IO.println s!"{path}: {records.size} records, {fixed} with the fixed digest, {failures} failures"
+  return failures
+
+/-! ### Hand-derived preimages -/
+
+/-- The transaction of the hand-derived cases, before its outputs. -/
+def txIn0 : TxIn :=
+  { prevout := ⟨⟨List.replicate 32 0x11, by simp⟩, 0⟩, scriptSig := script [0x51], sequence := 0xfffffffe }
+
+def txIn1 : TxIn :=
+  { prevout := ⟨⟨List.replicate 32 0x22, by simp⟩, 1⟩, scriptSig := script [0x52, 0x53], sequence := 0x01020304 }
+
+def txOut0 : TxOut := { value := 5, scriptPubKey := script [0x76] }
+
+def txOut1 : TxOut := { value := 0x0102, scriptPubKey := script [0xac] }
+
+/-- Version 2, inputs 0 and 1, the given outputs, lock time `0x11223344`. -/
+def tx (outs : List TxOut) : Transaction :=
+  { version := 2, inputs := countedOf [txIn0, txIn1], outputs := countedOf outs, lockTime := 0x11223344 }
+
+/-! Wire fields of the cases, written out byte by byte. -/
+
+def version : List UInt8 := [0x02, 0x00, 0x00, 0x00]
+def lockTime : List UInt8 := [0x44, 0x33, 0x22, 0x11]
+def prevout0 : List UInt8 := List.replicate 32 0x11 ++ [0x00, 0x00, 0x00, 0x00]
+def prevout1 : List UInt8 := List.replicate 32 0x22 ++ [0x01, 0x00, 0x00, 0x00]
+def seq0 : List UInt8 := [0xfe, 0xff, 0xff, 0xff]
+def seq1 : List UInt8 := [0x04, 0x03, 0x02, 0x01]
+def zeroSeq : List UInt8 := [0x00, 0x00, 0x00, 0x00]
+def emptyScript : List UInt8 := [0x00]
+def out0 : List UInt8 := [0x05, 0, 0, 0, 0, 0, 0, 0] ++ [0x01, 0x76]
+def out1 : List UInt8 := [0x02, 0x01, 0, 0, 0, 0, 0, 0] ++ [0x01, 0xac]
+/-- `CTxOut()`: amount −1, empty script. -/
+def nullOut : List UInt8 := List.replicate 8 0xff ++ [0x00]
+
+/-- The script code `OP_DUP OP_CODESEPARATOR OP_CHECKSIG`. -/
+def codeSep : List UInt8 := [0x76, 0xab, 0xac]
+/-- It is written without the separator: count 2, then `76 ac`. -/
+def codeSepBytes : List UInt8 := [0x02, 0x76, 0xac]
+
+/-- Whether the plan hashes exactly `expected`. -/
+def hashes (sc : List UInt8) (t : Transaction) (nIn h : UInt32) (expected : List UInt8) : Bool :=
+  legacySignatureHashPlan (script sc) t nIn h == .hashBytes expected
+
+/-- The script-code cases: the script, and its bytes as `SerializeScriptCode` writes them. -/
+def scriptCodeCases : List (String × List UInt8 × List UInt8) := [
+  ("empty script", [], [0x00]),
+  ("separator instruction is removed and not counted", codeSep, codeSepBytes),
+  ("separator alone", [0xab], [0x00]),
+  ("0xab inside push data is kept", [0x02, 0xab, 0xab, 0xab], [0x03, 0x02, 0xab, 0xab]),
+  ("empty PUSHDATA1, then a separator", [0x4c, 0x00, 0xab], [0x02, 0x4c, 0x00]),
+  ("whole PUSHDATA4 of one byte", [0x4e, 0x01, 0x00, 0x00, 0x00, 0xaa],
+    [0x06, 0x4e, 0x01, 0x00, 0x00, 0x00, 0xaa]),
+  -- Short pushes: the count is of the whole script, the bytes stop at GetOp's cursor.
+  ("push of 1 with no data stops after the opcode", [0x01], [0x01, 0x01]),
+  ("push of 2 with 1 byte stops after the opcode", [0x02, 0xaa], [0x02, 0x02]),
+  ("PUSHDATA1 with no length stops after the opcode", [0x4c], [0x01, 0x4c]),
+  ("PUSHDATA1 of 5 with 1 byte stops after the length", [0x4c, 0x05, 0xaa], [0x03, 0x4c, 0x05]),
+  ("PUSHDATA2 with 1 length byte stops after the opcode", [0x4d, 0x01], [0x02, 0x4d]),
+  ("PUSHDATA4 of 2 with 1 byte stops after the length", [0x4e, 0x02, 0x00, 0x00, 0x00, 0xaa],
+    [0x06, 0x4e, 0x02, 0x00, 0x00, 0x00]),
+  ("separator, then a short PUSHDATA1", [0xab, 0x4c], [0x01, 0x4c])]
+
+/-- The checks on hand-derived preimages, each with its name and whether it holds. -/
+def cases : Except String (List (String × Bool)) := do
+  let one ← parseHex "0000000000000000000000000000000000000000000000000000000000000001"
+  let both := tx [txOut0, txOut1]
+  let allOutputs := [0x02] ++ out0 ++ out1
+  let inputsWithCode1 (otherSeq : List UInt8) :=
+    [0x02] ++ prevout0 ++ emptyScript ++ otherSeq ++ prevout1 ++ codeSepBytes ++ seq1
+  let scriptCodeChecks := scriptCodeCases.map fun (name, sc, expected) =>
+    (s!"script code: {name}", scriptCodeBytes (script sc) == expected)
+  return scriptCodeChecks ++ [
+    ("one displays as 00…01", legacyOne.displayBytes == one.toList),
+    ("ALL, nIn 1",
+      hashes codeSep both 1 1 (version ++ inputsWithCode1 seq0 ++ allOutputs ++ lockTime ++ [0x01, 0, 0, 0])),
+    ("ALL, nIn 0",
+      hashes codeSep both 0 1 (version ++ [0x02] ++ prevout0 ++ codeSepBytes ++ seq0 ++ prevout1 ++ emptyScript ++
+        seq1 ++ allOutputs ++ lockTime ++ [0x01, 0, 0, 0])),
+    ("NONE, nIn 1: no outputs, other sequence 0",
+      hashes codeSep both 1 2 (version ++ inputsWithCode1 zeroSeq ++ [0x00] ++ lockTime ++ [0x02, 0, 0, 0])),
+    ("SINGLE, nIn 1: null output 0, other sequence 0",
+      hashes codeSep both 1 3
+        (version ++ inputsWithCode1 zeroSeq ++ [0x02] ++ nullOut ++ out1 ++ lockTime ++ [0x03, 0, 0, 0])),
+    ("SINGLE, nIn 0: output 0 only",
+      hashes codeSep both 0 3
+        (version ++ [0x02] ++ prevout0 ++ codeSepBytes ++ seq0 ++ prevout1 ++ emptyScript ++ zeroSeq ++
+          [0x01] ++ out0 ++ lockTime ++ [0x03, 0, 0, 0])),
+    ("SINGLE|ANYONECANPAY, nIn 1: input 1 alone with its sequence, null output 0",
+      hashes codeSep both 1 0x83
+        (version ++ [0x01] ++ prevout1 ++ codeSepBytes ++ seq1 ++ [0x02] ++ nullOut ++ out1 ++ lockTime ++
+          [0x83, 0, 0, 0])),
+    ("ALL|ANYONECANPAY, nIn 0: input 0 alone, all outputs",
+      hashes codeSep both 0 0x81
+        (version ++ [0x01] ++ prevout0 ++ codeSepBytes ++ seq0 ++ allOutputs ++ lockTime ++ [0x81, 0, 0, 0])),
+    ("NONE|ANYONECANPAY, nIn 1: input 1 alone with its sequence, no outputs",
+      hashes codeSep both 1 0x82
+        (version ++ [0x01] ++ prevout1 ++ codeSepBytes ++ seq1 ++ [0x00] ++ lockTime ++ [0x82, 0, 0, 0])),
+    -- Other raw hash types: low 5 bits other than 2 and 3 serialize as ALL.
+    ("hash type 0 serializes as ALL",
+      hashes codeSep both 1 0 (version ++ inputsWithCode1 seq0 ++ allOutputs ++ lockTime ++ [0x00, 0, 0, 0])),
+    ("hash type 4 serializes as ALL",
+      hashes codeSep both 1 4 (version ++ inputsWithCode1 seq0 ++ allOutputs ++ lockTime ++ [0x04, 0, 0, 0])),
+    ("hash type 0x21 serializes as ALL",
+      hashes codeSep both 1 0x21 (version ++ inputsWithCode1 seq0 ++ allOutputs ++ lockTime ++ [0x21, 0, 0, 0])),
+    ("hash type 0x22 serializes as NONE",
+      hashes codeSep both 1 0x22 (version ++ inputsWithCode1 zeroSeq ++ [0x00] ++ lockTime ++ [0x22, 0, 0, 0])),
+    ("hash type -1 serializes as ALL|ANYONECANPAY",
+      hashes codeSep both 1 (bits32 (-1))
+        (version ++ [0x01] ++ prevout1 ++ codeSepBytes ++ seq1 ++ allOutputs ++ lockTime ++ [0xff, 0xff, 0xff, 0xff])),
+    ("hash type 0x103 serializes as SINGLE",
+      hashes codeSep both 1 0x103
+        (version ++ inputsWithCode1 zeroSeq ++ [0x02] ++ nullOut ++ out1 ++ lockTime ++ [0x03, 0x01, 0, 0])),
+    -- A short push in the script code.
+    ("short PUSHDATA1 in the script code of input 1",
+      hashes [0x4c, 0x05, 0xaa] both 1 1
+        (version ++ [0x02] ++ prevout0 ++ emptyScript ++ seq0 ++ prevout1 ++ [0x03, 0x4c, 0x05] ++ seq1 ++
+          allOutputs ++ lockTime ++ [0x01, 0, 0, 0])),
+    -- The fixed digest.
+    ("nIn equal to the input count gives one",
+      legacySignatureHashPlan (script codeSep) both 2 1 == .fixedDigest legacyOne),
+    ("nIn 0xffffffff gives one",
+      legacySignatureHashPlan (script codeSep) both 0xffffffff 1 == .fixedDigest legacyOne),
+    ("SINGLE with no output at nIn gives one",
+      legacySignatureHashPlan (script codeSep) (tx [txOut0]) 1 3 == .fixedDigest legacyOne),
+    ("SINGLE|ANYONECANPAY with no output at nIn gives one",
+      legacySignatureHashPlan (script codeSep) (tx [txOut0]) 1 0x83 == .fixedDigest legacyOne),
+    ("ALL with no output at nIn hashes",
+      hashes codeSep (tx [txOut0]) 1 1
+        (version ++ inputsWithCode1 seq0 ++ [0x01] ++ out0 ++ lockTime ++ [0x01, 0, 0, 0])),
+    ("NONE with no outputs hashes",
+      hashes codeSep (tx []) 1 2 (version ++ inputsWithCode1 zeroSeq ++ [0x00] ++ lockTime ++ [0x02, 0, 0, 0])),
+    ("the digest of the fixed plan is one",
+      (legacySignatureHash (script codeSep) both 2 1).val == one.toList.reverse)]
+
+/-- Every legacy signature-hash known answer. Returns the number of failures. -/
+def check : IO Nat := do
+  let corpus ← checkCorpus "tests/transaction/sighash/sighash.json"
+  match cases with
+  | .error e =>
+    IO.eprintln s!"FAIL legacy sighash: {e}"
+    return corpus + 1
+  | .ok cs =>
+    let mut failures := 0
+    for (name, ok) in cs do
+      if !ok then
+        IO.eprintln s!"FAIL legacy sighash {name}"
+        failures := failures + 1
+    IO.println s!"legacy sighash: {cs.length} hand-derived checks, {failures} failures"
+    return corpus + failures
+
+end KnownAnswers.LegacySighash
+
+/-!
 ## Difficulty retarget
 
 Runs every `get_next_work_*` case of Dogecoin Core's `src/test/dogecoin_tests.cpp` at commit `e0a1c15` (SOURCES.md, D7) through the compiled `calculateDogecoinNextWorkRequired`.
@@ -967,6 +1196,7 @@ def main : IO UInt32 := do
   let compactSize ← KnownAnswers.CompactSize.check
   let countedList ← KnownAnswers.CountedList.check
   let transactions ← KnownAnswers.Transactions.check
+  let sighash ← KnownAnswers.LegacySighash.check
   let compact ← KnownAnswers.Work.checkCompact
   let retarget ← KnownAnswers.Work.checkRetarget
-  return if short + long + genesis + codec + compactSize + countedList + transactions + compact + retarget == 0 then 0 else 1
+  return if short + long + genesis + codec + compactSize + countedList + transactions + sighash + compact + retarget == 0 then 0 else 1

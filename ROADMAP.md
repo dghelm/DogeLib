@@ -14,7 +14,7 @@ This roadmap is the living plan. The reasoning behind it is in [design record 00
 | 1 | Source registry, shared types, contribution policy | Baseline and evidence conventions are explicit | Documents only |
 | 2 | Bounded CompactSize reader and proofs | Accepted-prefix relation, bounded round trip, Core comparisons | Reader, relation, soundness and completeness, bounded round trip, and known answers from Core's tests done in `feat/compactsize`. A comparison that runs Core and a packed reader (issue #12) are not started. |
 | 3 | Raw transaction types and base codecs | Exact field preservation, explicit parse mode, parser obligations | Fixed-length byte strings and `Hash256` done in `feat/fixed-bytes`. Transaction types, base codecs, Core's base-mode reader, the complete reader and the transaction ID done in `feat/transaction-base`. Core's transaction corpus (issue #22) and the witness-allowed mode (issue #23) are open. |
-| 4 | Legacy hash-plan specification | Declared lower-level modes and special cases are covered | Not started |
+| 4 | Legacy hash-plan specification | Declared lower-level modes and special cases are covered | Done in `feat/legacy-sighash`: `legacySignatureHashPlan` for `SIGVERSION_BASE`, Core's `sighash.json` corpus and hand-derived preimages as known answers. The witness v0 digest and the `CheckSig` wrapper are not specified. |
 | 5 | Streaming preimage implementation and proof | Exact plan equality on the recorded domain | Not started |
 | 6 | Rust refinement experiment | One extracted implementation matches an independent contract | Not started |
 

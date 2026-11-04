@@ -66,7 +66,7 @@ lean_exe «check-decls» where
 default target: `scripts/test_check_decls.sh` builds and checks it. -/
 lean_lib «CheckDeclsTest» where
   srcDir := "scripts"
-  roots := #[`CheckDeclsTest, `CheckDeclsForeign]
+  roots := #[`CheckDeclsTest, `CheckDeclsForeign, `CheckDeclsForeignSorry]
   -- The classic root checks findings behind ordinary module boundaries.
   allowNonModules := true
 

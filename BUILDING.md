@@ -16,8 +16,11 @@ bash scripts/test_oracle.sh
 An unfinished proof only warns, so `--wfail` turns every warning into an error.
 
 `lake exe check-decls` reads the compiled declarations of the `DogeLib`, `Proofs` and `Exports` libraries.
-It reports any axiom beyond `propext`, `Classical.choice` and `Quot.sound`, and any `partial`, `opaque`, `unsafe`, `@[extern]`, `@[implemented_by]` or `@[csimp]` declaration.
+It requires every `.lean` file under `DogeLib/`, and `DogeLib.lean`, to be reachable from those roots.
+It names each unreachable module and fails the check.
+It reports any transitive axiom dependency beyond `propext`, `Classical.choice` and `Quot.sound`, and any `partial`, `opaque`, `unsafe`, `@[extern]`, `@[implemented_by]` or `@[csimp]` declaration.
 It also reports a specification definition that reaches an opaque constant, so that the kernel cannot unfold it.
+
 `scripts/check_decls_baseline.txt` lists the findings that exist today.
 It is empty, and a new finding is fixed, never added to it.
 
@@ -62,6 +65,8 @@ bash scripts/test_check_decls.sh
 
 It builds the fixtures in `scripts/CheckDeclsTest`, which contain `sorry` and every other finding on purpose.
 The check must report each planted finding and nothing else, pass with a baseline that lists them, and fail on a stale baseline entry.
+An isolated fixture requires rejection of an imported unfinished proof.
+The self-test also plants an unimported production file and requires a failure that names its module.
 
 ## Module boundaries
 

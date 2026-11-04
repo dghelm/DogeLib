@@ -42,9 +42,9 @@ Gap D asks whether the use of DogeLib holds together.
 | B4 | The oracle's IO adapter or a foreign boundary is wrong | `scripts/test_oracle.sh` runs fixtures with independent expected values, Core's `sighash.json` and the base-mode records of Core's transaction corpus through the oracle. `lake exe check-decls` checks the `Exports` library. `scripts/compare_core.py` compares the oracle with the Core harness, and `scripts/test_compare_core.py` checks that the comparison can fail. | R F |
 | B5 | This repository substitutes compiled code | `lake exe check-decls` fails on any new substitution | R |
 | B6 | Extraction or the Rust toolchain is wrong | None: no extraction yet | I |
-| C1 | The Lean kernel or its axioms are unsound | None | P I |
+| C1 | The Lean kernel or its axioms are unsound | `lake exe check-decls` rejects transitive axiom dependencies outside the allowed set, including imported unfinished proofs. Kernel soundness and axiom consistency remain trusted. | P I |
 | C2 | A proof trusts compiled code | `lake exe check-decls` fails on any use | P I |
-| C3 | A declaration reached the environment unchecked | None | P I |
+| C3 | A declaration reached the environment unchecked | No kernel replay. The declaration check requires every production module to be reachable from its default roots. | P I |
 | D1 | A client misuses an operation, such as a prefix decoder where complete consumption is required | Policy: each public operation documents its input domain and consumption contract | R I |
 | D2 | A dependency changes | Pins in `SOURCES.md` and `lean-toolchain`. The package has no Lake dependencies. | P R I |
 | D3 | The fixtures are wrong | Each fixture records its provenance. The NIST CAVP files and Core's `sighash.json` are pinned by digest, and CI checks the pins. Core's test cases are copied into `tests/KnownAnswers.lean` with their file and line. | F |
@@ -635,7 +635,10 @@ The extracted model is an implementation artifact. It never becomes the specific
 Every theorem trusts the Lean kernel, and whichever of the three standard axioms it uses: `propext`, `Classical.choice` and `Quot.sound`.
 Those three are the allowed set. A theorem may use fewer.
 
-`lake exe check-decls` checks dependencies: no declaration may depend on an axiom outside that set.
+`lake exe check-decls` checks the transitive axiom dependencies of safe declarations under `DogeLib`, including private proof bodies.
+It rejects `sorryAx` even when an unfinished proof comes from an imported module outside that scope.
+Unsafe declarations are reported separately.
+Detection does not require attribution to a declaration that uses the axiom directly.
 It does not check the kernel, and it does not show that the axioms are consistent.
 
 ### C2. Tactics that trust compiled code
@@ -656,6 +659,12 @@ The fixtures in `scripts/CheckDeclsTest` use them on purpose.
 
 A metaprogram can add a declaration to the environment without the kernel checking it.
 An independent checker that replays the environment, such as `lean4checker`, would catch it, but none runs yet.
+
+The default declaration check loads `DogeLib`, `DogeLib.Proofs` and `DogeLib.Exports` with their private proof bodies.
+It requires every `.lean` file under `DogeLib/`, and `DogeLib.lean`, to appear in that imported environment.
+An unreachable module fails the check, including a leaf omitted from its layer root.
+This reachability check does not replay kernel checks or detect a metaprogram that bypassed them.
+A future `Refinement/` library must extend the default imports, checked scope and file inventory together.
 
 ## Gap D: does the use of DogeLib hold together?
 

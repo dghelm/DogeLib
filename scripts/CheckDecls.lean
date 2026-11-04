@@ -228,6 +228,7 @@ def check (env : Environment) (scope : Name) : Array Finding := Id.run do
   let mut foreign : NameSet := {}
   for a in extra do
     if a == ``sorryAx then
+      foreign := foreign.insert a
       for (n, c) in decls do
         if c.getUsedConstantsAsSet.contains ``sorryAx then
           out := out.push ⟨"sorry", n, "depends on sorryAx"⟩
@@ -247,7 +248,9 @@ def check (env : Environment) (scope : Name) : Array Finding := Id.run do
       unless c matches .axiomInfo _ do
         let mine := ((memo.find? n).getD {}).toList.filter foreign.contains
         for a in frontier env scope memo (axiomChildren c) (.ofList mine) do
-          out := out.push ⟨"axioms", n, s!"depends on {a}, from a dependency"⟩
+          -- Direct unfinished proofs keep their existing `sorry` finding.
+          unless a == ``sorryAx && c.getUsedConstantsAsSet.contains a do
+            out := out.push ⟨"axioms", n, s!"depends on {a}, from a dependency"⟩
           attributed := attributed.insert a
     -- Attribution can fail: an inductive type and its constructors each inherit the axiom from the other, so neither is a frontier.
     -- Detection must not depend on it, so an axiom still unreported is reported where it is used directly.
@@ -284,6 +287,26 @@ def check (env : Environment) (scope : Name) : Array Finding := Id.run do
       out := out.push ⟨"csimp", thm, s!"a @[csimp] theorem replacing {target.getD thm}"⟩
   return out
 
+/-! ## Production module reachability -/
+
+/-- The roots that load every production module.
+A future `Refinement/` library must extend these imports, the checked scope and the file inventory together. -/
+def defaultModules : List Name := [`DogeLib, `DogeLib.Proofs, `DogeLib.Exports]
+
+/-- Production modules on disk that the imported environment does not contain.
+The inventory includes leaf files, even when a library root omits them. -/
+def unreachableModules (env : Environment) : IO (Array Name) := do
+  let files ← (System.FilePath.walkDir "DogeLib")
+  let files := files.push "DogeLib.lean"
+  let imported : NameSet := env.header.modules.foldl (fun s m => s.insert m.module) {}
+  let mut missing := #[]
+  for path in files do
+    if path.extension == some "lean" then
+      let n := (path.withExtension "").components.foldl (fun n c => Name.str n c) .anonymous
+      unless imported.contains n do
+        missing := missing.push n
+  return missing
+
 /-! ## The baseline -/
 
 /-- The baseline: one `kind declaration` per line, with `#` comments and blank lines ignored. -/
@@ -311,7 +334,8 @@ unsafe def run (args : List String) : IO UInt32 := do
     | .error e => do
       IO.eprintln s!"check-decls: {e}\n{usage}"
       return 2
-  let mods := if mods.isEmpty then [`DogeLib, `DogeLib.Proofs, `DogeLib.Exports] else mods
+  let checkProduction := mods.isEmpty && scope == `DogeLib
+  let mods := if mods.isEmpty then defaultModules else mods
   initSearchPath (← findSysroot)
   -- `loadExts := true` is essential: without it the `@[csimp]` table, among others, stays empty.
   -- Lean v4.35.0 `Lean.importModules`: `.private` loads every private proof body.
@@ -322,6 +346,12 @@ unsafe def run (args : List String) : IO UInt32 := do
   if (csimpTheorems env).isEmpty then
     IO.eprintln "check-decls: no @[csimp] theorems visible, so the extensions did not load"
     return 3
+  if checkProduction then
+    let missing ← unreachableModules env
+    unless missing.isEmpty do
+      for m in missing do
+        IO.eprintln s!"unreachable-module {m}: not imported by the default production roots"
+      return 1
   let baseline ← readBaseline baselinePath
   let findings := check env scope
   let isListed (f : Finding) := baseline.contains (f.kind, f.decl)

@@ -377,10 +377,13 @@ Reviewers assess definitions and theorem statements on their own merits, whateve
 
 ## Licence
 
-DogeLib's own material is intended to be distributed under the MIT licence.
-The repository is private, and the licence is recorded in a `LICENSE` file before it becomes public.
-The goal is the most open licence that is compatible with the material DogeLib takes from other projects.
-DogeLib does not accept external contributions until the licence and contributor terms are recorded here.
+DogeLib's own material is distributed under the MIT licence.
+The legal text is in [LICENSE](LICENSE).
+The copyright holder is *The DogeLib contributors*.
+Material from other projects keeps its own terms, as [Material from other projects](#material-from-other-projects) explains.
+
+By submitting a contribution, you agree to make it available under the MIT licence.
+You must have the authority to do so.
 
 ## Material from other projects
 

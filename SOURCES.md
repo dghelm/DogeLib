@@ -6,7 +6,7 @@ This file is the single source registry ([CONTRIBUTING.md](CONTRIBUTING.md#sourc
 
 | Repository | Commit | Label | Role | Adopted |
 | --- | --- | --- | --- | --- |
-| [Dogecoin Core](https://github.com/dogecoin/dogecoin) | `e0a1c157791544e818c901bd9341896965afbf9d` | `v1.14.9` | Compatibility target for the selected functions and modes | Proposed |
+| [Dogecoin Core](https://github.com/dogecoin/dogecoin) | `e0a1c157791544e818c901bd9341896965afbf9d` | `v1.14.9` | Compatibility target for the selected functions and modes | Adopted |
 | [EthLib](https://github.com/ethereum/EthLib) | `6a93711e7cc062e787fff6747e4101a141d38b7a` | — | Model project: architecture, proof policy, writing standard, SHA-256, declaration check | Adopted |
 | [btc-verified](https://github.com/ProofOfKeags/btc-verified) | `ecf4f0d2c5ab4df84f2595ca60ba2e1fd62d1bce` | — | Codecs, byte representations and packed refinements. Its Apache 2.0 licence is in `LICENSES/btc-verified-Apache-2.0.txt`. | Adopted |
 | [Charon](https://github.com/AeneasVerif/charon) / [Aeneas](https://github.com/AeneasVerif/aeneas) | Not selected | — | Rust extraction and refinement | Not selected |
@@ -16,7 +16,7 @@ Design records 0001 and 0002 cite EthLib at `5d4b584`. The pin above is two comm
 
 *Proposed* means recorded in the design records and not yet built against. A pin becomes *Adopted* when a merged lane builds or compares against it.
 
-The Dogecoin pin is a compatibility target for the operations DogeLib models. It is not a claim that every rule in that version is formalized, or that one version is enough evidence for historical consensus.
+The maintainer confirmed the Dogecoin pin on 2026-11-03 (issue #5). `v1.14.9` was then the latest Dogecoin Core release. The Dogecoin pin is a compatibility target for the operations DogeLib models. It is not a claim that every rule in that version is formalized, or that one version is enough evidence for historical consensus.
 
 Keep these concepts separate:
 

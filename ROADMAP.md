@@ -74,12 +74,12 @@ If the Rust refinement is not in the first release, the release says so and make
 | Proof-trust policy | EthLib's: standard axioms only, no tactic that trusts compiled code | See SOUNDNESS.md, C2 | Adopted |
 | btc-verified reuse form | Adaptation into DogeLib's layout, with provenance, not a dependency | Different toolchain, colocated proofs, and `bv_decide` steps | Step 0b, codec foundations, with Lean core and `Std` only |
 | Writing standard | EthLib's `WRITING.md` and checker, with DogeLib vocabulary | Follows the model project | Adopted |
+| Core compatibility pin | Dogecoin Core `v1.14.9`, commit `e0a1c15` | The latest Core release on 2026-11-03 | Maintainer, 2026-11-03, issue #5 |
 
 ## Open decisions
 
 | Decision | Options under consideration | Owner lane |
 | --- | --- | --- |
-| Core compatibility pin | Adopt `v1.14.9` / `e0a1c15` or choose another | Maintainers, issue #5 |
 | Oracle record format | Not yet proposed | Milestone B |
 | First signature-proof domain | Fully parsed script code is the candidate | Milestone C |
 | Project license and contributor terms | MIT intended. Recorded in `LICENSE` before the repository becomes public. Third-party material follows CONTRIBUTING.md. | Maintainers, issue #4 |

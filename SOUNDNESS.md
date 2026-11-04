@@ -592,7 +592,7 @@ The word division model also runs the two zero-divisor cases.
 
 ### Target validity and supplied-hash proof of work
 
-`Work.ProofOfWork` specifies `CheckProofOfWork` at D17, `src/pow.cpp` lines 117-135.
+`Work.ProofOfWork` specifies `CheckProofOfWork` at D17, `src/pow.cpp` lines 115-132.
 The inputs are a supplied `Hash256`, a UInt32 compact target and a parameter record, of which only `powLimit` is read.
 `hashToArith256` uses the eight little-endian `UintToArith256` word reads.
 `hashToArith256_eq` proves equality to the independent radix-256 interpretation for every supplied hash.
@@ -625,7 +625,7 @@ DogeLib models that behavior.
 The example is reachable through the isolated `CalculateDogecoinNextWorkRequired` API with that record.
 The normally selected regtest `GetNextWorkRequired` caller cannot reach a legacy retarget: the legacy record applies below height ten, with interval 14400.
 
-`lake test` runs 20 synthetic branch and boundary cases derived from D17 lines 124-134.
+`lake test` runs 20 synthetic branch and boundary cases derived from D17 lines 124-129.
 It also requires target validity for all 312 pinned mainnet headers.
 Core's `src/test/auxpow_tests.cpp` lines 333-355 mines passing and failing digests at runtime, rather than supplies fixed digest fixtures.
 The Lean tests do not compute scrypt or compare with compiled Core.
@@ -917,7 +917,11 @@ Regtest DigiShield uses a separate exact-multiplier argument, and legacy regtest
 The supplied-hash subsection states the network corollaries and the caller boundary.
 
 A chain-level application still assumes that the previous block passed Core's check with the relevant `powLimit`.
-It also requires that the supplied hash is the correct scrypt digest.
+The header path supplies `GetConsensus(0)` to `CheckAuxPowProofOfWork` (D33, `src/validation.cpp` line 2933).
+That function passes the record to `CheckProofOfWork` (D6, `src/dogecoin.cpp` lines 107 and 118).
+Every record within a network has the same `powLimit` (D14, the record copies at lines 126-136, 282-300 and 425-432).
+
+The chain-level application also requires that the supplied hash is the correct scrypt digest.
 No theorem here establishes that digest computation, AuxPoW validity or full header validity.
 
 ### A3. Side channels

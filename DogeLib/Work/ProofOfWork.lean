@@ -7,7 +7,7 @@ public import DogeLib.Work.Retarget
 /-!
 # Supplied-hash proof of work
 
-`CheckProofOfWork` in Dogecoin Core `e0a1c15`, `src/pow.cpp` lines 117-135 (SOURCES.md, D17), checks a compact target and a supplied hash.
+`CheckProofOfWork` in Dogecoin Core `e0a1c15`, `src/pow.cpp` lines 115-132 (SOURCES.md, D17), checks a compact target and a supplied hash.
 It does not compute scrypt or validate a header.
 Only `powLimit` is read from the parameter record.
 Hash bytes retain Core's internal order, with byte zero least significant for `UintToArith256` (D13 lines 254-260).
@@ -31,7 +31,7 @@ def hashToArith256 (hash : Hash256) : ArithUint256 :=
   ArithUint256.Words.toArith (ArithUint256.Words.uintToArith256
     (fun i => hash.val[i.val]'(by have := hash.property; omega)))
 
-/-- The target range check of D17 lines 124-128, for every compact encoding.
+/-- The target range check of D17 lines 124-125, for every compact encoding.
 Negative, zero, overflowing and above-limit targets fail.
 Noncanonical encodings can pass. -/
 def validProofOfWorkTarget (nBits : UInt32) (params : RetargetParams) : Bool :=
@@ -40,8 +40,8 @@ def validProofOfWorkTarget (nBits : UInt32) (params : RetargetParams) : Bool :=
     false
   else true
 
-/-- Core's `CheckProofOfWork` (D17 lines 117-135) for an arbitrary supplied hash and compact target.
-It accepts exactly a target within range and a hash at most that target.
+/-- Core's `CheckProofOfWork` (D17 lines 115-132) for an arbitrary supplied hash and compact target.
+It accepts exactly a target within range and a hash at most that target (lines 128-129).
 The caller supplies the digest and selects the network parameters. -/
 def checkProofOfWork (hash : Hash256) (nBits : UInt32) (params : RetargetParams) : Bool :=
   if !validProofOfWorkTarget nBits params then false

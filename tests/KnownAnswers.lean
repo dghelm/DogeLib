@@ -1808,7 +1808,7 @@ def checkNextWork : IO Nat := do
 /-!
 ### Supplied-hash proof of work
 
-These synthetic known answers derive from D17, `src/pow.cpp` lines 124-134 at `e0a1c15`.
+These synthetic known answers derive from D17, `src/pow.cpp` lines 124-129 at `e0a1c15`.
 `0x03000100` decodes to 256, so little-endian hashes 255 and 256 pass and 257 fails.
 `0x04000001` also decodes to 256, despite its noncanonical encoding.
 

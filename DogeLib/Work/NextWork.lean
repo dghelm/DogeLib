@@ -45,9 +45,9 @@ inductive NextWorkError where
   | heightOutOfRange
   /-- Adjacent entries do not represent consecutive predecessors. -/
   | inconsistentHeights
-  /-- The first-height assertion at pow.cpp line 84 would fail. -/
+  /-- The first-height assertion at `src/pow.cpp` line 83 would fail. -/
   | firstHeightUnderflow
-  /-- Required history is absent. Core asserts an ancestor at pow.cpp line 86. -/
+  /-- Required history is absent. Core asserts an ancestor at `src/pow.cpp` line 85. -/
   | missingAncestor
   /-- A custom parameter record supplies an interval of zero. -/
   | zeroInterval
@@ -75,7 +75,7 @@ The first retarget uses interval minus one, and every later retarget uses the fu
 def blocksToGoBack (interval previousHeight : Nat) : Nat :=
   if previousHeight + 1 = interval then interval - 1 else interval
 
-/-- Strict timestamp delay comparison (`src/pow.cpp`, D17, line 59 at `e0a1c15`).
+/-- Strict timestamp delay comparison (`src/pow.cpp`, D17, line 61 at `e0a1c15`).
 Times are widened UInt32 values, and spacing is measured in seconds. -/
 def delayedBlock (params : WorkParams) (lastTime candidateTime : UInt32) : Bool :=
   (candidateTime.toNat : Int) > (lastTime.toNat : Int) + (params.nPowTargetSpacing : Int) * 2

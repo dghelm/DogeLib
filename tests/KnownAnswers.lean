@@ -1620,7 +1620,7 @@ private instance : BEq (Except NextWorkError UInt32) where
 def workEntry (height : Nat) (time bits : UInt32) : BlockIndex := ⟨height, time, bits⟩
 
 /-- Parameter fields fixed independently by Core's network records (D14).
-The tuple is timespan, spacing, DigiShield permission, minimum-difficulty permission and compact limit. -/
+The tuple is timespan, spacing, DigiShield calculation flag, minimum-difficulty permission and compact limit. -/
 def workFields (network : WorkNetwork) (height : UInt32) : Int × Nat × Bool × Bool × UInt32 :=
   let p := getConsensus network height
   (p.nPowTargetTimespan.toInt, p.nPowTargetSpacing, p.fDigishieldDifficultyCalculation,
@@ -1698,7 +1698,7 @@ def nextWorkCases : List (String × Bool) :=
    ("DigiShield equality needs ancestor", nextWorkRequired .testnet [e 157500 100 0x1c123456] 220 == .error .missingAncestor),
    ("activation candidate 145000 needs ancestor", nextWorkRequired .mainnet [e 144999 100 0] 101 == .error .missingAncestor),
    ("main missing retarget ancestor", nextWorkRequired .mainnet [e 239 100 0] 101 == .error .missingAncestor),
-   -- Regtest's fPowNoRetargeting is true, but this caller ignores it (D17 line 88).
+   -- Regtest's fPowNoRetargeting is true, but this caller ignores it (D17 line 87).
    -- With T=1 and actual timespan=1, D6 returns the old compact.
    ("regtest retarget at 10", nextWorkRequired .regtest [e 9 100 0x1c123456, e 8 99 0] 101 == .ok 0x1c123456),
    ("regtest ignores no-retarget flag and normalizes compact", nextWorkRequired .regtest

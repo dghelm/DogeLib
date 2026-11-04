@@ -90,6 +90,21 @@ The build script uses `JOBS` parallel jobs, 8 by default.
 It reuses the Core libraries when the build directory's stamp matches the pin, the script, the compilers and the flags.
 A first build takes under a minute on 8 cores, and the comparison takes about 20 seconds.
 
+### Compiled Rust CompactSize comparison
+
+Build the Rust adapter, then compare only CompactSize reader requests through the oracle, Core and compiled Rust:
+
+```bash
+cargo +nightly-2026-09-17 build --locked --manifest-path Refinement/Rust/Cargo.toml --example compactsize_oracle --jobs 4
+python3 -I scripts/compare_core.py --rust-compactsize Refinement/Rust/target/debug/examples/compactsize_oracle .lake/build/bin/dogelib-oracle build/core-harness/core-oracle
+```
+
+This mode compares 404 requests: seven existing fixtures and 397 boundary, truncation, non-canonical and suffix cases.
+It compares every error, successful value, consumed count and remainder.
+The Rust crate has no encoder.
+The comparator reads the oracle version at runtime and checks the Rust adapter's projection label.
+The Core CI job builds the adapter and runs this comparison, with elapsed times in its logs.
+
 ## The declaration check
 
 After a change to the check itself, run its self-test:

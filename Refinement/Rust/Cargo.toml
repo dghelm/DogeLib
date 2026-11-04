@@ -6,3 +6,10 @@ license = "MIT"
 
 [lib]
 path = "src/lib.rs"
+
+[dev-dependencies]
+serde_json = { version = "1.0", features = ["arbitrary_precision"] }
+
+[[example]]
+name = "compactsize_oracle"
+test = true

@@ -13,6 +13,11 @@ Core's digest instead.
 Each failure line starts with `FAIL <CODE>`; scripts/test_compare_core.py
 relies on the codes. The exit status is 0 only when every response agrees.
 
+With `--rust-compactsize PATH`, only CompactSize reader requests from the
+fixtures and CompactSize boundary set run through all three programs.
+The Rust crate has no encoder.
+The comparator reads the oracle version at runtime and passes it to the adapter.
+
 The transaction field walker below only locates fields in transactions that
 are known to parse. No expected value comes from this script.
 """
@@ -29,7 +34,6 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 ORACLE_FORMAT = "dogelib-oracle/2"
-HARNESS_FORMAT = "dogelib-oracle/2-core-projection"
 MAX_SIZE = 0x02000000
 SEED = 20261104
 MAX_REPORTS = 10
@@ -62,10 +66,10 @@ def run_program(program: str, args: list[str], data: str, timeout: float) -> str
     return out
 
 
-def run_stream(program: str, requests: list[dict], timeout: float) -> list[dict]:
+def run_stream(program: str, requests: list[dict], timeout: float, args: list[str] | None = None) -> list[dict]:
     """The responses of `program` to `requests`, one per request, ids checked in order."""
     data = "".join(json.dumps(r, sort_keys=True, separators=(",", ":")) + "\n" for r in requests)
-    lines = run_program(program, [], data, timeout).splitlines()
+    lines = run_program(program, args or [], data, timeout).splitlines()
     if len(lines) != len(requests):
         raise RunError("COUNT", f"{program}: {len(lines)} responses to {len(requests)} requests")
     responses = []
@@ -541,9 +545,9 @@ def outcome(resp: dict) -> str:
     return ":".join(str(err[k]) for k in ("kind", "reason", "argument") if k in err)
 
 
-def compare(req: dict, ours: dict, core: dict) -> tuple[str, str] | None:
+def compare(req: dict, ours: dict, core: dict, peer: str = "core") -> tuple[str, str] | None:
     """None when the responses agree, else a failure code and a message."""
-    for side, resp in (("oracle", ours), ("core", core)):
+    for side, resp in (("oracle", ours), (peer, core)):
         if resp.get("error", {}).get("kind") == "request":
             return "REQUEST_ERROR", f"{side} rejected the request: {resp['error'].get('message')}"
     if req["op"] == "sighash.legacy" and "ok" in ours and "ok" in core:
@@ -566,9 +570,9 @@ def compare(req: dict, ours: dict, core: dict) -> tuple[str, str] | None:
     return None
 
 
-def check_versions(oracle: str, harness: str, timeout: float) -> list[str]:
+def check_versions(oracle: str, harness: str, timeout: float, oracle_format: str = ORACLE_FORMAT) -> list[str]:
     failures = []
-    for program, expected in ((oracle, ORACLE_FORMAT), (harness, HARNESS_FORMAT)):
+    for program, expected in ((oracle, oracle_format), (harness, oracle_format + "-core-projection")):
         try:
             out = run_program(program, ["--version"], "", timeout).strip()
             resp = run_stream(program, [{"id": "version", "op": "oracle.version"}], timeout)[0]
@@ -587,15 +591,48 @@ def main() -> int:
     parser.add_argument("--timeout", type=float, default=600.0)
     parser.add_argument("--quick", action="store_true",
                         help=f"only the sets {', '.join(QUICK_SETS)}, for the comparator's self-test")
+    parser.add_argument("--rust-compactsize", metavar="PATH",
+                        help="compare only CompactSize reader requests with this native Rust adapter as a third program")
     parser.add_argument("oracle")
     parser.add_argument("harness")
     args = parser.parse_args()
 
-    failures = check_versions(args.oracle, args.harness, args.timeout)
+    rust_args = []
+    if args.rust_compactsize:
+        try:
+            version = json.loads(run_program(args.oracle, ["--version"], "", args.timeout))
+            oracle_format = version["format"]
+            if not isinstance(oracle_format, str) or not oracle_format.startswith("dogelib-oracle/"):
+                raise ValueError("unexpected oracle format")
+            suffix = oracle_format.removeprefix("dogelib-oracle/")
+            if not suffix or any(c not in "0123456789" for c in suffix):
+                raise ValueError("unexpected oracle format version")
+            rust_args = ["--oracle-format", oracle_format]
+            expected = {"format": oracle_format + "-rust-compactsize"}
+            rust_version = json.loads(run_program(args.rust_compactsize, [*rust_args, "--version"], "", args.timeout))
+            response = run_stream(args.rust_compactsize, [{"id": "version", "op": "oracle.version"}],
+                                  args.timeout, rust_args)[0]
+            if not json_equal(rust_version, expected) or not json_equal(response, {"id": "version", "ok": expected}):
+                raise ValueError("unexpected Rust projection format")
+        except RunError as e:
+            print(f"FAIL {e.code} {e}")
+            return 1
+        except (ValueError, KeyError, TypeError) as e:
+            print(f"FAIL VERSION {e}")
+            return 1
+    else:
+        oracle_format = ORACLE_FORMAT
+    failures = check_versions(args.oracle, args.harness, args.timeout, oracle_format)
     for line in failures:
         print(line)
 
-    sets, excluded = request_sets()
+    if args.rust_compactsize:
+        fixtures, excluded = load_fixtures()
+        sets = [("fixtures", fixtures), ("compactsize", set_compactsize())]
+        sets = [(name, [r for r in reqs if r["op"] == "compactsize.read"]) for name, reqs in sets]
+        print("CompactSize-only: compiled Rust, oracle and Core (reader only, no Rust encoder)")
+    else:
+        sets, excluded = request_sets()
     if args.quick:
         sets = [(name, reqs) for name, reqs in sets if name in QUICK_SETS]
     print(f"fixtures left out: {len(excluded)}")
@@ -611,6 +648,7 @@ def main() -> int:
     try:
         ours = run_stream(args.oracle, requests, args.timeout)
         core = run_stream(args.harness, requests, args.timeout)
+        rust = run_stream(args.rust_compactsize, requests, args.timeout, rust_args) if args.rust_compactsize else None
     except RunError as e:
         print(f"FAIL {e.code} {e}")
         return 1
@@ -618,10 +656,12 @@ def main() -> int:
     per_set = {name: [len(reqs), 0] for name, reqs in sets}
     outcomes = {name: {} for name, _ in sets}
     reported = 0
-    for req, name, a, b in zip(requests, owner, ours, core):
+    for i, (req, name, a, b) in enumerate(zip(requests, owner, ours, core)):
         kind = outcome(b)
         outcomes[name][kind] = outcomes[name].get(kind, 0) + 1
         result = compare(req, a, b)
+        if result is None and rust is not None:
+            result = compare(req, a, rust[i], "rust")
         if result is None:
             continue
         per_set[name][1] += 1
@@ -633,6 +673,8 @@ def main() -> int:
             print(f"  request: {json.dumps(req)[:400]}")
             print(f"  oracle:  {json.dumps(a)[:400]}")
             print(f"  core:    {json.dumps(b)[:400]}")
+            if rust is not None:
+                print(f"  rust:    {json.dumps(rust[i])[:400]}")
     for name, (total, bad) in per_set.items():
         print(f"{name}: {total} requests, {bad} disagreements")
         print("  Core's outcomes: " + ", ".join(f"{k} {v}" for k, v in sorted(outcomes[name].items())))

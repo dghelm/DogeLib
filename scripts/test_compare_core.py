@@ -22,8 +22,6 @@ import time
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 COMPARE = ROOT / "scripts" / "compare_core.py"
-ORACLE_FORMAT = "dogelib-oracle/2"
-HARNESS_FORMAT = "dogelib-oracle/2-core-projection"
 
 # mode: (role of the wrapper, expected failure code). The role "core" stands
 # in for the harness, "oracle" for dogelib-oracle.
@@ -83,9 +81,15 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
         pathlib.Path(pidfile).write_text(str(child.pid))
         time.sleep(1000)
         return 0
-    projected_format = HARNESS_FORMAT if role == "core" else ORACLE_FORMAT
+    oracle_format = json.loads(subprocess.run([oracle, "--version"], capture_output=True,
+                                              text=True, check=True).stdout)["format"]
+    projected_format = oracle_format + {"core": "-core-projection", "rust": "-rust-compactsize", "oracle": ""}[role]
     if mode == "version" and role == "core":
-        projected_format = ORACLE_FORMAT
+        projected_format = oracle_format
+    if role == "rust":
+        if args[:2] != ["--oracle-format", oracle_format]:
+            return 2
+        args = args[2:]
     if args == ["--version"]:
         print(json.dumps({"format": projected_format}, separators=(",", ":")))
         return 0
@@ -98,6 +102,10 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
             ok["format"] = projected_format
         if role == "core" and mode != "core_preimage":
             ok.pop("preimage_hex", None)
+
+    if responses and all("format" in r.get("ok", {}) for r in responses):
+        print("\n".join(json.dumps(r, separators=(",", ":")) for r in responses))
+        return 0
 
     def set_ok(field, value):
         return lambda r: r["ok"].__setitem__(field, value)
@@ -195,6 +203,19 @@ def main() -> int:
         else:
             print(f"ok   positive control: {total[0]}")
 
+        rust_modes = {"none": None, "consumed": "MISMATCH", "reason": "MISMATCH",
+                      "rest_hex": "MISMATCH", "request_error": "REQUEST_ERROR", "drop": "COUNT",
+                      "id": "ID", "malformed": "MALFORMED"}
+        for mode, code in rust_modes.items():
+            result = compare(oracle, wrapper(tmp, "none", "core", oracle),
+                             ["--rust-compactsize", wrapper(tmp, mode, "rust", oracle)])
+            codes = {line.split()[1] for line in result.stdout.splitlines() if line.startswith("FAIL ")}
+            if result.returncode != (1 if code else 0) or (code and code not in codes):
+                failures += 1
+                print(f"FAIL Rust {mode}: exit {result.returncode}\n{result.stdout[-1500:]}{result.stderr[-1500:]}")
+            else:
+                print(f"ok   Rust {mode}: {code or 'positive control'}")
+
         for mode, (role, code) in MUTATIONS.items():
             env = dict(os.environ)
             pidfile = tmp / f"{mode}.pid"
@@ -222,7 +243,7 @@ def main() -> int:
                 except ProcessLookupError:
                     pass
             print(f"ok   {mode}: FAIL {code}")
-    print(f"{len(MUTATIONS) + 1} cases, {failures} failures")
+    print(f"{len(MUTATIONS) + len(rust_modes) + 1} cases, {failures} failures")
     return 1 if failures else 0
 
 

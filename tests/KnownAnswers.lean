@@ -1559,9 +1559,9 @@ def checkCompact : IO Nat := do
 
 The cases of `arith_uint256_tests.cpp` (D16) that use the operators the retarget uses: `operator*` by a 32-bit value, `operator/` and `GetLow64`.
 The inputs and expected values are copied from the test file, with the line of each case.
-Two `divide` cases, lines 362 and 368, expect an exception for a zero divisor. `ArithUint256.div` takes a proof that the divisor is not zero, so it has no such case.
-The multiply and `GetLow64` cases also run through the word models.
-The division cases run through the arithmetic definition only (issue #16).
+The multiply, nonzero divide and `GetLow64` cases run through both the arithmetic and word models.
+Two `divide` cases, lines 362 and 368, expect `uint_error` for a zero divisor.
+The word model returns `none` for these `BOOST_CHECK_THROW` expectations.
 -/
 
 /-- The value of a string of hexadecimal digits, or `none` for another character. -/
@@ -1599,7 +1599,10 @@ def operatorCases : Except String (List (Nat × Bool)) := do
   let one := ArithUint256.ofNat 1
   let zero := ArithUint256.ofNat 0
   let is (a : ArithUint256) (s : String) : Except String Bool := do return a == (← num s)
-  let divIs (a b : ArithUint256) (c : ArithUint256) : Bool := divide? a b == some c
+  let wordDivide (a b : ArithUint256) : Option ArithUint256 :=
+    (ArithUint256.Words.divide (ArithUint256.Words.ofArith a) (ArithUint256.Words.ofArith b)).map ArithUint256.Words.toArith
+  let divIs (a b : ArithUint256) (c : ArithUint256) : Bool :=
+    divide? a b == some c && wordDivide a b == some c
   return [
     (347, ArithUint256.mulUInt32 r1 0 == zero),
     (348, ArithUint256.mulUInt32 r1 1 == r1),
@@ -1610,11 +1613,13 @@ def operatorCases : Except String (List (Nat × Bool)) := do
     (359, divIs r1 one r1),
     (360, divIs r1 mx zero),
     (361, divIs mx r1 (ArithUint256.ofNat 2)),
+    (362, wordDivide r1 zero == none),
     (363, divIs r2 d1 (← num "000000000000000013e1665895a1cc981de6d93670105a6b3ec3b73141b3a3c5")),
     (364, divIs r2 d2 (← num "000000000e8f0abe753bb0afe2e9437ee85d280be60882cf0bd1aaf7fa3cc2c4")),
     (365, divIs r2 one r2),
     (366, divIs r2 mx zero),
     (367, divIs mx r2 one),
+    (368, wordDivide r2 zero == none),
     (394, ArithUint256.getLow64 r1 == 0x121156cfdb4a529c),
     (395, ArithUint256.getLow64 (ArithUint256.shiftLeft one 255) == 0),
     (396, ArithUint256.getLow64 one == 1),

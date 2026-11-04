@@ -31,7 +31,7 @@ Gap D asks whether the use of DogeLib holds together.
 
 | ID | Risk | Mitigation in place | Applies to |
 |----|------|---------------------|------------|
-| A1 | A definition does not match the pinned Dogecoin behavior | Source mapping in `SOURCES.md`, by review only. Five 256-bit word models have arithmetic equivalence proofs. Division and `operator-=` remain by review only, including Core's zero-divisor `uint_error` branch. SHA-256 has a proof against a FIPS 180-4 model, and NIST CAVP known answers. Known answers from Core's genesis data test the integer codecs. Core's own test cases are known answers for CompactSize, the legacy signature hash, the compact encoding and the difficulty retarget. The scripts of the genesis coinbase are known answers for counted lists. The genesis coinbase is a known answer for the transaction codec, reader and ID. `scripts/compare_core.py` runs the oracle and Core's own code at the pin on 179,556 requests. They cover CompactSize, the base-mode transaction reader, serialization and ID, and the legacy signature hash. | P R I F |
+| A1 | A definition does not match the pinned Dogecoin behavior | Source mapping in `SOURCES.md`, by review only. The 256-bit word models have arithmetic equivalence proofs, including division and its comparison and subtraction dependencies. The division model represents Core's zero-divisor exception. The remaining retarget paths stay by review only (issue #48). SHA-256 has a proof against a FIPS 180-4 model, and NIST CAVP known answers. Known answers from Core's genesis data test the integer codecs. Core's own test cases are known answers for CompactSize, the legacy signature hash, the compact encoding and the difficulty retarget. The scripts of the genesis coinbase are known answers for counted lists. The genesis coinbase is a known answer for the transaction codec, reader and ID. `scripts/compare_core.py` runs the oracle and Core's own code at the pin on 179,556 requests. They cover CompactSize, the base-mode transaction reader, serialization and ID, and the legacy signature hash. | P R I F |
 | A2 | A theorem holds only under a hypothesis | Policy: each conditional theorem lists its hypotheses here and in `COVERAGE.md` | P I |
 | A3 | Timing reveals secret data | None: no constant-time claim | R I |
 | A4 | A security theorem idealises a primitive | None: no security theorem yet | P |
@@ -554,12 +554,14 @@ These parts are not proved and not specified:
 
 - Header validity, including `CheckProofOfWork`, and AuxPoW.
 
-The word-model refinements below cover multiplication, both shifts, bit length and low-64-bit extraction.
-Division and its `operator-=` dependency remain by review only (A1, issue #16).
+The word-model refinements below cover multiplication, division, both shifts, bit length and low-64-bit extraction.
+They also cover division's comparison, addition, negation and subtraction dependencies.
+The correspondence between Core's source and the Lean models remains subject to review (A1).
+
 `lake test` runs the six `get_next_work_*` cases of `dogecoin_tests.cpp` and the 21 steps of `bignum_SetCompact` through the compiled code (B1).
 It also runs 17 cases of the `multiply`, `divide` and `methods` tests of `arith_uint256_tests.cpp` (D16) through `mulUInt32`, `div` and `getLow64`.
-Seven of those cases also run through the multiplication and low-64-bit word models.
-The division cases test only the arithmetic definition.
+All 17 cases also run through the corresponding word models.
+The word division model also runs the two zero-divisor cases.
 
 ### 256-bit word arithmetic
 
@@ -599,11 +601,49 @@ For a 32-bit `int`, N3337 section 5.8 paragraph 2 leaves `1 << 31` undefined (S1
 The model expresses the intended `0x80000000` mask with `testBit`.
 No theorem assigns semantics to undefined C++ execution.
 
-Division, word comparison and word subtraction have no word model or equivalence theorem (issue #16).
-Their arithmetic correspondence remains by review only.
-Core throws `uint_error("Division by zero")` when the divisor has zero bits (D13 line 92).
-The arithmetic `div` takes a nonzero proof, so it does not specify that exception branch.
-No proof covers Lean's compiler or runtime (B1, B2).
+### 256-bit word division
+
+`Work.ArithUint256Division` models Core's comparison, addition, negation, subtraction and division loops over the same eight words (D12, D13).
+`compareTo_eq` compares their natural values.
+`addLoop_value` accounts for the final carry, with an initial carry of at most one.
+`add_step` proves that this carry and two words sum exactly in 64 bits.
+`add_value`, `neg_value` and `sub_value` give addition, two's-complement negation and subtraction modulo 2^256 for every word input.
+Negation follows Core's complement and prefix increment, including every wrapped word.
+
+`divide_toArith` and `divide_ofArith` equate word division with `ArithUint256.div` for every dividend and nonzero divisor.
+`divLoop_spec` preserves `num + quotient * original divisor` and leaves `num` below the original divisor.
+Its hypotheses require aligned divisor words, the numerator bound at the current shift, and zero low quotient bits.
+`divide_value` establishes these hypotheses from Core's bit-length alignment and zero initial quotient.
+The bound also proves that the initial left shift and each accepted subtraction preserve the exact natural value.
+
+`divide_eq_none_iff` proves that the model returns `none` exactly when the divisor's value is zero.
+Core zeroes its quotient before the zero-divisor test, then throws `uint_error("Division by zero")` (D13 lines 88-92).
+The model represents the exception without the operand state after the throw.
+Its separate early-return branch returns the zero quotient when the divisor has more bits than the dividend.
+The arithmetic `div` requires a nonzero proof and excludes the exception branch.
+
+The quotient bit update uses Core's intended unsigned mask.
+Core writes the signed expression `1 << (shift & 31)` (D13 line 100).
+At bit 31, the same N3337 5.8 paragraph 2 boundary applies as for `bitScan` (S1).
+No theorem assigns semantics to undefined C++ execution.
+The correspondence between Core's source and these Lean models remains subject to review (A1).
+No proof covers Core's compiled code or Lean's compiler and runtime (B1, B2).
+
+`lake test` runs all ten nonzero divide cases from D16 lines 357-367 through both models.
+It also checks `none` for both `BOOST_CHECK_THROW` cases at lines 362 and 368.
+The expected quotients and exceptions come from Core's test file.
+
+`readWords_ofFn` proves that the vector copy at each loop boundary preserves every word.
+This copy prevents repeated evaluation of function-valued words from earlier loop states.
+It adds Lean core vector and array operations to the compiled path (B2).
+
+The axioms of all 24 public theorems in `Work.Proofs.ArithUint256Division`, by `#print axioms` with Lean `v4.35.0`:
+All names in this table are in `DogeLib.Work.ArithUint256.Words`.
+
+| Axioms | Theorems |
+| --- | --- |
+| `propext`, `Quot.sound` | `add_step`, `addLoop_value`, `add_value`, `shiftRight_value` |
+| `propext`, `Classical.choice`, `Quot.sound` | `readWords_ofFn`, `compareLoop_eq`, `compareTo_eq`, `incrementLoop_digits`, `incrementLoop_value`, `complement_value`, `neg_value`, `sub_value`, `sub_value_of_le`, `shiftLeft_value`, `quotient_mask`, `quotient_or_value`, `quotient_add_value`, `divLoop_spec`, `bits_eq_zero_iff`, `bits_value_bounds`, `divide_eq_none_iff`, `divide_value`, `divide_toArith`, `divide_ofArith` |
 
 ### Next-work selection and work parameters
 
@@ -704,8 +744,13 @@ Neither check establishes proof of work, AuxPoW validity or full header validity
 
 The multiplication, shift, bit-length and low-64-bit models have arithmetic equivalence proofs, as the *256-bit word arithmetic* subsection states.
 A reader still checks their correspondence to Core's source.
-Division and its `operator-=` dependency remain by review only (issue #16).
-Core's zero-divisor `uint_error` branch has no counterpart in the arithmetic definition, which takes a nonzero proof.
+The division, comparison and subtraction models also have arithmetic equivalence proofs, as the *256-bit word division* subsection states.
+The word division model represents Core's zero-divisor exception.
+The arithmetic definition takes a nonzero proof.
+
+The retarget's `SetCompact`, `GetCompact`, uint64 constructors and `UintToArith256` still have no word models (issue #48).
+Its powLimit comparison uses the arithmetic definition rather than the proved `CompareTo` model.
+The correspondence of these retarget paths to Core remains by review only (issue #48).
 
 A Dogecoin rule can differ from the Bitcoin rule it descends from.
 A definition or proof adopted from btc-verified is evidence to investigate, not a compatibility proof for Dogecoin.

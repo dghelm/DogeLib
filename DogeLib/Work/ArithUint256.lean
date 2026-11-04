@@ -23,7 +23,10 @@ GetCompact             arith_uint256.cpp 224-245  value to compact encoding
 `DogeLib.Work.ArithUint256Words` models multiplication, both shifts, `bits()` and `GetLow64()` over eight words.
 `DogeLib.Work.Proofs.ArithUint256Words` proves that these models agree with the arithmetic results on every input.
 The correspondence between Core's source and each Lean model is checked by review.
-Division and its word subtraction remain by review only (issue #16).
+
+`DogeLib.Work.ArithUint256Division` models word division, comparison, addition, negation and subtraction.
+`DogeLib.Work.Proofs.ArithUint256Division` proves arithmetic equivalence for every word input, with a nonzero divisor for successful division.
+The division model also represents Core's zero-divisor exception.
 Core's own tests of the compact encoding run through these definitions in `tests/KnownAnswers.lean`.
 
 The compact encoding packs a number into 32 bits, like a floating-point number in base 256:

@@ -105,8 +105,8 @@ Report only the checks you ran, with the exact command, revision, and result ([C
 | Refinement | `lake -d Refinement build --wfail`: the Aeneas model of the Rust reader agrees with `decodeBounded` on every Rust-representable slice | Yes. The root Build gate also checks the packed codec refinements. | `ci` / `lean` |
 | Declaration check | `lake exe check-decls` | Yes | `ci` / `lean` |
 | Import boundaries | `lake env lean --run scripts/CheckRefinementImports.lean` | Yes | `ci` / `lean` |
-| Rust known answers | `cargo +nightly-2026-09-17 test --locked --manifest-path Refinement/Rust/Cargo.toml --jobs 8` | Yes | No |
-| Rust extraction freshness | `Refinement/Rust/regenerate.sh --check` | Yes, after `Refinement/Rust/setup-tools.sh` | No |
+| Rust known answers | `cargo +nightly-2026-09-17 test --locked --manifest-path Refinement/Rust/Cargo.toml --jobs 4` | Yes | `ci` / `rust` |
+| Rust extraction freshness | `Refinement/Rust/regenerate.sh --check` | Yes, after `Refinement/Rust/setup-tools.sh` | `ci` / `rust` |
 | Declaration check self-test | `bash scripts/test_check_decls.sh` | Yes | `ci` / `lean` |
 | Source and coverage review | Manual review of SOURCES.md and COVERAGE.md | Manual | No |
 | Conformance | `lake test`: known answers through the compiled code | Yes, for the operations that [COVERAGE.md](COVERAGE.md) gives a `lake test` comparison | `ci` / `lean` |

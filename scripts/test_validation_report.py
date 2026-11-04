@@ -165,7 +165,7 @@ class Reports(unittest.TestCase):
             'build': 'lake build --wfail',
             'declaration-check': 'lake exe check-decls',
             'import-boundaries': 'lake env lean --run scripts/CheckRefinementImports.lean',
-            'rust-known-answers': 'cargo +nightly-2026-09-17 test --locked --manifest-path Refinement/Rust/Cargo.toml --jobs 8',
+            'rust-known-answers': 'cargo +nightly-2026-09-17 test --locked --manifest-path Refinement/Rust/Cargo.toml --jobs 4',
             'rust-extraction-freshness': 'Refinement/Rust/regenerate.sh --check',
             'declaration-check-self-test': 'bash scripts/test_check_decls.sh',
             'source-and-coverage-review': None,

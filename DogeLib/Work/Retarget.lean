@@ -66,8 +66,8 @@ So line 81 converts `retargetTimespan` to `uint64_t` modulo 2^64, then builds a 
 It requires `nPowTargetTimespan > 0`: every network of the pinned Core sets 14400, 60 or 1 (D14).
 With a zero timespan, Core throws `uint_error` at line 81.
 
-Which parameters apply at which height is not part of this module.
-Core selects them with `Consensus::Params::GetConsensus` (D14), and `GetNextWorkRequired` in `src/pow.cpp` (D17) chooses when to call this function and with which first block.
+`DogeLib.Work.Consensus` selects the work parameters by height.
+`DogeLib.Work.NextWork` specifies the caller, `GetNextWorkRequired` (D17), which chooses when to retarget and which first block to use.
 -/
 
 @[expose] public section

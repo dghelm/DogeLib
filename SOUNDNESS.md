@@ -467,9 +467,10 @@ The 256-bit product at line 80 is reduced modulo 2^256, as Core reduces it.
 `retarget_eq_of_no_wrap` gives the exact result when the product does not wrap.
 `no_wrap_of_le_powLimit` and `mainnet_limit` say that it does not wrap for the mainnet parameters when the old target is at most `powLimit`.
 `retarget_wrap_example` shows a wrap for an old target of 2^255: a longer actual timespan gives a smaller target.
-No theorem shows that a valid chain never reaches such a target, because block-index walking and header validity are not specified.
+No theorem shows that a valid chain never reaches such a target, because header validity is not specified.
+The finite-view caller checks coherent heights without establishing a target bound.
 
-The axioms of the 45 theorems of the layer, by `#print axioms` with Lean `v4.35.0`:
+The axioms of the 45 arithmetic and retarget theorems, by `#print axioms` with Lean `v4.35.0`:
 
 | Axioms | Theorems |
 | --- | --- |
@@ -481,15 +482,71 @@ Some concrete examples use `decide +kernel`, which the kernel checks without com
 
 These parts are not proved and not specified:
 
-- Which parameters apply at which height, `Consensus::Params::GetConsensus`.
-- When a retarget happens and which first block it uses, `GetNextWorkRequired`, and its walk over `CBlockIndex`.
-- The minimum-difficulty rules of the test networks.
 - Header validity, including `CheckProofOfWork`, and AuxPoW.
 
 The relation between Core's word-by-word loops in `arith_uint256.cpp` and the arithmetic results that the definitions state is checked by review (A1).
 `lake test` runs the six `get_next_work_*` cases of `dogecoin_tests.cpp` and the 21 steps of `bignum_SetCompact` through the compiled code (B1).
 It also runs 17 cases of the `multiply`, `divide` and `methods` tests of `arith_uint256_tests.cpp` (D16) through `mulUInt32`, `div` and `getLow64`.
 Those cases check the stated arithmetic on Core's values. They do not relate the word loops to it (issue #16).
+
+### Next-work selection and work parameters
+
+`DogeLib.Work.Consensus` projects the work fields from Core's parameter records (D14, D15).
+`ConsensusTree.getConsensus` follows the left and right search links and checks the right candidate's effective height before accepting it.
+The three `getConsensus_*` theorems give the projected work fields at every UInt32 target height.
+Mainnet changes at 145000, testnet at 145000 and 157500, and regtest at 10.
+AuxPoW records retain separate effective heights but repeat these fields.
+The projection makes no claim about the other consensus fields.
+
+`DogeLib.Work.NextWork` specifies the caller of the retarget (D17, lines 32-88).
+`nextWorkRequired` selects the candidate height's parameters, as validation and mining do (D33, D34).
+The local interval becomes one at previous height 145000.
+`retargetInterval_no_recovery` proves that the non-retarget branch cannot execute from that previous height, for every parameter record.
+
+The recovery loop uses the record's interval instead of that local interval.
+`retargetInterval_eq_record_of_nonretarget` proves that the local and record intervals agree whenever the caller is off a retarget boundary, for every record.
+Recovery requires that condition, so no input can reach recovery with different intervals.
+At previous height 144999, the candidate's DigiShield record already has interval one.
+
+The all-block minimum rule checks previous height at least 157500 and a strict delay greater than twice the spacing (D6, lines 26-39).
+Selected testnet parameters permit minimum difficulty from candidate height 157500, so that candidate still retargets and candidate 157501 can use the delay rule.
+This caller ignores `fPowNoRetargeting`, including on regtest.
+It also ignores `fPowAllowDigishieldMinDifficultyBlocks`.
+
+The view is a newest-first list of explicit height, UInt32 time and compact target fields.
+The adapter checks consecutive heights and bounds every height below 2147483647.
+The last entry may be above genesis, so the view need not contain all history.
+A walk that still needs a predecessor returns `missingAncestor` at a truncated suffix.
+Core's corresponding ancestor assertion aborts when the required index is absent.
+
+The model omits skip links and uses the predecessor path for ancestor lookup (D35).
+No theorem relates Core's skip-pointer traversal to that path.
+
+`blocksToGoBack_le` excludes the negative-first-height assertion when the interval is positive and divides the next height.
+The adapter checks `zeroInterval` before the retarget boundary and underflow checks.
+Thus `firstHeightUnderflow` is unreachable for every validated view: a positive interval at a retarget satisfies `blocksToGoBack_le`.
+Malformed-view errors are separate from both assertion cases.
+These errors are adapter contracts, not Core rejection codes.
+The UInt32 times widen to Int, and the fixed network spacings of 1 or 60 keep the delay arithmetic within int64_t.
+
+`getNextWorkRequired_genesis` proves the null-tip result for every record and candidate time.
+`getNextWorkRequired_minDifficulty` proves the minimum result when validation succeeds and the all-block minimum condition holds.
+`recoverLastNonMinDifficulty_mem` proves that a successful recovery returns a supplied entry's compact, without a header-validity hypothesis.
+None of these claims establishes `CheckProofOfWork` or the old-target bound required by `no_wrap_of_le_powLimit`.
+That bound remains a hypothesis.
+
+`lake test` includes source-derived network and branch examples and all six D7 retarget answers through synthetic contiguous views.
+The intermediate entries are synthetic, not historical headers.
+These examples do not run Core or prove equality to its compiled caller.
+
+By `#print axioms` with Lean `v4.35.0`:
+
+| Axioms | Theorems |
+| --- | --- |
+| None | `getConsensus_mainnet`, `getConsensus_regtest` |
+| `propext` | `retargetInterval_after`, `blocksToGoBack_first`, `blocksToGoBack_later`, `recoverLastNonMinDifficulty_mem`, `retargetInterval_no_recovery` |
+| `propext`, `Quot.sound` | `getConsensus_testnet`, `retargetInterval_before`, `blocksToGoBack_le`, `retargetInterval_eq_record_of_nonretarget` |
+| `propext`, `Classical.choice`, `Quot.sound` | `getNextWorkRequired_genesis`, `getNextWorkRequired_minDifficulty` |
 
 ### What cannot be proved yet
 
@@ -519,6 +576,8 @@ A definition or proof adopted from btc-verified is evidence to investigate, not 
 A conditional theorem is only as strong as its hypotheses.
 The first planned one is the signature-preimage equivalence, which may require fully parsed script code (ROADMAP.md, milestone C).
 Whatever those hypotheses leave unproved is part of what a reader trusts.
+The next-work view checks heights but does not discharge the old-target bound of `no_wrap_of_le_powLimit`.
+A proof about an accepted header chain still needs header validity.
 
 ### A3. Side channels
 
@@ -541,7 +600,10 @@ The first operations, base codecs and legacy signature hashing, have few context
 The transaction readers model two serialization modes of Core's reader: base mode and the witness-allowed format.
 The witness-allowed format is a format only. Segregated witness is not active on Dogecoin's main or test network at the pin, and no theorem says that it is.
 The legacy signature hash is the `SIGVERSION_BASE` mode of `SignatureHash`, and its script code is an input: the interpreter's preparation of it is not specified.
-Script, ledger and activation work will need explicit context.
+
+The work-parameter search covers each network and height, and the next-work wrapper selects the candidate height.
+The caller's hard-coded activation checks use the previous height, as the next-work subsection explains.
+Script and ledger work will need explicit context.
 
 ## Gap B: does the code that runs match the definitions?
 

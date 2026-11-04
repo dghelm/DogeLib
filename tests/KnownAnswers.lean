@@ -513,6 +513,14 @@ The other expected results come from a reading of `Unserialize_impl` and `ReadCo
 - Too few elements is `truncated`.
 
 The list of `UInt16` values `[1, 0x0302]` encodes as `02 01 00 02 03`, by `WriteCompactSize` (lines 219 to 242) and `ser_writedata16`.
+
+Long lists (issue #19): a count of `longCount` elements, read by the three readers that read one element at a time.
+Each must return that many elements with no remainder.
+With one byte fewer, each must fail as a short list fails: `none`, or `truncated` from `decodeBounded`.
+
+These checks test the results of the loop forms on long lists. They do not detect a return to the recursive forms.
+In this compiled driver, the recursive forms read 8,000,000 elements and overflowed the stack at 16,000,000, where the loop forms passed.
+A count that large needs about 4 GB, more than CI should spend, and `MAX_SIZE` itself is not tested.
 -/
 
 namespace KnownAnswers.CountedList
@@ -625,8 +633,44 @@ def cases (coinbase : ByteArray) : Except String (List (String × Bool)) := do
       isError (decodeBoundedBytes ((c.drop 41).take 16)) .truncated),
     ("no bytes is truncated", isError (decodeBoundedBytes []) .truncated)]
 
+/-- The count of the long-list checks. It keeps the memory of `lake test` near 1 GB. -/
+def longCount : Nat := 3000000
+
+/-- The long-list checks, each with its name and whether it holds. They run one at a time. -/
+def longCases : List (String × (Unit → Bool)) := [
+  ("generic codec reads a long list", fun _ =>
+    let bs := CompactSize.encode (UInt64.ofNat longCount) ++ List.replicate longCount 7
+    match Codec.decode (α := CountedList UInt8) bs with
+    | some (cl, []) => cl.val.length == longCount
+    | _ => false),
+  ("generic codec rejects a long list one byte short", fun _ =>
+    let bs := CompactSize.encode (UInt64.ofNat longCount) ++ List.replicate (longCount - 1) 7
+    (Codec.decode (α := CountedList UInt8) bs).isNone),
+  ("decodeBounded readByte reads a long list", fun _ =>
+    let bs := CompactSize.encode (UInt64.ofNat longCount) ++ List.replicate longCount 7
+    match decodeBounded readByte bs with
+    | .ok (cl, []) => cl.val.length == longCount
+    | _ => false),
+  ("decodeBounded readByte: a long list one byte short is truncated", fun _ =>
+    let bs := CompactSize.encode (UInt64.ofNat longCount) ++ List.replicate (longCount - 1) 7
+    isError (decodeBounded readByte bs) .truncated),
+  ("packed codec reads a long UInt16 list", fun _ =>
+    let bs := CompactSize.encode (UInt64.ofNat longCount) ++ List.replicate (2 * longCount) 7
+    match PackedCodec.decodeSlice (α := CountedList UInt16) (ByteSlice.ofByteArray ⟨bs.toArray⟩) with
+    | some (cl, rest) => cl.val.length == longCount && rest.toList.isEmpty
+    | none => false),
+  ("packed codec rejects a long UInt16 list one byte short", fun _ =>
+    let bs := CompactSize.encode (UInt64.ofNat longCount) ++ List.replicate (2 * longCount - 1) 7
+    (PackedCodec.decodeSlice (α := CountedList UInt16) (ByteSlice.ofByteArray ⟨bs.toArray⟩)).isNone)]
+
 /-- Every counted-list known answer. Returns the number of failures. -/
 def check : IO Nat := do
+  let mut longFailures := 0
+  for (name, run) in longCases do
+    if !run () then
+      IO.eprintln s!"FAIL countedlist {name}"
+      longFailures := longFailures + 1
+  IO.println s!"countedlist: {longCases.length} long-list checks of {longCount} elements, {longFailures} failures"
   let result := do
     let coinbase ← parseHex coinbaseHex
     if coinbase.size != 143 then throw s!"coinbase literal has {coinbase.size} bytes, expected 143"
@@ -634,7 +678,7 @@ def check : IO Nat := do
   match result with
   | .error e =>
     IO.eprintln s!"FAIL countedlist: {e}"
-    return 1
+    return 1 + longFailures
   | .ok cs =>
     let mut failures := 0
     for (name, ok) in cs do
@@ -642,7 +686,7 @@ def check : IO Nat := do
         IO.eprintln s!"FAIL countedlist {name}"
         failures := failures + 1
     IO.println s!"countedlist: {cs.length} checks, {failures} failures"
-    return failures
+    return failures + longFailures
 
 end KnownAnswers.CountedList
 

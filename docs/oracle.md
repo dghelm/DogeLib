@@ -131,7 +131,7 @@ A suffix may stop above genesis if the selected branch needs no earlier entry.
 The adapter checks the whole view before it selects a branch, even when a delay would permit minimum difficulty.
 
 ```json
-{"id":"target","op":"work.set_compact","compact":33587328}
+{"id":"target","op":"work.set_compact","compact":33587200}
 {"id":"target","ok":{"negative":false,"overflow":false,"value_hex":"0000000000000000000000000000000000000000000000000000000000000080"}}
 ```
 

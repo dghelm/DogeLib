@@ -16,7 +16,9 @@ It copies the transaction, changes the copy step by step, and serializes the cop
 2. Remove the `OP_CODESEPARATOR` instructions from the script code with `FindAndDelete`.
 3. Give every input the empty script, then give input `nIn` the script code.
 4. NONE: remove every output, and set the sequence of every other input to 0.
-   SINGLE: if `nIn` is not the index of an output, the result is `one`. Otherwise keep outputs `0` to `nIn`, replace each one before `nIn` with the null output, and set the sequence of every other input to 0.
+   SINGLE: if `nIn` is not the index of an output, the result is `one`.
+   Otherwise keep outputs `0` to `nIn`, and replace each one before `nIn` with the null output.
+   Set the sequence of every other input to 0.
 5. ANYONECANPAY: keep only input `nIn`.
 6. Serialize the copy without witness data, then the hash type, and hash the bytes.
 
@@ -33,7 +35,8 @@ Core's `FindAndDelete` counts the copies in an `int`. Here the count is a `Nat`.
 The Core compatibility of `findAndDelete` excludes a count that overflows an `int`.
 The equality of the two plans is between Lean definitions, so it needs no hypothesis about the count.
 
-`DogeLib.Transaction.Proofs.LegacySighashReference` proves that the two plans are equal when no instruction of the script code fails to parse and the transaction has fewer than 2^32 inputs and 2^32 outputs.
+`DogeLib.Transaction.Proofs.LegacySighashReference` proves that the two plans are equal under three hypotheses.
+No instruction of the script code fails to parse, and the transaction has fewer than 2^32 inputs and 2^32 outputs.
 -/
 
 @[expose] public section
@@ -135,7 +138,7 @@ theorem findAndDelete_length_le (s b : List UInt8) : (findAndDelete s b).1.lengt
 
 /-! ## The transformed transaction -/
 
-/-- A list no longer than a counted list, as a counted list. -/
+/-- A list whose length is at most the length of a counted list, as a counted list. -/
 def CountedList.ofLengthLe {α β : Type} (l : List α) (c : CountedList β) (h : l.length ≤ c.val.length) :
     CountedList α :=
   ⟨l, Nat.lt_of_le_of_lt h c.property⟩

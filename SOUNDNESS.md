@@ -360,7 +360,9 @@ The equality is between two Lean definitions. It says nothing about memory use o
 
 Each hypothesis is needed for a reason.
 The production serializer reduces the counts modulo 2^32, and `SignatureHashOld` does not.
-On a script that ends in a short push, the serializer writes the bytes up to the cursor of the failed `GetOp` and omits the unread rest. `FindAndDelete` keeps the rest.
+
+Take a script that ends in a short push.
+The serializer writes its bytes up to the cursor of the failed `GetOp`, and omits the unread rest. `FindAndDelete` keeps the rest.
 `legacyPlans_differ_shortPush` shows this on the script `4c 05 aa`.
 So for such a script the two Core functions commit to different bytes, and only the production function is consensus code.
 

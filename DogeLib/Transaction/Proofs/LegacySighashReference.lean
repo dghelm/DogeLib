@@ -292,7 +292,8 @@ theorem CountedList.encode_eq_flatten {α : Type} [Codec α] (c : CountedList α
   rw [CountedList.encode, CountedList.encodeElems_eq_flatten]
 
 /--
-For every script code whose instructions all parse, every list of inputs, index `n` and flag `z`: the encodings of the inputs of the copy before the ANYONECANPAY step are the inputs that the serializer writes, `legacyInputBytes`.
+Hypothesis: every instruction of the script code parses.
+Then for every list of inputs, index `n` and flag `z`, the copy's inputs before the ANYONECANPAY step encode as `legacyInputBytes`.
 -/
 theorem referenceSequencedInputs_map_encode (sc : Script) (hParse : (scanOps sc.bytes.val).2 = [])
     (inputs : List TxIn) (n : Nat) (z : Bool) :
@@ -319,7 +320,8 @@ theorem take_one_set_zero {α : Type} {l : List α} (x : α) (h : l ≠ []) : (l
   | cons y ys => rfl
 
 /--
-For every script code whose instructions all parse, every transaction with fewer than 2^32 inputs, every input index `nIn` and both flags: the encoding of the inputs of the copy is `legacyInputsBytes`.
+Hypotheses: every instruction of the script code parses, and the transaction has fewer than 2^32 inputs.
+Then for every input index `nIn` and both flags, the inputs of the copy encode as `legacyInputsBytes`.
 -/
 theorem encode_referenceInputs (sc : Script) (hParse : (scanOps sc.bytes.val).2 = []) (tx : Transaction)
     (nIn : UInt32) (z a : Bool) (hLen : tx.inputs.val.length < 2 ^ 32)
@@ -356,7 +358,8 @@ theorem encode_referenceInputs (sc : Script) (hParse : (scanOps sc.bytes.val).2 
     rfl
 
 /--
-For every transaction with fewer than 2^32 outputs, every input index `nIn`, and both flags, where `nIn` is an output index when `single` holds: the encoding of the outputs of the copy is `legacyOutputsBytes`.
+Hypotheses: the transaction has fewer than 2^32 outputs, and `nIn` is an output index when `single` holds.
+Then for both flags, the outputs of the copy encode as `legacyOutputsBytes`.
 -/
 theorem encode_referenceOutputs (tx : Transaction) (nIn : UInt32) (none single : Bool)
     (hLen : tx.outputs.val.length < 2 ^ 32) (hSingle : single = true → nIn.toNat < tx.outputs.val.length) :
@@ -393,7 +396,8 @@ theorem encode_referenceOutputs (tx : Transaction) (nIn : UInt32) (none single :
 /-! ## The plans -/
 
 /--
-For every script code whose instructions all parse, every transaction with fewer than 2^32 inputs and fewer than 2^32 outputs, every input index and every hash type: the plan of the production serializer equals the plan of the transformation reference.
+Hypotheses: every instruction of the script code parses, and the transaction has fewer than 2^32 inputs and fewer than 2^32 outputs.
+Then for every input index and every hash type, the production plan equals the plan of the transformation reference.
 -/
 theorem legacySignatureHashPlan_eq_reference (sc : Script) (tx : Transaction) (nIn h : UInt32)
     (hParse : (scanOps sc.bytes.val).2 = []) (hIn : tx.inputs.val.length < 2 ^ 32)

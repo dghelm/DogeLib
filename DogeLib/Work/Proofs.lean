@@ -1,6 +1,7 @@
 module
 
 public import DogeLib.Work.Proofs.ArithUint256
+public import DogeLib.Work.Proofs.ArithUint256Division
 public import DogeLib.Work.Proofs.ArithUint256Words
 public import DogeLib.Work.Proofs.Consensus
 public import DogeLib.Work.Proofs.NextWork

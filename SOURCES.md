@@ -39,7 +39,7 @@ Design records and module documentation cite these identifiers.
 | D6 | [Dogecoin difficulty: `CalculateDogecoinNextWorkRequired`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/dogecoin.cpp) |
 | D7 | [Dogecoin difficulty tests: DigiShield rounding regression](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/test/dogecoin_tests.cpp) |
 | D8 | [Dogecoin hashing: `CHash256`, `CHashWriter`, `SerializeHash`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/hash.h) |
-| D9 | [Dogecoin chain parameters: genesis blocks and their asserted hashes](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/chainparams.cpp) |
+| D9 | [Dogecoin chain parameters: genesis hashes and mainnet checkpoints](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/chainparams.cpp) |
 | D10 | [Dogecoin pure block header: fields, serialization order, `GetHash`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/primitives/pureheader.h) |
 | D11 | [Dogecoin 256-bit values: `GetHex` display order](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/uint256.cpp) |
 | D12 | [Dogecoin 256-bit arithmetic: `base_uint` operators and conversions, `arith_uint256`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/arith_uint256.h) |
@@ -91,6 +91,14 @@ Design records and module documentation cite these identifiers.
 | B16 | [btc-verified raw scripts](https://github.com/ProofOfKeags/btc-verified/blob/ecf4f0d2c5ab4df84f2595ca60ba2e1fd62d1bce/BtcVerified/Script/Script.lean) |
 | R1 | [Aeneas documentation](https://github.com/AeneasVerif/aeneas) (for discovery only: pin a revision before use) |
 | S1 | [C++11 working draft N3337](https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2012/n3337.pdf): [expr.mul] 5.6 paragraph 4, [conv.integral] 4.7 paragraph 2, [over.ics.rank] 13.3.3.2 paragraph 2, [expr.shift] 5.8 paragraph 2 |
+
+## Historical header fixture
+
+[`tests/work/mainnet-headers/README.md`](tests/work/mainnet-headers/README.md) records the public source of 312 mainnet headers and the fetch date.
+D10 fixes their 80-byte layout (`src/primitives/pureheader.h`, lines 29–54).
+D9 fixes checkpoint 145000 (`src/chainparams.cpp`, line 184), which the compiled test checks after double SHA-256 and display-order reversal.
+The test checks every predecessor link and compares next-work results with the headers' own `nBits`.
+The fixture does not change any reference pin.
 
 ## Operation-to-source mapping
 

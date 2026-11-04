@@ -28,11 +28,12 @@ It also reports a specification definition that reaches an opaque constant, so t
 It is empty, and a new finding is fixed, never added to it.
 
 `lake test` runs known answers through the compiled code.
-Three directories hold vendored files, each with a README that gives their provenance:
+Four directories hold vendored files, each with a README that gives their provenance:
 
 - `tests/cryptography/sha256/cavp/`: the NIST CAVP vectors, for SHA-256.
 - `tests/transaction/sighash/`: Dogecoin Core's signature-hash corpus, for the legacy signature hash.
 - `tests/transaction/corpus/`: Dogecoin Core's transaction corpus, for the base-mode reader and codecs.
+- `tests/work/mainnet-headers/`: public mainnet headers, for next-work selection across DigiShield activation.
 
 The other known answers, and their provenance, are in `tests/KnownAnswers.lean`.
 

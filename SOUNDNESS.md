@@ -186,14 +186,20 @@ Core itself does not run, so this is not a Core comparison.
 
 The packed codec runs core's `ByteArray.push` and `ByteArray.get`, as the other packed codecs do (B2).
 
+`decodeBoundedSlice` is Core's reader over a `ByteSlice`.
+`abstractRead_decodeBoundedSlice` compares it with `decodeBounded` on the bytes of each slice.
+On every slice, it gives the same error, or the same value and remainder bytes.
+`abstractRead` is the `Except` counterpart of `abstractParse`.
+`lake test` runs the bounded cases through it at offset 3 of a buffer.
+
 By `#print axioms` with Lean `v4.35.0`:
 
 | Theorem | Axioms |
 | --- | --- |
 | `maxSize_toNat` | None |
-| `encode_maxSize_succ`, `encodeFixedWidth_length` | `propext` |
+| `encode_maxSize_succ`, `encodeFixedWidth_length`, `abstractRead_error`, `abstractRead_ok` | `propext` |
 | `lawfulCodec`, `decode_encode`, `decode_canonical`, `encode_length_le`, `encode_head`, `toUInt8_lt_fd`, `toUInt8_ne_zero`, `toList_encodeInto`, `readCanonical_toOption`, `decodeBounded_eq_error_tooLarge_iff`, `decode_maxSize_succ`, `decodeBounded_maxSize_succ`, `decodeBounded_encode_maxSize_succ` | `propext`, `Quot.sound` |
-| `lawfulPackedCodec`, `abstractParse_decodeSlice`, `decode_eq_some_iff`, `decodeBounded_eq_ok_iff_decode`, `decodeBounded_eq_ok_iff_valid`, `decodeBounded_encode` | `propext`, `Classical.choice`, `Quot.sound` |
+| `abstractRead_readPayloadSlice`, `abstractRead_readCanonicalSlice`, `abstractRead_decodeBoundedSlice`, `lawfulPackedCodec`, `abstractParse_decodeSlice`, `decode_eq_some_iff`, `decodeBounded_eq_ok_iff_decode`, `decodeBounded_eq_ok_iff_valid`, `decodeBounded_encode` | `propext`, `Classical.choice`, `Quot.sound` |
 
 Upstream proves two small facts in `decode_encode` and `encode_head` with `bv_decide`.
 Here `toUInt8_lt_fd` and `toUInt8_ne_zero` prove them: each converts the bytes to natural numbers and closes the goal with `omega` (C2).

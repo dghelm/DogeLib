@@ -62,7 +62,7 @@ These are the changes:
 - `packedCodec` packages the packed operations as a `PackedCodec UInt64`. Upstream has no such value.
 - The namespace, the module header and the doc comments are DogeLib's.
 
-`maxSize`, `ReadError`, `readPayload`, `readCanonical` and `decodeBounded` are DogeLib's.
+`maxSize`, `ReadError`, `readPayload`, `readCanonical` and `decodeBounded` are DogeLib's, and so are their packed forms `readPayloadSlice`, `readCanonicalSlice` and `decodeBoundedSlice`.
 They follow `MAX_SIZE` and `ReadCompactSize` of Dogecoin Core `v1.14.9`, commit `e0a1c15`, `src/serialize.h` (SOURCES.md, D1).
 -/
 
@@ -249,6 +249,38 @@ The categories of `ReadError` are the contract, and the text of the C++ failures
 -/
 def decodeBounded (bs : List UInt8) : Except ReadError (UInt64 × List UInt8) :=
   match readCanonical bs with
+  | .error e => .error e
+  | .ok (nSizeRet, rest) =>
+    if nSizeRet > maxSize then .error .tooLarge
+    else .ok (nSizeRet, rest)
+
+/-! ## The packed form of Core's bounded reader -/
+
+/-- `readPayload` over a slice: the payload read with `readBitVecLE`. -/
+def readPayloadSlice (byteWidth minValue : Nat) (s : ByteSlice) :
+    Except ReadError (UInt64 × ByteSlice) :=
+  match readBitVecLE byteWidth s with
+  | none => .error .truncated
+  | some (w, rest) =>
+    if w.toNat < minValue then .error .nonCanonical
+    else .ok (⟨w.setWidth 64⟩, rest)
+
+/-- `readCanonical` over a slice: the marker read with `ByteSlice.uncons`, then the payload. -/
+def readCanonicalSlice (s : ByteSlice) : Except ReadError (UInt64 × ByteSlice) :=
+  match s.uncons with
+  | none => .error .truncated
+  | some (chSize, t) =>
+    if chSize < 253 then .ok (chSize.toUInt64, t)
+    else if chSize = 253 then readPayloadSlice 2 253 t
+    else if chSize = 254 then readPayloadSlice 4 0x10000 t
+    else readPayloadSlice 8 0x100000000 t
+
+/--
+Core's CompactSize reader over a slice: the packed form of `decodeBounded`.
+`abstractRead_decodeBoundedSlice`, in the proof library, proves that it gives the same errors, values and remainder bytes as `decodeBounded` on every slice.
+-/
+def decodeBoundedSlice (s : ByteSlice) : Except ReadError (UInt64 × ByteSlice) :=
+  match readCanonicalSlice s with
   | .error e => .error e
   | .ok (nSizeRet, rest) =>
     if nSizeRet > maxSize then .error .tooLarge

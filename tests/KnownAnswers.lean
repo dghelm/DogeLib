@@ -1783,6 +1783,104 @@ def checkNextWork : IO Nat := do
   return failures
 
 /-!
+### Mainnet headers
+
+The raw fixture and its Electrum provenance are in `tests/work/mainnet-headers/README.md`.
+D10 fixes the 80-byte layout.
+D9 fixes checkpoint 145000 at Core `e0a1c15`.
+The checkpoint anchors its ancestors, but does not authenticate later headers.
+These checks do not establish proof of work, AuxPoW validity or agreement with compiled Core.
+-/
+
+namespace MainnetHeaders
+
+open DogeLib.Serialization
+open KnownAnswers.Sha256Cavp (parseHex toHex)
+
+/-- One pure header, with the int32 version's bits preserved as UInt32.
+The fixture height is separate from the 80 serialized bytes (D10). -/
+structure Header where
+  height : Nat
+  versionBits : UInt32
+  prev : DogeLib.Hash256
+  merkleRoot : DogeLib.Hash256
+  time : UInt32
+  bits : UInt32
+  nonce : UInt32
+  digest : ByteArray
+
+/-- Parses all six D10 fields, consumes exactly 80 bytes and hashes those bytes with Sha256d. -/
+def parseHeader (height : Nat) (hex : String) : Except String Header := do
+  let bytes ← parseHex hex
+  if bytes.size != 80 then throw s!"height {height}: expected 80 bytes, got {bytes.size}"
+  let some ((version, prev, merkle, time, bits, nonce), rest) :=
+      Codec.decode (α := UInt32 × DogeLib.Hash256 × DogeLib.Hash256 × UInt32 × UInt32 × UInt32) bytes.toList
+    | throw s!"height {height}: cannot decode header"
+  if !rest.isEmpty then throw s!"height {height}: trailing header bytes"
+  return ⟨height, version, prev, merkle, time, bits, nonce,
+    DogeLib.Cryptography.Hash.Sha256d.hash bytes⟩
+
+/-- Requires exactly the fixture's 312 consecutive heights, so missing records cannot reduce the checks. -/
+def parseHeaders (text : String) : Except String (Array Header) := do
+  let mut headers := #[]
+  for line in text.splitOn "\n" do
+    if line.isEmpty then continue
+    let [heightText, hex] := line.splitOn " " | throw "expected height and header hex"
+    let some height := heightText.toNat? | throw s!"bad height: {heightText}"
+    if height != 144719 + headers.size then throw s!"unexpected height: {height}"
+    headers := headers.push (← parseHeader height hex)
+  if headers.size != 312 then throw s!"expected 312 headers, got {headers.size}"
+  return headers
+
+/-- Checks every hash link, checkpoint 145000 and next-work result with sufficient prior history.
+Only the initial context header and the incomplete retarget at 144720 lack known answers. -/
+def check : IO Nat := do
+  let headers ← match parseHeaders (← IO.FS.readFile "tests/work/mainnet-headers/headers.txt") with
+    | .ok headers => pure headers
+    | .error e =>
+      IO.eprintln s!"FAIL mainnet headers: {e}"
+      return 1
+  let mut failures := 0
+  let mut previous : Option Header := none
+  let mut view : List BlockIndex := []
+  let mut copies := 0
+  let mut legacyRetargets := 0
+  let mut digiRetargets := 0
+  for header in headers do
+    if let some prev := previous then
+      unless header.prev.val == prev.digest.toList do
+        IO.eprintln s!"FAIL mainnet header {header.height}: predecessor hash"
+        failures := failures + 1
+    if header.height == 145000 then
+      let display := toHex ⟨header.digest.toList.reverse.toArray⟩
+      unless display == "cc47cae70d7c5c92828d3214a266331dde59087d4a39071fa76ddfff9b7bde72" do
+        IO.eprintln s!"FAIL mainnet checkpoint 145000: {display}"
+        failures := failures + 1
+    if header.height > 144719 then
+      let got := nextWorkRequired .mainnet view header.time
+      if header.height == 144720 then
+        unless got == .error .missingAncestor do
+          IO.eprintln s!"FAIL mainnet header 144720: expected missingAncestor, got {repr got}"
+          failures := failures + 1
+      else
+        unless got == .ok header.bits do
+          IO.eprintln s!"FAIL mainnet next work {header.height}: got {repr got}, expected {header.bits}"
+          failures := failures + 1
+        if header.height >= 145000 then digiRetargets := digiRetargets + 1
+        else if header.height % 240 == 0 then legacyRetargets := legacyRetargets + 1
+        else copies := copies + 1
+    view := ⟨header.height, header.time, header.bits⟩ :: view
+    previous := some header
+  unless copies == 278 && legacyRetargets == 1 && digiRetargets == 31 do
+    IO.eprintln "FAIL mainnet headers: unexpected branch counts"
+    failures := failures + 1
+  IO.println s!"mainnet headers: {headers.size} hashes, 311 links, checkpoint 145000; {failures} failures"
+  IO.println s!"mainnet next work: {copies} legacy copies, {legacyRetargets} interval-240 retarget, {digiRetargets} DigiShield retargets"
+  return failures
+
+end MainnetHeaders
+
+/-!
 ### Shifts
 
 The byte helpers and cases below adapt `src/test/arith_uint256_tests.cpp` lines 125-197 at Core `e0a1c15` (D16).
@@ -1890,7 +1988,8 @@ def main : IO UInt32 := do
   let sighash ← KnownAnswers.LegacySighash.check
   let compact ← KnownAnswers.Work.checkCompact
   let retarget ← KnownAnswers.Work.checkRetarget
+  let mainnetHeaders ← KnownAnswers.Work.MainnetHeaders.check
   let nextWork ← KnownAnswers.Work.checkNextWork
   let operators ← KnownAnswers.Work.checkOperators
   let shifts ← KnownAnswers.Work.checkShifts
-  return if short + long + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + operators + shifts == 0 then 0 else 1
+  return if short + long + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts == 0 then 0 else 1

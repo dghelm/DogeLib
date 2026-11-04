@@ -169,7 +169,8 @@ class Reports(unittest.TestCase):
             'conformance': 'lake test',
             'pinned-vectors': '(cd tests/cryptography/sha256/cavp && sha256sum -c SHA256SUMS) && '
                               '(cd tests/transaction/sighash && sha256sum -c SHA256SUMS) && '
-                              '(cd tests/transaction/corpus && sha256sum -c SHA256SUMS)',
+                              '(cd tests/transaction/corpus && sha256sum -c SHA256SUMS) && '
+                              '(cd tests/work/mainnet-headers && sha256sum -c SHA256SUMS)',
             'refinement': 'lake build --wfail',
             'soundness-review': None,
             'writing': 'uv run --no-project --python 3.12 python scripts/check_writing.py --base main',

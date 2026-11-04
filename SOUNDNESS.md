@@ -655,6 +655,17 @@ That bound remains a hypothesis.
 The intermediate entries are synthetic, not historical headers.
 These examples do not run Core or prove equality to its compiled caller.
 
+`lake test` also reads 312 real mainnet headers at heights 144719–145030 from a public Electrum server.
+The [fixture README](tests/work/mainnet-headers/README.md) records the source, date and exact request.
+The test hashes all headers with compiled `Sha256d`, checks all predecessor links and requires Core's checkpoint hash at 145000 (D9).
+It compares `nextWorkRequired .mainnet` with 278 difficulty copies, the interval-240 retarget at 144960 and 31 DigiShield retargets at 145000–145030.
+The substantive retarget evidence is 144960 plus those 31 DigiShield blocks.
+
+The first header supplies context.
+Retarget 144720 lacks an ancestor, so the test requires `missingAncestor` there.
+These known answers establish neither proof of work nor AuxPoW validity, and do not discharge the old-target bound.
+They do not run Core or prove equivalence on other inputs.
+
 By `#print axioms` with Lean `v4.35.0`:
 
 | Axioms | Theorems |
@@ -683,6 +694,13 @@ Core comparisons run the compiled oracle against the pinned Core revision.
 The source registry exists. The fixtures are listed per operation in the *Comparison* column of [COVERAGE.md](COVERAGE.md), and each records its provenance.
 The Core comparison runs the compiled oracle and Core's own code at the pin on the same requests, for the operations of the oracle ([docs/oracle.md](docs/oracle.md#the-core-harness)).
 It shows agreement on the requests it sends, and nothing about other inputs.
+
+The real mainnet headers test next-work selection across DigiShield activation against historical `nBits` values.
+The next-work subsection states the exact branch counts.
+Hash links connect headers through 145000 to the pinned Core checkpoint, subject to the hash commitment assumption.
+The checkpoint does not authenticate later headers, whose provenance still relies on the public source.
+The fixture digest pins all bytes, and the compiled test checks links through 145030.
+Neither check establishes proof of work, AuxPoW validity or full header validity.
 
 The multiplication, shift, bit-length and low-64-bit models have arithmetic equivalence proofs, as the *256-bit word arithmetic* subsection states.
 A reader still checks their correspondence to Core's source.

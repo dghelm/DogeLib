@@ -69,7 +69,7 @@ From design record 0001, section 9. A first release has:
 - An executable oracle and a reproducible Core comparison harness.
 - Independent fixtures, targeted boundary and malformed cases, and minimized mismatches.
 - A statement of proof assumptions, execution boundaries, and unsupported areas.
-- Validation reports identifying the exact revisions and commands actually run.
+- Validation reports identifying the exact revisions and commands actually run ([report command](BUILDING.md#validation-reports)).
 
 If the Rust refinement is not in the first release, the release says so and makes no Rust verification claim.
 

@@ -92,15 +92,21 @@ Report only the checks you ran, with the exact command, revision, and result ([C
 | Declaration check self-test | `bash scripts/test_check_decls.sh` | Yes | `ci` / `lean` |
 | Source and coverage review | Manual review of SOURCES.md and COVERAGE.md | Manual | No |
 | Conformance | `lake test`: known answers through the compiled code | Yes, for the operations that [COVERAGE.md](COVERAGE.md) gives a `lake test` comparison | `ci` / `lean` |
-| Pinned vectors | `sha256sum -c SHA256SUMS` in each vendored vector directory: `tests/cryptography/sha256/cavp/`, `tests/transaction/sighash/` and `tests/transaction/corpus/` | Yes | `ci` / `tools` |
+| Pinned vectors | `(cd tests/cryptography/sha256/cavp && sha256sum -c SHA256SUMS) && (cd tests/transaction/sighash && sha256sum -c SHA256SUMS) && (cd tests/transaction/corpus && sha256sum -c SHA256SUMS)` | Yes | `ci` / `tools` |
 | Refinement | `lake build --wfail`: the `LawfulPackedCodec` instances prove that the packed codecs agree with the codec specification | Yes, for the packed fixed-width and fixed-length codecs, the packed CompactSize codec and bounded reader (`abstractRead_decodeBoundedSlice`), the packed counted-list codecs and the packed transaction codecs | `ci` / `lean` |
 | Soundness review | Manual review of SOUNDNESS.md | Manual | No |
 | Writing | `uv run --no-project --python 3.12 python scripts/check_writing.py --base main` | Yes. Its findings are advice and never fail the check. | `writing`, as annotations |
 | Oracle | `bash scripts/test_oracle.sh`: builds `dogelib-oracle` and checks its responses to `tests/oracle/`, to Core's `sighash.json` and to the base-mode records of Core's transaction corpus | Yes | `ci` / `lean` |
-| Core comparison | `scripts/build_core_harness.sh <dogecoin-git-clone> build/core-harness`, then `python3 -I scripts/compare_core.py .lake/build/bin/dogelib-oracle build/core-harness/core-oracle`: Dogecoin Core's code and the oracle on the same requests ([docs/oracle.md](docs/oracle.md#the-core-harness)) | Yes | `core` / `compare` |
+| Core comparison | `scripts/build_core_harness.sh <dogecoin-git-clone> build/core-harness && python3 -I scripts/compare_core.py .lake/build/bin/dogelib-oracle build/core-harness/core-oracle`: Dogecoin Core's code and the oracle on the same requests ([docs/oracle.md](docs/oracle.md#the-core-harness)) | Yes | `core` / `compare` |
 | Comparator self-test | `python3 -I scripts/test_compare_core.py .lake/build/bin/dogelib-oracle` | Yes | `core` / `compare` |
 | Writing checker tests | `uv run --no-project --python 3.12 python -m unittest scripts/test_check_writing.py` | Yes | `writing` |
+| Validation report tests | `python3 -I scripts/test_validation_report.py` | Yes | `ci` / `tools` |
 | Lane tool | `bash scripts/test_lane.sh` | Yes | `ci` / `tools` |
+
+The validation report reads this table as executable input.
+The first code span in each automated gate's command cell is its complete command.
+Manual gates have `Manual` in the *Exists* column.
+Use `--core-clone PATH` to replace `<dogecoin-git-clone>` with a shell-quoted path.
 
 When a lane adds a command, it updates this table in the same change. The workflows are in `.github/workflows/`. CI runs on every pull request and on every push to `main`.
 

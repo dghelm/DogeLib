@@ -3,6 +3,8 @@
 `dogelib-oracle` runs DogeLib's specification on requests from another program, such as a harness that runs Dogecoin Core on the same inputs.
 This document defines its record format, `dogelib-oracle/3`.
 The oracle supports only this format.
+Format `/3` adds four work operations and the `work_view` error kind.
+Operations from `/2` keep their request fields, response shapes and behavior, and only the version string changes.
 A change to the format needs a maintainer's approval ([AGENTS.md](../AGENTS.md#changes-that-need-a-maintainer)) and a new format name.
 
 The oracle models Core's serialization, its legacy signature hash and its work arithmetic.
@@ -225,6 +227,16 @@ It links no Boost library.
 
 The work functions and parameter constructors require five additional Core objects: `pow.cpp`, `chain.cpp`, `dogecoin.cpp`, `chainparams.cpp` and `chainparamsbase.cpp`.
 Function and data sections, with linker garbage collection, discard unrelated server functions and their dependencies.
+The build assumes GNU ld for `--gc-sections`, as Linux CI does.
+These pinned sources supply the additional objects:
+
+| Source | Role |
+| --- | --- |
+| [D17, `src/pow.cpp`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/pow.cpp) | `GetNextWorkRequired` |
+| [D35, `src/chain.cpp`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/chain.cpp) | `BuildSkip`, `GetAncestor` and the skip-height guard |
+| [D6, `src/dogecoin.cpp`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/dogecoin.cpp) | `CalculateDogecoinNextWorkRequired` and minimum-difficulty permission |
+| [D14, `src/chainparams.cpp`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/chainparams.cpp) | Network parameter records, `SelectParams` and `GetConsensus` |
+| [D39, `src/chainparamsbase.cpp`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/chainparamsbase.cpp) | `SelectBaseParams`, called by `SelectParams` |
 
 ### What the harness runs
 
@@ -249,11 +261,14 @@ The harness compares `work.next` only on contiguous views with enough history fo
 It rejects a request outside that domain before it calls Core.
 Core can assert on a missing ancestor, and a truncated recovery walk can return a different result.
 The comparison excludes every `work_view` fixture and checks those errors only against the oracle fixtures.
+The oracle reads chain heights as `u32` and returns `work_view` with `height_out_of_range` from 2147483647.
+The harness instead returns a `request` error for those heights, outside its caller domain.
 
 The harness sets each supplied entry's `pprev`, `nHeight`, `nTime` and `nBits`.
 It computes Core's `GetSkipHeight` only to decide whether to call `BuildSkip` within the supplied suffix.
 When that destination precedes the suffix, the skip pointer stays null.
 Core's `GetAncestor` then follows `pprev`, so this guard changes no result.
+The traversal cannot diverge through a retained skip pointer because Core follows `pskip` only when its skip height is at least the target.
 The `work missing skip traversal` comparison retargets from height 479 to ancestor 239 across height 256, whose skip pointer is null.
 
 ### How its responses differ
@@ -314,6 +329,9 @@ The work comparison reports these sets separately:
 - D16's `bignum_SetCompact` cases and D7's six `get_next_work_*` cases from the oracle fixtures.
 - Compact exponent, mantissa, sign and overflow boundaries, plus magnitudes around every bit boundary through 256 bits.
 - Retarget timespan, rounding, height and parameter boundaries on all three networks, with UInt32 time endpoints.
+  Spans −69, −68, −67, 307, 308 and 309 cover DigiShield's clamp edges for timespan 60.
+  Spans −8, −7 and −6 cover the lower edge for regtest's timespan 1.
+  The signed compact `0x04923456` checks that retarget arithmetic ignores the sign flag.
 - The `regtest legacy wrap case`: selection height 0, last height 1, times 901 and 0, and bits `0x207fffff`.
   Core's multiplication wraps modulo 2^256, and returns `0x1f02467a`.
 - Synthetic network chains at the legacy, DigiShield and minimum-difficulty boundaries, with strict delay endpoints.

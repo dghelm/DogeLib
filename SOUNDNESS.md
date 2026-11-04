@@ -1046,7 +1046,7 @@ A user of the comparison trusts these parts of it:
 - Core's libraries at the pin, compiled by the compiler of the machine that runs the comparison: GCC 13 in CI, on `ubuntu-24.04`.
   Core v1.14.9 was released for older compilers.
   The build script uses `-O2 -ffunction-sections -fdata-sections`, and Core's configure selects C++11.
-  The linker discards unused sections with `--gc-sections`.
+  GNU ld discards unused sections with `--gc-sections`.
 - The harness's own code. It converts hexadecimal text and JSON numbers to Core's arguments, writes Core's results as JSON, and maps four exception messages to read errors.
   Any other exception from Core stops the harness, so it cannot pass as a result.
 - The `plan` label of `sighash.legacy`. The harness computes it from Core's conditions instead of observing it. It stops if the label is `fixed_digest` and Core's digest is not the value one.

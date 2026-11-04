@@ -490,11 +490,12 @@ def set_work_retarget() -> list[dict]:
         for selection in (0, 9, 10, 19, 20, 144999, 145000, 157499, 157500, 158100, 371337, 0xffffffff):
             for height in (0, 4999, 5000, 9999, 10000, 145000, 2147483646):
                 # Include clamp boundaries for every network timespan, and negative differences.
-                spans = {-1, 0, 1, 2, 7, 8, 9, 48, 52, 59, 60, 61, 67, 68, 69,
+                spans = {-69, -68, -67, -8, -7, -6, -1, 0, 1, 2, 7, 8, 9,
+                         48, 52, 59, 60, 61, 67, 68, 69, 307, 308, 309,
                          899, 900, 901, 1799, 1800, 1801, 3599, 3600, 3601,
                          14399, 14400, 14401, 57599, 57600, 57601}
                 for span in sorted(spans):
-                    for bits in (0, 0x1b671062, 0x207fffff, 0xff123456):
+                    for bits in (0, 0x04923456, 0x1b671062, 0x207fffff, 0xff123456):
                         requests.append(calculate_request(network, selection, height, 100000 + span, 100000, bits))
             for last_time, first_time in ((0, 0xffffffff), (0xffffffff, 0), (0xffffffff, 0xffffffff)):
                 requests.append(calculate_request(network, selection, 145000, last_time, first_time, 0x1e0fffff))

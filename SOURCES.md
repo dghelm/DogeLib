@@ -9,12 +9,20 @@ This file is the single source registry ([CONTRIBUTING.md](CONTRIBUTING.md#sourc
 | [Dogecoin Core](https://github.com/dogecoin/dogecoin) | `e0a1c157791544e818c901bd9341896965afbf9d` | `v1.14.9` | Compatibility target for the selected functions and modes | Adopted |
 | [EthLib](https://github.com/ethereum/EthLib) | `6a93711e7cc062e787fff6747e4101a141d38b7a` | — | Model project: architecture, proof policy, writing standard, SHA-256, declaration check | Adopted |
 | [btc-verified](https://github.com/ProofOfKeags/btc-verified) | `ecf4f0d2c5ab4df84f2595ca60ba2e1fd62d1bce` | — | Codecs, byte representations and packed refinements. Its Apache 2.0 licence is in `LICENSES/btc-verified-Apache-2.0.txt`. | Adopted |
-| [Charon](https://github.com/AeneasVerif/charon) / [Aeneas](https://github.com/AeneasVerif/aeneas) | Not selected | — | Rust extraction and refinement | Not selected |
+| [Aeneas](https://github.com/AeneasVerif/aeneas) | `d1e177bb9fdc17fa62e730d524ac905ba19776ed` | — | Rust refinement: translates Charon's output to Lean, and its `backends/lean` library models Rust's primitives. That library pins Lean `v4.35.0` and requires Mathlib. Apache 2.0. | Proposed |
+| [Charon](https://github.com/AeneasVerif/charon) | `a58d159210b3a36fedeaba4437bda896a8b12f0d` | — | Rust extraction, the commit in Aeneas's `charon-pin` at the Aeneas pin. It builds with Rust `nightly-2026-09-17`. Apache 2.0. | Proposed |
 | [Lean 4](https://github.com/leanprover/lean4) | `eb6cafb7290e8bd5f2937522d8d804f58f02bafc` | `v4.35.0` | Toolchain, pinned in `lean-toolchain` | Adopted |
 
 Design records 0001 and 0002 cite EthLib at `5d4b584`. The pin above is two commits later and uses the same toolchain, `v4.35.0`. The two commits add the SHA-256 precompile and the rule against every tactic that trusts compiled code. `WRITING.md` and `scripts/check_writing.py` are adapted from this pin.
 
-*Proposed* means recorded in the design records and not yet built against. A pin becomes *Adopted* when a merged lane builds or compares against it.
+*Proposed* means recorded in the design records and not yet built against.
+
+The Aeneas and Charon pins were proposed on 2026-11-04 for ROADMAP step 6.
+Neither project tags releases, so each pin is a commit on its `main` branch: Aeneas's latest on 2026-11-03, and the Charon commit that Aeneas names.
+Before step 6 can use them, the maintainer decides two questions:
+
+- **Mathlib.** The Aeneas Lean library requires Mathlib `v4.35.0` (commit `56a005855ea17e0b0958f73ec801ae140b0a1679` in its `lake-manifest.json`). It would enter only the `Refinement` library, never the specification (issue #3).
+- **Trust policy.** The Aeneas Lean library declares seven axioms. Five declare types for Rust items it does not model, such as `core.pin.Pin`, and one in a test module declares a function. The seventh, `core.slice.Slice.get_unchecked_SliceIndexUsizeSlice_spec` (`Aeneas/Std/Slice.lean:615`), states a property. `lake exe check-decls` reports a declaration whose proof depends on any of them. A refinement proof that avoids them needs no exception. The Aeneas library also uses `native_decide` and `bv_decide`, in tests and in tactics that a proof can avoid. A pin becomes *Adopted* when a merged lane builds or compares against it.
 
 The maintainer confirmed the Dogecoin pin on 2026-11-03 (issue #5). `v1.14.9` was then the latest Dogecoin Core release. The Dogecoin pin is a compatibility target for the operations DogeLib models. It is not a claim that every rule in that version is formalized, or that one version is enough evidence for historical consensus.
 

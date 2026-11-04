@@ -18,7 +18,10 @@ An unfinished proof only warns, so `--wfail` turns every warning into an error.
 `lake exe check-decls` reads the compiled declarations of the `DogeLib`, `Proofs` and `Exports` libraries.
 It requires every `.lean` file under `DogeLib/`, and `DogeLib.lean`, to be reachable from those roots.
 It names each unreachable module and fails the check.
-It reports any transitive axiom dependency beyond `propext`, `Classical.choice` and `Quot.sound`, and any `partial`, `opaque`, `unsafe`, `@[extern]`, `@[implemented_by]` or `@[csimp]` declaration.
+
+It reports any axiom beyond `propext`, `Classical.choice` and `Quot.sound` in the transitive dependencies of safe declarations.
+Unsafe declarations are reported as `unsafe` findings.
+It also reports any `partial`, `opaque`, `@[extern]`, `@[implemented_by]` or `@[csimp]` declaration.
 It also reports a specification definition that reaches an opaque constant, so that the kernel cannot unfold it.
 
 `scripts/check_decls_baseline.txt` lists the findings that exist today.

@@ -90,11 +90,22 @@ mod=${ORPHAN%.lean}
 mod=${mod//\//.}
 if lake exe check-decls >"$WORK/unreachable" 2>&1; then
   echo "FAIL: an unreachable production module passed"; FAIL=1
-elif grep -qx "unreachable-module $mod: not imported by the default production roots" "$WORK/unreachable"; then
+elif grep -qx "unreachable-module $mod: not imported by the default production roots" "$WORK/unreachable" \
+    && grep -q '^check-decls: .* declarations under DogeLib,' "$WORK/unreachable"; then
   echo "ok:   an unreachable production leaf is named and fails the check"
 else
   echo "FAIL: the unreachable production module was not named"; cat "$WORK/unreachable"; FAIL=1
 fi
 rm -f "$ORPHAN"
+
+# The default check needs the production file inventory from the repository root.
+exe="$PWD/.lake/build/bin/check-decls"
+lake env bash -c 'cd "$1" && exec "$2"' _ "$WORK" "$exe" >"$WORK/cwd" 2>&1
+got=$?
+if [ "$got" -eq 2 ] && grep -q '^check-decls: run the default production check from the repository root' "$WORK/cwd"; then
+  echo "ok:   the default check explains a missing repository root"
+else
+  echo "FAIL: the missing repository root was not explained"; cat "$WORK/cwd"; FAIL=1
+fi
 
 exit "$FAIL"

@@ -336,6 +336,10 @@ unsafe def run (args : List String) : IO UInt32 := do
       return 2
   let checkProduction := mods.isEmpty && scope == `DogeLib
   let mods := if mods.isEmpty then defaultModules else mods
+  if checkProduction then
+    unless (← System.FilePath.pathExists "DogeLib.lean") && (← System.FilePath.isDir "DogeLib") do
+      IO.eprintln "check-decls: run the default production check from the repository root (DogeLib.lean and DogeLib/ are required)"
+      return 2
   initSearchPath (← findSysroot)
   -- `loadExts := true` is essential: without it the `@[csimp]` table, among others, stays empty.
   -- Lean v4.35.0 `Lean.importModules`: `.private` loads every private proof body.
@@ -346,12 +350,9 @@ unsafe def run (args : List String) : IO UInt32 := do
   if (csimpTheorems env).isEmpty then
     IO.eprintln "check-decls: no @[csimp] theorems visible, so the extensions did not load"
     return 3
-  if checkProduction then
-    let missing ← unreachableModules env
-    unless missing.isEmpty do
-      for m in missing do
-        IO.eprintln s!"unreachable-module {m}: not imported by the default production roots"
-      return 1
+  let missing ← if checkProduction then unreachableModules env else pure #[]
+  for m in missing do
+    IO.eprintln s!"unreachable-module {m}: not imported by the default production roots"
   let baseline ← readBaseline baselinePath
   let findings := check env scope
   let isListed (f : Finding) := baseline.contains (f.kind, f.decl)
@@ -363,7 +364,7 @@ unsafe def run (args : List String) : IO UInt32 := do
     IO.println s!"stale baseline entry, no longer found: {kind} {decl}"
   let nDecls := env.constants.toList.countP fun (n, _) => inScope env scope n
   IO.println s!"check-decls: {nDecls} declarations under {scope}, {findings.size} findings, {findings.size - fresh.size} in the baseline, {fresh.size} new, {stale.length} stale"
-  return if fresh.isEmpty && stale.isEmpty then 0 else 1
+  return if missing.isEmpty && fresh.isEmpty && stale.isEmpty then 0 else 1
 
 end CheckDecls
 

@@ -1,6 +1,9 @@
 # Legacy spend validation
 
 **Status:** Proposed. The maintainer must approve the scope before implementation starts.
+Proposed records remain open for review as an exception to the frozen-record convention.
+After adoption, this record freezes and implementation status belongs in ROADMAP.md and COVERAGE.md.
+
 **Date:** 2026-11-04
 **Companions:** [Coverage](../../COVERAGE.md), [soundness](../../SOUNDNESS.md), [architecture](../../ARCHITECTURE.md) and [oracle contract](../oracle.md).
 
@@ -10,6 +13,7 @@ This record proposes an executable specification of legacy Script spends, with p
 It connects transaction fields and legacy signature hashing to the Script rules that consume them.
 The first milestone covers `VerifyScript(scriptSig, scriptPubKey, emptyWitness, flags, checker)` in `SIGVERSION_BASE` for the selected flags below.
 It does not establish transaction, UTXO, block or chain validity.
+Implementation refinement and Rust extraction are outside the proposed scope.
 
 DogeLib already specifies raw transactions and the legacy signature hash.
 Its transformation-reference theorem requires fully parsed script code and fewer than 2^32 inputs and outputs.
@@ -26,6 +30,7 @@ Bytes that resemble witness programs retain their ordinary legacy meaning when w
 ## 2. Reference software revision
 
 Every Core citation below refers to commit `e0a1c157791544e818c901bd9341896965afbf9d`, the compatibility pin in [SOURCES.md](../../SOURCES.md).
+D36 identifies block validation and D9 identifies chain parameters in that registry.
 The line ranges identify the inspected source for each contract:
 
 | Reference | Pinned source and inspected lines | Subject |
@@ -41,11 +46,13 @@ The line ranges identify the inspected source for each contract:
 | C9 | [script.h, lines 418–464](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/script/script.h#L418-L464), [lines 502–596](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/script/script.h#L502-L596) | Push construction, `GetOp2` and `FindAndDelete`. |
 | C10 | [script.cpp, lines 204–211 and 239–258](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/script/script.cpp#L204-L258) | Exact P2SH template and `IsPushOnly`. |
 | C11 | [script_error.h, lines 9–73](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/script/script_error.h#L9-L73) | `ScriptError` categories. |
-| C12 | [pubkey.cpp, lines 168–187](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/pubkey.cpp#L168-L187), [lines 289–295](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/pubkey.cpp#L289-L295) | Key parsing, lax DER parsing, S normalization and `CheckLowS`. |
+| C12 | [pubkey.cpp, lines 132–187](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/pubkey.cpp#L132-L187), [lines 289–295](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/pubkey.cpp#L289-L295) | Key parsing, lax DER parsing, S normalization and `CheckLowS`. |
 | C13 | [script_tests.cpp, lines 123–169](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/test/script_tests.cpp#L123-L169), [lines 955–997](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/test/script_tests.cpp#L955-L997) | Script fixture construction and interpretation. |
 | C14 | [transaction_tests.cpp, lines 97–262](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/test/transaction_tests.cpp#L97-L262) | Transaction corpus interpretation. |
 | C15 | [script_tests.json](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/test/data/script_tests.json), lines 1–7 | Script cases and their construction context. |
 | C16 | [tx_valid.json](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/test/data/tx_valid.json), [tx_invalid.json](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/test/data/tx_invalid.json) | Transaction cases, with previous-output scripts and flags. |
+| C17 | [chainparams.cpp, lines 86–87](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/chainparams.cpp#L86-L87), [lines 102–106](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/chainparams.cpp#L102-L106) | Mainnet BIP65/BIP66 heights and CSV deployment window (D9). |
+| C18 | [rpc/blockchain.cpp, lines 1146–1174](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/rpc/blockchain.cpp#L1146-L1174), [lines 1252–1263](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/rpc/blockchain.cpp#L1252-L1263) | CSV status in `getblockchaininfo`. |
 
 The cited findings come from source inspection, without a Core comparison run.
 Implementation lanes must add operation mappings and fixture provenance to the existing registries without changing the pin.
@@ -72,6 +79,7 @@ The pure contract distinguishes these results:
 
 The adapter separately reports malformed requests, transaction decode errors and out-of-range indices.
 Nonempty witness input reports `unsupported(witness)`, rather than a Script rejection.
+The witness exclusion deliberately narrows Core's API: without the witness flag, Core ignores the witness argument [C5, lines 1517–1527].
 Neither unsupported results nor adapter failures count as evidence that a spend fails Core's rules.
 For supported requests, `accepted` corresponds to Core's `true` with `SCRIPT_ERR_OK`, and `rejected` corresponds to `false` with its error.
 Intermediate execution APIs expose stacks and cursor state for proofs, but post-failure stacks need not become part of the spend contract.
@@ -92,17 +100,30 @@ The table omits the common `SCRIPT_VERIFY_` prefix from flag names:
 | --- | --- | --- | --- |
 | `P2SH` | 0 | Evaluate the redeem script for the exact Pay to Script Hash (P2SH) template. | Consensus from inception [C6]. Also standard policy [C7]. |
 | `STRICTENC` | 1 | Check signature DER, defined hash type and compressed or uncompressed public-key shape. | Policy only [C1, C2, C7]. |
-| `DERSIG` | 2 | Require strict DER for nonempty signatures that undergo an encoding check. | Consensus from the configured `BIP66Height` [C6]. Also standard policy [C7]. |
+| `DERSIG` | 2 | Require strict DER for nonempty signatures that undergo an encoding check. | Consensus from `BIP66Height`, 1,034,383 on mainnet [C6, C17]. Also standard policy [C7]. |
 | `LOW_S` | 3 | Require DER and low S for nonempty signatures that undergo an encoding check. | Policy only [C2, C6, C7]. |
 | `NULLDUMMY` | 4 | Require the extra multisig dummy item to have zero bytes. | Policy only at this pin [C6, C7]. |
-| `CHECKLOCKTIMEVERIFY` | 9 | Enforce the CLTV operand against transaction locktime and the selected input's sequence. | Consensus from the configured `BIP65Height` [C6]. Also standard policy [C7]. |
-| `CHECKSEQUENCEVERIFY` | 10 | Enforce the CSV operand against transaction version and the selected input's sequence. | Consensus when `DEPLOYMENT_CSV` is active through versionbits [C6]. Also standard policy [C7]. |
+| `CHECKLOCKTIMEVERIFY` | 9 | Enforce the CLTV operand against transaction locktime and the selected input's sequence. | Consensus from `BIP65Height`, 3,464,751 on mainnet [C6, C17]. Also standard policy [C7]. |
+| `CHECKSEQUENCEVERIFY` | 10 | Enforce the CSV operand against transaction version and the selected input's sequence. | Conditional consensus if `DEPLOYMENT_CSV` is active [C6]. Mainnet activation is unverified here. Also standard policy [C7]. |
 
 Core adds `NULLDUMMY` to block flags only inside the `IsWitnessEnabled` branch, which this pin never enters [C6].
 The `MANDATORY_SCRIPT_VERIFY_FLAGS` policy constant contains only P2SH [C7].
 That constant does not replace the height and deployment checks in `ConnectBlock`.
 The API accepts explicit flags, so it can express historical and policy contexts without claiming to derive either.
 A caller that claims consensus validity must justify its flags for the network and activation state.
+
+Mainnet CSV uses bit 0, start time 1,462,060,800 (2016-05-01) and timeout 1,493,596,800 (2017-05-01) [C17].
+That deployment window is closed.
+The adjacent source comment warns that BIP heights and hashes need Dogecoin values [C17, line 103].
+The source inspection does not establish whether CSV locked in before the window closed.
+This record asserts neither activation nor failure.
+
+Evidence from a synchronized mainnet node at the pin could settle this question.
+The evidence should record `getblockchaininfo.bip9_softforks.csv.status`, its `since` height, and the node's tip hash and height [C18].
+A historical claim also needs the relevant activation transition or a reproducible versionbits calculation from chain headers.
+No such chain query or calculation forms part of this record.
+Consequently, a CSV branch may enforce only relay policy in a context where CSV never activated.
+CLTV has an explicit mainnet consensus height independently of CSV [C6, C17].
 
 When their flags are absent, CLTV and CSV act as NOP2 and NOP3 [C3, lines 350–427].
 All other flags report `unsupported`, including `MINIMALDATA`, `SIGPUSHONLY`, `CLEANSTACK`, `NULLFAIL` and `DISCOURAGE_UPGRADABLE_NOPS`.
@@ -115,6 +136,7 @@ In particular, it must not enable minimal pushes, clean stacks or null-failure r
 The stages follow the library's separation of specification, properties and adapters.
 A Script execution layer may depend on Transaction for legacy hashing.
 Transaction must not import that layer and create an import cycle.
+The maintainer must approve module placement and the corresponding ARCHITECTURE.md update before that layer lands.
 An implementation lane must review any relocation of the existing instruction reader separately and preserve its public contract.
 
 ### Stage 1: instruction decoding and execution state
@@ -138,6 +160,10 @@ It reports unsupported execution rather than a spend verdict.
 
 The evaluator follows Core's ordering of decode, push-size check, opcode count, disabled-opcode check and branch execution [C3, lines 275–315].
 Even a skipped branch must parse, respect push-size limits, count applicable opcodes and reject disabled opcodes.
+A truncated push yields `SCRIPT_ERR_BAD_OPCODE` [C3, lines 280–281].
+`OP_VERIF` (0x65) and `OP_VERNOTIF` (0x66) also yield `BAD_OPCODE` inside skipped branches.
+Core dispatches their opcode range even when `fExec` is false, then reaches the default error [C3, lines 311 and 1028–1029].
+
 The evaluator implements control flow, stack operations, equality, numeric operations, ordinary NOPs and Core-defined opcode failures.
 Signature operations and active timelock checks remain unsupported until their stages.
 
@@ -180,6 +206,8 @@ Until all ordinary operations land, the capability list remains explicit and mis
 
 `CHECKSIG`, `CHECKSIGVERIFY`, `CHECKMULTISIG` and `CHECKMULTISIGVERIFY` use the explicit verifier parameter.
 The specification checks encoding rules before signature verification, in Core's order [C2, C3].
+Script-code deletion precedes those encoding checks [C3, lines 895–898].
+
 An empty signature passes the encoding filter but fails `CheckSig` [C2, C4].
 For a nonempty signature, `CheckSig` removes the final hash-type byte and zero-extends that byte to the existing `UInt32` hash-type input.
 It hashes through the existing production `legacySignatureHash` and passes the remaining signature bytes, public-key bytes and digest to the verifier.
@@ -255,8 +283,12 @@ Any mismatch becomes a minimized regression case before an agreement claim.
 The verifier parameter represents Core-compatible verification of raw public-key bytes, signature bytes without the hash-type byte, and a 32-byte digest.
 Its intended behavior includes key parsing, lax DER acceptance and S normalization where strict flags do not reject the input first [C12].
 A strict-DER-only ECDSA callback cannot substitute for that behavior in historical contexts.
-`LOW_S` is an executable encoding predicate, with its scalar boundary justified independently against `CheckLowS` [C12].
-It must not depend on a verifier that normalizes S and loses the original value.
+
+`LOW_S` models `CheckLowS` and its parser behavior, not only a mathematical bound on the original S [C12].
+If lax parsing detects an overflowing R or S, it replaces both scalars with zero and returns parsing success [C12, lines 132–166].
+`CheckLowS` then accepts that zero signature, although ECDSA verification fails.
+The LOW_S encoding filter can therefore accept this overflow case when the prior DER check also passes.
+The predicate must preserve this case and must not depend on a verifier that normalizes S and loses the original value.
 
 Execution theorems quantify over the verifier.
 A compatibility theorem assumes that this parameter agrees with the pinned verifier on the relevant input domain.
@@ -325,25 +357,47 @@ For this example, each public key has 33 bytes and the redeem script must satisf
 The script family supplies a property target.
 A production bridge instance needs separate fixtures and custody review.
 
+The locktime 1,000,000 is illustrative, not a deployment height or an activation claim.
 Let the previous output contain the exact P2SH commitment to these redeem-script bytes.
-Assume P2SH and CLTV flags, an in-range input, supported semantics, and canonical push-only unlocking shapes.
-The ordinary unlocking shape pushes an empty dummy, two signatures, a true selector and the redeem script.
-The recovery shape pushes one signature, a false selector and the redeem script.
-Each signature carries its own hash-type byte, and each checker call uses the corresponding effective script code and digest.
+Assume P2SH and CLTV flags, an in-range input and supported semantics.
+Quantify over every push-only `scriptSig` that supplies this exact redeem-script instance, without a canonical encoding or a fixed unlocking shape.
+A different redeem script with the same digest requires a separate hash-commitment argument.
+The target does not infer byte equality from digest equality.
 
-The ordinary-branch target states that acceptance holds exactly when Core's ordered matching accepts the two supplied signatures against the three key positions.
-Any selected encoding flags also apply to checks that Core actually reaches.
+The theorem target is an equivalence, including its converse.
+If `scriptSig` evaluation fails, the spend rejects.
+Otherwise, let its resulting stack be `S ++ [redeem]`, with the top item on the right.
+Acceptance holds exactly when one of these cases applies and the script evaluations respect their resource limits and reached encoding checks:
+
+- Ordinary branch: `S` has suffix `[dummy, sig1, sig2, selector]`, `CastToBool(selector)` is true, and ordered multisig matching succeeds.
+- Recovery branch: `S` has suffix `[sigR, selector]`, `CastToBool(selector)` is false, the CLTV conditions hold, and CHECKSIG succeeds against `R`.
+
+Both cases allow an arbitrary stack prefix and nonminimal push encodings.
+Without `NULLDUMMY`, the dummy can contain any bytes that satisfy the element limit.
+With `NULLDUMMY`, the dummy must be empty.
+Consensus at this pin enforces neither NULLDUMMY nor MINIMALIF, so consensus alone requires neither an empty dummy nor a canonical selector [C1, C6].
+Every selector byte string has its `CastToBool` meaning, including negative zero as false [C2].
+The selected flags do not impose a clean final stack.
+
+Each signature carries its own hash-type byte, and each checker call uses the corresponding effective script code and digest.
+The ordinary-branch case means Core's ordered matching accepts two supplied signatures against three key positions.
 The general target uses `1 <= k <= n <= 20`, with explicit numeric pushes and the same resource hypotheses.
 For P2SH instances, the 520-byte element bound further restricts the key count.
 A claim about `k` distinct signers additionally needs distinct keys and a security model.
 Duplicate keys alone do not establish distinct authorization.
 
-The recovery-branch target states that acceptance implies transaction locktime of at least 1,000,000, below the timestamp threshold, and a nonfinal selected sequence.
+The recovery-branch case requires transaction locktime of at least 1,000,000, below the timestamp threshold, and a nonfinal selected sequence.
 It also requires a successful signature check against `R`, subject to the selected encoding flags.
-Conversely, those conditions with the stated unlocking shape and execution bounds should imply acceptance.
+The converse states that these conditions, the stated stack suffix and the execution bounds suffice for acceptance.
 In particular, a transaction with locktime below 1,000,000 cannot pass this recovery branch when CLTV applies.
 Without the CLTV flag, that exclusion does not hold.
 A claim that recovery cannot enter a chain before a height or time also needs transaction-finality and chain-context results outside this milestone.
+
+The execution target permits every one-byte hash type that the selected flags admit.
+That includes NONE, SINGLE, SINGLE's fixed `one` digest, and ANYONECANPAY combinations.
+These modes do not guarantee the transaction commitments that a custody argument might require.
+The maintainer must decide whether a separate authorization property restricts hash types, for example to ALL without ANYONECANPAY.
+Such a restriction belongs to that property's hypotheses, not an invented rule in CHECKSIG or CHECKMULTISIG.
 
 The proof needs generic results for branch selection, stack composition, Script numbers, CLTV, CHECKSIG and ordered multisig matching.
 It also needs exact script construction, P2SH composition and signature-hash preparation results.
@@ -356,9 +410,13 @@ The maintainer must settle these scope and contract proposals before implementat
 
 - Approve the seven-flag scope, explicit flag context and separate unsupported result.
 - Approve the stages, including SHA-1 and RIPEMD-160 prerequisites and their proof scope.
+- Decide whether CSV stays in milestone 1 despite the unverified mainnet activation state.
+- Approve the Script layer's module placement, dependency direction and ARCHITECTURE.md update.
 - Approve the raw-byte verifier interface and the later trusted backend for comparison runs.
 - Decide whether exact Core error categories belong to the public contract as proposed.
 - Approve the worked script family and any production bridge instance as separate artifacts.
+- Decide the hash-type scope of any custody property, including NONE, SINGLE's `one` digest and ANYONECANPAY.
+- Confirm that implementation refinement and Rust extraction remain outside this milestone.
 - Decide the oracle format number and operation schemas in the later adapter change.
 
 The main compatibility risks are error order, skipped-branch rules, lax signature parsing and script-code mutation.

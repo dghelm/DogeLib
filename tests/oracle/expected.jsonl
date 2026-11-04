@@ -1,0 +1,50 @@
+{"id": "version", "ok": {"format": "dogelib-oracle/1"}}
+{"id": "cs-encode-252", "ok": {"bytes_hex": "fc"}}
+{"id": "cs-encode-253", "ok": {"bytes_hex": "fdfd00"}}
+{"id": "cs-encode-65536", "ok": {"bytes_hex": "fe00000100"}}
+{"id": "cs-encode-2^53+1", "ok": {"bytes_hex": "ff0100000000002000"}}
+{"id": "cs-encode-2^64-1", "ok": {"bytes_hex": "ffffffffffffffffff"}}
+{"id": "cs-read-max-size", "ok": {"value": "33554432", "consumed": 5, "rest_hex": ""}}
+{"id": "cs-read-max-size+1", "error": {"kind": "read", "reason": "too_large"}}
+{"id": "cs-read-2^64-1", "error": {"kind": "read", "reason": "too_large"}}
+{"id": "cs-read-noncanonical", "error": {"kind": "read", "reason": "non_canonical"}}
+{"id": "cs-read-truncated", "error": {"kind": "read", "reason": "truncated"}}
+{"id": "cs-read-empty", "error": {"kind": "read", "reason": "truncated"}}
+{"id": "cs-read-rest", "ok": {"value": "253", "consumed": 3, "rest_hex": "aa"}}
+{"id": "tx-decode", "ok": {"tx": {"version": 1, "inputs": [{"prevout": {"hash_hex": "0001000000000000000000000000000000000000000000000000000000000000", "hash_display": "0000000000000000000000000000000000000000000000000000000000000100", "n": 0}, "script_sig_hex": "", "sequence": 0}], "outputs": [{"value": "0", "script_pubkey_hex": ""}], "lock_time": 0}, "serialized_hex": "010000000100010000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000", "txid_hex": "7eb89d9b1c1478cd49bfaa4604c2d4ab21ccd881e41560b477be6a212ebe4434", "txid_display": "3444be2e216abe77b46015e481d8cc21abd4c20446aabf49cd78141c9b9db87e"}}
+{"id": "tx-read-prefix", "ok": {"tx": {"version": 1, "inputs": [{"prevout": {"hash_hex": "0001000000000000000000000000000000000000000000000000000000000000", "hash_display": "0000000000000000000000000000000000000000000000000000000000000100", "n": 0}, "script_sig_hex": "", "sequence": 0}], "outputs": [{"value": "0", "script_pubkey_hex": ""}], "lock_time": 0}, "consumed": 60, "rest_hex": "ff"}}
+{"id": "tx-decode-trailing", "error": {"kind": "trailing_bytes", "count": 1}}
+{"id": "tx-decode-truncated", "error": {"kind": "read", "reason": "truncated"}}
+{"id": "tx-decode-too-many-inputs", "error": {"kind": "read", "reason": "too_large"}}
+{"id": "sighash-458", "ok": {"plan": "hash_bytes", "preimage_hex": "*", "digest_hex": "87964517d6cbf81e733bf16a5a3057a3873001fefae0ba069a73ac44a8b3c242", "digest_display": "42c2b3a844ac739a06bae0fafe013087a357305a6af13b731ef8cbd617459687"}}
+{"id": "sighash-458-unsigned", "ok": {"plan": "hash_bytes", "preimage_hex": "*", "digest_hex": "87964517d6cbf81e733bf16a5a3057a3873001fefae0ba069a73ac44a8b3c242", "digest_display": "42c2b3a844ac739a06bae0fafe013087a357305a6af13b731ef8cbd617459687"}}
+{"id": "sighash-index-past-inputs", "ok": {"plan": "fixed_digest", "digest_hex": "0100000000000000000000000000000000000000000000000000000000000000", "digest_display": "0000000000000000000000000000000000000000000000000000000000000001"}}
+{"id": "sighash-single-past-outputs", "ok": {"plan": "fixed_digest", "digest_hex": "0100000000000000000000000000000000000000000000000000000000000000", "digest_display": "0000000000000000000000000000000000000000000000000000000000000001"}}
+{"id": "sighash-index-5.0", "ok": {"plan": "fixed_digest", "digest_hex": "0100000000000000000000000000000000000000000000000000000000000000", "digest_display": "0000000000000000000000000000000000000000000000000000000000000001"}}
+{"id": "sighash-index-5e0", "ok": {"plan": "fixed_digest", "digest_hex": "0100000000000000000000000000000000000000000000000000000000000000", "digest_display": "0000000000000000000000000000000000000000000000000000000000000001"}}
+{"id": "sighash-index-50e-1", "ok": {"plan": "fixed_digest", "digest_hex": "0100000000000000000000000000000000000000000000000000000000000000", "digest_display": "0000000000000000000000000000000000000000000000000000000000000001"}}
+{"id": "sighash-bad-tx", "error": {"kind": "read", "reason": "truncated", "argument": "tx_hex"}}
+{"id": "unknown-op", "error": {"kind": "request"}}
+{"id": "missing-op", "error": {"kind": "request"}}
+{"id": "op-not-string", "error": {"kind": "request"}}
+{"id": "missing-argument", "error": {"kind": "request"}}
+{"id": "unknown-argument", "error": {"kind": "request"}}
+{"id": "odd-hex", "error": {"kind": "request"}}
+{"id": "non-hex", "error": {"kind": "request"}}
+{"id": "hex-not-string", "error": {"kind": "request"}}
+{"id": "u64-negative", "error": {"kind": "request"}}
+{"id": "u64-2^64", "error": {"kind": "request"}}
+{"id": "u64-number", "error": {"kind": "request"}}
+{"id": "u64-leading-zero", "error": {"kind": "request"}}
+{"id": "u64-plus", "error": {"kind": "request"}}
+{"id": "index-fraction", "error": {"kind": "request"}}
+{"id": "index-2^32", "error": {"kind": "request"}}
+{"id": "index-negative", "error": {"kind": "request"}}
+{"id": "hash-type-below", "error": {"kind": "request"}}
+{"id": "hash-type-2^32", "error": {"kind": "request"}}
+{"id": "index-5e-1", "error": {"kind": "request"}}
+{"id": "dup-a", "ok": {"value": "252", "consumed": 1, "rest_hex": ""}}
+{"id": {"k": [1, "x"]}, "ok": {"format": "dogelib-oracle/1"}}
+{"id": null, "ok": {"format": "dogelib-oracle/1"}}
+{"id": null, "error": {"kind": "request"}}
+{"id": null, "error": {"kind": "request"}}

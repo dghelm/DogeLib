@@ -1,0 +1,50 @@
+{"id": "version", "op": "oracle.version"}
+{"id": "cs-encode-252", "op": "compactsize.encode", "value": "252"}
+{"id": "cs-encode-253", "op": "compactsize.encode", "value": "253"}
+{"id": "cs-encode-65536", "op": "compactsize.encode", "value": "65536"}
+{"id": "cs-encode-2^53+1", "op": "compactsize.encode", "value": "9007199254740993"}
+{"id": "cs-encode-2^64-1", "op": "compactsize.encode", "value": "18446744073709551615"}
+{"id": "cs-read-max-size", "op": "compactsize.read", "bytes_hex": "fe00000002"}
+{"id": "cs-read-max-size+1", "op": "compactsize.read", "bytes_hex": "fe01000002"}
+{"id": "cs-read-2^64-1", "op": "compactsize.read", "bytes_hex": "ffffffffffffffffff"}
+{"id": "cs-read-noncanonical", "op": "compactsize.read", "bytes_hex": "fdfc00"}
+{"id": "cs-read-truncated", "op": "compactsize.read", "bytes_hex": "fd00"}
+{"id": "cs-read-empty", "op": "compactsize.read", "bytes_hex": ""}
+{"id": "cs-read-rest", "op": "compactsize.read", "bytes_hex": "FDFD00aa"}
+{"id": "tx-decode", "op": "tx.decode_base", "bytes_hex": "010000000100010000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000"}
+{"id": "tx-read-prefix", "op": "tx.read_base", "bytes_hex": "010000000100010000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000ff"}
+{"id": "tx-decode-trailing", "op": "tx.decode_base", "bytes_hex": "010000000100010000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000ff"}
+{"id": "tx-decode-truncated", "op": "tx.decode_base", "bytes_hex": "01000000010001000000"}
+{"id": "tx-decode-too-many-inputs", "op": "tx.decode_base", "bytes_hex": "01000000fe01000002"}
+{"id": "sighash-458", "op": "sighash.legacy", "tx_hex": "a3d805ce016e22a8c67ee310d17b49ccacfaee4b27fadfb32be00296266096acba9e87b91a02000000009b0c09f2016fa8b0020000000001ac1513720d", "script_code_hex": "6aacac", "input_index": 0, "hash_type": -107131905}
+{"id": "sighash-458-unsigned", "op": "sighash.legacy", "tx_hex": "a3d805ce016e22a8c67ee310d17b49ccacfaee4b27fadfb32be00296266096acba9e87b91a02000000009b0c09f2016fa8b0020000000001ac1513720d", "script_code_hex": "6aacac", "input_index": 0, "hash_type": 4187835391}
+{"id": "sighash-index-past-inputs", "op": "sighash.legacy", "tx_hex": "010000000100010000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000", "script_code_hex": "", "input_index": 1, "hash_type": 1}
+{"id": "sighash-single-past-outputs", "op": "sighash.legacy", "tx_hex": "0100000002000100000000000000000000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000", "script_code_hex": "", "input_index": 1, "hash_type": 3}
+{"id": "sighash-index-5.0", "op": "sighash.legacy", "tx_hex": "010000000100010000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000", "script_code_hex": "", "input_index": 5.0, "hash_type": 1}
+{"id": "sighash-index-5e0", "op": "sighash.legacy", "tx_hex": "010000000100010000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000", "script_code_hex": "", "input_index": 5e0, "hash_type": 1}
+{"id": "sighash-index-50e-1", "op": "sighash.legacy", "tx_hex": "010000000100010000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000", "script_code_hex": "", "input_index": 50e-1, "hash_type": 1}
+{"id": "sighash-bad-tx", "op": "sighash.legacy", "tx_hex": "00", "script_code_hex": "", "input_index": 0, "hash_type": 1}
+{"id": "unknown-op", "op": "tx.encode"}
+{"id": "missing-op"}
+{"id": "op-not-string", "op": 1}
+{"id": "missing-argument", "op": "compactsize.read"}
+{"id": "unknown-argument", "op": "compactsize.read", "bytes_hex": "00", "bytes": "00"}
+{"id": "odd-hex", "op": "compactsize.read", "bytes_hex": "abc"}
+{"id": "non-hex", "op": "compactsize.read", "bytes_hex": "zz"}
+{"id": "hex-not-string", "op": "compactsize.read", "bytes_hex": 5}
+{"id": "u64-negative", "op": "compactsize.encode", "value": "-1"}
+{"id": "u64-2^64", "op": "compactsize.encode", "value": "18446744073709551616"}
+{"id": "u64-number", "op": "compactsize.encode", "value": 5}
+{"id": "u64-leading-zero", "op": "compactsize.encode", "value": "01"}
+{"id": "u64-plus", "op": "compactsize.encode", "value": "+5"}
+{"id": "index-fraction", "op": "sighash.legacy", "tx_hex": "010000000100010000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000", "script_code_hex": "", "input_index": 1.5, "hash_type": 1}
+{"id": "index-2^32", "op": "sighash.legacy", "tx_hex": "010000000100010000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000", "script_code_hex": "", "input_index": 4294967296, "hash_type": 1}
+{"id": "index-negative", "op": "sighash.legacy", "tx_hex": "010000000100010000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000", "script_code_hex": "", "input_index": -1, "hash_type": 1}
+{"id": "hash-type-below", "op": "sighash.legacy", "tx_hex": "010000000100010000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000", "script_code_hex": "", "input_index": 0, "hash_type": -2147483649}
+{"id": "hash-type-2^32", "op": "sighash.legacy", "tx_hex": "010000000100010000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000", "script_code_hex": "", "input_index": 0, "hash_type": 4294967296}
+{"id":"index-5e-1","op":"sighash.legacy","tx_hex":"010000000100010000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000","script_code_hex":"","input_index":5e-1,"hash_type":1}
+{"id":"dup-a","op":"compactsize.read","bytes_hex":"00","bytes_hex":"fc"}
+{"id":{"k":[1,"x"]},"op":"oracle.version"}
+{"op":"oracle.version"}
+{"id":7,"op":"oracle.version"
+[1,2]

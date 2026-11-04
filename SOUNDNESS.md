@@ -39,7 +39,7 @@ Gap D asks whether the use of DogeLib holds together.
 | B1 | The Lean compiler, the C compiler or the Lean runtime is wrong | `lake test` runs the NIST CAVP SHA-256 vectors, Core's compact-encoding and retarget test cases, and the codec known answers through the compiled code | R |
 | B2 | Lean core runs code other than its definitions | Lean core is a declared baseline | R |
 | B3 | Elaboration runs native code | None yet | P |
-| B4 | The oracle's IO adapter or a foreign boundary is wrong | None yet | R F |
+| B4 | The oracle's IO adapter or a foreign boundary is wrong | `scripts/test_oracle.sh` runs fixtures with independent expected values, Core's `sighash.json` and the base-mode records of Core's transaction corpus through the oracle. `lake exe check-decls` checks the `Exports` library. | R F |
 | B5 | This repository substitutes compiled code | `lake exe check-decls` fails on any new substitution | R |
 | B6 | Extraction or the Rust toolchain is wrong | None: no extraction yet | I |
 | C1 | The Lean kernel or its axioms are unsound | None | P I |
@@ -540,6 +540,17 @@ A proof is unaffected unless it uses one of the tactics of C2.
 
 The oracle reads fixture records and writes results through IO.
 That adapter is outside the specification library, and no theorem covers it.
+
+The oracle is `dogelib-oracle`, in the `Exports` library ([docs/oracle.md](docs/oracle.md)).
+Each operation calls one function of the specification. The adapter converts its arguments and its result:
+
+- Lean core's `Json.parse` reads each request, and `Json.compress` writes each response. Both are trusted as Lean core is (B2).
+- The adapter's own code converts hexadecimal text to bytes and back, JSON numbers and decimal strings to integers, and the specification's errors to JSON objects.
+  The tests check these conversions at their boundaries, against expected values from Core's files, Core's source and Python's `hashlib`.
+- The loop over standard input uses `repeat`, which Lean core defines with `partial`. `lake exe check-decls` exempts the `Exports` modules from its check of reachable opaque constants, and checks their axioms and their own declarations.
+
+A wrong conversion could make the oracle and Core disagree, or agree, for a reason outside the specification.
+The comparison with Core that would use the oracle does not exist yet.
 Any later foreign boundary, such as a C or Rust binding, is listed here with its size and its error handling.
 
 ### B5. Compiler substitutions in this repository

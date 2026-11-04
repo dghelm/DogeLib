@@ -715,4 +715,61 @@ So the hypothesis `n ≤ 0x02000000` of `decodeBounded_encode` cannot be removed
 theorem decodeBounded_encode_maxSize_succ :
     decodeBounded (encode 0x02000001) = .error .tooLarge := rfl
 
+/-! ## The packed form of Core's bounded reader -/
+
+/--
+For every width, minimum and slice `s`, the packed payload read agrees with `readPayload` on `s.toList`.
+It gives the same error, or the same value and remainder bytes.
+-/
+theorem abstractRead_readPayloadSlice (byteWidth minValue : Nat) (s : ByteSlice) :
+    abstractRead (readPayloadSlice byteWidth minValue s) = readPayload byteWidth minValue s.toList := by
+  unfold readPayloadSlice readPayload
+  have h := abstractParse_readBitVecLE byteWidth s
+  cases hr : readBitVecLE byteWidth s with
+  | none =>
+    rw [hr] at h
+    rw [← h]
+    rfl
+  | some p =>
+    obtain ⟨w, rest⟩ := p
+    rw [hr] at h
+    rw [← h]
+    simp only [abstractParse_some]
+    split <;> rfl
+
+/-- For every slice `s`, the packed marker and payload read agrees with `readCanonical` on `s.toList`. -/
+theorem abstractRead_readCanonicalSlice (s : ByteSlice) :
+    abstractRead (readCanonicalSlice s) = readCanonical s.toList := by
+  unfold readCanonicalSlice readCanonical
+  cases hu : s.uncons with
+  | none =>
+    rw [ByteSlice.toList_of_uncons_none hu]
+    rfl
+  | some p =>
+    obtain ⟨b, t⟩ := p
+    rw [ByteSlice.toList_of_uncons_some hu]
+    dsimp only
+    split
+    · rfl
+    · split
+      · exact abstractRead_readPayloadSlice _ _ _
+      · split
+        · exact abstractRead_readPayloadSlice _ _ _
+        · exact abstractRead_readPayloadSlice _ _ _
+
+/--
+For every slice `s`, the packed form of Core's reader agrees with `decodeBounded` on `s.toList`.
+It gives the same error, or the same value and the same remainder bytes.
+-/
+theorem abstractRead_decodeBoundedSlice (s : ByteSlice) :
+    abstractRead (decodeBoundedSlice s) = decodeBounded s.toList := by
+  unfold decodeBoundedSlice decodeBounded
+  rw [← abstractRead_readCanonicalSlice s]
+  cases readCanonicalSlice s with
+  | error e => rfl
+  | ok p =>
+    obtain ⟨n, rest⟩ := p
+    simp only [abstractRead_ok]
+    split <;> rfl
+
 end DogeLib.Serialization.CompactSize

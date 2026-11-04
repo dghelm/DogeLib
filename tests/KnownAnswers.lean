@@ -474,6 +474,14 @@ def check : IO Nat := do
     if !expected.matches (decodeBounded input) then
       IO.eprintln s!"FAIL compactsize {name}"
       failures := failures + 1
+  -- The same cases through the packed reader, at offset 3 of a buffer.
+  for (name, input, expected) in boundedCases do
+    count := count + 1
+    let buf : ByteArray := ⟨#[0xaa, 0xbb, 0xcc] ++ input.toArray⟩
+    let got := (decodeBoundedSlice ((ByteSlice.ofByteArray buf).drop 3)).map fun p => (p.1, p.2.toList)
+    if !expected.matches got then
+      IO.eprintln s!"FAIL compactsize packed {name}"
+      failures := failures + 1
   for (value, bytes) in encodeCases do
     count := count + 1
     if encode value != bytes then

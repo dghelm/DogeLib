@@ -93,6 +93,22 @@ theorem abstractParse_bindValue {α β : Type} (p : Option α)
   rw [Option.map_bind]
   exact congrArg _ (funext h)
 
+/--
+A packed reader result with a typed error, read as a list reader result.
+It keeps the error or the value, and replaces the remaining slice by its bytes.
+It is the `Except` counterpart of `abstractParse`.
+-/
+def abstractRead {ε α : Type} : Except ε (α × ByteSlice) → Except ε (α × List UInt8) :=
+  Except.map (Prod.map id ByteSlice.toList)
+
+/-- `abstractRead` keeps an error. -/
+@[simp] theorem abstractRead_error {ε α : Type} (e : ε) :
+    abstractRead (α := α) (.error e : Except ε (α × ByteSlice)) = .error e := rfl
+
+/-- `abstractRead` maps a result `(a, s)` to `(a, s.toList)`. -/
+@[simp] theorem abstractRead_ok {ε α : Type} (a : α) (s : ByteSlice) :
+    abstractRead (ε := ε) (.ok (a, s)) = .ok (a, s.toList) := rfl
+
 /-- For every slice `s`, `s.uncons` through the abstraction is `decodeByte s.toList`. -/
 theorem abstractParse_uncons (s : ByteSlice) :
     abstractParse s.uncons = decodeByte s.toList := by

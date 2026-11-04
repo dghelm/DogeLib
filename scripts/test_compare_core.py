@@ -26,6 +26,8 @@ COMPARE = ROOT / "scripts" / "compare_core.py"
 # mode: (role of the wrapper, expected failure code). The role "core" stands
 # in for the harness, "oracle" for dogelib-oracle.
 MUTATIONS = {
+    **{name: ("core", "MISMATCH") for name in
+       ("work_value", "work_negative", "work_overflow", "work_compact", "work_calculate_bits", "work_next_bits")},
     "wtxid": ("core", "MISMATCH"),
     "witnesses": ("core", "MISMATCH"),
     "has_witness": ("core", "MISMATCH"),
@@ -111,7 +113,21 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
     def set_ok(field, value):
         return lambda r: r["ok"].__setitem__(field, value)
 
-    if mode == "wtxid":
+    if mode in ("work_value", "work_negative", "work_overflow", "work_compact"):
+        field = {"work_value": "value_hex", "work_negative": "negative",
+                 "work_overflow": "overflow", "work_compact": "compact"}[mode]
+        def alter(r):
+            value = r["ok"][field]
+            r["ok"][field] = (not value if type(value) is bool else
+                              value ^ 1 if type(value) is int else "f" * 64)
+        mutate_first(responses, lambda r: field in r.get("ok", {}), alter)
+    elif mode in ("work_calculate_bits", "work_next_bits"):
+        requests = [json.loads(line) for line in data.splitlines()]
+        op = "work.calculate_next" if mode == "work_calculate_bits" else "work.next"
+        ids = {r["id"] for r in requests if r["op"] == op}
+        mutate_first(responses, lambda r: r["id"] in ids and "bits" in r.get("ok", {}),
+                     lambda r: r["ok"].__setitem__("bits", r["ok"]["bits"] ^ 1))
+    elif mode == "wtxid":
         mutate_first(responses, lambda r: "wtxid_hex" in r.get("ok", {}), set_ok("wtxid_hex", "00" * 32))
     elif mode == "witnesses":
         mutate_first(responses, lambda r: r.get("ok", {}).get("has_witness") is True,

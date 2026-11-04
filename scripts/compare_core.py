@@ -3,7 +3,7 @@
 Usage: python3 -I scripts/compare_core.py [--timeout SECONDS] [--quick] <dogelib-oracle> <core-oracle>
 
 The harness, harness/core/core_oracle.cpp, runs Dogecoin Core's own code and
-answers a projection of dogelib-oracle/2 (docs/oracle.md, "The Core harness").
+answers a projection of dogelib-oracle/3 (docs/oracle.md, "The Core harness").
 This script builds a deterministic stream of well-formed requests, runs each
 program once on the whole stream, and requires the two responses to every
 request to be equal as JSON values, with one exception: Core does not expose
@@ -33,7 +33,7 @@ import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-ORACLE_FORMAT = "dogelib-oracle/2"
+ORACLE_FORMAT = "dogelib-oracle/3"
 MAX_SIZE = 0x02000000
 SEED = 20261104
 MAX_REPORTS = 10
@@ -195,8 +195,8 @@ def load_fixtures() -> tuple[list[dict], list[str]]:
     for req_line, exp_line in zip(req_lines, exp_lines):
         expected = json.loads(exp_line)
         label = json.dumps(expected.get("id"))
-        if expected.get("error", {}).get("kind") == "request":
-            excluded.append(f"{label} (request error)")
+        if expected.get("error", {}).get("kind") in ("request", "work_view"):
+            excluded.append(f"{label} ({expected['error']['kind']} error)")
             continue
         try:
             req = json.loads(req_line, object_pairs_hook=no_duplicates)
@@ -463,7 +463,97 @@ def set_large_base() -> list[dict]:
     return requests
 
 
-QUICK_SETS = ("fixtures", "compactsize", "sighash endpoints", "witness flags and stacks")
+# Work requests carry no generated expected results. Core supplies the comparison.
+def set_work_compact() -> list[dict]:
+    requests = []
+    for size in range(256):
+        for word in (0, 1, 0x7f, 0x80, 0xff, 0x100, 0xffff, 0x10000, 0x123456, 0x7fffff):
+            for sign in (0, 0x800000):
+                requests.append({"op": "work.set_compact", "compact": size << 24 | sign | word})
+    values = {0, (1 << 256) - 1}
+    for bit in range(256):
+        values.update(v for v in ((1 << bit) - 1, 1 << bit, (1 << bit) + 1) if v < 1 << 256)
+    for value in sorted(values):
+        for negative in (False, True):
+            requests.append({"op": "work.get_compact", "value_hex": f"{value:064x}", "negative": negative})
+    return requests
+
+
+def calculate_request(network, selection, height, last_time, first_time, bits):
+    return {"op": "work.calculate_next", "network": network, "selection_height": selection,
+            "last_height": height, "last_time": last_time, "first_time": first_time, "last_bits": bits}
+
+
+def set_work_retarget() -> list[dict]:
+    requests = []
+    for network in ("mainnet", "testnet", "regtest"):
+        for selection in (0, 9, 10, 19, 20, 144999, 145000, 157499, 157500, 158100, 371337, 0xffffffff):
+            for height in (0, 4999, 5000, 9999, 10000, 145000, 2147483646):
+                # Include clamp boundaries for every network timespan, and negative differences.
+                spans = {-1, 0, 1, 2, 7, 8, 9, 48, 52, 59, 60, 61, 67, 68, 69,
+                         899, 900, 901, 1799, 1800, 1801, 3599, 3600, 3601,
+                         14399, 14400, 14401, 57599, 57600, 57601}
+                for span in sorted(spans):
+                    for bits in (0, 0x1b671062, 0x207fffff, 0xff123456):
+                        requests.append(calculate_request(network, selection, height, 100000 + span, 100000, bits))
+            for last_time, first_time in ((0, 0xffffffff), (0xffffffff, 0), (0xffffffff, 0xffffffff)):
+                requests.append(calculate_request(network, selection, 145000, last_time, first_time, 0x1e0fffff))
+    return requests
+
+
+def work_chain(height, count=241, bits=0x1c123456, spacing=60):
+    return [{"height": h, "time": 1000000 + h % 100000 * spacing, "bits": bits}
+            for h in range(height, max(-1, height - count), -1)]
+
+
+def next_request(network, chain, candidate_time):
+    return {"op": "work.next", "network": network, "chain": chain, "candidate_time": candidate_time}
+
+
+def set_work_next() -> list[dict]:
+    requests = []
+    heights = (0, 1, 8, 9, 10, 19, 20, 238, 239, 240, 479, 4999, 5000, 9999, 10000,
+               144998, 144999, 145000, 145001, 157498, 157499, 157500, 157501,
+               158099, 158100, 371336, 371337, 2147483646)
+    for network in ("mainnet", "testnet", "regtest"):
+        spacing = 1 if network == "regtest" else 60
+        requests.append(next_request(network, [], 0))
+        for height in heights:
+            for bits in (0x1c123456, 0x1e0fffff, 0x207fffff):
+                chain = work_chain(height, bits=bits, spacing=spacing)
+                for delay in (0, spacing * 2 - 1, spacing * 2, spacing * 2 + 1):
+                    requests.append(next_request(network, chain, chain[0]["time"] + delay))
+    return requests
+
+
+def set_work_recovery() -> list[dict]:
+    requests = []
+    for height in (1, 2, 238, 240, 241, 478, 144998):
+        for length in (1, 2, 10, 241):
+            chain = work_chain(height, count=min(height + 1, 241), bits=0x1e0fffff)
+            # Stop at a nonminimum entry or an interval boundary, before any missing link.
+            stop = min(length - 1, len(chain) - 1)
+            chain[stop] = {**chain[stop], "bits": 0x1c123456}
+            requests.append(next_request("testnet", chain, chain[0]["time"] + 120))
+    return requests
+
+
+def set_work_headers() -> list[dict]:
+    chain, requests = [], []
+    for line in (ROOT / "tests/work/mainnet-headers/headers.txt").read_text().splitlines():
+        height, raw = line.split()
+        header = bytes.fromhex(raw)
+        entry = {"height": int(height), "time": int.from_bytes(header[68:72], "little"),
+                 "bits": int.from_bytes(header[72:76], "little")}
+        # The first two records supply context, and 144720 lacks its retarget ancestor.
+        if int(height) >= 144721:
+            requests.append(next_request("mainnet", chain.copy(), entry["time"]))
+        chain.insert(0, entry)
+    return requests
+
+
+QUICK_SETS = ("fixtures", "compactsize", "sighash endpoints", "witness flags and stacks",
+              "work compact boundaries", "regtest legacy wrap case", "work missing skip traversal")
 
 
 def request_sets() -> tuple[list[tuple[str, list[dict]]], list[str]]:
@@ -476,7 +566,9 @@ def request_sets() -> tuple[list[tuple[str, list[dict]]], list[str]]:
     witness_corpus = corpus_txs(True)
     extended = [b for b in witness_corpus if b[4] == 0]
     sets = [
-        ("fixtures", fixtures),
+        ("fixtures", [r for r in fixtures if not str(r.get("id", "")).startswith(("work-d16-", "work-d7-"))]),
+        ("work D16 bignum_SetCompact", [r for r in fixtures if str(r.get("id", "")).startswith("work-d16-")]),
+        ("work D7 get_next_work", [r for r in fixtures if str(r.get("id", "")).startswith("work-d7-")]),
         ("sighash.json", set_sighash_corpus(records)),
         ("corpus", set_corpus(corpus)),
         ("prefixes", set_prefixes(all_txs)),
@@ -495,6 +587,14 @@ def request_sets() -> tuple[list[tuple[str, list[dict]]], list[str]]:
         ("witness flags and stacks", set_witness_cases()),
         ("witness byte flips", set_flips(witness_corpus, rng, 5000, True)),
         ("large structured base", set_large_base()),
+        ("work compact boundaries", set_work_compact()),
+        ("work retarget boundaries", set_work_retarget()),
+        ("regtest legacy wrap case", [calculate_request("regtest", 0, 1, 901, 0, 0x207fffff)]),
+        ("work network chains", set_work_next()),
+        ("work testnet recovery", set_work_recovery()),
+        ("work mainnet headers", set_work_headers()),
+        # Height 256 has no skip destination in this suffix. GetAncestor(239) crosses it.
+        ("work missing skip traversal", [next_request("mainnet", work_chain(479), 1028800)]),
     ]
     return sets, excluded
 

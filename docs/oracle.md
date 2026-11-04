@@ -1,12 +1,11 @@
 # The oracle and its record format
 
 `dogelib-oracle` runs DogeLib's specification on requests from another program, such as a harness that runs Dogecoin Core on the same inputs.
-This document defines its record format, `dogelib-oracle/2`.
+This document defines its record format, `dogelib-oracle/3`.
 The oracle supports only this format.
-Compared with `dogelib-oracle/1`, prior operations keep their request fields, response shapes and behavior, and only the version string changes.
 A change to the format needs a maintainer's approval ([AGENTS.md](../AGENTS.md#changes-that-need-a-maintainer)) and a new format name.
 
-The oracle models Core's serialization and its legacy signature hash.
+The oracle models Core's serialization, its legacy signature hash and its work arithmetic.
 It reads transactions in base mode or with witness data allowed.
 The witness operations model a serialization format only.
 Segregated witness is not active on Dogecoin at the pin.
@@ -20,7 +19,7 @@ It checks no consensus rule. Its output says what Core's code computes for an in
 ```bash
 lake build dogelib-oracle
 .lake/build/bin/dogelib-oracle             # answer requests on standard input
-.lake/build/bin/dogelib-oracle --version   # print {"format":"dogelib-oracle/2"}
+.lake/build/bin/dogelib-oracle --version   # print {"format":"dogelib-oracle/3"}
 ```
 
 The oracle reads one request per line of standard input and writes one response per line of standard output.
@@ -51,6 +50,9 @@ Arguments use these types:
 | Bytes | string | Hexadecimal digits, two per byte, in the order Core serializes them. Upper and lower case are accepted. |
 | `u32` | number | An integer from 0 to 2^32 − 1. Any notation of an integer value is accepted: `5`, `5.0`, `5e0` and `50e-1` are all 5. `1.5` and `5e-1` are rejected. |
 | `u64` | string | Decimal digits, with no sign and no leading zero, for a value from 0 to 2^64 − 1. A string keeps a value above 2^53 exact in every JSON reader. |
+| Target magnitude | string | Exactly 64 hexadecimal digits, most significant byte first. Upper and lower case are accepted. The magnitude is a number, separate from hash byte order. |
+| Boolean | boolean | Only `true` and `false`. |
+| Network | string | `mainnet`, `testnet` or `regtest`. |
 | Hash type | number | An integer from −2^31 to 2^32 − 1, by the rule of `u32`. The oracle reduces it modulo 2^32, as Core's `int nHashType` becomes the `uint32_t` of the preimage. |
 
 ## Responses
@@ -85,15 +87,18 @@ Results use these types:
 | --- | --- | --- |
 | `request` | The oracle could not interpret the request. Examples: invalid JSON, an unknown `op`, a missing or unknown argument, or a value out of range. | `message`, free text for a person. It is not part of the format. |
 | `read` | The reader of the specification rejects the bytes, as Core's stream would. | `reason`: `truncated` (the input ends early), `non_canonical` (a CompactSize value in a longer form than needed), `too_large` (a CompactSize value above `MAX_SIZE`, `0x02000000`), or `unknown_optional_data` (a transaction flag bit other than bit 0 remains after the input and output lists and any stacks). For `sighash.legacy`, `argument` names the argument that failed. |
+| `work_view` | The finite work view cannot supply a result. The view errors describe the adapter, not consensus rejection codes. | `reason`: `height_out_of_range`, `inconsistent_heights`, `missing_ancestor`, `first_height_underflow` or `zero_interval`. The last two are unreachable with these network parameters and checked views. |
 | `trailing_bytes` | A transaction was read and bytes remain. | `count`: the number of bytes after the transaction. For `sighash.legacy`, `argument`. |
 
-Only `request` errors come from the oracle itself. The other kinds are results of the specification.
+`work_view` errors describe the finite-view adapter in the specification.
+They do not describe Core consensus rejection.
+The other non-request kinds report serialization errors of the specification.
 
 ## Operations
 
 | `op` | Arguments | `ok` fields | Specification |
 | --- | --- | --- | --- |
-| `oracle.version` | none | `format`: `"dogelib-oracle/2"` | none |
+| `oracle.version` | none | `format`: `"dogelib-oracle/3"` | none |
 | `compactsize.encode` | `value`: `u64` | `bytes_hex` | `CompactSize.encode`, Core's `WriteCompactSize` |
 | `compactsize.read` | `bytes_hex` | `value` (`u64`), `consumed`, `rest_hex` | `CompactSize.decodeBounded`, Core's `ReadCompactSize` with its `MAX_SIZE` check |
 | `tx.read_base` | `bytes_hex` | `tx`, `consumed`, `rest_hex` | `Transaction.readBase`: a transaction at the start of the bytes, as Core reads the next transaction of a stream |
@@ -101,6 +106,41 @@ Only `request` errors come from the oracle itself. The other kinds are results o
 | `tx.read_witness` | `bytes_hex` | Witness result, `consumed`, `rest_hex` | `Transaction.readAllowWitness`: a prefix with witness data allowed |
 | `tx.decode_witness` | `bytes_hex` | Witness result | `Transaction.decodeAllowWitnessComplete`: the whole input with witness data allowed |
 | `sighash.legacy` | `tx_hex`, `script_code_hex`, `input_index` (`u32`), `hash_type` | `plan`, `preimage_hex` (for `hash_bytes` only), `digest_hex`, `digest_display` | `tx_hex` is read as by `tx.decode_base`. Then `legacySignatureHashPlan` and `LegacyHashPlan.digest`: Core's `SignatureHash` with `SIGVERSION_BASE` |
+| `work.set_compact` | `compact` (`u32`) | `value_hex` (target magnitude), `negative`, `overflow` (booleans) | `Work.ArithUint256.setCompact` |
+| `work.get_compact` | `value_hex` (target magnitude), `negative` (boolean) | `compact` (`u32`) | `Work.ArithUint256.getCompact` |
+| `work.calculate_next` | `network`, `selection_height`, `last_height`, `last_time`, `last_bits`, `first_time` | `bits` (`u32`) | `Work.calculateDogecoinNextWorkRequired` with `Work.getConsensus` |
+| `work.next` | `network`, `chain`, `candidate_time` (`u32`) | `bits` (`u32`) | `Work.nextWorkRequired` |
+
+### Work arguments
+
+`work.calculate_next` takes `u32` fields, except `last_height`, which must be from 0 through 2147483646.
+This bound lets Core increment the height within its signed 32-bit domain.
+`selection_height` selects Core's network parameter record independently of `last_height`.
+The retarget arithmetic uses candidate height `last_height + 1`, `last_time - first_time`, and `last_bits`.
+Both times stay within the UInt32 domain of block timestamps.
+The adapter exposes no custom parameter record.
+
+`work.next` takes `chain` as a newest-first array of objects with exactly `height`, `time` and `bits`, all `u32` fields.
+Each next object represents the preceding block.
+Adjacent heights must differ by one, and each height must be below 2147483647.
+An empty array represents a null tip and returns compact `powLimit`.
+Otherwise, the candidate height selects the network parameters.
+`candidate_time` is separate from the chain.
+
+A suffix may stop above genesis if the selected branch needs no earlier entry.
+The adapter checks the whole view before it selects a branch, even when a delay would permit minimum difficulty.
+
+```json
+{"id":"target","op":"work.set_compact","compact":33587328}
+{"id":"target","ok":{"negative":false,"overflow":false,"value_hex":"0000000000000000000000000000000000000000000000000000000000000080"}}
+```
+
+The compact is `0x02008000`, Core's encoding of the magnitude `0x80` (D16, line 490).
+The `negative` output reports the sign flag, while `value_hex` always holds the unsigned stored magnitude.
+Neither compact operation validates a proof-of-work target.
+The work operations check no header validity or AuxPoW rule.
+
+### Transaction results
 
 The `tx` object holds every field as it was read:
 
@@ -180,7 +220,11 @@ python3 -I scripts/compare_core.py .lake/build/bin/dogelib-oracle build/core-har
 The build script exports the pinned commit from the clone with `git archive`.
 The clone must contain that commit, but its working tree may be at any other.
 It builds Core's consensus, cryptography and secp256k1 libraries, and compiles Core's bundled UniValue to read the requests.
-It needs autoconf, automake, libtool, pkg-config and OpenSSL's development files.
+It needs autoconf, automake, libtool, pkg-config, OpenSSL's development files and Boost headers (`libboost-dev` on Ubuntu).
+It links no Boost library.
+
+The work functions and parameter constructors require five additional Core objects: `pow.cpp`, `chain.cpp`, `dogecoin.cpp`, `chainparams.cpp` and `chainparamsbase.cpp`.
+Function and data sections, with linker garbage collection, discard unrelated server functions and their dependencies.
 
 ### What the harness runs
 
@@ -193,11 +237,30 @@ It needs autoconf, automake, libtool, pkg-config and OpenSSL's development files
 | `tx.read_witness`, `tx.decode_witness` | `CMutableTransaction` read from a `CDataStream` without `SERIALIZE_TRANSACTION_NO_WITNESS`. The complete operation requires an empty stream. Both write with witness data allowed and call `CTransaction::HasWitness`, `GetHash` and `GetWitnessHash`. |
 | `sighash.legacy` | `tx_hex` read as by `tx.decode_base`. Then `SignatureHash` with amount 0 and `SIGVERSION_BASE` |
 
+The harness also calls these work functions:
+
+| `op` | Core's code |
+| --- | --- |
+| `work.set_compact`, `work.get_compact` | `arith_uint256::SetCompact` and `GetCompact` |
+| `work.calculate_next` | `SelectParams`, `Params().GetConsensus(selection_height)`, then `CalculateDogecoinNextWorkRequired` on an explicit `CBlockIndex` |
+| `work.next` | `SelectParams`, candidate-height `GetConsensus`, then `GetNextWorkRequired` on linked `CBlockIndex` objects |
+
+The harness compares `work.next` only on contiguous views with enough history for the required retarget ancestor or recovery walk.
+It rejects a request outside that domain before it calls Core.
+Core can assert on a missing ancestor, and a truncated recovery walk can return a different result.
+The comparison excludes every `work_view` fixture and checks those errors only against the oracle fixtures.
+
+The harness sets each supplied entry's `pprev`, `nHeight`, `nTime` and `nBits`.
+It computes Core's `GetSkipHeight` only to decide whether to call `BuildSkip` within the supplied suffix.
+When that destination precedes the suffix, the skip pointer stays null.
+Core's `GetAncestor` then follows `pprev`, so this guard changes no result.
+The `work missing skip traversal` comparison retargets from height 479 to ancestor 239 across height 256, whose skip pointer is null.
+
 ### How its responses differ
 
-The harness answers a projection of `dogelib-oracle/2`, not the format itself:
+The harness answers a projection of `dogelib-oracle/3`, not the format itself:
 
-- `--version` and `oracle.version` give the format `dogelib-oracle/2-core-projection`.
+- `--version` and `oracle.version` give the format `dogelib-oracle/3-core-projection`.
 - `sighash.legacy` has no `preimage_hex`.
   `SignatureHash` hashes its preimage as it writes it and does not return it.
 - `plan` is a label that the harness computes from the conditions of Core's two early returns, in `src/script/interpreter.cpp` lines 1225 to 1235.
@@ -246,10 +309,24 @@ The request stream is deterministic, and the random sets use a fixed seed:
   Variants replace both vector counts, the first input script length and the first output script length with malformed encodings.
   They also truncate fields and scripts, and append trailing bytes.
 
+The work comparison reports these sets separately:
+
+- D16's `bignum_SetCompact` cases and D7's six `get_next_work_*` cases from the oracle fixtures.
+- Compact exponent, mantissa, sign and overflow boundaries, plus magnitudes around every bit boundary through 256 bits.
+- Retarget timespan, rounding, height and parameter boundaries on all three networks, with UInt32 time endpoints.
+- The `regtest legacy wrap case`: selection height 0, last height 1, times 901 and 0, and bits `0x207fffff`.
+  Core's multiplication wraps modulo 2^256, and returns `0x1f02467a`.
+- Synthetic network chains at the legacy, DigiShield and minimum-difficulty boundaries, with strict delay endpoints.
+- Testnet recovery walks to a nonminimum target or an interval boundary below height 145000.
+- The 312 recorded mainnet headers as history for 310 candidates, heights 144721 through 145030.
+  Height 144720 lacks its retarget ancestor and stays an oracle error fixture in the known-answer tests.
+- A retarget whose ancestor traversal crosses a block with a null skip pointer.
+
 `scripts/test_compare_core.py` checks that the comparison can fail.
 A wrapper around the oracle stands in for the harness.
-Unchanged, it must pass on the full stream. Each of 25 mutations must fail with the failure code that it targets.
+Unchanged, it must pass on the full stream. Each of 31 mutations must fail with the failure code that it targets.
 The witness mutations change `wtxid_hex`, a stack and `has_witness`.
+The work mutations change the magnitude, both flags, the encoded compact and each work operation's result bits.
 
 ### Compiled Rust CompactSize
 

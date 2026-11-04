@@ -1,7 +1,7 @@
-// The Dogecoin Core harness: answers dogelib-oracle/2 requests by running
+// The Dogecoin Core harness: answers dogelib-oracle/3 requests by running
 // Dogecoin Core's own code, so that scripts/compare_core.py can check the
 // oracle against Core. docs/oracle.md, section "The Core harness", describes
-// its responses, a projection of dogelib-oracle/2.
+// its responses, a projection of dogelib-oracle/3.
 //
 // scripts/build_core_harness.sh builds it against Core's libraries at the
 // commit that SOURCES.md pins.
@@ -14,6 +14,11 @@
 // An exception from Core that is not one of the four mapped read errors ends
 // the program with status 3, so it shows as a failed comparison.
 
+#include "arith_uint256.h"
+#include "chain.h"
+#include "chainparams.h"
+#include "dogecoin.h"
+#include "pow.h"
 #include "primitives/transaction.h"
 #include "script/interpreter.h"
 #include "script/script.h"
@@ -40,7 +45,7 @@ static_assert(std::numeric_limits<unsigned int>::max() == UINT32_MAX, "unsigned 
 
 namespace {
 
-const char* const FORMAT = "dogelib-oracle/2-core-projection";
+const char* const FORMAT = "dogelib-oracle/3-core-projection";
 
 // The stream version of Core's base mode: the reader allows no witness data.
 const int BASE_VERSION = PROTOCOL_VERSION | SERIALIZE_TRANSACTION_NO_WITNESS;
@@ -271,6 +276,63 @@ void checkArgs(const UniValue& req, const std::string& op, const std::vector<std
     }
 }
 
+// Work arguments follow docs/oracle.md. No result arithmetic lives here.
+bool argBool(const UniValue& req, const std::string& key)
+{
+    const auto& v = arg(req, key);
+    if (!v.isBool()) throw RequestError{"argument " + key + " must be a boolean"};
+    return v.get_bool();
+}
+
+void selectWorkNetwork(const UniValue& req)
+{
+    const auto& v = arg(req, "network");
+    if (!v.isStr()) throw RequestError{"network must be a string"};
+    const auto& network = v.get_str();
+    if (network == "mainnet") SelectParams(CBaseChainParams::MAIN);
+    else if (network == "testnet") SelectParams(CBaseChainParams::TESTNET);
+    else if (network == "regtest") SelectParams(CBaseChainParams::REGTEST);
+    else throw RequestError{"unknown network"};
+}
+
+// Core's GetSkipHeight (D35), used only to guard BuildSkip on a suffix.
+// Adapted from Dogecoin Core e0a1c15, src/chain.cpp, MIT licence.
+// Copyright (c) 2009-2010 Satoshi Nakamoto
+// Copyright (c) 2009-2016 The Bitcoin Core developers
+// Copyright (c) 2021-2022 The Dogecoin Core developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+int availableSkipHeight(int height)
+{
+    if (height < 2) return 0;
+    auto invert = [](int n) { return n & (n - 1); };
+    return (height & 1) ? invert(invert(height - 1)) + 1 : invert(height);
+}
+// End of the adapted skip-height helper.
+
+// Reject histories outside the compared caller domain before invoking Core.
+// In particular, a truncated recovery walk must not masquerade as genesis.
+void checkWorkHistory(const std::vector<CBlockIndex>& chain, const CBlockHeader& candidate,
+                      const Consensus::Params& params)
+{
+    if (chain.empty()) return;
+    const CBlockIndex& last = chain.front();
+    if (AllowDigishieldMinDifficultyForBlock(&last, &candidate, params)) return;
+    const int64_t interval = last.nHeight >= 145000 ? 1 : params.DifficultyAdjustmentInterval();
+    if ((last.nHeight + 1) % interval != 0) {
+        if (!params.fPowAllowMinDifficultyBlocks ||
+            candidate.GetBlockTime() > last.GetBlockTime() + params.nPowTargetSpacing * 2) return;
+        const uint32_t limit = UintToArith256(params.powLimit).GetCompact();
+        for (const auto& entry : chain) {
+            if (entry.nHeight % params.DifficultyAdjustmentInterval() == 0 || entry.nBits != limit) return;
+        }
+        throw RequestError{"incomplete recovery history is outside the Core comparison domain"};
+    }
+    const int64_t back = last.nHeight + 1 == interval ? interval - 1 : interval;
+    if (back > last.nHeight || static_cast<uint64_t>(back) >= chain.size())
+        throw RequestError{"missing retarget ancestor is outside the Core comparison domain"};
+}
+
 UniValue run(const UniValue& req)
 {
     const UniValue& opv = arg(req, "op");
@@ -281,6 +343,62 @@ UniValue run(const UniValue& req)
     if (op == "oracle.version") {
         checkArgs(req, op, {});
         ok.pushKV("format", FORMAT);
+    } else if (op == "work.set_compact") {
+        checkArgs(req, op, {"compact"});
+        arith_uint256 value;
+        bool negative, overflow;
+        value.SetCompact(argU32(req, "compact"), &negative, &overflow);
+        ok.pushKV("value_hex", value.GetHex());
+        ok.pushKV("negative", negative);
+        ok.pushKV("overflow", overflow);
+    } else if (op == "work.get_compact") {
+        checkArgs(req, op, {"value_hex", "negative"});
+        const auto bytes = argHex(req, "value_hex");
+        if (bytes.size() != 32) throw RequestError{"value_hex must contain exactly 32 bytes"};
+        arith_uint256 value;
+        value.SetHex(arg(req, "value_hex").get_str());
+        ok.pushKV("compact", static_cast<uint64_t>(value.GetCompact(argBool(req, "negative"))));
+    } else if (op == "work.calculate_next") {
+        checkArgs(req, op, {"network", "selection_height", "last_height", "last_time", "last_bits", "first_time"});
+        selectWorkNetwork(req);
+        const auto& params = Params().GetConsensus(argU32(req, "selection_height"));
+        CBlockIndex last;
+        last.nHeight = argInt(req, "last_height", 0, 2147483646);
+        last.nTime = argU32(req, "last_time");
+        last.nBits = argU32(req, "last_bits");
+        const auto bits = CalculateDogecoinNextWorkRequired(&last, argU32(req, "first_time"), params);
+        ok.pushKV("bits", static_cast<uint64_t>(bits));
+    } else if (op == "work.next") {
+        checkArgs(req, op, {"network", "chain", "candidate_time"});
+        selectWorkNetwork(req);
+        const auto& entries = arg(req, "chain");
+        if (!entries.isArray()) throw RequestError{"chain must be an array"};
+        std::vector<CBlockIndex> chain(entries.size());
+        for (size_t i = 0; i < chain.size(); ++i) {
+            const auto& entry = entries[i];
+            if (!entry.isObject()) throw RequestError{"chain entries must be objects"};
+            for (const auto& key : entry.getKeys()) {
+                if (key != "height" && key != "time" && key != "bits") throw RequestError{"unknown chain entry field"};
+            }
+            chain[i].nHeight = argInt(entry, "height", 0, 2147483646);
+            chain[i].nTime = argU32(entry, "time");
+            chain[i].nBits = argU32(entry, "bits");
+            if (i && chain[i-1].nHeight != chain[i].nHeight + 1) throw RequestError{"inconsistent chain heights"};
+        }
+        CBlockHeader candidate;
+        candidate.nTime = argU32(req, "candidate_time");
+        const auto& params = Params().GetConsensus(chain.empty() ? 0 : chain.front().nHeight + 1);
+        checkWorkHistory(chain, candidate, params);
+        // Build from oldest to newest, with stable addresses and real pprev links.
+        for (size_t i = chain.size(); i-- > 0;) {
+            if (i + 1 < chain.size()) {
+                chain[i].pprev = &chain[i+1];
+                if (availableSkipHeight(chain[i].nHeight) >= chain.back().nHeight)
+                    chain[i].BuildSkip();
+            }
+        }
+        const auto bits = GetNextWorkRequired(chain.empty() ? nullptr : &chain.front(), &candidate, params);
+        ok.pushKV("bits", static_cast<uint64_t>(bits));
     } else if (op == "compactsize.encode") {
         checkArgs(req, op, {"value"});
         uint64_t n = argU64(req, "value");

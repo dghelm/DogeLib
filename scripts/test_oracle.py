@@ -40,6 +40,19 @@ def run_batch(oracle: str, lines: list[str]) -> list[dict]:
     return [json.loads(line) for line in out.splitlines()]
 
 
+def run_requests(oracle: str, name: str, requests: list[dict]) -> list[dict] | None:
+    """The responses to `requests`, or `None` after a report when they are not one per request with each `id` in order."""
+    got = run_batch(oracle, [json.dumps(r) for r in requests])
+    if len(got) != len(requests):
+        print(f"FAIL {name}: {len(got)} responses to {len(requests)} requests")
+        return None
+    for line, (req, resp) in enumerate(zip(requests, got), start=1):
+        if resp.get("id") != req["id"]:
+            print(f"FAIL {name}: response {line} has id {resp.get('id')!r}, expected {req['id']!r}")
+            return None
+    return got
+
+
 def matches(got, want) -> bool:
     """Whether a response matches its expected value, with the two exceptions of item 1."""
     if isinstance(want, dict) and isinstance(got, dict):
@@ -74,11 +87,14 @@ def check_fixtures(oracle: str) -> int:
 def check_sighash_corpus(oracle: str) -> int:
     records = json.loads((ROOT / "tests/transaction/sighash/sighash.json").read_text())
     records = [r for r in records if len(r) == 5]
-    lines = [json.dumps({"id": i, "op": "sighash.legacy", "tx_hex": tx, "script_code_hex": code,
-                         "input_index": n, "hash_type": h})
-             for i, (tx, code, n, h, _) in enumerate(records)]
+    requests = [{"id": i, "op": "sighash.legacy", "tx_hex": tx, "script_code_hex": code,
+                 "input_index": n, "hash_type": h}
+                for i, (tx, code, n, h, _) in enumerate(records)]
+    responses = run_requests(oracle, "sighash.json", requests)
+    if responses is None:
+        return 1
     failures = 0
-    for (*_, digest), resp in zip(records, run_batch(oracle, lines)):
+    for (*_, digest), resp in zip(records, responses):
         if resp.get("ok", {}).get("digest_display") != digest:
             failures += 1
             print(f"FAIL sighash.json record {resp.get('id')}: {json.dumps(resp)[:200]}")
@@ -92,9 +108,13 @@ def check_tx_corpus(oracle: str) -> int:
         records = json.loads((ROOT / "tests/transaction/corpus" / name).read_text())
         # Base mode: the byte after the version is not the zero marker of the extended format (issue #22).
         txs = [r[1] for r in records if len(r) == 3 and r[1][8:10] != "00"]
-        lines = [json.dumps({"id": i, "op": "tx.decode_base", "bytes_hex": tx}) for i, tx in enumerate(txs)]
+        requests = [{"id": i, "op": "tx.decode_base", "bytes_hex": tx} for i, tx in enumerate(txs)]
+        responses = run_requests(oracle, name, requests)
+        if responses is None:
+            failures += 1
+            continue
         bad = 0
-        for tx, resp in zip(txs, run_batch(oracle, lines)):
+        for tx, resp in zip(txs, responses):
             ok = resp.get("ok", {})
             txid = sha256d(bytes.fromhex(tx))
             if (ok.get("serialized_hex") != tx.lower() or ok.get("txid_hex") != txid.hex()

@@ -15,14 +15,14 @@ This file is the single source registry ([CONTRIBUTING.md](CONTRIBUTING.md#sourc
 
 Design records 0001 and 0002 cite EthLib at `5d4b584`. The pin above is two commits later and uses the same toolchain, `v4.35.0`. The two commits add the SHA-256 precompile and the rule against every tactic that trusts compiled code. `WRITING.md` and `scripts/check_writing.py` are adapted from this pin.
 
-*Proposed* means recorded in the design records and not yet built against.
+*Proposed* means recorded in the design records and not yet built against. A pin becomes *Adopted* when a merged lane builds or compares against it.
 
 The Aeneas and Charon pins were proposed on 2026-11-04 for ROADMAP step 6.
 Neither project tags releases, so each pin is a commit on its `main` branch: Aeneas's latest on 2026-11-03, and the Charon commit that Aeneas names.
 Before step 6 can use them, the maintainer decides two questions:
 
 - **Mathlib.** The Aeneas Lean library requires Mathlib `v4.35.0` (commit `56a005855ea17e0b0958f73ec801ae140b0a1679` in its `lake-manifest.json`). It would enter only the `Refinement` library, never the specification (issue #3).
-- **Trust policy.** The Aeneas Lean library declares seven axioms. Five declare types for Rust items it does not model, such as `core.pin.Pin`, and one in a test module declares a function. The seventh, `core.slice.Slice.get_unchecked_SliceIndexUsizeSlice_spec` (`Aeneas/Std/Slice.lean:615`), states a property. `lake exe check-decls` reports a declaration whose proof depends on any of them. A refinement proof that avoids them needs no exception. The Aeneas library also uses `native_decide` and `bv_decide`, in tests and in tactics that a proof can avoid. A pin becomes *Adopted* when a merged lane builds or compares against it.
+- **Trust policy.** The Aeneas Lean library declares seven axioms. Five declare types for Rust items it does not model, such as `core.pin.Pin`, and one in a test module declares a function. The seventh, `core.slice.Slice.get_unchecked_SliceIndexUsizeSlice_spec` (`Aeneas/Std/Slice.lean:615`), states a property. `lake exe check-decls` reports a declaration whose proof depends on any of them. A refinement proof that avoids them needs no exception. The Aeneas library also uses `native_decide` and `bv_decide`, in tests and in tactics that a proof can avoid.
 
 The maintainer confirmed the Dogecoin pin on 2026-11-03 (issue #5). `v1.14.9` was then the latest Dogecoin Core release. The Dogecoin pin is a compatibility target for the operations DogeLib models. It is not a claim that every rule in that version is formalized, or that one version is enough evidence for historical consensus.
 

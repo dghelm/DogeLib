@@ -133,6 +133,7 @@ Every gate that the runner skips is **not run**, including manual reviews and th
 The runner shell-quotes the Core clone path before it replaces the table's placeholder.
 Any remaining placeholder also leaves the gate **not run**.
 A failed gate does not stop later gates, but makes the runner exit with status 1.
+
 The report updates after each completed gate.
 An interrupt stops the gate's process group and records its partial output.
 The Writing gate is advisory, and its findings can accompany a zero exit status.

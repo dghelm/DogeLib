@@ -55,6 +55,7 @@ DogeLib/<Layer>/Exports/             the oracle adapter for that layer
 Refinement/Rust/                     Rust sources, extraction configuration, refinement proofs
 tests/<layer>/                       fixtures with recorded provenance
 tests/KnownAnswers.lean              the driver that `lake test` runs
+harness/core/                        the Dogecoin Core harness: Core's code on the oracle's requests
 scripts/                             repository tools and checks
 ```
 

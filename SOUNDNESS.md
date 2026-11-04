@@ -31,15 +31,15 @@ Gap D asks whether the use of DogeLib holds together.
 
 | ID | Risk | Mitigation in place | Applies to |
 |----|------|---------------------|------------|
-| A1 | A definition does not match the pinned Dogecoin behavior | Source mapping in `SOURCES.md`, by review only. SHA-256 has a proof against a FIPS 180-4 model, and NIST CAVP known answers. Known answers from Core's genesis data test the integer codecs. Core's own test cases are known answers for CompactSize, the legacy signature hash, the compact encoding and the difficulty retarget. The scripts of the genesis coinbase are known answers for counted lists. The genesis coinbase is a known answer for the transaction codec, reader and ID. No comparison against a running Core yet. | P R I F |
+| A1 | A definition does not match the pinned Dogecoin behavior | Source mapping in `SOURCES.md`, by review only. SHA-256 has a proof against a FIPS 180-4 model, and NIST CAVP known answers. Known answers from Core's genesis data test the integer codecs. Core's own test cases are known answers for CompactSize, the legacy signature hash, the compact encoding and the difficulty retarget. The scripts of the genesis coinbase are known answers for counted lists. The genesis coinbase is a known answer for the transaction codec, reader and ID. `scripts/compare_core.py` runs the oracle and Core's own code at the pin on 179,556 requests. They cover CompactSize, the base-mode transaction reader, serialization and ID, and the legacy signature hash. | P R I F |
 | A2 | A theorem holds only under a hypothesis | Policy: each conditional theorem lists its hypotheses here and in `COVERAGE.md` | P I |
 | A3 | Timing reveals secret data | None: no constant-time claim | R I |
 | A4 | A security theorem idealises a primitive | None: no security theorem yet | P |
 | A5 | A rule depends on a protocol context that the definition does not model | Policy: each operation records its mode, network and era in `SOURCES.md` | P R I F |
-| B1 | The Lean compiler, the C compiler or the Lean runtime is wrong | `lake test` runs the NIST CAVP SHA-256 vectors, Core's compact-encoding and retarget test cases, and the codec known answers through the compiled code | R |
+| B1 | The Lean compiler, the C compiler or the Lean runtime is wrong | `lake test` runs the NIST CAVP SHA-256 vectors, Core's compact-encoding and retarget test cases, and the codec known answers through the compiled code. `scripts/compare_core.py` runs the compiled oracle against Core | R |
 | B2 | Lean core runs code other than its definitions | Lean core is a declared baseline | R |
 | B3 | Elaboration runs native code | None yet | P |
-| B4 | The oracle's IO adapter or a foreign boundary is wrong | `scripts/test_oracle.sh` runs fixtures with independent expected values, Core's `sighash.json` and the base-mode records of Core's transaction corpus through the oracle. `lake exe check-decls` checks the `Exports` library. | R F |
+| B4 | The oracle's IO adapter or a foreign boundary is wrong | `scripts/test_oracle.sh` runs fixtures with independent expected values, Core's `sighash.json` and the base-mode records of Core's transaction corpus through the oracle. `lake exe check-decls` checks the `Exports` library. `scripts/compare_core.py` compares the oracle with the Core harness, and `scripts/test_compare_core.py` checks that the comparison can fail. | R F |
 | B5 | This repository substitutes compiled code | `lake exe check-decls` fails on any new substitution | R |
 | B6 | Extraction or the Rust toolchain is wrong | None: no extraction yet | I |
 | C1 | The Lean kernel or its axioms are unsound | None | P I |
@@ -464,11 +464,14 @@ Each such definition that remains is listed here with its reason.
 ### A1. A wrong definition
 
 A definition can differ from Dogecoin's behavior while every theorem about it holds, because the theorems are proved about the definition, not about Dogecoin Core.
-Three things guard against that, once they exist.
+Three things guard against that.
 Each definition is named and shaped after its source in `SOURCES.md`, so that a reader can compare them line by line.
 Fixtures come from pinned Core tests, primary specifications or documented historical data, never from the implementation under test.
 Core comparisons run the compiled oracle against the pinned Core revision.
-The source registry exists. The fixtures are listed per operation in the *Comparison* column of [COVERAGE.md](COVERAGE.md), and each records its provenance. No Core comparison exists yet.
+
+The source registry exists. The fixtures are listed per operation in the *Comparison* column of [COVERAGE.md](COVERAGE.md), and each records its provenance.
+The Core comparison runs the compiled oracle and Core's own code at the pin on the same requests, for the operations of the oracle ([docs/oracle.md](docs/oracle.md#the-core-harness)).
+It shows agreement on the requests it sends, and nothing about other inputs.
 
 A Dogecoin rule can differ from the Bitcoin rule it descends from.
 A definition or proof adopted from btc-verified is evidence to investigate, not a compatibility proof for Dogecoin.
@@ -550,7 +553,22 @@ Each operation calls one function of the specification. The adapter converts its
 - The loop over standard input uses `repeat`, which Lean core defines with `partial`. `lake exe check-decls` exempts the `Exports` modules from its check of reachable opaque constants, and checks their axioms and their own declarations.
 
 A wrong conversion could make the oracle and Core disagree, or agree, for a reason outside the specification.
-The comparison with Core that would use the oracle does not exist yet.
+
+The Core harness, `harness/core/core_oracle.cpp`, is the other side of the comparison ([docs/oracle.md](docs/oracle.md#the-core-harness)).
+A user of the comparison trusts these parts of it:
+
+- Core's libraries at the pin, compiled by the compiler of the machine that runs the comparison: GCC 13 in CI, on `ubuntu-24.04`.
+  Core v1.14.9 was released for older compilers.
+  The build script passes only `-O2` as compiler flags, and Core's configure selects C++11.
+- The harness's own code. It converts hexadecimal text and JSON numbers to Core's arguments, writes Core's results as JSON, and maps three exception messages to read errors.
+  Any other exception from Core stops the harness, so it cannot pass as a result.
+- The `plan` label of `sighash.legacy`. The harness computes it from Core's conditions instead of observing it, and stops if the label disagrees with whether Core's digest is the value one.
+- The comparator, `scripts/compare_core.py`.
+  Its self-test, `scripts/test_compare_core.py`, requires a passing control, and 17 mutations that each fail with the code they target.
+- For `sighash.legacy`, the oracle's preimage is checked by hashing it, not byte by byte: Core does not expose its preimage.
+
+Both programs could be wrong in the same way on an input that the comparison does not send.
+
 Any later foreign boundary, such as a C or Rust binding, is listed here with its size and its error handling.
 
 ### B5. Compiler substitutions in this repository

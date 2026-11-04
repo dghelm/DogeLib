@@ -119,9 +119,85 @@ These operations are planned, and each would need a new format name:
   It models a serialization format that Core's code can read. It does not mean that segregated witness is active on any Dogecoin network.
 - Building a transaction from its fields.
 
-A harness that runs Dogecoin Core on the same requests does not exist yet.
-
 ## Tests
 
 `scripts/test_oracle.sh` builds the oracle and runs `scripts/test_oracle.py`.
 `tests/oracle/README.md` gives the source of each expected value.
+
+## The Core harness
+
+`harness/core/core_oracle.cpp` answers the same requests by running Dogecoin Core's own code.
+It is built against Core v1.14.9 at commit `e0a1c15`, the pin in [SOURCES.md](../SOURCES.md).
+`scripts/compare_core.py` runs the harness and the oracle on one stream of requests and requires their responses to agree.
+CI runs the comparison in workflow `core`, job `compare`.
+
+```bash
+lake build dogelib-oracle
+scripts/build_core_harness.sh <dogecoin-git-clone> build/core-harness
+python3 -I scripts/test_compare_core.py .lake/build/bin/dogelib-oracle
+python3 -I scripts/compare_core.py .lake/build/bin/dogelib-oracle build/core-harness/core-oracle
+```
+
+The build script exports the pinned commit from the clone with `git archive`.
+The clone must contain that commit, but its working tree may be at any other.
+It builds Core's consensus, cryptography and secp256k1 libraries, and compiles Core's bundled UniValue to read the requests.
+It needs autoconf, automake, libtool, pkg-config and OpenSSL's development files.
+
+### What the harness runs
+
+| `op` | Core's code |
+| --- | --- |
+| `compactsize.encode` | `WriteCompactSize` into a `CDataStream` |
+| `compactsize.read` | `ReadCompactSize` from a `CDataStream` |
+| `tx.read_base` | `CMutableTransaction` read from a `CDataStream` whose version has `SERIALIZE_TRANSACTION_NO_WITNESS`, so `UnserializeTransaction` reads base mode |
+| `tx.decode_base` | The same read, then a check that the stream is empty. The transaction written back to a stream of the same version, and `CTransaction::GetHash` |
+| `sighash.legacy` | `tx_hex` read as by `tx.decode_base`. Then `SignatureHash` with amount 0 and `SIGVERSION_BASE` |
+
+### How its responses differ
+
+The harness answers a projection of `dogelib-oracle/1`, not the format itself:
+
+- `--version` and `oracle.version` give the format `dogelib-oracle/1-core-projection`.
+- `sighash.legacy` has no `preimage_hex`.
+  `SignatureHash` hashes its preimage as it writes it and does not return it.
+- `plan` is a label that the harness computes from the conditions of Core's two early returns, in `src/script/interpreter.cpp` lines 1225 to 1235.
+  It is not observed from Core.
+  If the label is `fixed_digest` and Core's digest is not the value one, or the reverse, the harness stops with exit status 3.
+- The harness passes the hash type to Core's `int nHashType` as the same 32 bits, read as a two's complement value.
+  It passes `input_index` to `unsigned int nIn` unchanged.
+- Core reports a read error as a `std::ios_base::failure`.
+  The harness maps three messages to `read` errors: `CDataStream::read(): end of data` to `truncated`, `non-canonical ReadCompactSize()` to `non_canonical`, and `ReadCompactSize(): size too large` to `too_large`.
+  It accepts each message alone or followed by `: iostream error`, which libstdc++ appends.
+  Any other exception stops the harness with exit status 3, so it fails the comparison.
+
+The harness checks request arguments by the rules of this document.
+The comparison sends only well-formed requests, so it does not test those checks.
+
+### The comparison
+
+`scripts/compare_core.py` gives each request its own `id` and sends both programs the same text.
+For each request the two responses must be equal as JSON values, with one exception.
+For `sighash.legacy` with plan `hash_bytes`, the double SHA-256 of the oracle's `preimage_hex` must equal Core's `digest_hex`.
+This checks the preimage against Core's digest, not byte by byte against a preimage from Core.
+A request error from either program fails the comparison.
+
+The request stream is deterministic, and the random sets use a fixed seed:
+
+- The fixtures of `tests/oracle/`, except the request errors, `oracle.version` and the request that repeats a key.
+  The script prints each fixture it leaves out.
+- Core's `sighash.json`, and the base-mode records of Core's transaction corpus.
+- Every proper prefix of every transaction of the two corpora, and each transaction followed by 1, 3 and 40 bytes.
+- Field changes in the transaction corpus and the first 100 transactions of `sighash.json`.
+  Each count and length is replaced by non-canonical forms, by `MAX_SIZE` and larger values, and by a truncated CompactSize.
+  Also each version, sequence, output value and lock time replaced by boundary values.
+- The same transactions rebuilt with no inputs, no outputs, or empty scripts.
+- CompactSize values and encodings at every boundary of the forms and of `MAX_SIZE`.
+- `sighash.legacy` on the first 25 transactions of `sighash.json`, at the boundaries of the input index and the hash type.
+  Also transaction arguments that fail to read, and random script codes on all of its transactions.
+- Random byte changes in the transactions of both corpora.
+
+`scripts/test_compare_core.py` checks that the comparison can fail.
+A wrapper around the oracle stands in for the harness.
+Unchanged, it must pass on the full stream. Each of 17 mutations must fail with the failure code that it targets.
+
+Agreement covers the requests in the stream and nothing more.

@@ -36,6 +36,24 @@ It needs Python 3.10 or later, with only the standard library.
 Dogecoin Core's own test cases test the compact target encoding and the difficulty retarget.
 `tests/KnownAnswers.lean` gives the file and line of each case.
 
+## Comparison with Dogecoin Core
+
+The comparison runs Dogecoin Core's own code on the oracle's requests ([docs/oracle.md](docs/oracle.md#the-core-harness)).
+It needs a git clone of Dogecoin Core that contains the pinned commit, and autoconf, automake, libtool, pkg-config and OpenSSL's development files.
+
+```bash
+lake build dogelib-oracle
+scripts/build_core_harness.sh <dogecoin-git-clone> build/core-harness
+python3 -I scripts/test_compare_core.py .lake/build/bin/dogelib-oracle
+python3 -I scripts/compare_core.py .lake/build/bin/dogelib-oracle build/core-harness/core-oracle
+```
+
+The build script uses `JOBS` parallel jobs, 8 by default.
+It reuses the Core libraries when the build directory's stamp matches the pin, the script, the compilers and the flags.
+A first build takes under a minute on 8 cores, and the comparison takes about 20 seconds.
+
+## The declaration check
+
 After a change to the check itself, run its self-test:
 
 ```bash

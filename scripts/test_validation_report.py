@@ -170,7 +170,8 @@ class Reports(unittest.TestCase):
             'declaration-check-self-test': 'bash scripts/test_check_decls.sh',
             'source-and-coverage-review': None,
             'conformance': 'lake test',
-            'pinned-vectors': '(cd tests/cryptography/sha256/cavp && sha256sum -c SHA256SUMS) && '
+            'pinned-vectors': '(cd tests/cryptography/ripemd160 && sha256sum -c SHA256SUMS) && '
+                              '(cd tests/cryptography/sha256/cavp && sha256sum -c SHA256SUMS) && '
                               '(cd tests/transaction/sighash && sha256sum -c SHA256SUMS) && '
                               '(cd tests/transaction/corpus && sha256sum -c SHA256SUMS) && '
                               '(cd tests/work/mainnet-headers && sha256sum -c SHA256SUMS) && '

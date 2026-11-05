@@ -1,3 +1,4 @@
+import DogeLib.Cryptography.Hash.Hash160
 import DogeLib.Cryptography.Hash.Sha256
 import DogeLib.Cryptography.Hash.Sha256d
 import DogeLib.Serialization
@@ -2230,11 +2231,79 @@ def check : IO Nat := do
   return failures
 end KnownAnswers.Block
 
+/-!
+## RIPEMD-160 and Hash160
+
+The checks read immutable expectations from `tests/cryptography/ripemd160/vectors.json`.
+Its README records the authors' vectors, pinned Core vectors and independently compared Hash160 digests.
+-/
+
+namespace KnownAnswers.Ripemd160
+
+open KnownAnswers.Sha256Cavp (parseHex toHex)
+open DogeLib.Cryptography.Hash
+
+/-- One independent expectation, with its algorithm and source label. -/
+structure Fixture where
+  algorithm : String
+  source : String
+  message : ByteArray
+  digest : ByteArray
+
+/-- Decode the fixture formats, including Core's million-byte `LongTestString`. -/
+def parseFixtures (text : String) : Except String (Array Fixture) := do
+  let rows ← (← Lean.Json.parse text).getArr?
+  rows.mapM fun row => do
+    let algorithm ← (← row.getObjVal? "algorithm").getStr?
+    let source ← (← row.getObjVal? "source").getStr?
+    let encoding ← (← row.getObjVal? "encoding").getStr?
+    let messageText ← (← row.getObjVal? "message").getStr?
+    let message ← match encoding with
+      | "hex" => parseHex messageText
+      | "repeat_a" => do
+        unless messageText == "1000000" do throw "unexpected repeat count"
+        pure ⟨Array.replicate 1000000 0x61⟩
+      | "core_long" => do
+        unless messageText.isEmpty do throw "unexpected core_long payload"
+        pure ⟨Array.ofFn fun j : Fin 1000000 =>
+          ((j.val / 5) >>> (4 * (j.val % 5))).toUInt8⟩
+      | _ => throw s!"unknown message encoding: {encoding}"
+    let digest ← parseHex (← (← row.getObjVal? "digest").getStr?)
+    unless digest.size == 20 do throw "expected a twenty-byte digest"
+    unless (algorithm == "ripemd160" && (source == "authors" || source == "core_crypto_tests")) ||
+        (algorithm == "hash160" && source == "hashlib_and_core_chash160") do
+      throw s!"unexpected algorithm or source: {algorithm}, {source}"
+    pure { algorithm, source, message, digest }
+
+/-- Check all 31 expectations and the count from each independent source. -/
+def check : IO Nat := do
+  let text ← IO.FS.readFile "tests/cryptography/ripemd160/vectors.json"
+  let fixtures ← match parseFixtures text with
+    | .ok rows => pure rows
+    | .error e => throw (IO.userError e)
+  let mut failures := 0
+  for (source, expected) in [("authors", 9), ("core_crypto_tests", 10), ("hashlib_and_core_chash160", 12)] do
+    let count := (fixtures.filter (·.source == source)).size
+    unless count == expected do
+      IO.eprintln s!"FAIL {source}: {count} fixtures, expected {expected}"
+      failures := failures + 1
+  for v in fixtures do
+    let got := if v.algorithm == "ripemd160" then Ripemd160.hash v.message else Hash160.hash v.message
+    let wrapped := if v.algorithm == "ripemd160" then ripemd160 v.message else hash160 v.message
+    unless got == v.digest && wrapped == v.digest do
+      IO.eprintln s!"FAIL {v.algorithm} fixture ({v.source}, {v.message.size} bytes): got {toHex got}, expected {toHex v.digest}"
+      failures := failures + 1
+  IO.println s!"ripemd160/hash160: {fixtures.size} fixtures, {failures} failures"
+  return failures
+
+end KnownAnswers.Ripemd160
+
 /-- Entry point of `lake test`. -/
 def main : IO UInt32 := do
   let dir : System.FilePath := "tests/cryptography/sha256/cavp"
   let short ← KnownAnswers.Sha256Cavp.checkFile (dir / "SHA256ShortMsg.rsp") 65
   let long ← KnownAnswers.Sha256Cavp.checkFile (dir / "SHA256LongMsg.rsp") 64
+  let ripemd ← KnownAnswers.Ripemd160.check
   let genesis ← KnownAnswers.Genesis.check
   let codec ← KnownAnswers.Codec.check
   let compactSize ← KnownAnswers.CompactSize.check
@@ -2251,4 +2320,4 @@ def main : IO UInt32 := do
   let nextWork ← KnownAnswers.Work.checkNextWork
   let operators ← KnownAnswers.Work.checkOperators
   let shifts ← KnownAnswers.Work.checkShifts
-  return if blocks + short + long + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts + proofOfWork == 0 then 0 else 1
+  return if blocks + short + long + ripemd + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts + proofOfWork == 0 then 0 else 1

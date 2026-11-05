@@ -1,0 +1,219 @@
+[
+  {
+    "algorithm": "ripemd160",
+    "encoding": "hex",
+    "message": "61",
+    "digest": "0bdc9d2d256b3ee9daae347be6f4dc835a467ffe",
+    "source": "authors"
+  },
+  {
+    "algorithm": "ripemd160",
+    "encoding": "hex",
+    "message": "616263",
+    "digest": "8eb208f7e05d987a9b044a8e98c6b087f15a0bfc",
+    "source": "authors"
+  },
+  {
+    "algorithm": "ripemd160",
+    "encoding": "hex",
+    "message": "6d65737361676520646967657374",
+    "digest": "5d0689ef49d2fae572b881b123a85ffa21595f36",
+    "source": "authors"
+  },
+  {
+    "algorithm": "ripemd160",
+    "encoding": "hex",
+    "message": "6162636465666768696a6b6c6d6e6f707172737475767778797a",
+    "digest": "f71c27109c692c1b56bbdceb5b9d2865b3708dbc",
+    "source": "authors"
+  },
+  {
+    "algorithm": "ripemd160",
+    "encoding": "hex",
+    "message": "6162636462636465636465666465666765666768666768696768696a68696a6b696a6b6c6a6b6c6d6b6c6d6e6c6d6e6f6d6e6f706e6f7071",
+    "digest": "12a053384a9c0c88e405a06c27dcf49ada62eb2b",
+    "source": "authors"
+  },
+  {
+    "algorithm": "ripemd160",
+    "encoding": "hex",
+    "message": "4142434445464748494a4b4c4d4e4f505152535455565758595a6162636465666768696a6b6c6d6e6f707172737475767778797a30313233343536373839",
+    "digest": "b0e20b6e3116640286ed3a87a5713079b21f5189",
+    "source": "authors"
+  },
+  {
+    "algorithm": "ripemd160",
+    "encoding": "hex",
+    "message": "3132333435363738393031323334353637383930313233343536373839303132333435363738393031323334353637383930313233343536373839303132333435363738393031323334353637383930",
+    "digest": "9b752e45573d4b39f4dbd3323cab82bf63326bfb",
+    "source": "authors"
+  },
+  {
+    "algorithm": "ripemd160",
+    "encoding": "hex",
+    "message": "",
+    "digest": "9c1185a5c5e9fc54612808977ee8f548b2258d31",
+    "source": "authors"
+  },
+  {
+    "algorithm": "ripemd160",
+    "encoding": "repeat_a",
+    "message": "1000000",
+    "digest": "52783243c1697bdbe16d37f97f68f08325dc1528",
+    "source": "authors"
+  },
+  {
+    "algorithm": "ripemd160",
+    "encoding": "hex",
+    "message": "",
+    "digest": "9c1185a5c5e9fc54612808977ee8f548b2258d31",
+    "source": "core_crypto_tests"
+  },
+  {
+    "algorithm": "ripemd160",
+    "encoding": "hex",
+    "message": "616263",
+    "digest": "8eb208f7e05d987a9b044a8e98c6b087f15a0bfc",
+    "source": "core_crypto_tests"
+  },
+  {
+    "algorithm": "ripemd160",
+    "encoding": "hex",
+    "message": "6d65737361676520646967657374",
+    "digest": "5d0689ef49d2fae572b881b123a85ffa21595f36",
+    "source": "core_crypto_tests"
+  },
+  {
+    "algorithm": "ripemd160",
+    "encoding": "hex",
+    "message": "736563757265206861736820616c676f726974686d",
+    "digest": "20397528223b6a5f4cbc2808aba0464e645544f9",
+    "source": "core_crypto_tests"
+  },
+  {
+    "algorithm": "ripemd160",
+    "encoding": "hex",
+    "message": "524950454d4431363020697320636f6e7369646572656420746f2062652073616665",
+    "digest": "a7d78608c7af8a8e728778e81576870734122b66",
+    "source": "core_crypto_tests"
+  },
+  {
+    "algorithm": "ripemd160",
+    "encoding": "hex",
+    "message": "6162636462636465636465666465666765666768666768696768696a68696a6b696a6b6c6a6b6c6d6b6c6d6e6c6d6e6f6d6e6f706e6f7071",
+    "digest": "12a053384a9c0c88e405a06c27dcf49ada62eb2b",
+    "source": "core_crypto_tests"
+  },
+  {
+    "algorithm": "ripemd160",
+    "encoding": "hex",
+    "message": "466f7220746869732073616d706c652c20746869732036332d6279746520737472696e672077696c6c206265207573656420617320696e7075742064617461",
+    "digest": "de90dbfee14b63fb5abf27c2ad4a82aaa5f27a11",
+    "source": "core_crypto_tests"
+  },
+  {
+    "algorithm": "ripemd160",
+    "encoding": "hex",
+    "message": "546869732069732065786163746c79203634206279746573206c6f6e672c206e6f7420636f756e74696e6720746865207465726d696e6174696e672062797465",
+    "digest": "eda31d51d3a623b81e19eb02e24ff65d27d67b37",
+    "source": "core_crypto_tests"
+  },
+  {
+    "algorithm": "ripemd160",
+    "encoding": "repeat_a",
+    "message": "1000000",
+    "digest": "52783243c1697bdbe16d37f97f68f08325dc1528",
+    "source": "core_crypto_tests"
+  },
+  {
+    "algorithm": "ripemd160",
+    "encoding": "core_long",
+    "message": "",
+    "digest": "464243587bd146ea835cdf57bdae582f25ec45f1",
+    "source": "core_crypto_tests"
+  },
+  {
+    "algorithm": "hash160",
+    "encoding": "hex",
+    "message": "",
+    "digest": "b472a266d0bd89c13706a4132ccfb16f7c3b9fcb",
+    "source": "hashlib_and_core_chash160"
+  },
+  {
+    "algorithm": "hash160",
+    "encoding": "hex",
+    "message": "61",
+    "digest": "994355199e516ff76c4fa4aab39337b9d84cf12b",
+    "source": "hashlib_and_core_chash160"
+  },
+  {
+    "algorithm": "hash160",
+    "encoding": "hex",
+    "message": "616263",
+    "digest": "bb1be98c142444d7a56aa3981c3942a978e4dc33",
+    "source": "hashlib_and_core_chash160"
+  },
+  {
+    "algorithm": "hash160",
+    "encoding": "hex",
+    "message": "6d65737361676520646967657374",
+    "digest": "c0f5356420849b03a32ddfa5f9204f41392bad94",
+    "source": "hashlib_and_core_chash160"
+  },
+  {
+    "algorithm": "hash160",
+    "encoding": "hex",
+    "message": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff",
+    "digest": "07a536d93e0b9a779874e1287a226b8230cda46e",
+    "source": "hashlib_and_core_chash160"
+  },
+  {
+    "algorithm": "hash160",
+    "encoding": "hex",
+    "message": "00ff8000",
+    "digest": "bd56bcb03c103f2b4f1c3f65e3cb4db0b63d19ea",
+    "source": "hashlib_and_core_chash160"
+  },
+  {
+    "algorithm": "hash160",
+    "encoding": "hex",
+    "message": "61616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161",
+    "digest": "e23716d6140e7f616ed0784636820792fc66e0ba",
+    "source": "hashlib_and_core_chash160"
+  },
+  {
+    "algorithm": "hash160",
+    "encoding": "hex",
+    "message": "6161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161",
+    "digest": "e1dcb0b473950f27c45e65c0cdbe2ce6e80f7794",
+    "source": "hashlib_and_core_chash160"
+  },
+  {
+    "algorithm": "hash160",
+    "encoding": "hex",
+    "message": "616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161",
+    "digest": "ef2fc29f583db8d0cdb43916d0c6f46a3ae0b9bb",
+    "source": "hashlib_and_core_chash160"
+  },
+  {
+    "algorithm": "hash160",
+    "encoding": "hex",
+    "message": "61616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161",
+    "digest": "57591c6b8f00df7d36a642cc94021dda9ccd43fc",
+    "source": "hashlib_and_core_chash160"
+  },
+  {
+    "algorithm": "hash160",
+    "encoding": "hex",
+    "message": "6161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161",
+    "digest": "6c34b9e5f634dcdf42c6841102f786169b088b06",
+    "source": "hashlib_and_core_chash160"
+  },
+  {
+    "algorithm": "hash160",
+    "encoding": "hex",
+    "message": "616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161",
+    "digest": "656f97843ef5f33015d24e84156a1203ca716b03",
+    "source": "hashlib_and_core_chash160"
+  }
+]

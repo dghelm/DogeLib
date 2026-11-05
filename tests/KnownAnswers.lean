@@ -3,6 +3,7 @@ import DogeLib.Cryptography.Hash.Sha256d
 import DogeLib.Serialization
 import DogeLib.Transaction
 import DogeLib.Work
+import DogeLib.Block
 import Lean.Data.Json
 
 /-!
@@ -2060,6 +2061,175 @@ def checkShifts : IO Nat := do
 
 end KnownAnswers.Work
 
+/-!
+## Pure headers and Merkle roots
+
+`tests/block/README.md` records fixture provenance and the limits of the independent expectations.
+Header hashes use successor fields or independent Python hashlib expectations.
+The Merkle vectors transcribe Core's deterministic transaction lists at the pinned revision.
+-/
+namespace KnownAnswers.Block
+open DogeLib DogeLib.Block DogeLib.Serialization
+open KnownAnswers.Sha256Cavp (parseHex toHex)
+
+/-- Parse a display-order hash without padding or truncation. -/
+def parseHash (s : String) : Except String Hash256 := do
+  let some h := Hash256.ofDisplayBytes? (← parseHex s).toList | throw "expected 32-byte hash"
+  return h
+
+/-- Check a proposition and report its fixture label on failure. -/
+def require (label : String) (ok : Bool) : IO Nat := do
+  if ok then return 0
+  IO.eprintln s!"FAIL block: {label}"
+  return 1
+
+/-- Read fixture JSON, with a failure on malformed or absent input. -/
+def jsonFile (path : System.FilePath) : IO Lean.Json := do
+  match Lean.Json.parse (← IO.FS.readFile path) with
+  | .ok j => return j
+  | .error e => throw (IO.userError e)
+
+/-- Check pure-header decoding, encoding, hash bytes, all truncated prefixes and an arbitrary suffix. -/
+def checkHeader (label : String) (raw : List UInt8) (expected : Hash256) : IO Nat := do
+  let some (h, rest) := Codec.decode (α := PureBlockHeader) raw
+    | return ← require s!"{label}: decode" false
+  let mut failures ← require s!"{label}: exact encoding" (rest.isEmpty && Codec.encode h == raw)
+  failures := failures + (← require s!"{label}: 80 bytes" (raw.length == 80))
+  failures := failures + (← require s!"{label}: hash" (h.getHash == expected))
+  failures := failures + (← require s!"{label}: suffix"
+    (Codec.decode (raw ++ [0x42, 0xff]) == some (h, [0x42, 0xff])))
+  for n in [:80] do
+    failures := failures + (← require s!"{label}: truncated at {n}"
+      ((Codec.decode (α := PureBlockHeader) (raw.take n)).isNone))
+  return failures
+
+/-- Check all 312 recorded mainnet headers against recorded links and the independent final digest. -/
+def checkHeaders : IO Nat := do
+  let text ← IO.FS.readFile "tests/work/mainnet-headers/headers.txt"
+  let records ← match KnownAnswers.Work.MainnetHeaders.parseHeaders text with
+    | .ok r => pure r
+    | .error e => throw (IO.userError e)
+  let last ← match parseHash (← IO.FS.readFile "tests/block/last-header-hash.txt").trimAscii.toString with
+    | .ok h => pure h
+    | .error e => throw (IO.userError e)
+  let lines := (text.splitOn "\n").filter (!·.isEmpty)
+  let mut failures := 0
+  for i in [:records.size] do
+    let some record := records[i]? | throw (IO.userError "missing header")
+    let expected := match records[i+1]? with
+      | some next => next.prev
+      | none => last
+    let some line := lines[i]? | throw (IO.userError s!"missing raw header at index {i}")
+    let some hex := (line.splitOn " ")[1]? | throw (IO.userError "bad header line")
+    let raw ← match parseHex hex with
+      | .ok b => pure b.toList
+      | .error e => throw (IO.userError e)
+    failures := failures + (← checkHeader s!"height {record.height}" raw expected)
+  IO.println s!"pure headers: {records.size} records, 24960 truncated prefixes; {failures} failures"
+  return failures
+
+/-- Check real transaction lists against Merkle roots in the fetched raw headers. -/
+def checkMainnet : IO Nat := do
+  let rows ← match (← jsonFile "tests/block/mainnet.json").getArr? with
+    | .ok rows => pure rows
+    | .error e => throw (IO.userError e)
+  let mut failures ← require "three mainnet block fixtures" (rows.size == 3)
+  for row in rows do
+    let parsed : Except String (Nat × List UInt8 × Hash256 × List Transaction.Transaction × List Hash256) := do
+      let height ← (← row.getObjVal? "height").getNat?
+      let raw := (← parseHex (← row.getObjValAs? String "header")).toList
+      let expected ← parseHash (← row.getObjValAs? String "blockHash")
+      let txs ← (← row.getObjVal? "transactions").getArr?
+      let ids ← (← row.getObjVal? "txids").getArr?
+      let transactions ← txs.toList.mapM fun j => do
+        let bytes := (← parseHex (← j.getStr?)).toList
+        match Transaction.Transaction.decodeBaseComplete bytes with
+        | .ok tx => pure tx
+        | .error _ => throw "transaction decode failed"
+      let hashes ← ids.toList.mapM fun j => do parseHash (← j.getStr?)
+      return (height, raw, expected, transactions, hashes)
+    let (height, raw, expected, txs, ids) ← match parsed with
+      | .ok p => pure p
+      | .error e => throw (IO.userError e)
+    failures := failures + (← checkHeader s!"block {height}" raw expected)
+    let some (h, _) := Codec.decode (α := PureBlockHeader) raw
+      | throw (IO.userError "pure header decode failed")
+    failures := failures + (← require s!"block {height}: transaction IDs" (txs.map (·.txid) == ids))
+    failures := failures + (← require s!"block {height}: Merkle root"
+      (blockMerkleRoot txs == (⟨h.hashMerkleRoot, false⟩ : MerkleResult)))
+  return failures
+
+/-- Check independently computed roots and mutation flags for deterministic Core transaction lists. -/
+def checkMerkleVectors : IO Nat := do
+  let rows ← match (← jsonFile "tests/block/merkle.json").getArr? with
+    | .ok rows => pure rows
+    | .error e => throw (IO.userError e)
+  let mut failures ← require "34 deterministic Merkle vectors" (rows.size == 34)
+  for row in rows do
+    let parsed : Except String (Nat × Nat × List Hash256 × MerkleResult) := do
+      let count ← (← row.getObjVal? "count").getNat?
+      let mutation ← (← row.getObjVal? "mutation").getNat?
+      let leaves ← (← (← row.getObjVal? "leaves").getArr?).toList.mapM fun j => do
+        parseHash (← j.getStr?)
+      let root ← parseHash (← row.getObjValAs? String "root")
+      let mutated ← row.getObjValAs? Bool "mutated"
+      return (count, mutation, leaves, ⟨root, mutated⟩)
+    let (count, mutation, leaves, expected) ← match parsed with
+      | .ok p => pure p
+      | .error e => throw (IO.userError e)
+    failures := failures + (← require s!"Merkle size {count}, mutation {mutation}"
+      (computeMerkleRoot leaves == expected))
+    let base : List Transaction.Transaction := (List.range count).map fun j =>
+      ⟨1, ⟨[], by decide⟩, ⟨[], by decide⟩, j.toUInt32⟩
+    let baseHashes := base.map (·.txid)
+    let baseRoot := (computeMerkleRoot baseHashes).root
+    failures := failures + (← require s!"Merkle size {count}: root unchanged"
+      (expected.root == baseRoot))
+    failures := failures + (← require s!"Merkle size {count}: mutation flag"
+      (expected.mutated == (mutation != 0)))
+    let mut rebuilt := baseHashes
+    for _ in [:mutation] do
+      let mut n := rebuilt.length
+      let mut duplicate := 1
+      while n > 0 && n % 2 == 0 do
+        duplicate := duplicate * 2
+        n := n / 2
+      if duplicate >= rebuilt.length then
+        throw (IO.userError s!"Merkle size {count}: duplication would add a whole tree level")
+      rebuilt := rebuilt ++ rebuilt.drop (rebuilt.length - duplicate)
+    failures := failures + (← require s!"Merkle size {count}, mutation {mutation}: reconstructed leaves"
+      (rebuilt == leaves))
+  return failures
+
+/-- Check genesis commitments, the AuxPoW bit predicate, and all block fixtures. -/
+def check : IO Nat := do
+  let mut failures ← checkHeaders
+  failures := failures + (← checkMainnet)
+  failures := failures + (← checkMerkleVectors)
+  let parsed : Except String (PureBlockHeader × Transaction.Transaction × Hash256) := do
+    let raw := (← parseHex KnownAnswers.Codec.headerHex).toList
+    let some (h, []) := Codec.decode (α := PureBlockHeader) raw | throw "genesis header"
+    let tx ← match Transaction.Transaction.decodeBaseComplete (← KnownAnswers.Genesis.coinbase).toList with
+      | .ok tx => pure tx
+      | .error _ => throw "genesis transaction"
+    return (h, tx, ← parseHash "1a91e3dace36e2be3bf030a65679fe821aa1d6ef92e7c9902eb318182c355691")
+  let (h, tx, expected) ← match parsed with
+    | .ok p => pure p
+    | .error e => throw (IO.userError e)
+  failures := failures + (← require "genesis header hash" (h.getHash == expected))
+  failures := failures + (← require "genesis block Merkle root"
+    (blockMerkleRoot [tx] == (⟨h.hashMerkleRoot, false⟩ : MerkleResult)))
+  for version in ([0, 1, 255, 256, 257, 511, 512, 0x80000100, 0xffffffff] : List UInt32) do
+    failures := failures + (← require s!"AuxPoW flag {version}"
+      (({h with nVersion := version}).isAuxpow == (version.toNat / 256 % 2 == 1)))
+  failures := failures + (← require "signed version high bit"
+    (({h with nVersion := 0x80000100}).signedVersion.toInt == -2147483392))
+  failures := failures + (← require "signed version minus one"
+    (({h with nVersion := 0xffffffff}).signedVersion.toInt == -1))
+  IO.println s!"block known answers: {failures} failures"
+  return failures
+end KnownAnswers.Block
+
 /-- Entry point of `lake test`. -/
 def main : IO UInt32 := do
   let dir : System.FilePath := "tests/cryptography/sha256/cavp"
@@ -2075,9 +2245,10 @@ def main : IO UInt32 := do
   let sighash ← KnownAnswers.LegacySighash.check
   let compact ← KnownAnswers.Work.checkCompact
   let retarget ← KnownAnswers.Work.checkRetarget
+  let blocks ← KnownAnswers.Block.check
   let mainnetHeaders ← KnownAnswers.Work.MainnetHeaders.check
   let proofOfWork ← KnownAnswers.Work.checkProofOfWorkCases
   let nextWork ← KnownAnswers.Work.checkNextWork
   let operators ← KnownAnswers.Work.checkOperators
   let shifts ← KnownAnswers.Work.checkShifts
-  return if short + long + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts + proofOfWork == 0 then 0 else 1
+  return if blocks + short + long + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts + proofOfWork == 0 then 0 else 1

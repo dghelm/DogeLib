@@ -35,6 +35,10 @@ Regtest DigiShield has multiplier one and cannot wrap.
 The isolated retarget can wrap with the legacy regtest record, which the normally selected caller never uses at a retarget.
 Scrypt, AuxPoW and full header validity are not specified.
 
+The `Block` layer specifies pure 80-byte headers, their double SHA-256 hashes and transaction Merkle roots with complete-subtree mutation detection.
+Its codec and structural properties are separate from scrypt, AuxPoW and block validity.
+[Block fixture provenance](tests/block/README.md) records the finite known answers.
+
 The word-arithmetic proofs cover division and its dependencies (#47), as well as multiplication, shifts, bit length and low-64-bit extraction (#42).
 The compact, constructor and byte-conversion paths and the composed word retarget also have arithmetic equivalence proofs (#50).
 [COVERAGE.md](COVERAGE.md#operations) records the operation-level evidence.
@@ -116,3 +120,6 @@ None. A maintainer decision that blocks a lane becomes an issue with the `needs-
 
 Deferred work is tracked as GitHub issues with the `deferred` label.
 Decisions that only a maintainer can make carry the `needs-maintainer` label.
+
+[Issue #61](https://github.com/dghelm/DogeLib/issues/61) tracks pure-header and Merkle oracle operations and their Core comparison.
+The oracle contract requires a maintainer decision.

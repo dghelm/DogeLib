@@ -1,6 +1,7 @@
 module
 
 public import DogeLib.Base.Proofs
+public import DogeLib.Block.Proofs
 public import DogeLib.Cryptography.Proofs
 public import DogeLib.Serialization.Proofs
 public import DogeLib.Transaction.Proofs

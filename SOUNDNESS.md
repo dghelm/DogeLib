@@ -83,6 +83,34 @@ The bytes to hash are derived by hand from `src/chainparams.cpp`, and the deriva
 Neither theorem says how Dogecoin orders the bytes of a hash for display, or which bytes it hashes.
 Those belong to the definitions of the objects that are hashed.
 
+### Pure headers and transaction Merkle roots
+
+`PureBlockHeader.decode_encode` preserves every raw field and arbitrary trailing bytes.
+`decode_sound` identifies the consumed prefix as the returned header's encoding.
+`encode_length` establishes exactly 80 bytes, and `getHash_val` identifies their double SHA-256 digest.
+These claims cover the pure header even when its version sets the AuxPoW bit.
+Core's full `CBlockHeader` then carries additional data, which this codec does not parse (D41).
+No theorem establishes scrypt proof of work, AuxPoW validity or contextual header validity.
+
+`computeMerkleRoot_nil` and `computeMerkleRoot_singleton` cover empty and one-leaf lists.
+`merkleLevel_duplicate_last` equates the next levels before and after explicit duplication of an odd level's final leaf.
+Its prefix-length hypothesis establishes that the final leaf is unpaired.
+`merkleMutated_of_equal` detects any equal aligned leaf pair after an even-length prefix.
+
+`merkleMutated_iff` characterizes the recursive flag through equal pairs here or among complete parent subtrees.
+The complete-level operation discards an unpaired final subtree.
+Thus synthetic nodes from padding never enter mutation detection.
+Core's leaf pass checks complete subtree pairs, and its final sweep never updates `mutated` (D42).
+This source review does not prove an all-input equivalence to Core's C++.
+The compatibility domain excludes lists of 2^32 leaves or more, where Core's count and shifts exceed their intended range.
+
+`tests/block/README.md` records the independent fixtures and the limits of their provenance (A1, B1, D3).
+The later header expectations rely on successor commitments or an independent hashlib computation, not Core output.
+The isolated fetched blocks have no authenticated chain connection.
+Finite comparisons and structural theorems do not establish collision resistance or transaction validity.
+The checked header codec, length, digest and Merkle structural proofs depend on `propext` and `Quot.sound`, by `#print axioms`.
+The declaration check inspects all declarations under the unchanged standard-axiom policy (C1, C2).
+
 ### Codecs
 
 A codec has an encoder `encode : α → List UInt8` and a prefix decoder `decode : List UInt8 → Option (α × List UInt8)`.

@@ -268,3 +268,27 @@
 {"id": "v4-header-zero-encode", "op": "header.encode", "header": {"version": 0, "prev_block_hex": "0000000000000000000000000000000000000000000000000000000000000000", "merkle_root_hex": "0000000000000000000000000000000000000000000000000000000000000000", "time": 0, "bits": 0, "nonce": 0}}
 {"id": "v4-header-numeric-notation", "op": "header.encode", "header": {"version": 1.0, "prev_block_hex": "0000000000000000000000000000000000000000000000000000000000000000", "merkle_root_hex": "0000000000000000000000000000000000000000000000000000000000000000", "time": 0, "bits": 0, "nonce": 0}}
 {"id": "v4-header-nested-op", "op": "header.encode", "header": {"version": 0, "prev_block_hex": "0000000000000000000000000000000000000000000000000000000000000000", "merkle_root_hex": "0000000000000000000000000000000000000000000000000000000000000000", "time": 0, "bits": 0, "nonce": 0, "op": "oracle.version"}}
+{"id":"script-read-direct","op":"script.read_op","bytes_hex":"02018061","cursor":0}
+{"id":"script-read-nonminimal","op":"script.read_op","bytes_hex":"4c0107","cursor":0}
+{"id":"script-read-end","op":"script.read_op","bytes_hex":"51","cursor":1}
+{"id":"script-read-length","op":"script.read_op","bytes_hex":"4d01","cursor":0}
+{"id":"script-read-payload","op":"script.read_op","bytes_hex":"4e0200000001","cursor":0}
+{"id":"script-read-offset","op":"script.read_op","bytes_hex":"510201","cursor":1}
+{"id":"script-eval-stack","op":"script.eval","bytes_hex":"7c76","flags":0,"stack_hex":["aA","bB"]}
+{"id":"script-eval-false","op":"script.eval","bytes_hex":"00","flags":0,"stack_hex":[]}
+{"id":"script-eval-return","op":"script.eval","bytes_hex":"6a","flags":0,"stack_hex":[]}
+{"id":"script-eval-skipped","op":"script.eval","bytes_hex":"0063ac68","flags":0,"stack_hex":[]}
+{"id":"script-eval-signature","op":"script.eval","bytes_hex":"ac","flags":0,"stack_hex":[]}
+{"id":"script-eval-flags","op":"script.eval","bytes_hex":"6a","flags":64,"stack_hex":[]}
+{"id":"script-eval-cltv","op":"script.eval","bytes_hex":"51b1","flags":512,"stack_hex":[]}
+{"id":"script-eval-csv","op":"script.eval","bytes_hex":"51b2","flags":1024,"stack_hex":[]}
+{"id":"script-read-cursor-past","op":"script.read_op","bytes_hex":"","cursor":1}
+{"id":"script-read-cursor-negative","op":"script.read_op","bytes_hex":"","cursor":-1}
+{"id":"script-read-cursor-fraction","op":"script.read_op","bytes_hex":"","cursor":0.5}
+{"id":"script-read-cursor-missing","op":"script.read_op","bytes_hex":""}
+{"id":"script-eval-flags-missing","op":"script.eval","bytes_hex":"","stack_hex":[]}
+{"id":"script-eval-stack-type","op":"script.eval","bytes_hex":"","flags":0,"stack_hex":""}
+{"id":"script-eval-item-type","op":"script.eval","bytes_hex":"","flags":0,"stack_hex":[1]}
+{"id":"script-eval-item-hex","op":"script.eval","bytes_hex":"","flags":0,"stack_hex":["z0"]}
+{"id":"script-eval-item-odd","op":"script.eval","bytes_hex":"","flags":0,"stack_hex":["0"]}
+{"id":"script-eval-unknown","op":"script.eval","bytes_hex":"","flags":0,"stack_hex":[],"flag":0}

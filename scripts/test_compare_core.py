@@ -27,6 +27,14 @@ COMPARE = ROOT / "scripts" / "compare_core.py"
 # in for the harness, "oracle" for dogelib-oracle.
 MUTATIONS = {
     **{name: ("core", "MISMATCH") for name in (
+        "script_cursor", "script_opcode", "script_bytes", "script_pushed", "script_part", "script_read_class",
+        "script_eval_class", "script_stack", "script_rejection")},
+    **{name: ("oracle", "SCRIPT_RESULT") for name in (
+        "script_unsupported_reason", "script_unsupported_bits", "script_unsupported_opcode", "script_unsupported_extra", "script_unsupported_absent")},
+    "script_core_unsupported": ("core", "SCRIPT_RESULT"),
+    "script_success_error": ("core", "SCRIPT_RESULT"),
+    "composition_stack": ("core", "MISMATCH"),
+    **{name: ("core", "MISMATCH") for name in (
         "hash_ripemd160", "hash_hash160", "hash_sha1", "header_version", "header_time", "header_bits",
         "header_nonce", "header_prev_block_hex", "header_prev_block_display", "header_merkle_root_hex",
         "header_merkle_root_display", "header_bytes", "header_hash_hex", "header_hash_display",
@@ -109,6 +117,9 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
             ok["format"] = projected_format
         if role == "core" and mode != "core_preimage":
             ok.pop("preimage_hex", None)
+        if role == "core" and ok.get("result") == "unsupported":
+            # An informational Core outcome can differ from an unsupported oracle.
+            resp["ok"] = {"result": "accepted", "script_error": "OK", "stack_hex": []}
 
     # Data mutations preserve the version handshake so they reach the comparison.
     if responses and all("format" in r.get("ok", {}) for r in responses):
@@ -118,7 +129,50 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
     def set_ok(field, value):
         return lambda r: r["ok"].__setitem__(field, value)
 
-    if mode.startswith(("hash_", "header_", "merkle_")):
+    if mode == "composition_stack":
+        requests = [json.loads(line) for line in data.splitlines()]
+        ids = {r["id"] for r in requests if str(r["id"]).startswith("composition-") and r.get("stack_hex")}
+        if any(r["id"] in ids and r.get("ok", {}).get("result") == "accepted" for r in responses):
+            mutate_first(responses, lambda r: r["id"] in ids and r.get("ok", {}).get("result") == "accepted",
+                         lambda r: r["ok"]["stack_hex"].append("ff"))
+    elif mode.startswith("script_"):
+        requests = [json.loads(line) for line in data.splitlines()]
+        by_id = {r["id"]: r for r in requests}
+        field = {"script_cursor": "cursor", "script_opcode": "opcode", "script_bytes": "bytes_hex",
+                 "script_pushed": "pushed_hex", "script_part": "part", "script_read_class": "result"}.get(mode)
+        def eligible(r):
+            value = r.get("ok", {})
+            if field:
+                return by_id[r["id"]]["op"] == "script.read_op" and field in value
+            if mode.startswith("script_unsupported"):
+                extra = "bits" if mode.endswith("bits") else "opcode" if mode.endswith(("opcode", "absent")) else "reason"
+                return value.get("result") == "unsupported" and extra in value
+            target = "rejected" if mode == "script_rejection" else "accepted"
+            return by_id[r["id"]]["op"] == "script.eval" and value.get("result") == target
+        def alter(r):
+            value = r["ok"]
+            if field:
+                old = value[field]
+                value[field] = old + 1 if type(old) is int else old + "00" if field.endswith("hex") else "changed"
+            elif mode == "script_eval_class":
+                r["ok"] = {"result": "rejected", "script_error": "OP_RETURN"}
+            elif mode == "script_stack":
+                value["stack_hex"].append("ff")
+            elif mode == "script_rejection":
+                value["script_error"] = "VERIFY" if value["script_error"] != "VERIFY" else "OP_RETURN"
+            elif mode == "script_success_error":
+                value["script_error"] = "OP_RETURN"
+            elif mode == "script_core_unsupported":
+                r["ok"] = {"result": "unsupported", "reason": "signature_opcode", "opcode": 172}
+            else:
+                if mode == "script_unsupported_absent":
+                    # An absent opcode cannot identify an executed capability.
+                    value["opcode"] = next(op for op in range(256) if f"{op:02x}" not in by_id[r["id"]]["bytes_hex"])
+                    return
+                key = mode.removeprefix("script_unsupported_")
+                value[key] = "changed" if key == "reason" else True if key == "opcode" else 0
+        mutate_first(responses, eligible, alter)
+    elif mode.startswith(("hash_", "header_", "merkle_")):
         requests = [json.loads(line) for line in data.splitlines()]
         if mode.startswith("hash_"):
             op, field = "hash." + mode[5:], "digest_hex"
@@ -273,7 +327,7 @@ def main() -> int:
             env["COMPARE_SELFTEST_PIDFILE"] = str(pidfile)
             w = wrapper(tmp, mode, role, oracle)
             oracle_side, harness_side = (w, wrapper(tmp, "none", "core", oracle)) if role == "oracle" else (oracle, w)
-            extra = ["--quick", "--timeout", "5" if mode == "hang" else "120"]
+            extra = ([] if mode == "composition_stack" else ["--quick"]) + ["--timeout", "5" if mode == "hang" else "120"]
             result = compare(oracle_side, harness_side, extra, env)
             codes = {line.split()[1] for line in result.stdout.splitlines() if line.startswith("FAIL ")}
             if result.returncode != 1 or code not in codes:

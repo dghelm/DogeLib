@@ -6,7 +6,7 @@ public import DogeLib.Base.Bytes
 /-!
 # `Exports.Json`
 
-The conversions between JSON values and the arguments and results of the oracle, `dogelib-oracle/4`.
+The conversions between JSON values and the arguments and results of the oracle, `dogelib-oracle/5`.
 
 `docs/oracle.md` defines the record format. This module implements its rules for arguments:
 
@@ -24,11 +24,11 @@ namespace DogeLib.Exports
 
 open Lean (Json JsonNumber)
 
-/-- Why a request has no result: the oracle cannot interpret the request, or the specification rejects its input. -/
+/-- A request error, a specification error or an adapter resource failure. -/
 inductive Failure where
   /-- The request is malformed: the message says how. -/
   | request (message : String)
-  /-- The specification rejects the input. The object describes the error. -/
+  /-- A structured error from the specification or an adapter resource limit. -/
   | spec (error : Json)
 
 /-- The arguments of a request: the fields of its JSON object. -/

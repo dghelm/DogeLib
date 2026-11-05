@@ -3186,6 +3186,12 @@ def checkCases : IO Nat := do
   unless script10000.length == 10000 do
     IO.eprintln s!"FAIL script eval: the 10,000-byte script has {script10000.length} bytes"
     failures := failures + 1
+  let table ← IO.FS.readFile "harness/core/script_error_names.inc"
+  let names := table.splitOn "\n" |>.filterMap fun line =>
+    if line.startsWith "SCRIPT_ERROR(" then (line.splitOn "\"")[1]? else none
+  unless names == "OK" :: ScriptError.all.map ScriptError.name do
+    IO.eprintln "FAIL Script error names: the Core table and Lean names differ"
+    failures := failures + 1
   IO.println s!"script eval: {cases.length} hand cases, {underflowOps.length} underflow cases, {failures} failures"
   return failures
 

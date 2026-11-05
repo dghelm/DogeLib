@@ -5,16 +5,17 @@ public import DogeLib.Transaction.Exports.Oracle
 public import DogeLib.Work.Exports.Oracle
 public import DogeLib.Block.Exports.Oracle
 public import DogeLib.Cryptography.Exports.Oracle
+public import DogeLib.Script.Exports.Oracle
 
 /-!
 # `Exports.Oracle`
 
-The oracle's response to one line of input, in the record format `dogelib-oracle/4` of `docs/oracle.md`.
+The oracle's response to one line of input, in the record format `dogelib-oracle/5` of `docs/oracle.md`.
 
 A line is one JSON object, the request: `{"id": ..., "op": "...", ...arguments}`.
 The response is `{"id": ..., "ok": {...}}` or `{"id": ..., "error": {...}}`.
 `id` is the request's `id`, or `null` when the line has none or is not a JSON object.
-An error of kind `request` means the oracle could not interpret the request. Any other kind is an error of the specification.
+An error of kind `request` means the oracle could not interpret the request. Other kinds report specification errors or adapter resource limits.
 A blank line has no response.
 -/
 
@@ -25,7 +26,7 @@ namespace DogeLib.Exports
 open Lean (Json)
 
 /-- The name of the record format. -/
-def formatName : String := "dogelib-oracle/4"
+def formatName : String := "dogelib-oracle/5"
 
 /-- The `ok` object of `oracle.version`. -/
 def versionJson : Json := Json.mkObj [("format", .str formatName)]
@@ -39,7 +40,7 @@ def oracleVersion : Operation where
 /-- Every operation of the oracle. -/
 def operations : List Operation :=
   oracleVersion :: Serialization.Exports.operations ++ Transaction.Exports.operations ++ Work.Exports.operations ++
-    Block.Exports.operations ++ Cryptography.Exports.operations
+    Block.Exports.operations ++ Cryptography.Exports.operations ++ Script.Exports.operations
 
 /-- The `error` object of a failure. -/
 def failureJson : Failure → Json

@@ -102,7 +102,13 @@ The complete-level operation discards an unpaired final subtree.
 Thus synthetic nodes from padding never enter mutation detection.
 Core's leaf pass checks complete subtree pairs, and its final sweep never updates `mutated` (D42).
 This source review does not prove an all-input equivalence to Core's C++.
-The compatibility domain excludes lists of 2^32 leaves or more, where Core's count and shifts exceed their intended range.
+
+The Core compatibility domain has at most 2^31 leaves.
+At exactly 2^31 leaves, the final sweep stops at `count == 1 << 31` (D42, lines 94-102).
+With 2^31 + 1 leaves, the sweep pads the unsigned 32-bit `count` to 2^32, which wraps to zero at line 112.
+The propagation loop increments `level` to 32 at line 125, then evaluates `(uint32_t)1 << 32` at line 115.
+C++ leaves that shift undefined.
+The Lean definitions remain total on every finite list and add no rejection rule.
 
 `tests/block/README.md` records the independent fixtures and the limits of their provenance (A1, B1, D3).
 The later header expectations rely on successor commitments or an independent hashlib computation, not Core output.

@@ -73,6 +73,10 @@ Its roots and mutation flags agreed with every recorded expectation.
 The build used unmodified `merkle.cpp`, `sha256.cpp`, `uint256.cpp` and `utilstrencodings.cpp` from the pin, with unused sections discarded.
 These finite cases do not prove equivalence to Core for every input.
 
+The Core compatibility domain has at most 2^31 leaves because larger lists can wrap its final sweep counter.
+[SOUNDNESS.md](../../SOUNDNESS.md#pure-headers-and-transaction-merkle-roots) explains the wrap and undefined shift at the pinned revision.
+The Lean definitions remain total on all finite lists without a rejection rule.
+
 ## Licence
 
 The mainnet headers and transactions are public chain data, not server software or explorer text.

@@ -11,7 +11,7 @@ Core checks equal complete subtrees during its leaf pass, but never checks its f
 `merkleMutated` therefore recurses over complete pairs only, without synthetic padding.
 Source review connects these definitions to Core, without an all-input equivalence theorem to C++.
 
-The compatibility domain has fewer than 2^32 leaves, before Core's count and shift limits.
+The Core compatibility domain has at most 2^31 leaves, before its final sweep can wrap the count.
 The Lean definitions are total on all finite lists, without a resource bound.
 No collision resistance or transaction validity assumption enters these computations.
 

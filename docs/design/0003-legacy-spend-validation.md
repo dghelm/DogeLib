@@ -1,19 +1,19 @@
 # Legacy spend validation
 
-**Status:** Proposed. The maintainer must approve the scope before implementation starts.
-Proposed records remain open for review as an exception to the frozen-record convention.
-After adoption, this record freezes and implementation status belongs in ROADMAP.md and COVERAGE.md.
+**Status:** Adopted by the maintainer on 2026-11-04.
+This record is frozen.
+Implementation status belongs in ROADMAP.md and COVERAGE.md.
 
 **Date:** 2026-11-04
 **Companions:** [Coverage](../../COVERAGE.md), [soundness](../../SOUNDNESS.md), [architecture](../../ARCHITECTURE.md) and [oracle contract](../oracle.md).
 
 ## 1. Purpose and boundary
 
-This record proposes an executable specification of legacy Script spends, with properties conditional on an explicit signature verifier.
+This record sets the scope for an executable specification of legacy Script spends, with properties conditional on an explicit signature verifier.
 It connects transaction fields and legacy signature hashing to the Script rules that consume them.
 The first milestone covers `VerifyScript(scriptSig, scriptPubKey, emptyWitness, flags, checker)` in `SIGVERSION_BASE` for the selected flags below.
 It does not establish transaction, UTXO, block or chain validity.
-Implementation refinement and Rust extraction are outside the proposed scope.
+Implementation refinement and Rust extraction are outside this milestone.
 
 DogeLib already specifies raw transactions and the legacy signature hash.
 Its transformation-reference theorem requires fully parsed script code and fewer than 2^32 inputs and outputs.
@@ -57,7 +57,7 @@ The line ranges identify the inspected source for each contract:
 The cited findings come from source inspection, without a Core comparison run.
 Implementation lanes must add operation mappings and fixture provenance to the existing registries without changing the pin.
 
-## 3. Proposed contract
+## 3. Contract for implementation
 
 ### Inputs and results
 
@@ -134,9 +134,9 @@ In particular, it must not enable minimal pushes, clean stacks or null-failure r
 ## 4. Implementation stages and exit conditions
 
 The stages follow the library's separation of specification, properties and adapters.
-A Script execution layer may depend on Transaction for legacy hashing.
+The Script execution layer sits above Transaction and depends on it for legacy hashing.
 Transaction must not import that layer and create an import cycle.
-The maintainer must approve module placement and the corresponding ARCHITECTURE.md update before that layer lands.
+The implementation adds separate proof and export modules and updates ARCHITECTURE.md with that placement.
 An implementation lane must review any relocation of the existing instruction reader separately and preserve its public contract.
 
 ### Stage 1: instruction decoding and execution state
@@ -176,7 +176,8 @@ Numeric decode exceptions map to `SCRIPT_ERR_UNKNOWN_ERROR`, as Core's catch cla
 
 The hash opcodes are part of execution, not signature-verifier behavior [C3, lines 847–867].
 DogeLib has SHA-256 and double SHA-256, but lacks SHA-1, RIPEMD-160 and HASH160 definitions.
-The proposal adds pure SHA-1 and RIPEMD-160 primitives, then composes HASH160 as RIPEMD-160 of SHA-256.
+Separate prerequisite lanes add pure SHA-1 and RIPEMD-160 primitives, each with independent vectors, review and precise functional-proof claims.
+HASH160 then composes RIPEMD-160 with SHA-256.
 `OP_HASH256` uses the existing double SHA-256 definition.
 
 Until these prerequisites land, affected opcodes report `unsupported(hashPrimitive)`.
@@ -209,7 +210,9 @@ The specification checks encoding rules before signature verification, in Core's
 Script-code deletion precedes those encoding checks [C3, lines 895–898].
 
 An empty signature passes the encoding filter but fails `CheckSig` [C2, C4].
-For a nonempty signature, `CheckSig` removes the final hash-type byte and zero-extends that byte to the existing `UInt32` hash-type input.
+`CheckSig` first constructs `CPubKey` and rejects an invalid key, before the empty-signature check or any digest computation [C4, lines 1253–1266].
+Only after the key check does it copy the signature, reject an empty signature and remove the final hash-type byte [C4, lines 1260–1264].
+It zero-extends that byte to the existing `UInt32` hash-type input.
 It hashes through the existing production `legacySignatureHash` and passes the remaining signature bytes, public-key bytes and digest to the verifier.
 An unavailable verifier reports unsupported, never ordinary signature failure.
 
@@ -272,9 +275,12 @@ Diagnostic signature requests can expose effective script bytes, hash types and 
 The harness must compare Core and Lean under identical scripts, transaction context, flags and verifier behavior.
 No comparison may replace excluded flags with a convenient subset.
 
-These operations require a later oracle format revision, with its number and schemas subject to maintainer approval.
-The proposal does not reserve a number or alter `dogelib-oracle/2`.
+These operations require a later oracle format revision.
+The implementer proposes concrete schemas and the format increment in the relevant PR, under this scope.
+The format change still requires maintainer merge authorization.
+This record does not reserve a number or alter the currently supported oracle format.
 The [oracle documentation](../oracle.md) remains the authority for the implemented format.
+
 The stage exits with fixture checks, comparator self-tests and reproducible differential runs that record both revisions, selected cases and random seeds.
 Any mismatch becomes a minimized regression case before an agreement claim.
 
@@ -367,10 +373,26 @@ The target does not infer byte equality from digest equality.
 The theorem target is an equivalence, including its converse.
 If `scriptSig` evaluation fails, the spend rejects.
 Otherwise, let its resulting stack be `S ++ [redeem]`, with the top item on the right.
-Acceptance holds exactly when one of these cases applies and the script evaluations respect their resource limits and reached encoding checks:
+Acceptance holds exactly when one of these cases applies under the concrete resource bounds and reached encoding predicates below:
 
 - Ordinary branch: `S` has suffix `[dummy, sig1, sig2, selector]`, `CastToBool(selector)` is true, and ordered multisig matching succeeds.
 - Recovery branch: `S` has suffix `[sigR, selector]`, `CastToBool(selector)` is false, the CLTV conditions hold, and CHECKSIG succeeds against `R`.
+
+The resource hypotheses must state these bounds explicitly:
+
+- Each script has at most 10,000 bytes, and the redeem script has at most 520 bytes.
+- Every parsed push has at most 520 payload bytes, including pushes in skipped branches.
+- Each decoded instruction prefix leaves at most 1,000 items across the main stack and altstack.
+- Each call counts at most 201 operations, including skipped opcodes above `OP_16` and the active multisig key count.
+- The fixed ordinary branch uses three keys and two signatures. The general target requires `1 <= k <= n <= 20`.
+- Transaction input and output counts are below 2^32, and the input index selects an input.
+
+The encoding predicates concern only the signature/key pairs that Core reaches, in Core's matching order [C2, C3].
+Nonempty reached signatures require DER when DERSIG, LOW_S or STRICTENC applies.
+LOW_S additionally requires the exact `CheckLowS` predicate, including its overflow behavior.
+STRICTENC additionally requires defined hash types and the permitted public-key shapes.
+NULLDUMMY requires an empty consumed dummy.
+The formal statement must enumerate these predicates and bounds, never replace them with a bare hypothesis that execution succeeds.
 
 Both cases allow an arbitrary stack prefix and nonminimal push encodings.
 Without `NULLDUMMY`, the dummy can contain any bytes that satisfy the element limit.
@@ -396,7 +418,7 @@ A claim that recovery cannot enter a chain before a height or time also needs tr
 The execution target permits every one-byte hash type that the selected flags admit.
 That includes NONE, SINGLE, SINGLE's fixed `one` digest, and ANYONECANPAY combinations.
 These modes do not guarantee the transaction commitments that a custody argument might require.
-The maintainer must decide whether a separate authorization property restricts hash types, for example to ALL without ANYONECANPAY.
+A later bridge property may restrict hash types to `SIGHASH_ALL` without `ANYONECANPAY`.
 Such a restriction belongs to that property's hypotheses, not an invented rule in CHECKSIG or CHECKMULTISIG.
 
 The proof needs generic results for branch selection, stack composition, Script numbers, CLTV, CHECKSIG and ordered multisig matching.
@@ -404,23 +426,28 @@ It also needs exact script construction, P2SH composition and signature-hash pre
 Any use of the transformation-reference equality must discharge its parsed-script and transaction-count hypotheses for the actual effective script code.
 No target assumes unforgeability merely to explain stack execution.
 
-## 8. Risks and decisions for the maintainer
+## 8. Decisions
 
-The maintainer must settle these scope and contract proposals before implementation begins:
+**Date:** 2026-11-04. **Decision maker:** Maintainer.
+The maintainer adopted this scope:
 
-- Approve the seven-flag scope, explicit flag context and separate unsupported result.
-- Approve the stages, including SHA-1 and RIPEMD-160 prerequisites and their proof scope.
-- Decide whether CSV stays in milestone 1 despite the unverified mainnet activation state.
-- Approve the Script layer's module placement, dependency direction and ARCHITECTURE.md update.
-- Approve the raw-byte verifier interface and the later trusted backend for comparison runs.
-- Decide whether exact Core error categories belong to the public contract as proposed.
-- Approve the worked script family and any production bridge instance as separate artifacts.
-- Decide the hash-type scope of any custody property, including NONE, SINGLE's `one` digest and ANYONECANPAY.
-- Confirm that implementation refinement and Rust extraction remain outside this milestone.
-- Decide the oracle format number and operation schemas in the later adapter change.
+| Topic | Decision |
+| --- | --- |
+| Flag scope | All seven flags, including CHECKSEQUENCEVERIFY, supplied explicitly by the caller. |
+| CSV activation | CSV semantics are in scope. No historical mainnet activation claim without the separate chain evidence in section 3. |
+| Errors | Preserve Core's exact `ScriptError` categories and their order at the pin. Keep unsupported capabilities distinct. |
+| Module placement | Script sits above Transaction, with separate proof and export modules. Preserve the dependency direction without an import cycle. |
+| Signature verifier | Use a raw-byte verifier parameter and a trusted backend for comparison. Name the agreement assumption explicitly. |
+| Hash primitives | SHA-1 and RIPEMD-160 each need a separate prerequisite lane, independent review, independent vectors and precise functional-proof claims. |
+| Hash types | The generic interpreter supports every one-byte hash type that the selected flags admit. A later bridge property may require `SIGHASH_ALL` without `ANYONECANPAY`. |
+| Worked property | Use the generic multisig and recovery template. A production bridge script is a separate application of these semantics. |
+| Rust work | Implementation refinement and Rust extraction remain outside this milestone. |
+| Oracle details | The implementer proposes concrete schemas and the format increment in the relevant PR, under this scope. The format change still requires maintainer merge authorization. |
+
+## 9. Remaining risks and boundaries
 
 The main compatibility risks are error order, skipped-branch rules, lax signature parsing and script-code mutation.
 P2SH policy must not replace consensus flag selection, and a CSV checker must not stand in for chain-relative sequence locks.
 Complete standard-policy coverage and witness execution need separate scope decisions.
 There is no pin change, trust-policy exception, public API implementation or fixture-format change in this record.
-A maintainer's approval of this design does not authorize a merge or establish any proposed theorem.
+Scope adoption does not establish any target theorem or authorize a later implementation merge.

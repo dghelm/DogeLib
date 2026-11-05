@@ -6,6 +6,7 @@ public import DogeLib.Transaction.Exports
 public import DogeLib.Work.Exports
 public import DogeLib.Block.Exports
 public import DogeLib.Cryptography.Exports
+public import DogeLib.Script.Exports
 
 /-!
 # `DogeLib.Exports`

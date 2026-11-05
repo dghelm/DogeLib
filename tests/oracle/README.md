@@ -66,3 +66,11 @@ For all 100 NIST Monte Carlo checkpoints, hashlib derives the final 60-byte inpu
 The oracle must return NIST's expected checkpoint digest for that input.
 This fixture comparison does not chain the oracle's intermediate digests.
 `lake test` checks the full chain separately.
+
+## Script operations
+
+The `script-read-*` fixtures follow `GetOp2` (SOURCES.md D24), with exact push bytes and failure cursors read from its branches.
+The `script-eval-*` fixtures follow `EvalScript` (D3): stack effects, false-top acceptance, `OP_RETURN`, skipped signature opcodes and unsupported capabilities.
+Request errors follow the argument rules in [the oracle format](../../docs/oracle.md#script-arguments-and-results).
+`scripts/test_oracle.py` also checks ten generated adapter resource boundaries, with expectations from the documented limits.
+These fixtures do not treat Core's spending corpus expectations as individual `EvalScript` results.

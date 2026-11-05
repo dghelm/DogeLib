@@ -3,12 +3,13 @@
 Usage: python3 -I scripts/compare_core.py [--timeout SECONDS] [--quick] <dogelib-oracle> <core-oracle>
 
 The harness, harness/core/core_oracle.cpp, runs Dogecoin Core's own code and
-answers a projection of dogelib-oracle/4 (docs/oracle.md, "The Core harness").
+answers a projection of dogelib-oracle/5 (docs/oracle.md, "The Core harness").
 This script builds a deterministic stream of well-formed requests, runs each
 program once on the whole stream, and requires the two responses to every
-request to be equal as JSON values, with one exception: Core does not expose
+supported request to be equal as JSON values, except for the preimage projection: Core does not expose
 the preimage of `sighash.legacy`, so the oracle's `preimage_hex` must hash to
 Core's digest instead.
+Script unsupported results have no compared verdict and are counted separately.
 
 Each failure line starts with `FAIL <CODE>`; scripts/test_compare_core.py
 relies on the codes. The exit status is 0 only when every response agrees.
@@ -37,7 +38,9 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 from oracle_hash_block import header_fields, header_records, header_fixtures, merkle_fixtures, hash_fixtures, sha1_fixtures
 
-ORACLE_FORMAT = "dogelib-oracle/4"
+from oracle_script import script_sets, corpus_records, evaluation, validate_eval, adapter_limit_cases
+
+ORACLE_FORMAT = "dogelib-oracle/5"
 MAX_SIZE = 0x02000000
 SEED = 20261104
 MAX_REPORTS = 10
@@ -609,7 +612,7 @@ def set_hash_boundaries(algorithm: str) -> list[dict]:
 
 QUICK_SETS = ("fixtures", "compactsize", "sighash endpoints", "witness flags and stacks",
               "work compact boundaries", "regtest legacy wrap case", "work missing skip traversal", "header field boundaries", "Merkle generated",
-              "RIPEMD-160 padding boundaries", "Hash160 padding boundaries", "SHA-1 padding boundaries")
+              "RIPEMD-160 padding boundaries", "Hash160 padding boundaries", "SHA-1 padding boundaries", "Script reader truncations", "Script resource boundaries")
 
 
 def request_sets() -> tuple[list[tuple[str, list[dict]]], list[str]]:
@@ -664,6 +667,7 @@ def request_sets() -> tuple[list[tuple[str, list[dict]]], list[str]]:
         ("SHA-1 fixtures", [r for r, _ in sha1_fixtures()]),
         ("SHA-1 padding boundaries", set_hash_boundaries("sha1")),
     ])
+    sets.extend(script_sets())
     return sets, excluded
 
 
@@ -707,6 +711,8 @@ def first_difference(a, b, path="") -> str:
 def outcome(resp: dict) -> str:
     """A short name for the kind of a response, for the report."""
     if "ok" in resp:
+        if "result" in resp["ok"]:
+            return ":".join(str(resp["ok"][k]) for k in ("result", "reason", "script_error") if k in resp["ok"])
         plan = resp["ok"].get("plan")
         return f"ok:{plan}" if plan else "ok"
     err = resp.get("error", {})
@@ -718,6 +724,13 @@ def compare(req: dict, ours: dict, core: dict, peer: str = "core") -> tuple[str,
     for side, resp in (("oracle", ours), (peer, core)):
         if resp.get("error", {}).get("kind") == "request":
             return "REQUEST_ERROR", f"{side} rejected the request: {resp['error'].get('message')}"
+    if req["op"] == "script.eval":
+        for response, allow in ((ours, True), (core, False)):
+            error = validate_eval(req, response, allow)
+            if error:
+                return "SCRIPT_RESULT", error
+        if ours["ok"]["result"] == "unsupported":
+            return None
     if req["op"] == "sighash.legacy" and "ok" in ours and "ok" in core:
         ok = dict(ours["ok"])
         if "preimage_hex" in core["ok"]:
@@ -751,6 +764,69 @@ def check_versions(oracle: str, harness: str, timeout: float, oracle_format: str
             failures.append(f"FAIL VERSION {program} --version printed {out!r}, expected format {expected}")
         if resp.get("ok") != {"format": expected}:
             failures.append(f"FAIL VERSION {program} oracle.version answered {json.dumps(resp)}")
+    return failures
+
+
+def compare_adapter_limits(oracle, harness, timeout):
+    """Check both adapters against the documented resource-limit expectations."""
+    cases = adapter_limit_cases()
+    requests = [{**request, "id": f"resource-{i}"} for i, (request, _) in enumerate(cases)]
+    try:
+        ours = run_stream(oracle, requests, timeout)
+        core = run_stream(harness, requests, timeout)
+    except RunError as error:
+        print(f"FAIL {error.code} Script adapter limits: {error}")
+        return [error.code]
+    failures = []
+    for request, (_, expected), a, b in zip(requests, cases, ours, core):
+        if not all(json_equal(response, {"id": request["id"], **expected}) for response in (a, b)):
+            print(f"FAIL MISMATCH Script adapter limits: {request['id']}")
+            failures.append("MISMATCH")
+    print(f"Script adapter limits: {len(cases)} requests, {len(failures)} disagreements")
+    return failures
+
+
+def compare_compositions(oracle, harness, timeout):
+    """Run two calls per corpus record, with each side's own successful stack."""
+    records = corpus_records()
+    first = [{**evaluation(bytes.fromhex(r["scriptSig_hex"]), r["effective_flags_mask"]),
+              "id": f"composition-{r['source_index']}"} for r in records]
+    try:
+        sides = []
+        for program in (oracle, harness):
+            initial = run_stream(program, first, timeout)
+            second = [{**evaluation(bytes.fromhex(r["scriptPubKey_hex"]), r["effective_flags_mask"], a["ok"]["stack_hex"]),
+                       "id": req["id"]}
+                      for r, req, a in zip(records, first, initial)
+                      if a.get("ok", {}).get("result") == "accepted"]
+            final = {r["id"]: r for r in run_stream(program, second, timeout)}
+            sides.append((initial, final))
+    except RunError as e:
+        print(f"FAIL {e.code} Script corpus composition: {e}")
+        return [e.code]
+    failures, outcomes, unsupported = [], {}, {}
+    for record, req, a, b in zip(records, first, sides[0][0], sides[1][0]):
+        failure = compare(req, a, b)
+        final_a = sides[0][1].get(req["id"], a)
+        final_b = sides[1][1].get(req["id"], b)
+        if failure is None:
+            # An unsupported first call stays a first-call result.
+            final_req = req if a.get("ok", {}).get("result") != "accepted" else {**req, "bytes_hex": record["scriptPubKey_hex"]}
+            failure = compare(final_req, final_a, final_b)
+        label = outcome(final_b)
+        outcomes[label] = outcomes.get(label, 0) + 1
+        if final_a.get("ok", {}).get("result") == "unsupported":
+            label = final_a["ok"].get("reason", "malformed") + " -> Core " + label
+            unsupported[label] = unsupported.get(label, 0) + 1
+        if failure:
+            failures.append(failure[0])
+            if len(failures) <= MAX_REPORTS:
+                print(f"FAIL {failure[0]} Script corpus composition source_index={req['id']}: {failure[1]}")
+    skipped = sum(unsupported.values())
+    print(f"Script corpus composition: {len(records)} records, {len(records) - skipped} compared, {skipped} unsupported, {len(failures)} disagreements")
+    print("  Core's outcomes: " + ", ".join(f"{k} {v}" for k, v in sorted(outcomes.items())))
+    for label, count in sorted(unsupported.items()):
+        print(f"  unsupported {label}: {count}")
     return failures
 
 
@@ -820,9 +896,13 @@ def main() -> int:
 
     per_set = {name: [len(reqs), 0] for name, reqs in sets}
     outcomes = {name: {} for name, _ in sets}
+    unsupported = {name: {} for name, _ in sets}
     reported = 0
     for i, (req, name, a, b) in enumerate(zip(requests, owner, ours, core)):
         kind = outcome(b)
+        if req["op"] == "script.eval" and a.get("ok", {}).get("result") == "unsupported":
+            label = a["ok"].get("reason", "malformed") + " -> Core " + kind
+            unsupported[name][label] = unsupported[name].get(label, 0) + 1
         outcomes[name][kind] = outcomes[name].get(kind, 0) + 1
         result = compare(req, a, b)
         if result is None and rust is not None:
@@ -841,9 +921,15 @@ def main() -> int:
             if rust is not None:
                 print(f"  rust:    {json.dumps(rust[i])[:400]}")
     for name, (total, bad) in per_set.items():
-        print(f"{name}: {total} requests, {bad} disagreements")
+        skipped = sum(unsupported[name].values())
+        print(f"{name}: {total} requests, {total - skipped} compared, {skipped} unsupported, {bad} disagreements")
+        for label, count in sorted(unsupported[name].items()):
+            print(f"  unsupported {label}: {count}")
         print("  Core's outcomes: " + ", ".join(f"{k} {v}" for k, v in sorted(outcomes[name].items())))
-    print(f"total: {len(requests)} requests, {len(failures)} failures")
+    if not args.quick and not args.rust_compactsize:
+        failures.extend(compare_adapter_limits(args.oracle, args.harness, args.timeout))
+        failures.extend(compare_compositions(args.oracle, args.harness, args.timeout))
+    print(f"total: {len(requests)} stream requests, {len(failures)} failures")
     return 1 if failures else 0
 
 

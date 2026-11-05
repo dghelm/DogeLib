@@ -1311,6 +1311,25 @@ The Core harness calls the pinned hash classes, pure header methods and `Compute
 Finite fixture and boundary comparisons cover the recorded inputs only.
 They establish no all-input Core equivalence, cryptographic security, AuxPoW validity, scrypt result or full block validity.
 
+The Script adapters call `readInstruction` and `evalScript` directly.
+They encode Script errors with the names in the [shared table](harness/core/script_error_names.inc).
+No theorem covers their JSON conversions.
+Adapter limits allow scripts above 10,000 bytes and caller stacks above 1,000 items, so those specification boundaries remain observable.
+The adapter bounds scripts and individual items to 1 MiB, stacks to 4,096 items, and total caller item bytes to 4 MiB.
+These bounds imply fewer than 2^31 items and at most `UINT_MAX` bytes per item, the documented Core-correspondence domains.
+
+JSON parsing and line allocation occur before these execution limits.
+The limits do not bound transport memory or the Lean runtime's allocations.
+
+The Core harness calls `GetOp` and `EvalScript` in `SIGVERSION_BASE` with `BaseSignatureChecker`.
+That checker fails every signature, locktime and sequence check.
+Unsupported Lean calls have no compared verdict.
+The comparator reports their reasons and Core outcomes separately, and compares supported calls regardless of the opcode support set.
+
+Two-call corpus compositions pass only the successful main stack between calls.
+They ignore each record's witness and do not run `VerifyScript`, evaluate P2SH or reproduce a transaction signature checker.
+Finite comparisons establish neither complete-spend validity nor equivalence to Core on all inputs.
+
 A wrong conversion could make the oracle and Core disagree, or agree, for a reason outside the specification.
 
 The Core harness, `harness/core/core_oracle.cpp`, is the other side of the comparison ([docs/oracle.md](docs/oracle.md#the-core-harness)).
@@ -1324,7 +1343,7 @@ A user of the comparison trusts these parts of it:
   Any other exception from Core stops the harness, so it cannot pass as a result.
 - The `plan` label of `sighash.legacy`. The harness computes it from Core's conditions instead of observing it. It stops if the label is `fixed_digest` and Core's digest is not the value one.
 - The comparator, `scripts/compare_core.py`.
-  Its self-test, `scripts/test_compare_core.py`, requires two passing controls and 59 mutations that each fail with the code they target.
+  Its self-test, `scripts/test_compare_core.py`, requires two passing controls and 76 mutations that each fail with the code they target.
 - For `sighash.legacy`, the oracle's preimage is checked by hashing it, not byte by byte: Core does not expose its preimage.
 
 Both programs could be wrong in the same way on an input that the comparison does not send.

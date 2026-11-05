@@ -1,7 +1,7 @@
-// The Dogecoin Core harness: answers dogelib-oracle/4 requests by running
+// The Dogecoin Core harness: answers dogelib-oracle/5 requests by running
 // Dogecoin Core's own code, so that scripts/compare_core.py can check the
 // oracle against Core. docs/oracle.md, section "The Core harness", describes
-// its responses, a projection of dogelib-oracle/4.
+// its responses, a projection of dogelib-oracle/5.
 //
 // scripts/build_core_harness.sh builds it against Core's libraries at the
 // commit that SOURCES.md pins.
@@ -50,7 +50,7 @@ static_assert(std::numeric_limits<unsigned int>::max() == UINT32_MAX, "unsigned 
 
 namespace {
 
-const char* const FORMAT = "dogelib-oracle/4-core-projection";
+const char* const FORMAT = "dogelib-oracle/5-core-projection";
 
 // The stream version of Core's base mode: the reader allows no witness data.
 const int BASE_VERSION = PROTOCOL_VERSION | SERIALIZE_TRANSACTION_NO_WITNESS;
@@ -377,6 +377,46 @@ void checkWorkHistory(const std::vector<CBlockIndex>& chain, const CBlockHeader&
         throw RequestError{"missing retarget ancestor is outside the Core comparison domain"};
 }
 
+
+// Check every pinned enum position when Core headers compile this table.
+constexpr ScriptError SCRIPT_ERRORS[] = {
+#define SCRIPT_ERROR(value, name) value,
+#include "script_error_names.inc"
+#undef SCRIPT_ERROR
+};
+constexpr bool orderedErrors(size_t n) {
+    return n == 0 || (SCRIPT_ERRORS[n - 1] == n - 1 && orderedErrors(n - 1));
+}
+static_assert(sizeof(SCRIPT_ERRORS) / sizeof(*SCRIPT_ERRORS) == SCRIPT_ERR_ERROR_COUNT,
+              "script error table must cover every Core enum");
+static_assert(orderedErrors(SCRIPT_ERR_ERROR_COUNT), "script error table must retain enum order");
+
+const char* scriptErrorName(ScriptError error)
+{
+    switch (error) {
+#define SCRIPT_ERROR(value, name) case value: return name;
+#include "script_error_names.inc"
+#undef SCRIPT_ERROR
+    default: throw UnmappedCoreError{"unmapped ScriptError"};
+    }
+}
+
+void scriptResourceLimit()
+{
+    UniValue error(UniValue::VOBJ);
+    error.pushKV("kind", "adapter");
+    error.pushKV("reason", "resource_limit");
+    throw SpecError{error};
+}
+
+
+std::vector<unsigned char> scriptBytes(const UniValue& req, const std::string& key)
+{
+    const auto& value = arg(req, key);
+    if (value.isStr() && value.get_str().size() > 2097152) scriptResourceLimit();
+    return argHex(req, key);
+}
+
 UniValue run(const UniValue& req)
 {
     const UniValue& opv = arg(req, "op");
@@ -387,6 +427,64 @@ UniValue run(const UniValue& req)
     if (op == "oracle.version") {
         checkArgs(req, op, {});
         ok.pushKV("format", FORMAT);
+    } else if (op == "script.read_op") {
+        checkArgs(req, op, {"bytes_hex", "cursor"});
+        const auto bytes = scriptBytes(req, "bytes_hex");
+        if (bytes.size() > 1048576) scriptResourceLimit();
+        const auto start = argU32(req, "cursor");
+        if (start > bytes.size()) throw RequestError{"cursor exceeds script length"};
+        const CScript script(bytes.begin(), bytes.end());
+        auto pc = script.begin() + start;
+        opcodetype opcode;
+        std::vector<unsigned char> pushed;
+        const bool read = script.GetOp(pc, opcode, pushed);
+        const auto cursor = pc - script.begin();
+        ok.pushKV("cursor", static_cast<int64_t>(cursor));
+        if (read) {
+            ok.pushKV("result", "instruction");
+            ok.pushKV("opcode", static_cast<int>(opcode));
+            ok.pushKV("bytes_hex", hexOf(std::vector<unsigned char>(script.begin() + start, pc)));
+            ok.pushKV("pushed_hex", hexOf(pushed));
+        } else if (start == bytes.size()) {
+            ok.pushKV("result", "at_end");
+        } else {
+            const auto original = bytes[start];
+            const unsigned width = original == OP_PUSHDATA1 ? 1 : original == OP_PUSHDATA2 ? 2 : original == OP_PUSHDATA4 ? 4 : 0;
+            ok.pushKV("result", "truncated");
+            ok.pushKV("opcode", static_cast<int>(original));
+            ok.pushKV("part", width && cursor == start + 1 ? "length_field" : "payload");
+        }
+    } else if (op == "script.eval") {
+        checkArgs(req, op, {"bytes_hex", "flags", "stack_hex"});
+        const auto bytes = scriptBytes(req, "bytes_hex");
+        if (bytes.size() > 1048576) scriptResourceLimit();
+        const auto flags = argU32(req, "flags");
+        const auto& items = arg(req, "stack_hex");
+        if (!items.isArray()) throw RequestError{"stack_hex must be an array"};
+        if (items.size() > 4096) scriptResourceLimit();
+        std::vector<std::vector<unsigned char>> stack;
+        size_t total = 0;
+        for (size_t i = 0; i < items.size(); ++i) {
+            UniValue item(UniValue::VOBJ);
+            item.pushKV("item", items[i]);
+            if (items[i].isStr()) {
+                total += items[i].get_str().size() / 2;
+                if (total > 4194304) scriptResourceLimit();
+            }
+            auto data = scriptBytes(item, "item");
+            if (data.size() > 1048576) scriptResourceLimit();
+            stack.push_back(std::move(data));
+        }
+        const CScript script(bytes.begin(), bytes.end());
+        ScriptError error = SCRIPT_ERR_UNKNOWN_ERROR;
+        const bool accepted = EvalScript(stack, script, flags, BaseSignatureChecker(), SIGVERSION_BASE, &error);
+        ok.pushKV("result", accepted ? "accepted" : "rejected");
+        ok.pushKV("script_error", scriptErrorName(error));
+        if (accepted) {
+            UniValue result(UniValue::VARR);
+            for (const auto& item : stack) result.push_back(UniValue(hexOf(item)));
+            ok.pushKV("stack_hex", result);
+        }
     } else if (op == "hash.ripemd160" || op == "hash.hash160" || op == "hash.sha1") {
         checkArgs(req, op, {"bytes_hex"});
         const auto bytes = argHex(req, "bytes_hex");

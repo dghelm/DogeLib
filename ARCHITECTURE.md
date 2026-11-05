@@ -86,8 +86,8 @@ Bottom-up. Each layer imports only the layers above it in this list.
 `Script.Eval` also imports the hash definitions of `Cryptography` for the hash opcodes.
 `Transaction` never imports `Script`.
 `Script.Number` imports no other layer.
-`Script` has a proof root and no export root yet.
-The oracle operations of [design record 0003](docs/design/0003-legacy-spend-validation.md), stage 5, add `DogeLib/Script/Exports/`.
+`Script` has a proof root and an export root.
+`DogeLib/Script/Exports/` adapts instruction reading and one `EvalScript` call to the [oracle format](docs/oracle.md).
 
 Ledger, Rules and Models layers are added when their work begins.
 

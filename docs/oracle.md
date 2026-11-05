@@ -1,29 +1,30 @@
 # The oracle and its record format
 
 `dogelib-oracle` runs DogeLib's specification on requests from another program, such as a harness that runs Dogecoin Core on the same inputs.
-This document defines its record format, `dogelib-oracle/4`.
+This document defines its record format, `dogelib-oracle/5`.
 The oracle supports only this format.
-Format `/4` exposes RIPEMD-160, Hash160, SHA-1, pure headers and Merkle roots.
+Format `/5` exposes Script instruction reading and one `EvalScript` call.
 The earlier operations keep their request fields, response shapes and behavior.
 Only the format name changes for them.
 
 A change to the format needs a maintainer's approval ([AGENTS.md](../AGENTS.md#changes-that-need-a-maintainer)) and a new format name.
 
-The oracle models Core's serialization, legacy signature hash, work arithmetic, byte-string hashes and pure block commitments.
+The oracle models Core's serialization, legacy signature hash, work arithmetic, byte-string hashes, pure block commitments and individual Script calls.
 It reads transactions in base mode or with witness data allowed.
 The witness operations model a serialization format only.
 Segregated witness is not active on Dogecoin at the pin.
 `IsWitnessEnabled` returns false, and main and test reject blocks with witness data (SOURCES.md D36).
 
 Its [protocol context](../SOUNDNESS.md#transactions-the-witness-allowed-format) separates witness script verification from the commitment checks in Core.
-It checks no consensus rule. Its output says what Core's code computes for an input, not that the input is valid on any network.
+Its output describes an operation under supplied flags, without a claim that an input is valid on any network.
+In particular, `script.eval` does not check a complete spend.
 
 ## Running it
 
 ```bash
 lake build dogelib-oracle
 .lake/build/bin/dogelib-oracle             # answer requests on standard input
-.lake/build/bin/dogelib-oracle --version   # print {"format":"dogelib-oracle/4"}
+.lake/build/bin/dogelib-oracle --version   # print {"format":"dogelib-oracle/5"}
 ```
 
 The oracle reads one request per line of standard input and writes one response per line of standard output.
@@ -89,6 +90,7 @@ Results use these types:
 
 | Kind | Meaning | Other fields |
 | --- | --- | --- |
+| `adapter` | A Script request exceeds an adapter resource limit, before execution. | `reason`: `resource_limit`. An adapter error is not a Script rejection. |
 | `request` | The oracle could not interpret the request. Examples: invalid JSON, an unknown `op`, a missing or unknown argument, or a value out of range. | `message`, free text for a person. It is not part of the format. |
 | `read` | The reader of the specification rejects the bytes, as Core's stream would. | `reason`: `truncated` (the input ends early), `non_canonical` (a CompactSize value in a longer form than needed), `too_large` (a CompactSize value above `MAX_SIZE`, `0x02000000`), or `unknown_optional_data` (a transaction flag bit other than bit 0 remains after the input and output lists and any stacks). For `sighash.legacy`, `argument` names the argument that failed. |
 | `work_view` | The finite work view cannot supply a result. The view errors describe the adapter, not consensus rejection codes. | `reason`: `height_out_of_range`, `inconsistent_heights`, `missing_ancestor`, `first_height_underflow` or `zero_interval`. The last two are unreachable with these network parameters and checked views. |
@@ -96,13 +98,15 @@ Results use these types:
 
 `work_view` errors describe the finite-view adapter in the specification.
 They do not describe Core consensus rejection.
-The other non-request kinds report serialization errors of the specification.
+The `read` and `trailing_bytes` kinds report serialization errors of the specification.
 
 ## Operations
 
 | `op` | Arguments | `ok` fields | Specification |
 | --- | --- | --- | --- |
-| `oracle.version` | none | `format`: `"dogelib-oracle/4"` | none |
+| `script.read_op` | `bytes_hex`, `cursor` (`u32`) | Instruction or read failure with cursor, as below | `Script.readInstruction`, Core's `CScript::GetOp` |
+| `script.eval` | `bytes_hex`, `flags` (`u32`), `stack_hex` | Evaluation result, as below | `Script.evalScript`, Core's `EvalScript` in `SIGVERSION_BASE` |
+| `oracle.version` | none | `format`: `"dogelib-oracle/5"` | none |
 | `compactsize.encode` | `value`: `u64` | `bytes_hex` | `CompactSize.encode`, Core's `WriteCompactSize` |
 | `compactsize.read` | `bytes_hex` | `value` (`u64`), `consumed`, `rest_hex` | `CompactSize.decodeBounded`, Core's `ReadCompactSize` with its `MAX_SIZE` check |
 | `tx.read_base` | `bytes_hex` | `tx`, `consumed`, `rest_hex` | `Transaction.readBase`: a transaction at the start of the bytes, as Core reads the next transaction of a stream |
@@ -121,6 +125,77 @@ The other non-request kinds report serialization errors of the specification.
 | `work.get_compact` | `value_hex` (target magnitude), `negative` (boolean) | `compact` (`u32`) | `Work.ArithUint256.getCompact` |
 | `work.calculate_next` | `network`, `selection_height`, `last_height`, `last_time`, `last_bits`, `first_time` | `bits` (`u32`) | `Work.calculateDogecoinNextWorkRequired` with `Work.getConsensus` |
 | `work.next` | `network`, `chain`, `candidate_time` (`u32`) | `bits` (`u32`) | `Work.nextWorkRequired` |
+
+### Script arguments and results
+
+`script.read_op` reads from `cursor`, a byte offset between zero and the script length, inclusive.
+The cursor can lie inside a push or its length field.
+The operation preserves exact instruction bytes, including nonminimal push encodings.
+It returns one of these `ok` objects:
+
+```json
+{"result":"instruction","opcode":76,"bytes_hex":"4c0107","pushed_hex":"07","cursor":3}
+{"result":"at_end","cursor":3}
+{"result":"truncated","opcode":77,"part":"length_field","cursor":1}
+```
+
+`cursor` is the offset after the call, including on failure.
+For a truncated push, `opcode` is the original input byte, although Core leaves its opcode output as `OP_INVALIDOPCODE`.
+`part` is `length_field` or `payload`.
+A short length field leaves the cursor after the opcode.
+A short payload leaves it after the complete length field, or after the opcode for a direct push.
+An end cursor stays unchanged.
+
+The harness obtains the cursor from Core's iterator and derives these diagnostic fields from the original opcode.
+
+`script.eval` takes explicit flags and an initial main stack in `stack_hex`, an array of hexadecimal strings, bottom first.
+It returns one of these `ok` objects:
+
+```json
+{"result":"accepted","script_error":"OK","stack_hex":["01",""]}
+{"result":"rejected","script_error":"OP_RETURN"}
+{"result":"unsupported","reason":"signature_opcode","opcode":172}
+{"result":"unsupported","reason":"flags","bits":64}
+```
+
+Acceptance means that one `EvalScript` call returned true.
+It permits an empty stack or a false top item.
+It does not imply `VerifyScript` acceptance, a P2SH result or a valid transaction.
+Only acceptance returns the final main stack.
+The altstack and other locals reset for every call.
+
+`script_error` follows the script-test spelling of Core's enum, as the shared [error-name table](../harness/core/script_error_names.inc) records.
+The names omit `SCRIPT_ERR_`, except that `SCRIPT_ERR_SIG_NULLFAIL` becomes `NULLFAIL`.
+The harness compiles the table against every enum position.
+`lake test` compares every name with `ScriptError.name`, including the separate `OK` result.
+
+Unsupported capabilities have these fields:
+
+| `reason` | Additional field |
+| --- | --- |
+| `flags` | `bits`, the unsupported bits as a u32 number |
+| `signature_opcode` | `opcode`, the executed opcode byte as a number |
+| `check_lock_time_verify`, `check_sequence_verify` | None |
+
+The evaluator determines whether a capability is needed.
+A skipped signature opcode, for example, does not itself cause an unsupported result.
+The adapter does not replace caller flags or classify unsupported results as Script rejection.
+
+The Script adapters limit each script to 1,048,576 bytes.
+`script.eval` also limits the caller stack to 4,096 items, 1,048,576 bytes per item and 4,194,304 bytes in total.
+Hexadecimal strings above twice the byte limit fail before hex decoding.
+The total adds half of each item's string length in bytes, rounded down, before that item's hex validation.
+
+These limits apply before evaluation, including when flags are unsupported.
+An excessive request returns `error.kind: adapter` and `reason: resource_limit`.
+A script of 10,001 bytes within those adapter limits still reaches the specification's `SCRIPT_SIZE` check under supported flags.
+JSON parsing and the input line allocation precede these limits.
+They bound execution inputs, not transport memory.
+
+The harness calls Core's own `EvalScript` with `SIGVERSION_BASE` and `BaseSignatureChecker`.
+That checker returns false for signature, locktime and sequence checks.
+The Lean adapter has no signature or transaction checker in this format.
+Its unsupported result makes no claim about Core's verdict on those requests.
 
 ### Hash and block arguments
 
@@ -300,6 +375,8 @@ These pinned sources supply the additional objects:
 | `tx.read_base` | `CMutableTransaction` read from a `CDataStream` whose version has `SERIALIZE_TRANSACTION_NO_WITNESS`, so `UnserializeTransaction` reads base mode |
 | `tx.decode_base` | The same read, then a check that the stream is empty. The transaction written back to a stream of the same version, and `CTransaction::GetHash` |
 | `tx.read_witness`, `tx.decode_witness` | `CMutableTransaction` read from a `CDataStream` without `SERIALIZE_TRANSACTION_NO_WITNESS`. The complete operation requires an empty stream. Both write with witness data allowed and call `CTransaction::HasWitness`, `GetHash` and `GetWitnessHash`. |
+| `script.read_op` | `CScript::GetOp` on the exact script bytes, with iterator `begin() + cursor` |
+| `script.eval` | `EvalScript` with the caller stack and flags, `BaseSignatureChecker` and `SIGVERSION_BASE` |
 | `sighash.legacy` | `tx_hex` read as by `tx.decode_base`. Then `SignatureHash` with amount 0 and `SIGVERSION_BASE` |
 
 The harness also calls these hash and block functions:
@@ -315,6 +392,7 @@ The harness also calls these hash and block functions:
 | `merkle.compute` | `ComputeMerkleRoot`, including its `mutated` output argument |
 
 Core's consensus archive supplies `primitives/pureheader.cpp` and `consensus/merkle.cpp`.
+The same archive contains `script/interpreter.cpp`, `script/script.cpp` and `script/script_error.cpp`.
 Its cryptography archive supplies RIPEMD-160, SHA-256 and SHA-1.
 The harness implements no replacement hash or Merkle algorithm.
 
@@ -342,9 +420,14 @@ The `work missing skip traversal` comparison retargets from height 479 to ancest
 
 ### How its responses differ
 
-The harness answers a projection of `dogelib-oracle/4`, not the format itself:
+The harness answers a projection of `dogelib-oracle/5`, not the format itself:
 
-- `--version` and `oracle.version` give the format `dogelib-oracle/4-core-projection`.
+- `--version` and `oracle.version` give the format `dogelib-oracle/5-core-projection`.
+- `script.eval` never returns `unsupported` from the harness.
+  It returns Core's verdict with `BaseSignatureChecker`, even when Lean reports an unsupported capability.
+  An unmapped `ScriptError` stops the harness with an unmapped-Core error.
+- For a truncated `script.read_op`, the harness derives `opcode` and `part` from the input and cursor.
+  Core does not return these diagnostics.
 - `sighash.legacy` has no `preimage_hex`.
   `SignatureHash` hashes its preimage as it writes it and does not return it.
 - `plan` is a label that the harness computes from the conditions of Core's two early returns, in `src/script/interpreter.cpp` lines 1225 to 1235.
@@ -358,12 +441,17 @@ The harness answers a projection of `dogelib-oracle/4`, not the format itself:
   Any other exception stops the harness with exit status 3, so it fails the comparison.
 
 The harness checks request arguments by the rules of this document.
-The comparison sends only well-formed requests, so it does not test those checks.
+Ten adapter-limit boundary requests check both programs against the documented expectations, including `adapter/resource_limit` errors.
+Other argument checks have oracle fixtures but no Core comparison.
 
 ### The comparison
 
 `scripts/compare_core.py` gives each request its own `id` and sends both programs the same text.
-For each request the two responses must be equal as JSON values, with one exception.
+For supported requests, the two responses must be equal as JSON values, subject to the signature-preimage projection below.
+For `script.eval`, an unsupported Lean result excludes that request from verdict agreement.
+The comparator validates the result shape, then reports the unsupported reason and Core outcome separately.
+An adapter error is not an unsupported result.
+
 For `sighash.legacy` with plan `hash_bytes`, the double SHA-256 of the oracle's `preimage_hex` must equal Core's `digest_hex`.
 This checks the preimage against Core's digest, not byte by byte against a preimage from Core.
 A request error from either program fails the comparison.
@@ -392,6 +480,24 @@ The request stream is deterministic, and the random sets use a fixed seed:
   It includes transactions with 253 or 254 inputs and outputs, 1000 inputs or outputs, and scripts of 4096 or 16384 bytes.
   Variants replace both vector counts, the first input script length and the first output script length with malformed encodings.
   They also truncate fields and scripts, and append trailing bytes.
+
+The Script comparison reports these sets separately:
+
+- Both scripts of every one of the 1,193 corpus records, as independent calls with empty initial stacks and unchanged effective flags.
+  The comparison has no witness input: a record's witness is ignored, and only its two base scripts run.
+- A composition for every record: `scriptSig`, then `scriptPubKey` with the first call's successful main stack.
+  Each implementation supplies its own stack to its second call.
+  A rejection or unsupported result ends that side's composition.
+  The composition does not run `VerifyScript` or use the corpus's expected spending verdict.
+  It ignores the record's witness and runs only the two base scripts.
+- Every opcode and every prefix of representative direct and extended pushes, including all short length-field and payload forms.
+  Extra cases read at arbitrary offsets within push encodings and at the end.
+- Below, at and above the 201-operation, 520-byte push, 1,000-item stack and 10,000-byte script limits.
+  Cases include skipped branches, altstack moves and caller stacks above 1,000 items.
+  Bounded pushes form accepted scripts of 9,999 and 10,000 bytes, followed by a 10,001-byte `SCRIPT_SIZE` case.
+- Ten adapter-limit requests sent to both programs, with results checked against the documented limits.
+- 2,000 generated scripts under seed `20261105`, with nested conditionals, stack operations and numeric and hash candidates.
+  Comparison depends on each returned capability result, rather than a fixed list of supported opcodes.
 
 The work comparison reports these sets separately:
 
@@ -430,13 +536,18 @@ The Merkle caller bound is explicit, but the comparison uses only small lists.
 
 `scripts/test_compare_core.py` checks that the comparison can fail.
 A wrapper around the oracle stands in for the harness.
-Unchanged, it must pass on the full stream. Each of 51 mutations must fail with the failure code that it targets.
+Unchanged, it must pass on the full stream. Each of 68 mutations must fail with the failure code that it targets.
 The witness mutations change `wtxid_hex`, a stack and `has_witness`.
 The work mutations change the magnitude, both flags, the encoded compact and each work operation's result bits.
 
 Hash mutations change each digest operation.
 Block mutations change every header field, encoding, both hash orders, consumption, remainder and truncation.
 They also change both Merkle root orders and the mutation flag.
+Script mutations change reader fields, evaluation classes, rejection errors, success errors, final stacks and unsupported fields.
+An informational Core result for an unsupported request can differ without a comparison failure.
+
+One mutation runs the full composition path and corrupts a successful second-call stack.
+Another gives an unsupported result an opcode absent from the script instructions.
 
 ### Compiled Rust CompactSize
 

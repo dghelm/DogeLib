@@ -117,6 +117,39 @@ Finite comparisons and structural theorems do not establish collision resistance
 The checked header codec, length, digest and Merkle structural proofs depend on `propext` and `Quot.sound`, by `#print axioms`.
 The declaration check inspects all declarations under the unchanged standard-axiom policy (C1, C2).
 
+### RIPEMD-160 and Hash160
+
+`Ripemd160.hash` adapts EthLib's executable definition at the existing pin in SOURCES.md.
+Its UInt32 arithmetic wraps, and its eight-byte length suffix reduces the bit length modulo 2^64.
+Source inspection compares the tables, round functions, constants, padding and digest order with Core's `CRIPEMD160` at the compatibility pin.
+This inspection is not a Lean equivalence proof.
+
+For every message, `hash_size` proves a twenty-byte digest.
+The padding theorems prove whole blocks, minimal zero padding, preservation of message bytes, the delimiter, zero bytes and the length-byte suffix.
+The suffix theorem identifies `lengthBytes message.size`, without separately proving a mathematical decoding theorem for those bytes.
+The constant theorems check integer square-root and cube-root inequalities.
+The table theorems check that each sixteen-step group includes every word index.
+Fourteen kernel-checked fixed-vector theorems cover eight published messages and six selected padding boundaries.
+
+No theorem equates `Ripemd160.hash` with a separate model of RIPEMD-160.
+
+`Hash160.hash_eq_composition` states the defining composition: executable RIPEMD-160 applied to executable SHA-256.
+It holds for every message and does not establish independent functional correctness of the composition.
+`Hash160.size_hash` proves a twenty-byte digest for every message.
+Neither operation has a theorem about collision resistance, preimage resistance or constant-time execution.
+
+With Lean `v4.35.0`, `#print axioms` reports `propext` and `Quot.sound` for both digest-size theorems and `hash_eq_composition`.
+The RIPEMD-160 padding theorems use the same axioms, with `Classical.choice` also used by `pad_length_suffix`.
+Both constant theorems use `propext` and `Quot.sound`, and the table theorems use only `propext`.
+The fourteen fixed-vector theorems use all three standard axioms.
+
+`lake test` checks nine author vectors and ten Core RIPEMD-160 vectors, including both million-byte Core messages.
+It also checks twelve Hash160 digests produced by hashlib and independently matched by compiled Core `CHash160`.
+Some author and Core records share an input and digest.
+The fixture README records provenance, versions, encodings and checksums.
+These comparisons cover the recorded inputs, and do not prove equality to Core on every message.
+The compiler and runtime boundaries remain those of Gap B.
+
 ### Codecs
 
 A codec has an encoder `encode : α → List UInt8` and a prefix decoder `decode : List UInt8 → Option (α × List UInt8)`.

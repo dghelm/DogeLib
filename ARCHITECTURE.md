@@ -79,6 +79,7 @@ Bottom-up. Each layer imports only the layers above it in this list.
 | `Cryptography` | SHA-256 and double SHA-256, and later secp256k1 and signature encodings |
 | `Work` | Proof-of-work arithmetic: 256-bit targets, their compact encoding, and the difficulty retarget |
 | `Transaction` | Raw transaction types, base serialization, transaction IDs, legacy signature hashing |
+| `Block` | Pure block headers, block hashes and transaction Merkle roots |
 
 Script, Ledger, Rules and Models layers are added when their work begins.
 

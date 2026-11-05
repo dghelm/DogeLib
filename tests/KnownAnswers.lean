@@ -2622,6 +2622,176 @@ def check : IO Nat := do
 
 end KnownAnswers.Script
 
+/-!
+## Script numbers and truth values
+
+Runs `ScriptNum.encode`, `decode`, `getint` and `castToBool` through the compiled code.
+
+Every expected byte string and value is written by hand from the byte layout of `CScriptNum` (SOURCES.md, D24, lines 198 to 371) and `CastToBool` (D3, lines 38 to 51).
+None is computed by the definitions under test.
+Each encoding case also fixes the result of decoding its expected bytes at sizes 4 and 5, with and without the minimal requirement.
+The expected result is `overflow` when the expected bytes are longer than the size, and the value otherwise.
+
+The sweep takes the integers of the `creation` test of `scriptnum_tests.cpp` (D44): every `values[i]` and `values[i] ± offsets[j]`.
+That test compares `CScriptNum` with a copy of the 0.10.0 code and has no literal expected bytes.
+Within ±(2^31 − 1), the operand range of the comment at D24 lines 200 to 207, each integer must survive the round trip.
+The round trip is `encode`, then a default-size `decode`.
+Outside that range the default-size decode must overflow.
+`getint` must match a clamp written out below.
+-/
+
+namespace KnownAnswers.ScriptNum
+
+open DogeLib.Script DogeLib.Script.ScriptNum
+
+/-- An expected decode result. `Except` has no equality test, so the cases compare through this type. -/
+inductive Expected where
+  | ok (n : Int)
+  | overflow
+  | nonMinimal
+
+/-- Whether a decode result is the expected one. -/
+def Expected.matches : Expected → Except DecodeError Int → Bool
+  | .ok n, .ok m => n == m
+  | .overflow, .error .overflow => true
+  | .nonMinimal, .error .nonMinimal => true
+  | _, _ => false
+
+/-- The expected decode of the encoding `bytes` of `n` at size `size`, from the length of the expected bytes. -/
+def expectedAt (n : Int) (bytes : List UInt8) (size : Nat) : Expected :=
+  if bytes.length ≤ size then .ok n else .overflow
+
+/-- Integers and their encodings, hand-derived: magnitude little-endian, sign in the top bit of the last byte. -/
+def encodeCases : List (Int × List UInt8) := [
+  (0, []),
+  (1, [0x01]), (-1, [0x81]),
+  (127, [0x7f]), (-127, [0xff]),
+  (128, [0x80, 0x00]), (-128, [0x80, 0x80]),
+  (255, [0xff, 0x00]), (-255, [0xff, 0x80]),
+  (256, [0x00, 0x01]), (-256, [0x00, 0x81]),
+  (2147483647, [0xff, 0xff, 0xff, 0x7f]), (-2147483647, [0xff, 0xff, 0xff, 0xff]),
+  -- Five-byte results: the magnitude fills the top bit, so one more byte carries the sign.
+  (2147483648, [0x00, 0x00, 0x00, 0x80, 0x00]), (-2147483648, [0x00, 0x00, 0x00, 0x80, 0x80]),
+  (4294967295, [0xff, 0xff, 0xff, 0xff, 0x00]), (-4294967295, [0xff, 0xff, 0xff, 0xff, 0x80]),
+  (4294967296, [0x00, 0x00, 0x00, 0x00, 0x01]),
+  (549755813887, [0xff, 0xff, 0xff, 0xff, 0x7f]), (-549755813887, [0xff, 0xff, 0xff, 0xff, 0xff]),
+  -- 2^39: six bytes, beyond the size 5 of CHECKLOCKTIMEVERIFY.
+  (549755813888, [0x00, 0x00, 0x00, 0x00, 0x80, 0x00])]
+
+/-- Decode cases: a label, the bytes, the minimal requirement, the size and the expected result. -/
+def decodeCases : List (String × List UInt8 × Bool × Nat × Expected) := [
+  ("empty", [], true, 4, .ok 0),
+  ("empty at size 0", [], true, 0, .ok 0),
+  ("01 at size 0", [0x01], false, 0, .overflow),
+  ("negative zero 80", [0x80], false, 4, .ok 0),
+  ("negative zero 80, minimal", [0x80], true, 4, .nonMinimal),
+  ("00", [0x00], false, 4, .ok 0),
+  ("00, minimal", [0x00], true, 4, .nonMinimal),
+  ("0000", [0x00, 0x00], false, 4, .ok 0),
+  ("0000, minimal", [0x00, 0x00], true, 4, .nonMinimal),
+  ("0080", [0x00, 0x80], false, 4, .ok 0),
+  ("0080, minimal", [0x00, 0x80], true, 4, .nonMinimal),
+  ("7f00", [0x7f, 0x00], false, 4, .ok 127),
+  ("7f00, minimal", [0x7f, 0x00], true, 4, .nonMinimal),
+  ("8000, minimal: the top bit of 80 needs the sign byte", [0x80, 0x00], true, 4, .ok 128),
+  ("ff00, minimal", [0xff, 0x00], true, 4, .ok 255),
+  ("ff80, minimal", [0xff, 0x80], true, 4, .ok (-255)),
+  ("ffffff7f, minimal", [0xff, 0xff, 0xff, 0x7f], true, 4, .ok 2147483647),
+  ("0000000000 at size 4, minimal: overflow first", [0x00, 0x00, 0x00, 0x00, 0x00], true, 4, .overflow),
+  ("0000000000 at size 5, minimal", [0x00, 0x00, 0x00, 0x00, 0x00], true, 5, .nonMinimal),
+  ("ffffffffff at size 4", [0xff, 0xff, 0xff, 0xff, 0xff], false, 4, .overflow),
+  ("ffffffffff at size 5", [0xff, 0xff, 0xff, 0xff, 0xff], true, 5, .ok (-549755813887)),
+  ("0000008080 at size 4", [0x00, 0x00, 0x00, 0x80, 0x80], true, 4, .overflow),
+  ("0000008080 at size 5", [0x00, 0x00, 0x00, 0x80, 0x80], true, 5, .ok (-2147483648)),
+  ("ffffffff00 at size 5", [0xff, 0xff, 0xff, 0xff, 0x00], true, 5, .ok 4294967295)]
+
+/-- `getint` cases: an integer and its value saturated to `[-2^31, 2^31 - 1]`. -/
+def getintCases : List (Int × Int) := [
+  (0, 0), (-1, -1),
+  (2147483647, 2147483647), (-2147483647, -2147483647),
+  (2147483648, 2147483647), (-2147483648, -2147483648), (-2147483649, -2147483648),
+  (1099511627776, 2147483647), (-1099511627776, -2147483648)]
+
+/-- `castToBool` cases: a label, the bytes and the expected truth value. -/
+def castCases : List (String × List UInt8 × Bool) := [
+  ("empty", [], false),
+  ("00", [0x00], false),
+  ("negative zero 80", [0x80], false),
+  ("0080", [0x00, 0x80], false),
+  ("000080", [0x00, 0x00, 0x80], false),
+  ("600 zero bytes", List.replicate 600 0x00, false),
+  ("600 zero bytes and 80", List.replicate 600 0x00 ++ [0x80], false),
+  ("01", [0x01], true),
+  ("81", [0x81], true),
+  ("8000: 80 is not the last byte", [0x80, 0x00], true),
+  ("008000", [0x00, 0x80, 0x00], true),
+  ("0001", [0x00, 0x01], true),
+  ("600 zero bytes and 01", List.replicate 600 0x00 ++ [0x01], true)]
+
+/-- `values` of `scriptnum_tests.cpp` (D44, line 17). -/
+def sweepValues : List Int :=
+  [0, 1, -2, 127, 128, -255, 256, 2 ^ 15 - 1, -(2 ^ 16), 2 ^ 24 - 1, 2 ^ 31, 1 - 2 ^ 32, 2 ^ 40]
+
+/-- `offsets` of `scriptnum_tests.cpp` (D44, line 19). -/
+def sweepOffsets : List Int := [1, 0x79, 0x80, 0x81, 0xFF, 0x7FFF, 0x8000, 0xFFFF, 0x10000]
+
+/-- The integers of the `creation` test (D44, lines 169 to 180). Core runs `values[i]` once for each offset, and here it appears once. -/
+def sweep : List Int :=
+  sweepValues.flatMap fun v => v :: sweepOffsets.flatMap fun o => [v + o, v - o]
+
+/-- The clamp of `getint`, written out: `INT_MAX` above, `INT_MIN` below. -/
+def clamp (n : Int) : Int :=
+  if n > 2147483647 then 2147483647 else if n < -2147483648 then -2147483648 else n
+
+/-- Every Script number and truth-value known answer. Returns the number of failures. -/
+def check : IO Nat := do
+  let mut failures := 0
+  let mut count := 0
+  for (n, bytes) in encodeCases do
+    count := count + 1
+    if encode n != bytes then
+      IO.eprintln s!"FAIL scriptnum encode {n}: got {encode n}, expected {bytes}"
+      failures := failures + 1
+    for size in [4, 5] do
+      for req in [false, true] do
+        count := count + 1
+        if !(expectedAt n bytes size).matches (decode bytes req size) then
+          IO.eprintln s!"FAIL scriptnum decode of the encoding of {n} at size {size}, minimal {req}"
+          failures := failures + 1
+  for (name, bytes, req, size, expected) in decodeCases do
+    count := count + 1
+    if !expected.matches (decode bytes req size) then
+      IO.eprintln s!"FAIL scriptnum decode {name}"
+      failures := failures + 1
+  for (n, expected) in getintCases do
+    count := count + 1
+    if getint n != expected then
+      IO.eprintln s!"FAIL scriptnum getint {n}: got {getint n}, expected {expected}"
+      failures := failures + 1
+  for (name, bytes, expected) in castCases do
+    count := count + 1
+    if castToBool bytes != expected then
+      IO.eprintln s!"FAIL castToBool {name}"
+      failures := failures + 1
+  if sweep.length != 247 then
+    IO.eprintln s!"FAIL scriptnum: the sweep has {sweep.length} integers, expected 247"
+    failures := failures + 1
+  for n in sweep do
+    count := count + 1
+    let inRange := -2147483647 ≤ n && n ≤ 2147483647
+    let ok :=
+      if inRange then
+        (Expected.ok n).matches (decode (encode n) false) && (Expected.ok n).matches (decode (encode n) true)
+      else
+        Expected.overflow.matches (decode (encode n) false)
+    if !ok || getint n != clamp n then
+      IO.eprintln s!"FAIL scriptnum sweep {n}"
+      failures := failures + 1
+  IO.println s!"scriptnum/castToBool: {count} checks, {failures} failures"
+  return failures
+
+end KnownAnswers.ScriptNum
+
 /-- Entry point of `lake test`. -/
 def main : IO UInt32 := do
   let sha1 ← KnownAnswers.Sha1.check
@@ -2646,4 +2816,5 @@ def main : IO UInt32 := do
   let nextWork ← KnownAnswers.Work.checkNextWork
   let operators ← KnownAnswers.Work.checkOperators
   let shifts ← KnownAnswers.Work.checkShifts
-  return if sha1 + blocks + short + long + ripemd + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts + proofOfWork + scriptReader == 0 then 0 else 1
+  let scriptNum ← KnownAnswers.ScriptNum.check
+  return if sha1 + blocks + short + long + ripemd + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts + proofOfWork + scriptReader + scriptNum == 0 then 0 else 1

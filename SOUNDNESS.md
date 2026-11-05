@@ -675,6 +675,48 @@ By `#print axioms` with Lean `v4.35.0`:
 | `readInstruction_eq_instruction_iff_readOp`, `readInstruction_eq_fail_iff_readOp`, `readInstruction_eq_truncated_iff_readOp`, `WithinStackLimit.handOff` | `propext`, `Quot.sound` |
 | `readInstruction_eq_instruction_iff`, `readInstruction_consumes`, `readInstruction_nonpush`, `readInstruction_truncated_iff`, `IsBoundary.le_length`, `IsBoundary.eq_or_next_le`, `IsBoundary.not_inside`, `WellFormed.advance`, `WellFormed.pc_le_length`, `WellFormed.beginCodeHash_le_length` | `propext`, `Classical.choice`, `Quot.sound` |
 
+### Script numbers and truth values
+
+`DogeLib.Script.Number` specifies Core's `CScriptNum` and `CastToBool` (SOURCES.md, D24 and D3).
+The theorems are in `DogeLib.Script.Proofs.Number`.
+For every integer `n`, byte string `b`, flag `req` and size `maxSize`:
+
+- `value_encode`: `value (encode n) = n`.
+- `isMinimal_encode` and `isMinimal_iff_encode_value`: `b` passes Core's minimality test exactly when `encode (value b) = b`. So the test accepts exactly one byte string for each integer, and rejects negative zero and every other string with a removable high byte.
+- `encode_length_le_iff`: `encode n` has at most `k` bytes exactly when `2 |n| < 256 ^ k`. So every integer within ±(2^31 − 1) has at most four bytes (`encode_length_le_four`), and the sum or difference of two of them has at most five (`encode_add_length_le_five`, `encode_sub_length_le_five`).
+- `decode_eq_ok_iff`, `decode_eq_overflow_iff` and `decode_eq_nonMinimal_iff` give every result of `decode`. Too many bytes give `overflow` whatever the flag. `nonMinimal` needs a length within the size, the flag and a failed test.
+- `decode_encode`: if `2 |n| < 256 ^ maxSize`, then `decode (encode n) req maxSize = .ok n`. `decode_false`: without the flag, a string within the size gives its value, also when it is not minimal.
+- `decode_natAbs_lt`: every decoded value satisfies `2 |n| < 256 ^ maxSize`. So a default-size decode lies within ±(2^31 − 1), a size-5 decode within ±(2^39 − 1), and a decode of up to 8 bytes within ±(2^63 − 1) (`decode_int64`).
+- `getint_eq_max_min`: `getint n` is the clamp of `n` to `[-2^31, 2^31 - 1]`. `getint_decode_default`: it never changes a value that a default-size decode returns.
+- `castToBool_eq_false_iff_value` and `castToBool_eq_false_iff`: `castToBool b` is false exactly when `value b = 0`, that is, when `b` is zero bytes, or zero bytes and then one `0x80`. This holds at every length. `castToBool_encode`: `castToBool (encode n)` is `n ≠ 0`.
+
+The definitions use `Int`, and Core uses `int64_t` and `int`.
+They agree only where Core's C++ is defined:
+
+- `set_vch` shifts byte `i` left by `8*i` bits (D24, line 360). A string of more than eight bytes needs a shift of 64 bits or more, which is undefined. The constructor checks the size first (lines 220 to 237), so this shift is reachable only with a size argument above 8. `decode_int64` covers the defined sizes, and the interpreter decodes at most five bytes (D3, lines 377 and 408).
+- `serialize` negates its argument (D24, line 326), which is undefined for `-2^63`. `encode` takes every integer.
+- `getint` assumes a 32-bit `int`. Every supported Core target has one, but no theorem or check here establishes it. On another width Core's `getint` stays defined and clamps to that width's limits (D24, lines 307 to 310).
+- `CastToBool` counts with an `unsigned int` (D3, line 40). For strings of at most `UINT_MAX` bytes it agrees with `castToBool`. On a longer string the counter wraps, and Core's loop can repeat without end, while `castToBool` returns a result. The theorems about `castToBool` hold at every length, but the Core correspondence covers only that domain.
+
+That the definitions are Core's rests on a reading of D24 and D3 (A1) and on the known answers.
+`lake test` runs 21 hand-derived encodings, 24 decodes, 9 `getint` cases and 13 `castToBool` cases.
+It also runs the 247 integers of the `creation` test of `scriptnum_tests.cpp` (D44).
+That test compares Core with its own 0.10.0 copy, so it gives the integers but no expected bytes.
+Core itself does not run, and no comparison with Core's compiled code exists.
+
+No opcode is specified.
+The interpreter maps a decode exception to `SCRIPT_ERR_UNKNOWN_ERROR` (D3, lines 1037 to 1040), and the evaluator must specify that mapping.
+The definitions add no hypothesis, axiom or execution boundary.
+By `#print axioms` with Lean `v4.35.0`:
+
+| Theorem | Axioms |
+| --- | --- |
+| `castToBool_concat` | `propext` |
+| `isMinimal_encode`, `natAbs_value_lt`, `decode_eq_ok_iff`, `decode_eq_overflow_iff`, `decode_eq_nonMinimal_iff`, `decode_false`, `decode_natAbs_lt`, `decode_default_natAbs_le`, `decode_five_natAbs_le`, `getint_eq_max_min`, `getint_of_ge`, `getint_of_le`, `castToBool_eq_false_iff_value`, `castToBool_eq_false_iff` | `propext`, `Quot.sound` |
+| `value_encode`, `isMinimal_iff_encode_value`, `encode_length_le_iff`, `encode_length_le_four`, `encode_add_length_le_five`, `encode_sub_length_le_five`, `decode_encode`, `decode_encode_default`, `decode_int64`, `getint_eq_self_iff`, `getint_mem`, `getint_decode_default`, `castToBool_encode` | `propext`, `Classical.choice`, `Quot.sound` |
+
+The supporting byte and little-endian lemmas of the module use the same three axioms or fewer.
+
 ### Compact encoding and difficulty retarget
 
 The `Work` layer specifies Core's `SetCompact`, `GetCompact` and `CalculateDogecoinNextWorkRequired` (SOURCES.md, D6, D12, D13).

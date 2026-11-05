@@ -80,10 +80,11 @@ Bottom-up. Each layer imports only the layers above it in this list.
 | `Work` | Proof-of-work arithmetic: 256-bit targets, their compact encoding, and the difficulty retarget |
 | `Transaction` | Raw transaction types, base serialization, transaction IDs, legacy signature hashing |
 | `Block` | Pure block headers, block hashes and transaction Merkle roots |
-| `Script` | The instruction reader of the Script interpreter and the state of one `EvalScript` call. Opcode semantics follow in later stages. |
+| `Script` | The instruction reader of the Script interpreter, the state of one `EvalScript` call, Script numbers (`CScriptNum`) and the truth value of a stack item. Opcode semantics follow in later stages. |
 
 `Script` imports `Transaction`, because the interpreter and the legacy signature serializer share one instruction reader, `Transaction.readOp`, and later stages hash with `Transaction.legacySignatureHash`.
 `Transaction` never imports `Script`.
+`Script.Number` imports no other layer.
 `Script` has a proof root and no export root yet.
 The oracle operations of [design record 0003](docs/design/0003-legacy-spend-validation.md), stage 5, add `DogeLib/Script/Exports/`.
 

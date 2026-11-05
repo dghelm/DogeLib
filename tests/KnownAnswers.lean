@@ -6,6 +6,7 @@ import DogeLib.Serialization
 import DogeLib.Transaction
 import DogeLib.Work
 import DogeLib.Block
+import DogeLib.Script
 import Lean.Data.Json
 
 /-!
@@ -2434,6 +2435,168 @@ def check : IO Nat := do
 
 end KnownAnswers.Ripemd160
 
+/-!
+## Script instruction reader
+
+Runs `readInstruction` on cases from Dogecoin Core's `script_tests.json` and on cases derived from `GetOp2`, through the compiled code.
+
+Every expected result is written by hand.
+A case from `script_tests.json` (SOURCES.md, D24 for the reader) names its line at commit `e0a1c15`.
+The asm of the fixture is written here as its bytes, and the expected result follows from `GetOp2`, `src/script/script.h` lines 502 to 552.
+A case marked `GetOp2` comes from that function alone.
+
+Each case fixes a script, a cursor and the full `ReadResult`.
+That result is the opcode, the instruction bytes, the pushed bytes and the next cursor, or the failure, its part and its cursor.
+A loop case fixes the results of `readInstruction` calls from cursor 0.
+The loop stops after the first result that is not an instruction.
+
+The cases cover direct pushes, `OP_PUSHDATA1`, `OP_PUSHDATA2` and `OP_PUSHDATA4`, and every short length field.
+They also cover short data for each push kind, nonminimal pushes and code separator bytes inside pushed data.
+Some cases read at cursors after 0, and some read opcodes that push nothing.
+-/
+
+namespace KnownAnswers.Script
+
+open DogeLib.Script
+
+/-- `n` copies of the byte `b`. -/
+def rep (n : Nat) (b : UInt8) : List UInt8 := List.replicate n b
+
+/-- A successful read with opcode `o`, instruction bytes `bytes`, pushed bytes `pushed` and next cursor `next`. -/
+def ins (o : UInt8) (bytes pushed : List UInt8) (next : Nat) : ReadResult :=
+  .instruction ⟨o, bytes, pushed, next⟩
+
+/-- One case: a label with its source, a script, a cursor and the expected result. -/
+structure Case where
+  label : String
+  script : List UInt8
+  pc : Nat
+  expected : ReadResult
+
+/-- One loop case: a label with its source, a script and the expected results of the loop from cursor 0. -/
+structure LoopCase where
+  label : String
+  script : List UInt8
+  expected : List ReadResult
+
+/-- The payload of `script_tests.json` line 25: `A` and then 74 bytes `z`. -/
+def az75 : List UInt8 := 0x41 :: rep 74 0x7a
+
+/-- The single-read cases. -/
+def cases : List Case := [
+  -- script_tests.json: direct pushes, PUSHDATA forms, nonminimal pushes, short pushes.
+  ⟨"script_tests.json:23 0x01 0x0b", [0x01, 0x0b], 0, ins 0x01 [0x01, 0x0b] [0x0b] 2⟩,
+  ⟨"script_tests.json:24 0x02 0x417a", [0x02, 0x41, 0x7a], 0, ins 0x02 [0x02, 0x41, 0x7a] [0x41, 0x7a] 3⟩,
+  ⟨"script_tests.json:25 0x4b and 75 bytes", 0x4b :: az75, 0, ins 0x4b (0x4b :: az75) az75 76⟩,
+  ⟨"script_tests.json:28 0x4c 0x01 0x07", [0x4c, 0x01, 0x07], 0, ins 0x4c [0x4c, 0x01, 0x07] [0x07] 3⟩,
+  ⟨"script_tests.json:29 0x4d 0x0100 0x08", [0x4d, 0x01, 0x00, 0x08], 0,
+    ins 0x4d [0x4d, 0x01, 0x00, 0x08] [0x08] 4⟩,
+  ⟨"script_tests.json:30 0x4e 0x01000000 0x09", [0x4e, 0x01, 0x00, 0x00, 0x00, 0x09], 0,
+    ins 0x4e [0x4e, 0x01, 0x00, 0x00, 0x00, 0x09] [0x09] 6⟩,
+  ⟨"script_tests.json:32 0x4c 0x00", [0x4c, 0x00], 0, ins 0x4c [0x4c, 0x00] [] 2⟩,
+  ⟨"script_tests.json:33 0x4d 0x0000", [0x4d, 0x00, 0x00], 0, ins 0x4d [0x4d, 0x00, 0x00] [] 3⟩,
+  ⟨"script_tests.json:34 0x4e 0x00000000", [0x4e, 0x00, 0x00, 0x00, 0x00], 0,
+    ins 0x4e [0x4e, 0x00, 0x00, 0x00, 0x00] [] 5⟩,
+  ⟨"script_tests.json:538 0x4c 0x4b and 75 bytes", [0x4c, 0x4b] ++ rep 75 0x11, 0,
+    ins 0x4c ([0x4c, 0x4b] ++ rep 75 0x11) (rep 75 0x11) 77⟩,
+  ⟨"script_tests.json:721 0x4c01", [0x4c, 0x01], 0, .truncated 0x4c .payload 2⟩,
+  ⟨"script_tests.json:722 0x4d0200ff", [0x4d, 0x02, 0x00, 0xff], 0, .truncated 0x4d .payload 3⟩,
+  ⟨"script_tests.json:723 0x4e03000000ffff", [0x4e, 0x03, 0x00, 0x00, 0x00, 0xff, 0xff], 0,
+    .truncated 0x4e .payload 5⟩,
+  -- GetOp2: the end of the script.
+  ⟨"GetOp2: empty script", [], 0, .atEnd⟩,
+  ⟨"GetOp2: cursor at the end", [0x61], 1, .atEnd⟩,
+  ⟨"GetOp2: cursor after the end", [0x61], 5, .atEnd⟩,
+  -- GetOp2: every short length field. The cursor stops after the opcode.
+  ⟨"GetOp2: 4c, no length byte", [0x4c], 0, .truncated 0x4c .lengthField 1⟩,
+  ⟨"GetOp2: 4d, no length byte", [0x4d], 0, .truncated 0x4d .lengthField 1⟩,
+  ⟨"GetOp2: 4d, one length byte", [0x4d, 0x00], 0, .truncated 0x4d .lengthField 1⟩,
+  ⟨"GetOp2: 4e, no length byte", [0x4e], 0, .truncated 0x4e .lengthField 1⟩,
+  ⟨"GetOp2: 4e, one length byte", [0x4e, 0x00], 0, .truncated 0x4e .lengthField 1⟩,
+  ⟨"GetOp2: 4e, two length bytes", [0x4e, 0x00, 0x00], 0, .truncated 0x4e .lengthField 1⟩,
+  ⟨"GetOp2: 4e, three length bytes", [0x4e, 0x00, 0x00, 0x00], 0, .truncated 0x4e .lengthField 1⟩,
+  -- GetOp2: short data. The cursor stops after the length field, or after a direct push opcode.
+  ⟨"GetOp2: 01, no data", [0x01], 0, .truncated 0x01 .payload 1⟩,
+  ⟨"GetOp2: 02, one data byte", [0x02, 0xaa], 0, .truncated 0x02 .payload 1⟩,
+  ⟨"GetOp2: 4b, 74 data bytes", 0x4b :: rep 74 0xaa, 0, .truncated 0x4b .payload 1⟩,
+  ⟨"GetOp2: 4c ff, 254 data bytes", [0x4c, 0xff] ++ rep 254 0xaa, 0, .truncated 0x4c .payload 2⟩,
+  ⟨"GetOp2: 4d 0100, no data", [0x4d, 0x01, 0x00], 0, .truncated 0x4d .payload 3⟩,
+  ⟨"GetOp2: 4d ffff, 3 data bytes", [0x4d, 0xff, 0xff, 0xaa, 0xaa, 0xaa], 0, .truncated 0x4d .payload 3⟩,
+  ⟨"GetOp2: 4e 01000000, no data", [0x4e, 0x01, 0x00, 0x00, 0x00], 0, .truncated 0x4e .payload 5⟩,
+  ⟨"GetOp2: 4e ffffffff, 1 data byte", [0x4e, 0xff, 0xff, 0xff, 0xff, 0xaa], 0,
+    .truncated 0x4e .payload 5⟩,
+  -- GetOp2: nonminimal pushes with data keep their own bytes.
+  ⟨"GetOp2: 4d 0100 aa", [0x4d, 0x01, 0x00, 0xaa], 0, ins 0x4d [0x4d, 0x01, 0x00, 0xaa] [0xaa] 4⟩,
+  ⟨"GetOp2: 4e 02000000 aabb", [0x4e, 0x02, 0x00, 0x00, 0x00, 0xaa, 0xbb], 0,
+    ins 0x4e [0x4e, 0x02, 0x00, 0x00, 0x00, 0xaa, 0xbb] [0xaa, 0xbb] 7⟩,
+  ⟨"GetOp2: 4c ff and 255 bytes", [0x4c, 0xff] ++ rep 255 0xaa, 0,
+    ins 0x4c ([0x4c, 0xff] ++ rep 255 0xaa) (rep 255 0xaa) 257⟩,
+  -- GetOp2: reads at cursors after 0, including one inside pushed data.
+  ⟨"GetOp2: 51 02aabb ab at 1", [0x51, 0x02, 0xaa, 0xbb, 0xab], 1,
+    ins 0x02 [0x02, 0xaa, 0xbb] [0xaa, 0xbb] 4⟩,
+  ⟨"GetOp2: 51 02aabb ab at 2, inside the push", [0x51, 0x02, 0xaa, 0xbb, 0xab], 2,
+    ins 0xaa [0xaa] [] 3⟩,
+  ⟨"GetOp2: 51 02aabb ab at 4", [0x51, 0x02, 0xaa, 0xbb, 0xab], 4, ins 0xab [0xab] [] 5⟩,
+  ⟨"GetOp2: 51 4d01 at 1", [0x51, 0x4d, 0x01], 1, .truncated 0x4d .lengthField 2⟩,
+  ⟨"GetOp2: 51 4c02aa at 1", [0x51, 0x4c, 0x02, 0xaa], 1, .truncated 0x4c .payload 3⟩,
+  -- GetOp2: opcodes above OP_PUSHDATA4 are one byte and push nothing.
+  ⟨"GetOp2: OP_1NEGATE", [0x4f, 0x01], 0, ins 0x4f [0x4f] [] 1⟩,
+  ⟨"GetOp2: OP_RESERVED", [0x50, 0x01], 0, ins 0x50 [0x50] [] 1⟩,
+  ⟨"GetOp2: OP_NOP", [0x61], 0, ins 0x61 [0x61] [] 1⟩,
+  ⟨"GetOp2: OP_CODESEPARATOR", [0xab, 0x01], 0, ins 0xab [0xab] [] 1⟩,
+  ⟨"GetOp2: OP_INVALIDOPCODE", [0xff], 0, ins 0xff [0xff] [] 1⟩
+]
+
+/-- The loop cases. -/
+def loopCases : List LoopCase := [
+  ⟨"script_tests.json:442 CODESEPARATOR 1", [0xab, 0x51],
+    [ins 0xab [0xab] [] 1, ins 0x51 [0x51] [] 2, .atEnd]⟩,
+  ⟨"script_tests.json:721 0x4c01", [0x4c, 0x01], [.truncated 0x4c .payload 2]⟩,
+  ⟨"GetOp2: 01 ab, a separator byte as data", [0x01, 0xab], [ins 0x01 [0x01, 0xab] [0xab] 2, .atEnd]⟩,
+  ⟨"GetOp2: 02 abab ab, data then a separator", [0x02, 0xab, 0xab, 0xab],
+    [ins 0x02 [0x02, 0xab, 0xab] [0xab, 0xab] 3, ins 0xab [0xab] [] 4, .atEnd]⟩,
+  ⟨"GetOp2: 4c ab and 171 bytes ab, a separator byte as the length", [0x4c, 0xab] ++ rep 171 0xab,
+    [ins 0x4c ([0x4c, 0xab] ++ rep 171 0xab) (rep 171 0xab) 173, .atEnd]⟩,
+  ⟨"GetOp2: 4d 0100 ab ab", [0x4d, 0x01, 0x00, 0xab, 0xab],
+    [ins 0x4d [0x4d, 0x01, 0x00, 0xab] [0xab] 4, ins 0xab [0xab] [] 5, .atEnd]⟩,
+  ⟨"GetOp2: 51 02aabb ab, the loop never reads cursor 2", [0x51, 0x02, 0xaa, 0xbb, 0xab],
+    [ins 0x51 [0x51] [] 1, ins 0x02 [0x02, 0xaa, 0xbb] [0xaa, 0xbb] 4, ins 0xab [0xab] [] 5, .atEnd]⟩,
+  ⟨"GetOp2: 61 4e000000, a short length field after an instruction", [0x61, 0x4e, 0x00, 0x00, 0x00],
+    [ins 0x61 [0x61] [] 1, .truncated 0x4e .lengthField 2]⟩
+]
+
+/-- The results of the loop of `readInstruction` calls from cursor 0, up to and including the first result that is not an instruction. Each instruction moves the cursor forward, so `script.length + 1` calls are enough. -/
+def loop (script : List UInt8) : List ReadResult :=
+  go (script.length + 1) 0
+where
+  go : Nat → Nat → List ReadResult
+    | 0, _ => []
+    | fuel + 1, pc =>
+      match readInstruction script pc with
+      | .instruction i => .instruction i :: go fuel i.next
+      | r => [r]
+
+/-- Runs every case. Returns the number of failures. -/
+def check : IO Nat := do
+  let mut failures := 0
+  if cases.length != 44 || loopCases.length != 8 then
+    IO.eprintln s!"FAIL script reader: {cases.length} cases and {loopCases.length} loop cases, expected 44 and 8"
+    failures := failures + 1
+  for c in cases do
+    let got := readInstruction c.script c.pc
+    unless got == c.expected do
+      IO.eprintln s!"FAIL {c.label}: got {repr got}, expected {repr c.expected}"
+      failures := failures + 1
+  for c in loopCases do
+    let got := loop c.script
+    unless got == c.expected do
+      IO.eprintln s!"FAIL {c.label}: got {repr got}, expected {repr c.expected}"
+      failures := failures + 1
+  IO.println s!"script reader: {cases.length} cases, {loopCases.length} loop cases, {failures} failures"
+  return failures
+
+end KnownAnswers.Script
+
 /-- Entry point of `lake test`. -/
 def main : IO UInt32 := do
   let sha1 ← KnownAnswers.Sha1.check
@@ -2454,7 +2617,8 @@ def main : IO UInt32 := do
   let blocks ← KnownAnswers.Block.check
   let mainnetHeaders ← KnownAnswers.Work.MainnetHeaders.check
   let proofOfWork ← KnownAnswers.Work.checkProofOfWorkCases
+  let scriptReader ← KnownAnswers.Script.check
   let nextWork ← KnownAnswers.Work.checkNextWork
   let operators ← KnownAnswers.Work.checkOperators
   let shifts ← KnownAnswers.Work.checkShifts
-  return if sha1 + blocks + short + long + ripemd + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts + proofOfWork == 0 then 0 else 1
+  return if sha1 + blocks + short + long + ripemd + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts + proofOfWork + scriptReader == 0 then 0 else 1

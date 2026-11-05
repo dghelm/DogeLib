@@ -2,6 +2,7 @@ module
 
 public import DogeLib.Cryptography.Proofs.Hash.Hash160
 public import DogeLib.Cryptography.Proofs.Hash.Ripemd160
+public import DogeLib.Cryptography.Proofs.Hash.Sha1
 public import DogeLib.Cryptography.Proofs.Hash.Sha256
 public import DogeLib.Cryptography.Proofs.Hash.Sha256d
 

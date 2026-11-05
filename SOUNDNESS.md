@@ -55,6 +55,36 @@ Each operation with a theorem has a subsection here.
 It says what is proved, under which hypotheses and over which input domain, and what is not proved.
 [COVERAGE.md](COVERAGE.md) gives the per-operation status. This section explains its meaning and limits.
 
+### SHA-1
+
+`Sha1.hash_eq_spec` equates `Sha1.hash` with `Sha1.Spec.hash` for every whole-byte message with `message.size < 2 ^ 61`.
+`Sha1.hash_size` gives twenty output bytes for every message.
+The definition is total beyond that bound, where its encoded bit length wraps modulo 2^64.
+The theorem makes no FIPS compatibility claim on those longer messages.
+`hash_eq_spec` depends on `propext`, `Classical.choice` and `Quot.sound`, by `#print axioms` with Lean `v4.35.0`.
+`hash_size` depends on `propext` and `Quot.sound`.
+
+The model uses 32-bit bit vectors and five named working variables.
+Its round function, constants, schedule recurrence, block recursion and digest restate FIPS 180-4 §6.1.2 separately from the executable SHA-1 definitions.
+The executable code reuses SHA-256's padding, big-endian reader, Ch and Maj.
+The model reuses SHA-256's independent padding and input-word model, because FIPS 180-4 §5.1.1 and §5.2.1 prescribe both for SHA-1.
+`f_toBitVec` relates the reused Ch and Maj to independent bit-vector expressions.
+A reader must still compare this model with FIPS and pinned Core's `CSHA1` (A1).
+
+The Core source review covers the portable `Transform` body and its `Round`, `f1`, `f2`, `f3` and `left` helpers.
+The ARMv8 and experimental AVX2 bodies are outside that source review.
+
+`lake test` checks 65 short and 64 long NIST messages and 100 Monte Carlo checkpoints through compiled `Sha1.hash`.
+The Monte Carlo procedure makes 100,000 hash calls, following SHAVS §6.4.
+The same test checks Core's ten SHA-1 cases, including two million-byte messages.
+[Fixture provenance](tests/cryptography/sha1/cavp/README.md) records the NIST files and checksums.
+Core cases come from `sha1_testvectors` and `LongTestString` at the pinned revision.
+These finite tests do not prove compiled-code equivalence to Core (B1).
+
+SHA-1 has [broken collision resistance](https://csrc.nist.gov/News/2017/Research-Results-on-SHA-1-Collisions).
+The functional equality theorem establishes no collision-resistance, preimage-resistance or other security property.
+No cryptographic assumption enters the theorem.
+
 ### SHA-256
 
 `hash_eq_spec` says that `hash` equals `Spec.hash` on every message shorter than 2^61 bytes.

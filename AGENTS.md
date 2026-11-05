@@ -110,7 +110,7 @@ Report only the checks you ran, with the exact command, revision, and result ([C
 | Declaration check self-test | `bash scripts/test_check_decls.sh` | Yes | `ci` / `lean` |
 | Source and coverage review | Manual review of SOURCES.md and COVERAGE.md | Manual | No |
 | Conformance | `lake test`: known answers through the compiled code | Yes, for the operations that [COVERAGE.md](COVERAGE.md) gives a `lake test` comparison | `ci` / `lean` |
-| Pinned vectors | `(cd tests/cryptography/ripemd160 && sha256sum -c SHA256SUMS) && (cd tests/cryptography/sha256/cavp && sha256sum -c SHA256SUMS) && (cd tests/transaction/sighash && sha256sum -c SHA256SUMS) && (cd tests/transaction/corpus && sha256sum -c SHA256SUMS) && (cd tests/work/mainnet-headers && sha256sum -c SHA256SUMS) && (cd tests/block && sha256sum -c SHA256SUMS)` | Yes | `ci` / `tools` |
+| Pinned vectors | `(cd tests/cryptography/ripemd160 && sha256sum -c SHA256SUMS) && (cd tests/cryptography/sha1/cavp && sha256sum -c SHA256SUMS) && (cd tests/cryptography/sha256/cavp && sha256sum -c SHA256SUMS) && (cd tests/transaction/sighash && sha256sum -c SHA256SUMS) && (cd tests/transaction/corpus && sha256sum -c SHA256SUMS) && (cd tests/work/mainnet-headers && sha256sum -c SHA256SUMS) && (cd tests/block && sha256sum -c SHA256SUMS)` | Yes | `ci` / `tools` |
 | Soundness review | Manual review of SOUNDNESS.md | Manual | No |
 | Writing | `uv run --no-project --python 3.12 python scripts/check_writing.py --base main` | Yes. Its findings are advice and never fail the check. | `writing`, as annotations |
 | Oracle | `bash scripts/test_oracle.sh`: builds `dogelib-oracle` and checks fixtures, Core's `sighash.json`, base-mode corpus records and every corpus record through both witness operations | Yes | `ci` / `lean` |

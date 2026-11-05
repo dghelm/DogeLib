@@ -1,6 +1,7 @@
 module
 
 public import DogeLib.Exports.Main
+public import DogeLib.Script.Exports
 public import DogeLib.Serialization.Exports
 public import DogeLib.Transaction.Exports
 public import DogeLib.Work.Exports

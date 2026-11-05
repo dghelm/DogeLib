@@ -7,6 +7,7 @@ import DogeLib.Transaction
 import DogeLib.Work
 import DogeLib.Block
 import Lean.Data.Json
+import DogeLib.Script.Exports
 
 /-!
 # `KnownAnswers`
@@ -2434,9 +2435,96 @@ def check : IO Nat := do
 
 end KnownAnswers.Ripemd160
 
+namespace KnownAnswers.ScriptState
+
+open DogeLib.Script
+
+/-- Fixed expectations for exact bytes, push values and success cursors. -/
+def successes : List (List UInt8 × Nat × Instruction) := [
+  ([0x00], 0, ⟨0x00, [0x00], some [], 1⟩),
+  ([0x01, 0x0b], 0, ⟨0x01, [0x01, 0x0b], some [0x0b], 2⟩),
+  ([0x02, 0x41, 0x7a], 0, ⟨0x02, [0x02, 0x41, 0x7a], some [0x41, 0x7a], 3⟩),
+  (0x4b :: List.replicate 75 0xab, 0,
+    ⟨0x4b, 0x4b :: List.replicate 75 0xab, some (List.replicate 75 0xab), 76⟩),
+  ([0x4c, 1, 7], 0, ⟨0x4c, [0x4c, 1, 7], some [7], 3⟩),
+  ([0x4d, 1, 0, 8], 0, ⟨0x4d, [0x4d, 1, 0, 8], some [8], 4⟩),
+  ([0x4e, 1, 0, 0, 0, 9], 0, ⟨0x4e, [0x4e, 1, 0, 0, 0, 9], some [9], 6⟩),
+  ([0x4c, 0], 0, ⟨0x4c, [0x4c, 0], some [], 2⟩),
+  ([0x4d, 0, 0], 0, ⟨0x4d, [0x4d, 0, 0], some [], 3⟩),
+  ([0x4e, 0, 0, 0, 0], 0, ⟨0x4e, [0x4e, 0, 0, 0, 0], some [], 5⟩),
+  ([0xab], 0, ⟨0xab, [0xab], none, 1⟩),
+  ([0xff], 0, ⟨0xff, [0xff], none, 1⟩),
+  ([0x51], 0, ⟨0x51, [0x51], none, 1⟩),
+  ([0x61, 0x02, 0xab, 0xab, 0xab], 1,
+    ⟨0x02, [0x02, 0xab, 0xab], some [0xab, 0xab], 4⟩),
+  ([0x61, 0x02, 0xab, 0xab, 0xab], 4, ⟨0xab, [0xab], none, 5⟩),
+  (0x4d :: 0 :: 1 :: List.replicate 256 0xab, 0,
+    ⟨0x4d, 0x4d :: 0 :: 1 :: List.replicate 256 0xab,
+      some (List.replicate 256 0xab), 259⟩),
+  (0x4e :: 0 :: 1 :: 0 :: 0 :: List.replicate 256 0xab, 0,
+    ⟨0x4e, 0x4e :: 0 :: 1 :: 0 :: 0 :: List.replicate 256 0xab,
+      some (List.replicate 256 0xab), 261⟩)]
+
+/-- Every proper PUSHDATA length prefix and a short payload for each push kind. -/
+def failures : List (List UInt8 × Nat × ReadResult) := [
+  ([0x4c], 0, .truncatedPush 1),
+  ([0x4d], 0, .truncatedPush 1),
+  ([0x4d, 1], 0, .truncatedPush 1),
+  ([0x4e], 0, .truncatedPush 1),
+  ([0x4e, 1], 0, .truncatedPush 1),
+  ([0x4e, 1, 0], 0, .truncatedPush 1),
+  ([0x4e, 1, 0, 0], 0, .truncatedPush 1),
+  ([0x02], 0, .truncatedPush 1),
+  ([0x02, 0xab], 0, .truncatedPush 1),
+  ([0x4c, 2], 0, .truncatedPush 2),
+  ([0x4c, 2, 0xab], 0, .truncatedPush 2),
+  ([0x4d, 2, 0], 0, .truncatedPush 3),
+  ([0x4d, 2, 0, 0xab], 0, .truncatedPush 3),
+  ([0x4e, 2, 0, 0, 0], 0, .truncatedPush 5),
+  ([0x4e, 2, 0, 0, 0, 0xab], 0, .truncatedPush 5),
+  ([0x4d, 0, 1], 0, .truncatedPush 3),
+  ([0x4e, 0, 0, 1, 0], 0, .truncatedPush 5),
+  ([0x4e, 0, 0, 0, 1], 0, .truncatedPush 5),
+  ([0x4e, 0xff, 0xff, 0xff, 0xff], 0, .truncatedPush 5),
+  ([0x61, 0x4d, 1], 1, .truncatedPush 2),
+  ([0x61, 0x4e, 2, 0, 0, 0, 0xab], 1, .truncatedPush 6),
+  ([], 0, .endOfScript),
+  ([0xab], 1, .endOfScript),
+  ([], 1, .invalidCursor),
+  ([0xab], 2, .invalidCursor)]
+
+/-- Check fixed reads, iteration boundaries, state reset and the unsupported execution result. -/
+def check : IO Nat := do
+  let mut errors := 0
+  for (bs, cursor, expected) in successes do
+    unless readInstruction bs cursor == .instruction expected do
+      IO.eprintln s!"FAIL Script read at {cursor}: {bs}"
+      errors := errors + 1
+  for (bs, cursor, expected) in failures do
+    unless readInstruction bs cursor == expected do
+      IO.eprintln s!"FAIL Script failure cursor at {cursor}: {bs}"
+      errors := errors + 1
+  let expected := [⟨0x02, [0x02, 0xab, 0xab], some [0xab, 0xab], 3⟩,
+    ⟨0xab, [0xab], none, 4⟩]
+  unless readInstructions [0x02, 0xab, 0xab, 0xab] == (expected, .endOfScript) &&
+      readInstructions [0x02, 0xab, 0xab, 0xab, 0x4d, 1] == (expected, .truncatedPush 5) do
+    IO.eprintln "FAIL Script iteration over separator payload"
+    errors := errors + 1
+  let prior : ExecutionState := ⟨[[], [0x80], [0, 0]], [[0xff]], 99, 80, [true, false], 201⟩
+  let reset : ExecutionState := ⟨[[], [0x80], [0, 0]], [], 0, 0, [], 0⟩
+  unless handoff prior == reset && initialState prior.stack == reset &&
+      Exports.execute [] reset == .execution do
+    IO.eprintln "FAIL Script state reset or unsupported execution"
+    errors := errors + 1
+  IO.println s!"Script: {successes.length} successful reads, {failures.length} terminal reads, iteration and reset, {errors} failures"
+  return errors
+
+end KnownAnswers.ScriptState
+
 /-- Entry point of `lake test`. -/
 def main : IO UInt32 := do
   let sha1 ← KnownAnswers.Sha1.check
+  let scriptState ← KnownAnswers.ScriptState.check
   let dir : System.FilePath := "tests/cryptography/sha256/cavp"
   let short ← KnownAnswers.Sha256Cavp.checkFile (dir / "SHA256ShortMsg.rsp") 65
   let long ← KnownAnswers.Sha256Cavp.checkFile (dir / "SHA256LongMsg.rsp") 64
@@ -2457,4 +2545,4 @@ def main : IO UInt32 := do
   let nextWork ← KnownAnswers.Work.checkNextWork
   let operators ← KnownAnswers.Work.checkOperators
   let shifts ← KnownAnswers.Work.checkShifts
-  return if sha1 + blocks + short + long + ripemd + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts + proofOfWork == 0 then 0 else 1
+  return if scriptState + sha1 + blocks + short + long + ripemd + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts + proofOfWork == 0 then 0 else 1

@@ -80,8 +80,12 @@ Bottom-up. Each layer imports only the layers above it in this list.
 | `Work` | Proof-of-work arithmetic: 256-bit targets, their compact encoding, and the difficulty retarget |
 | `Transaction` | Raw transaction types, base serialization, transaction IDs, legacy signature hashing |
 | `Block` | Pure block headers, block hashes and transaction Merkle roots |
+| `Script` | Instruction decoding and per-call execution state, above Transaction |
 
-Script, Ledger, Rules and Models layers are added when their work begins.
+The Script layer reuses `Transaction.readOp` without an import from Transaction to Script.
+Its proofs and pure exports belong to the separate `Proofs` and `Exports` libraries.
+Script execution and spend validation are not implemented.
+Ledger, Rules and Models layers are added when their work begins.
 
 ## Adopted upstream code
 

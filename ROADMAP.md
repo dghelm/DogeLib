@@ -52,6 +52,12 @@ The SHA-1 oracle operation remains deferred in issue #64.
 
 Steps 0 and 0b follow design record 0002: the first contributions adopt audited codec foundations and then define Dogecoin's bounded decoding contract. They replace the original plan to build fixed-width encodings and CompactSize from scratch. Design record 0002 preferred a pinned btc-verified dependency first. The decisions below choose an adaptation instead, because btc-verified's toolchain, file structure and trust policy all differ from EthLib's.
 
+The Script layer implements stage 1 of [design record 0003](docs/design/0003-legacy-spend-validation.md).
+It exposes instruction decoding, cursor and consumption properties, per-call state reset and main-stack handoff.
+It reports unsupported execution and gives no spend verdict.
+Stage 2 opcode transitions and execution properties are the next Script work.
+[COVERAGE.md](COVERAGE.md) records the precise evidence and exclusions.
+
 ## Milestones
 
 ### A: a small byte codec (steps 0, 0b and 2)

@@ -30,7 +30,7 @@ this library rather than to `DogeLib`. -/
 lean_lib «Proofs» where
   requiresModuleSystem := true
   roots := #[`DogeLib.Proofs, `DogeLib.Base.Proofs, `DogeLib.Cryptography.Proofs,
-    `DogeLib.Block.Proofs, `DogeLib.Serialization.Proofs, `DogeLib.Transaction.Proofs, `DogeLib.Work.Proofs]
+    `DogeLib.Block.Proofs, `DogeLib.Script.Proofs, `DogeLib.Serialization.Proofs, `DogeLib.Transaction.Proofs, `DogeLib.Work.Proofs]
   precompileModules := false
 
 /-- The oracle and its operations, in a separate library rooted at
@@ -45,7 +45,7 @@ compiles the code itself. -/
 @[default_target]
 lean_lib «Exports» where
   requiresModuleSystem := true
-  roots := #[`DogeLib.Exports, `DogeLib.Serialization.Exports, `DogeLib.Transaction.Exports,
+  roots := #[`DogeLib.Exports, `DogeLib.Script.Exports, `DogeLib.Serialization.Exports, `DogeLib.Transaction.Exports,
     `DogeLib.Work.Exports]
   precompileModules := false
 

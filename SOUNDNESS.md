@@ -630,6 +630,50 @@ The reader corollaries and their supporting bounds have these axiom dependencies
 | `legacySignatureHashPlan_eq_reference_of_decodeBaseComplete`, `legacySignatureHash_eq_reference_of_decodeBaseComplete` | `propext`, `Classical.choice`, `Quot.sound` |
 | `legacySignatureHashPlan_eq_reference_of_readAllowWitness`, `legacySignatureHash_eq_reference_of_readAllowWitness` | `propext`, `Classical.choice`, `Quot.sound` |
 
+### Script instructions and execution state
+
+`Script.readInstruction` reuses the legacy serializer's `Transaction.readOp` (D24).
+It retains exact instruction bytes, extracts raw push payloads and reports absolute byte cursors.
+`OP_0` returns an empty push payload, and nonminimal pushes retain their encodings.
+A truncated length field advances only past the opcode.
+A truncated payload advances past its complete header.
+
+Core returns `OP_INVALIDOPCODE` and clears the push value on failure.
+The Script result carries no decoded instruction in that case.
+An offset beyond the input gives `invalidCursor`, an API error with no Core iterator counterpart.
+Natural offsets do not wrap.
+Core compatibility excludes scripts of 2^32 bytes or more, which Core cannot store.
+
+`readInstruction_of_op` and `readInstruction_of_stop` prove agreement with the underlying reader for every in-bounds cursor.
+`instruction_consumption` reconstructs the input suffix from the returned instruction bytes and unread bytes.
+`instruction_cursor` proves strict cursor progress and an upper bound of the script length.
+
+`truncated_cursor` gives those bounds for a failed push.
+`readInstruction_end_iff` characterizes end-of-script exactly.
+`readInstructionsFrom_prefix` proves that iteration returns a prefix of complete instructions.
+`readInstructionsFrom_complete` reconstructs the whole suffix when iteration reaches its end.
+These reader properties concern Lean definitions, rather than equivalence to compiled Core.
+The source correspondence still rests on inspection (A1), and compiled known answers exercise the runtime boundary (B1).
+
+`ExecutionState` holds raw main-stack and altstack entries, program and separator cursors, conditionals and an operation count.
+`initialState_fields` and `handoff_fields` prove that initialization and handoff keep the supplied main stack and reset all local fields.
+The reset is unconditional, including for caller-supplied stacks outside execution limits.
+Cursor invariants hold for every initial state and every next script.
+
+`initialState_resources` requires explicit bounds on the supplied script and stack.
+No theorem establishes resource preservation under execution.
+Core checks combined stack size after each executed loop iteration, so this predicate does not characterize arbitrary successful empty evaluations.
+The pure execution export always reports the missing execution capability.
+This stage defines no opcode transitions, Script errors, signature checks or spend verdicts.
+
+By `#print axioms` with Lean `v4.35.0`:
+
+| Theorems | Axioms |
+| --- | --- |
+| `readInstruction_of_op`, `readInstruction_of_stop`, `instruction_consumption`, `initialState_fields`, `handoff_fields` | `propext` |
+| `readInstruction_end_iff`, `readInstructionsFrom_prefix`, `readInstructionsFrom_complete`, `initialState_cursor`, `initialState_resources`, `handoff_cursor` | `propext`, `Quot.sound` |
+| `instruction_cursor`, `truncated_cursor` | `propext`, `Classical.choice`, `Quot.sound` |
+
 ### Compact encoding and difficulty retarget
 
 The `Work` layer specifies Core's `SetCompact`, `GetCompact` and `CalculateDogecoinNextWorkRequired` (SOURCES.md, D6, D12, D13).

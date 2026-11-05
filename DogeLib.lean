@@ -3,6 +3,7 @@ module
 public import DogeLib.Base
 public import DogeLib.Block
 public import DogeLib.Cryptography
+public import DogeLib.Script
 public import DogeLib.Serialization
 public import DogeLib.Transaction
 public import DogeLib.Work
@@ -20,4 +21,5 @@ Each layer lives in its own subtree:
 - `DogeLib.Transaction` holds the transaction fields, their base serialization and the transaction ID.
 - `DogeLib.Work` holds the proof-of-work arithmetic: compact targets and the difficulty retarget.
 - `DogeLib.Block` holds pure headers, block hashes and transaction Merkle roots.
+- `DogeLib.Script` holds instruction decoding and per-call execution state.
 -/

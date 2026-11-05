@@ -43,7 +43,7 @@ The messages include empty input, ASCII, embedded zero and high-bit bytes, all b
 Both independent implementations agreed on all twelve digests before the fixtures were committed.
 The Lean implementation did not produce any expectation.
 The comparison driver is local-only and is not committed.
-[Issue #63](https://github.com/dghelm/DogeLib/issues/63) tracks a reproducible oracle comparison.
+The committed [Core harness and comparator](../../../docs/oracle.md#the-core-harness) repeat the fixture comparison and add generated padding boundaries.
 
 ## Encoding and checksums
 

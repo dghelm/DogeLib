@@ -34,3 +34,35 @@ Every record of both transaction corpus files also passes through `tx.read_witne
 The test separates base fields and witness stacks directly from the known bytes, by D4's field layout.
 It checks the stacks, `has_witness`, serialization, both hashes and the prefix consumption.
 The hashes come from Python's `hashlib`.
+
+## Hash and block operations
+
+The `/4` fixtures add empty hash inputs, an empty Merkle list and raw zero-header encoding.
+Empty hash digests come from the committed hash vectors and their documented published sources.
+Core's `MerkleComputation` defines the empty root and mutation flag (SOURCES.md D42).
+The zero header bytes and numeric-notation case follow the six-field layout in D10.
+Request-error fixtures cover missing, unknown, malformed and out-of-range fields, including nested header fields and exact leaf lengths.
+Header truncation fixtures use D10's 80-byte layout and D21's stream error.
+
+`scripts/oracle_hash_block.py` supplies fixture requests to the oracle tests and Core comparison.
+It reads all 315 recorded headers, their expected hash links, the 34 Merkle cases and three mainnet transaction-ID lists.
+It also reads the committed hash fixtures, including generated million-byte messages from their recorded encodings.
+Their expectations retain the provenance in `tests/block/README.md` and the cryptography fixture READMEs.
+The helper never calls DogeLib to produce an expectation.
+
+The SHA-1 cases include all 129 NIST short and long vectors and ten Core messages from `src/test/crypto_tests.cpp`, lines 220–233.
+Core's numerical expectations retain the MIT terms in `LICENSES/dogecoin-core-MIT.txt`.
+The input construction reuses the recorded RIPEMD-160 messages, except Core's algorithm-specific sentence.
+That sentence is fixture data, not a SHA-1 security claim.
+The Core notice is:
+
+```text
+Copyright (c) 2014-2016 The Bitcoin Core developers
+Distributed under the MIT software license, see the accompanying
+file COPYING or http://www.opensource.org/licenses/mit-license.php.
+```
+
+For all 100 NIST Monte Carlo checkpoints, hashlib derives the final 60-byte input independently.
+The oracle must return NIST's expected checkpoint digest for that input.
+This fixture comparison does not chain the oracle's intermediate digests.
+`lake test` checks the full chain separately.

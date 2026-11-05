@@ -26,6 +26,11 @@ COMPARE = ROOT / "scripts" / "compare_core.py"
 # mode: (role of the wrapper, expected failure code). The role "core" stands
 # in for the harness, "oracle" for dogelib-oracle.
 MUTATIONS = {
+    **{name: ("core", "MISMATCH") for name in (
+        "hash_ripemd160", "hash_hash160", "hash_sha1", "header_version", "header_time", "header_bits",
+        "header_nonce", "header_prev_block_hex", "header_prev_block_display", "header_merkle_root_hex",
+        "header_merkle_root_display", "header_bytes", "header_hash_hex", "header_hash_display",
+        "header_consumed", "header_rest", "header_truncated", "merkle_root_hex", "merkle_root_display", "merkle_mutated")},
     **{name: ("core", "MISMATCH") for name in
        ("work_value", "work_negative", "work_overflow", "work_compact", "work_calculate_bits", "work_next_bits")},
     "wtxid": ("core", "MISMATCH"),
@@ -113,7 +118,36 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
     def set_ok(field, value):
         return lambda r: r["ok"].__setitem__(field, value)
 
-    if mode in ("work_value", "work_negative", "work_overflow", "work_compact"):
+    if mode.startswith(("hash_", "header_", "merkle_")):
+        requests = [json.loads(line) for line in data.splitlines()]
+        if mode.startswith("hash_"):
+            op, field = "hash." + mode[5:], "digest_hex"
+        elif mode.startswith("merkle_"):
+            op, field = "merkle.compute", mode[7:]
+        elif mode == "header_bytes":
+            op, field = "header.encode", "bytes_hex"
+        elif mode.startswith("header_hash_"):
+            op, field = "header.hash", mode[7:]
+        else:
+            op, field = "header.read", mode[7:]
+        field = {"rest": "rest_hex", "truncated": "reason"}.get(field, field)
+        ids = {r["id"] for r in requests if r["op"] == op}
+        def eligible(r):
+            if r["id"] not in ids:
+                return False
+            if field == "reason":
+                return r.get("error", {}).get("reason") == "truncated"
+            ok = r.get("ok", {})
+            return "header" in ok or field in ok
+        def alter(r):
+            obj = r.get("error") if field == "reason" else r["ok"].get("header", r["ok"])
+            if field not in obj:
+                obj = r["ok"]
+            value = obj[field]
+            obj[field] = (not value if type(value) is bool else value ^ 1 if type(value) is int else
+                          "too_large" if field == "reason" else ("01" if value[:2] != "01" else "00") + value[2:])
+        mutate_first(responses, eligible, alter)
+    elif mode in ("work_value", "work_negative", "work_overflow", "work_compact"):
         field = {"work_value": "value_hex", "work_negative": "negative",
                  "work_overflow": "overflow", "work_compact": "compact"}[mode]
         def alter(r):

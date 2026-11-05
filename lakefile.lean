@@ -46,7 +46,7 @@ compiles the code itself. -/
 lean_lib «Exports» where
   requiresModuleSystem := true
   roots := #[`DogeLib.Exports, `DogeLib.Serialization.Exports, `DogeLib.Transaction.Exports,
-    `DogeLib.Work.Exports]
+    `DogeLib.Work.Exports, `DogeLib.Block.Exports, `DogeLib.Cryptography.Exports]
   precompileModules := false
 
 /-- The oracle: answers requests in the record format of `docs/oracle.md`,

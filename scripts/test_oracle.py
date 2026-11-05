@@ -28,6 +28,9 @@ import sys
 import threading
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "scripts"))
+from oracle_hash_block import header_fixtures, merkle_fixtures, hash_fixtures, sha1_fixtures
+
 TIMEOUT = 10
 
 
@@ -199,6 +202,25 @@ def check_witness_corpus(oracle: str) -> int:
     return failures
 
 
+def check_hash_block_fixtures(oracle: str) -> int:
+    failures = 0
+    for name, cases in (("header fixtures", header_fixtures()), ("Merkle fixtures", merkle_fixtures()),
+                        ("hash fixtures", hash_fixtures()), ("SHA-1 fixtures", sha1_fixtures())):
+        requests = [{**req, "id": i} for i, (req, _) in enumerate(cases)]
+        responses = run_requests(oracle, name, requests)
+        if responses is None:
+            failures += 1
+            continue
+        bad = 0
+        for i, (response, (_, expected)) in enumerate(zip(responses, cases)):
+            if not matches(response, {"id": i, "ok": expected}):
+                print(f"FAIL {name} {i}: {response!r}, expected {expected!r}")
+                bad += 1
+        print(f"{name}: {len(cases)} records, {bad} failures")
+        failures += bad
+    return failures
+
+
 def check_process(oracle: str) -> int:
     """Item 5: line-by-line answers from a process whose input stays open."""
     proc = subprocess.Popen([oracle], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
@@ -221,21 +243,21 @@ def check_process(oracle: str) -> int:
             print(f"FAIL process, {step}: {resp}")
 
     expect("one request, input open", '{"id":1,"op":"oracle.version"}\n',
-           lambda r: r == {"id": 1, "ok": {"format": "dogelib-oracle/3"}})
+           lambda r: r == {"id": 1, "ok": {"format": "dogelib-oracle/4"}})
     expect("malformed line", '{"id":2,\n', lambda r: r["id"] is None and r["error"]["kind"] == "request")
     expect("blank lines, then a request", '\n  \n{"id":"three","op":"oracle.version"}\n',
-           lambda r: r == {"id": "three", "ok": {"format": "dogelib-oracle/3"}})
+           lambda r: r == {"id": "three", "ok": {"format": "dogelib-oracle/4"}})
     proc.stdin.write('{"id":null,"op":"oracle.version"}')
     proc.stdin.close()
     resp = read_line()
-    if resp != {"id": None, "ok": {"format": "dogelib-oracle/3"}}:
+    if resp != {"id": None, "ok": {"format": "dogelib-oracle/4"}}:
         failures += 1
         print(f"FAIL process, final line without newline: {resp}")
     if proc.wait(TIMEOUT) != 0 or proc.stdout.read() != "":
         failures += 1
         print("FAIL process: exit status or output after the last response")
     version = subprocess.run([oracle, "--version"], capture_output=True, text=True, timeout=TIMEOUT)
-    if version.returncode != 0 or json.loads(version.stdout) != {"format": "dogelib-oracle/3"}:
+    if version.returncode != 0 or json.loads(version.stdout) != {"format": "dogelib-oracle/4"}:
         failures += 1
         print(f"FAIL --version: {version.stdout!r}")
     print(f"process: {failures} failures")
@@ -248,7 +270,7 @@ def main() -> int:
         return 2
     oracle = sys.argv[1]
     failures = (check_fixtures(oracle) + check_sighash_corpus(oracle) + check_tx_corpus(oracle)
-                + check_witness_corpus(oracle) + check_process(oracle))
+                + check_witness_corpus(oracle) + check_hash_block_fixtures(oracle) + check_process(oracle))
     print("PASS" if failures == 0 else f"FAIL: {failures} failures")
     return 0 if failures == 0 else 1
 

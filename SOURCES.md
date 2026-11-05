@@ -187,6 +187,9 @@ The Core harness, `harness/core/core_oracle.cpp`, calls these functions of Core 
 | `compactsize.encode`, `compactsize.read` | D1, `WriteCompactSize` and `ReadCompactSize`. D21, `CDataStream` |
 | `tx.read_base`, `tx.decode_base` | D4, `UnserializeTransaction` and `SerializeTransaction`, with `SERIALIZE_TRANSACTION_NO_WITNESS`. D23, `CTransaction::ComputeHash`. D11, `base_blob::GetHex` |
 | `tx.read_witness`, `tx.decode_witness` | D4, `UnserializeTransaction`, `SerializeTransaction` and `CTransaction::HasWitness`, without `SERIALIZE_TRANSACTION_NO_WITNESS`. D23, `CTransaction::GetHash` and `GetWitnessHash`. D11, `base_blob::GetHex` |
+| `hash.ripemd160`, `hash.hash160`, `hash.sha1` | `src/crypto/ripemd160.cpp`, `CRIPEMD160::Write`, `Finalize`. D8, `CHash160::Write`, `Finalize`. `src/crypto/sha1.cpp`, `CSHA1::Write`, `Finalize`. All at the Dogecoin pin. |
+| `header.read`, `header.encode`, `header.hash` | D10, `CPureBlockHeader::SerializationOp`. D21, `CDataStream`. D40, `CPureBlockHeader::GetHash`. |
+| `merkle.compute` | D42, `ComputeMerkleRoot` and `MerkleComputation`, with at most 2^31 internal-order leaves. |
 | `sighash.legacy` | D3, `SignatureHash` with `SIGVERSION_BASE` |
 | `work.set_compact`, `work.get_compact` | D13, `arith_uint256::SetCompact` and `GetCompact`, lines 204–245. Known answers: D16, `bignum_SetCompact`, lines 412–538. |
 | `work.calculate_next` | D6, `CalculateDogecoinNextWorkRequired`, lines 41–87. D14, `SelectParams` and `GetConsensus`. Known answers: D7, `get_next_work_*`, lines 123–210. |

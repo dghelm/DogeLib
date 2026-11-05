@@ -72,6 +72,10 @@ Raw fields preserved without validation, base/no-witness parsing with prefix and
 
 The oracle, `dogelib-oracle`, exists ([docs/oracle.md](docs/oracle.md)). The Core harness runs Dogecoin Core's code on the same requests, and CI compares the two ([docs/oracle.md](docs/oracle.md#the-core-harness)).
 
+Oracle format `/4` exposes pure headers, Merkle roots, RIPEMD-160, Hash160 and SHA-1.
+The Core comparison covers their committed fixtures and generated boundaries ([format and comparison](docs/oracle.md)).
+Format changes require maintainer review.
+
 ### C: one meaningful implementation equivalence (step 5)
 
 The field-by-field preimage construction is proved equal to the transaction-transformation reference by `legacySignatureHashPlan_eq_reference`.
@@ -112,7 +116,7 @@ From design record 0001, section 9. A first release has:
 | Proof-trust policy | EthLib's: standard axioms only, no tactic that trusts compiled code | See SOUNDNESS.md, C2 | Adopted |
 | btc-verified reuse form | Adaptation into DogeLib's layout, with provenance, not a dependency | Different toolchain, colocated proofs, and `bv_decide` steps | Step 0b, codec foundations, with Lean core and `Std` only |
 | Writing standard | EthLib's `WRITING.md` and checker, with DogeLib vocabulary | Follows the model project | Adopted |
-| Oracle record format | JSON Lines, `dogelib-oracle/3`, in [docs/oracle.md](docs/oracle.md) | One request and one response per line, so a harness can keep the oracle open. Hashes in both byte orders, and preimages in the response. | Maintainer, 2026-11-04, including the `/3` work operations |
+| Oracle record format | JSON Lines, `dogelib-oracle/4`, in [docs/oracle.md](docs/oracle.md) | One request and one response per line, so a harness can keep the oracle open. Hashes in both byte orders, and preimages in the response. | Pending maintainer review |
 | Core compatibility pin | Dogecoin Core `v1.14.9`, commit `e0a1c15` | The latest Core release on 2026-11-03 | Maintainer, 2026-11-03, issue #5 |
 | First signature-proof domain | Script code with no instruction that fails to parse, in a transaction with fewer than 2^32 inputs and 2^32 outputs | `legacySignatureHashPlan_eq_reference` holds on it. On a script that ends in a short push the two forms differ. | Step 5, `proof/legacy-sighash-reference` (#27) |
 | Rust refinement tools | Aeneas `d1e177b` and Charon `a58d159` (Adopted in SOURCES.md). Mathlib only in the separate `Refinement` Lake package. No trust-policy exception for Aeneas's axioms | Both tools target Lean `v4.35.0`. EthLib requires Mathlib. EthLib's trust policy allows only the three standard axioms | Maintainer, 2026-11-04, PR #33 |
@@ -126,6 +130,3 @@ None. A maintainer decision that blocks a lane becomes an issue with the `needs-
 
 Deferred work is tracked as GitHub issues with the `deferred` label.
 Decisions that only a maintainer can make carry the `needs-maintainer` label.
-
-[Issue #61](https://github.com/dghelm/DogeLib/issues/61) tracks pure-header and Merkle oracle operations and their Core comparison.
-The oracle contract requires a maintainer decision.

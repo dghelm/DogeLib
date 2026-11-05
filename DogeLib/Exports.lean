@@ -4,6 +4,8 @@ public import DogeLib.Exports.Main
 public import DogeLib.Serialization.Exports
 public import DogeLib.Transaction.Exports
 public import DogeLib.Work.Exports
+public import DogeLib.Block.Exports
+public import DogeLib.Cryptography.Exports
 
 /-!
 # `DogeLib.Exports`

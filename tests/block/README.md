@@ -71,6 +71,7 @@ The test checks each record's root and mutation flag, and checks every unmutated
 A local C++ driver also passed all 34 leaf lists to the pinned `ComputeMerkleRoot`.
 Its roots and mutation flags agreed with every recorded expectation.
 The build used unmodified `merkle.cpp`, `sha256.cpp`, `uint256.cpp` and `utilstrencodings.cpp` from the pin, with unused sections discarded.
+The committed [Core harness and comparator](../../docs/oracle.md#the-core-harness) repeat the fixture comparison and add generated subtree duplications.
 These finite cases do not prove equivalence to Core for every input.
 
 The Core compatibility domain has at most 2^31 leaves because larger lists can wrap its final sweep counter.

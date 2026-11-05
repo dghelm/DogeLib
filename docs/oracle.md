@@ -1,13 +1,15 @@
 # The oracle and its record format
 
 `dogelib-oracle` runs DogeLib's specification on requests from another program, such as a harness that runs Dogecoin Core on the same inputs.
-This document defines its record format, `dogelib-oracle/3`.
+This document defines its record format, `dogelib-oracle/4`.
 The oracle supports only this format.
-Format `/3` adds four work operations and the `work_view` error kind.
-Operations from `/2` keep their request fields, response shapes and behavior, and only the version string changes.
+Format `/4` exposes RIPEMD-160, Hash160, SHA-1, pure headers and Merkle roots.
+The earlier operations keep their request fields, response shapes and behavior.
+Only the format name changes for them.
+
 A change to the format needs a maintainer's approval ([AGENTS.md](../AGENTS.md#changes-that-need-a-maintainer)) and a new format name.
 
-The oracle models Core's serialization, its legacy signature hash and its work arithmetic.
+The oracle models Core's serialization, legacy signature hash, work arithmetic, byte-string hashes and pure block commitments.
 It reads transactions in base mode or with witness data allowed.
 The witness operations model a serialization format only.
 Segregated witness is not active on Dogecoin at the pin.
@@ -21,7 +23,7 @@ It checks no consensus rule. Its output says what Core's code computes for an in
 ```bash
 lake build dogelib-oracle
 .lake/build/bin/dogelib-oracle             # answer requests on standard input
-.lake/build/bin/dogelib-oracle --version   # print {"format":"dogelib-oracle/3"}
+.lake/build/bin/dogelib-oracle --version   # print {"format":"dogelib-oracle/4"}
 ```
 
 The oracle reads one request per line of standard input and writes one response per line of standard output.
@@ -100,7 +102,7 @@ The other non-request kinds report serialization errors of the specification.
 
 | `op` | Arguments | `ok` fields | Specification |
 | --- | --- | --- | --- |
-| `oracle.version` | none | `format`: `"dogelib-oracle/3"` | none |
+| `oracle.version` | none | `format`: `"dogelib-oracle/4"` | none |
 | `compactsize.encode` | `value`: `u64` | `bytes_hex` | `CompactSize.encode`, Core's `WriteCompactSize` |
 | `compactsize.read` | `bytes_hex` | `value` (`u64`), `consumed`, `rest_hex` | `CompactSize.decodeBounded`, Core's `ReadCompactSize` with its `MAX_SIZE` check |
 | `tx.read_base` | `bytes_hex` | `tx`, `consumed`, `rest_hex` | `Transaction.readBase`: a transaction at the start of the bytes, as Core reads the next transaction of a stream |
@@ -108,10 +110,61 @@ The other non-request kinds report serialization errors of the specification.
 | `tx.read_witness` | `bytes_hex` | Witness result, `consumed`, `rest_hex` | `Transaction.readAllowWitness`: a prefix with witness data allowed |
 | `tx.decode_witness` | `bytes_hex` | Witness result | `Transaction.decodeAllowWitnessComplete`: the whole input with witness data allowed |
 | `sighash.legacy` | `tx_hex`, `script_code_hex`, `input_index` (`u32`), `hash_type` | `plan`, `preimage_hex` (for `hash_bytes` only), `digest_hex`, `digest_display` | `tx_hex` is read as by `tx.decode_base`. Then `legacySignatureHashPlan` and `LegacyHashPlan.digest`: Core's `SignatureHash` with `SIGVERSION_BASE` |
+| `hash.ripemd160` | `bytes_hex` | `digest_hex` (twenty bytes) | `Cryptography.Hash.Ripemd160.hash` |
+| `hash.hash160` | `bytes_hex` | `digest_hex` (twenty bytes) | `Cryptography.Hash.Hash160.hash` |
+| `hash.sha1` | `bytes_hex` | `digest_hex` (twenty bytes) | `Cryptography.Hash.Sha1.hash` |
+| `header.read` | `bytes_hex` | `header`, `consumed`, `rest_hex` | `Codec.decode` for `Block.PureBlockHeader` |
+| `header.encode` | `header` | `bytes_hex` | `Codec.encode` for `Block.PureBlockHeader` |
+| `header.hash` | `header` | `hash_hex`, `hash_display` | `Block.PureBlockHeader.getHash` |
+| `merkle.compute` | `leaves_hex` | `root_hex`, `root_display`, `mutated` | `Block.computeMerkleRoot` |
 | `work.set_compact` | `compact` (`u32`) | `value_hex` (target magnitude), `negative`, `overflow` (booleans) | `Work.ArithUint256.setCompact` |
 | `work.get_compact` | `value_hex` (target magnitude), `negative` (boolean) | `compact` (`u32`) | `Work.ArithUint256.getCompact` |
 | `work.calculate_next` | `network`, `selection_height`, `last_height`, `last_time`, `last_bits`, `first_time` | `bits` (`u32`) | `Work.calculateDogecoinNextWorkRequired` with `Work.getConsensus` |
 | `work.next` | `network`, `chain`, `candidate_time` (`u32`) | `bits` (`u32`) | `Work.nextWorkRequired` |
+
+### Hash and block arguments
+
+`hash.ripemd160`, `hash.hash160` and `hash.sha1` take the exact bytes in `bytes_hex`.
+They return `digest_hex`, twenty bytes in digest output order, without reversal or a length prefix.
+Empty input is allowed.
+These operations have no network or activation parameter and make no cryptographic security claim.
+
+`header.read` reads exactly the first 80 bytes as a `CPureBlockHeader`.
+It returns `read/truncated` if fewer than 80 bytes are available.
+It returns the decoded `header`, `consumed: 80` and the exact `rest_hex` on success.
+The header object contains these fields:
+
+| Field | Meaning |
+| --- | --- |
+| `version` | The raw u32 bits of Core's signed `nVersion` |
+| `prev_block_hex`, `prev_block_display` | Previous block hash, in internal and display order |
+| `merkle_root_hex`, `merkle_root_display` | Transaction Merkle root, in internal and display order |
+| `time`, `bits`, `nonce` | Core's `nTime`, `nBits`, `nNonce`, each a u32 |
+
+`header.encode` and `header.hash` take a `header` object with exactly six fields:
+`version`, `prev_block_hex`, `merkle_root_hex`, `time`, `bits` and `nonce`.
+`version`, `time`, `bits` and `nonce` are `u32` arguments.
+`version` gives the raw bits of Core's signed `nVersion`, so a negative JSON value is a request error.
+Both hash strings must contain exactly 32 bytes in internal order.
+Display fields are output fields only.
+Unknown fields, including fields inside `header`, are request errors.
+
+`header.encode` returns the 80 serialized bytes as `bytes_hex`.
+`header.hash` returns their double SHA-256 as `hash_hex` and `hash_display`.
+The pure header boundary stays at 80 bytes even when version bit 8 indicates an AuxPoW payload.
+The operations neither parse that payload nor compute scrypt or check header validity.
+
+`merkle.compute` takes `leaves_hex`, an array of strings with exactly 32 bytes each, in internal order.
+It returns `root_hex`, `root_display` and the boolean `mutated`.
+The root is zero for an empty array and equals the leaf for one entry.
+Odd levels duplicate the final hash for root computation.
+Mutation detection compares equal aligned complete subtrees and excludes synthetic padding.
+
+The array must have at most 2^31 entries.
+A larger array is a request error before Merkle computation.
+This caller bound avoids counter wrap in Core's final sweep ([D42, `MerkleComputation`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/consensus/merkle.cpp)).
+The Lean specification `computeMerkleRoot` has no such bound.
+No operation checks transaction validity, witness commitments or full block validity.
 
 ### Work arguments
 
@@ -249,6 +302,22 @@ These pinned sources supply the additional objects:
 | `tx.read_witness`, `tx.decode_witness` | `CMutableTransaction` read from a `CDataStream` without `SERIALIZE_TRANSACTION_NO_WITNESS`. The complete operation requires an empty stream. Both write with witness data allowed and call `CTransaction::HasWitness`, `GetHash` and `GetWitnessHash`. |
 | `sighash.legacy` | `tx_hex` read as by `tx.decode_base`. Then `SignatureHash` with amount 0 and `SIGVERSION_BASE` |
 
+The harness also calls these hash and block functions:
+
+| `op` | Core's code |
+| --- | --- |
+| `hash.ripemd160` | `CRIPEMD160::Write` and `Finalize` |
+| `hash.hash160` | `CHash160::Write` and `Finalize` |
+| `hash.sha1` | `CSHA1::Write` and `Finalize` |
+| `header.read` | `CPureBlockHeader` read from a `CDataStream` |
+| `header.encode` | `CPureBlockHeader` written to a `CDataStream` |
+| `header.hash` | `CPureBlockHeader::GetHash` |
+| `merkle.compute` | `ComputeMerkleRoot`, including its `mutated` output argument |
+
+Core's consensus archive supplies `primitives/pureheader.cpp` and `consensus/merkle.cpp`.
+Its cryptography archive supplies RIPEMD-160, SHA-256 and SHA-1.
+The harness implements no replacement hash or Merkle algorithm.
+
 The harness also calls these work functions:
 
 | `op` | Core's code |
@@ -273,9 +342,9 @@ The `work missing skip traversal` comparison retargets from height 479 to ancest
 
 ### How its responses differ
 
-The harness answers a projection of `dogelib-oracle/3`, not the format itself:
+The harness answers a projection of `dogelib-oracle/4`, not the format itself:
 
-- `--version` and `oracle.version` give the format `dogelib-oracle/3-core-projection`.
+- `--version` and `oracle.version` give the format `dogelib-oracle/4-core-projection`.
 - `sighash.legacy` has no `preimage_hex`.
   `SignatureHash` hashes its preimage as it writes it and does not return it.
 - `plan` is a label that the harness computes from the conditions of Core's two early returns, in `src/script/interpreter.cpp` lines 1225 to 1235.
@@ -340,11 +409,34 @@ The work comparison reports these sets separately:
   Height 144720 lacks its retarget ancestor and stays an oracle error fixture in the known-answer tests.
 - A retarget whose ancestor traversal crosses a block with a null skip pointer.
 
+The hash and block comparison reports these sets separately:
+
+- All 315 recorded pure headers: fields, exact encoding, block hash and a three-byte suffix.
+- Every proper header prefix, lengths 0 through 79, for all 315 records.
+- Raw header field boundaries, including signed version bits and the AuxPoW flag.
+- The 34 committed Merkle cases and three mainnet transaction-ID lists.
+- Generated leaf lists of sizes 0 through 64, with aligned duplicates, complete-subtree duplicates and final-subtree extension.
+- All committed RIPEMD-160 and Hash160 vectors, plus the 129 short and long NIST SHA-1 vectors and Core's ten SHA-1 vectors.
+  These include million-byte inputs.
+- The final input of each of 100 NIST SHA-1 Monte Carlo checkpoints.
+  Python hashlib derives each 60-byte input independently, and NIST supplies the expected final digest.
+  The comparator does not chain the oracle's intermediate digests.
+  `lake test` checks the full 100,000-call chain.
+- Generated binary hash messages of lengths 0 through 200 and around padding boundaries, up to length 1025, separately for each hash.
+
+The fixture helper reads committed expectations and fixed header offsets independently of the executables.
+The comparison checks complete results, including both byte orders, fields, consumption, remainder, truncation errors and mutation flags.
+The Merkle caller bound is explicit, but the comparison uses only small lists.
+
 `scripts/test_compare_core.py` checks that the comparison can fail.
 A wrapper around the oracle stands in for the harness.
-Unchanged, it must pass on the full stream. Each of 31 mutations must fail with the failure code that it targets.
+Unchanged, it must pass on the full stream. Each of 51 mutations must fail with the failure code that it targets.
 The witness mutations change `wtxid_hex`, a stack and `has_witness`.
 The work mutations change the magnitude, both flags, the encoded compact and each work operation's result bits.
+
+Hash mutations change each digest operation.
+Block mutations change every header field, encoding, both hash orders, consumption, remainder and truncation.
+They also change both Merkle root orders and the mutation flag.
 
 ### Compiled Rust CompactSize
 

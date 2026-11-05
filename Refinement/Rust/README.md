@@ -91,7 +91,7 @@ python3 -I scripts/compare_core.py --rust-compactsize Refinement/Rust/target/deb
 [BUILDING.md](../../BUILDING.md#comparison-with-dogecoin-core) gives the oracle and Core build commands.
 The comparator reads the oracle format at runtime and passes `--oracle-format FORMAT` to the adapter.
 Both version interfaces report `FORMAT-rust-compactsize`.
-For example, `dogelib-oracle/3` selects `dogelib-oracle/3-rust-compactsize`.
+For example, `dogelib-oracle/4` selects `dogelib-oracle/4-rust-compactsize`.
 This projection label describes CompactSize reads only.
 
 The three programs agree on 404 reader requests: seven existing fixtures and 397 generated cases at encoding and size boundaries.

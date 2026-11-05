@@ -3201,6 +3201,99 @@ def check : IO Nat := do
 
 end KnownAnswers.ScriptEval
 
+namespace KnownAnswers.SignatureCode
+
+open DogeLib.Script
+
+/--
+All sixteen cases of Core's `script_FindAndDelete` (D46), in source order, as input, pattern, output and count.
+Copied from Dogecoin Core `e0a1c157791544e818c901bd9341896965afbf9d`, `src/test/script_tests.cpp`, under the MIT licence.
+The opcode constructors are expanded to their exact bytes.
+The upstream licence is in `LICENSES/dogecoin-core-MIT.txt`.
+-/
+def coreCases : List (String × String × String × Nat) := [
+  ("5152", "", "5152", 0),
+  ("515253", "52", "5153", 1),
+  ("535153535453", "53", "5154", 4),
+  ("0302ff03", "0302ff03", "", 1),
+  ("0302ff030302ff03", "0302ff03", "", 2),
+  ("0302ff030302ff03", "02", "0302ff030302ff03", 0),
+  ("0302ff030302ff03", "ff", "0302ff030302ff03", 0),
+  ("0302ff030302ff03", "03", "02ff0302ff03", 2),
+  ("02feed5169", "feed51", "02feed5169", 0),
+  ("02feed5169", "02feed51", "69", 1),
+  ("516902feed5169", "feed51", "516902feed5169", 0),
+  ("516902feed5169", "02feed51", "516969", 1),
+  ("00005151", "0051", "0051", 1),
+  ("000051005151", "0051", "0051", 2),
+  ("0003feed", "03feed", "00", 1),
+  ("0003feed", "00", "03feed", 1)]
+
+/-- Malformed suffix cases derived from D24's deletion loop and failed `GetOp2` reads. -/
+def tailCases : List (String × String × String × Nat) := [
+  ("514c", "51", "4c", 1),
+  ("514d01", "51", "4d01", 1),
+  ("514e010203", "51", "4e010203", 1),
+  ("514c02aa", "51", "4c02aa", 1),
+  ("514d0200aa", "51", "4d0200aa", 1),
+  ("514e02000000aa", "51", "4e02000000aa", 1),
+  ("4c02aa51", "51", "4c02aa51", 0),
+  ("4c03aa51", "51", "4c03aa51", 0)]
+
+/-- Push headers at every size transition, derived from Core's vector overload (D24, lines 437 to 464). -/
+def pushCases : List (Nat × List UInt8) := [
+  (0, [0x00]), (1, [0x01]), (75, [0x4b]), (76, [0x4c, 0x4c]),
+  (255, [0x4c, 0xff]), (256, [0x4d, 0x00, 0x01]),
+  (65535, [0x4d, 0xff, 0xff]), (65536, [0x4e, 0x00, 0x00, 0x01, 0x00])]
+
+/-- Run Core's complete deletion test, malformed suffix cases, push boundaries and signature-code preparation. -/
+def check : IO Nat := do
+  let mut failures := 0
+  unless coreCases.length == 16 do
+    throw (IO.userError "FindAndDelete corpus must contain sixteen cases")
+  for (s, b, out, count) in coreCases ++ tailCases do
+    let .ok sBytes := Sha256Cavp.parseHex s | throw (IO.userError "invalid input hex")
+    let .ok bBytes := Sha256Cavp.parseHex b | throw (IO.userError "invalid pattern hex")
+    let .ok outBytes := Sha256Cavp.parseHex out | throw (IO.userError "invalid output hex")
+    let got := DogeLib.Transaction.findAndDelete sBytes.toList bBytes.toList
+    unless got == (outBytes.toList, count) do
+      IO.eprintln s!"FAIL FindAndDelete {s} / {b}: {repr got}"
+      failures := failures + 1
+  for (n, header) in pushCases do
+    let data := List.replicate n (0xab : UInt8)
+    let expected := header ++ data
+    unless pushEncoding data == expected do
+      IO.eprintln s!"FAIL push encoding at {n} bytes"
+      failures := failures + 1
+    let got := readInstruction (pushEncoding data ++ [0x61]) 0
+    let expectedRead := ReadResult.instruction ⟨header.head!, expected, data, expected.length⟩
+    unless got == expectedRead do
+      IO.eprintln s!"FAIL push reader at {n} bytes"
+      failures := failures + 1
+  -- Vector construction never substitutes OP_1 or OP_1NEGATE (D24).
+  unless pushEncoding [0x01] == [0x01, 0x01] && pushEncoding [0x81] == [0x01, 0x81] do
+    IO.eprintln "FAIL single-byte vector push"
+    failures := failures + 1
+  -- Stack signature suffix [01, 02] has 02 nearest the top (D3, stacktop(-isig-k)).
+  -- The script prefix before cursor 2 stays outside the selected code.
+  let script := [0x61, 0xab, 0x01, 0x01, 0xab, 0x02, 0x01, 0x02, 0x01, 0x02, 0x4c]
+  let first := effectiveScriptCode script 2 [[0x02]]
+  let both := effectiveScriptCode script 2 [[0x02], [0x01]]
+  unless first == [0x01, 0x01, 0xab, 0x02, 0x01, 0x02, 0x4c] &&
+      both == [0xab, 0x02, 0x01, 0x02, 0x4c] &&
+      both == effectiveScriptCode first 0 [[0x01]] do
+    IO.eprintln "FAIL multisig signature visitation, retained payload or malformed suffix"
+    failures := failures + 1
+  unless effectiveScriptCode [0x00, 0x61, 0x00] 0 [[]] == [0x61] &&
+      effectiveScriptCode script 2 [] == script.drop 2 &&
+      effectiveScriptCode script 99 [[0x01]] == [] do
+    IO.eprintln "FAIL empty signature or suffix selection"
+    failures := failures + 1
+  IO.println s!"signature code: 16 Core deletion cases, 8 malformed tails, 8 push boundaries, preparation cases, {failures} failures"
+  return failures
+
+end KnownAnswers.SignatureCode
+
 /-- Entry point of `lake test`. -/
 def main : IO UInt32 := do
   let sha1 ← KnownAnswers.Sha1.check
@@ -3227,4 +3320,5 @@ def main : IO UInt32 := do
   let shifts ← KnownAnswers.Work.checkShifts
   let scriptNum ← KnownAnswers.ScriptNum.check
   let scriptEval ← KnownAnswers.ScriptEval.check
-  return if sha1 + blocks + short + long + ripemd + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts + proofOfWork + scriptReader + scriptNum + scriptEval == 0 then 0 else 1
+  let signatureCode ← KnownAnswers.SignatureCode.check
+  return if sha1 + blocks + short + long + ripemd + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts + proofOfWork + scriptReader + scriptNum + scriptEval + signatureCode == 0 then 0 else 1

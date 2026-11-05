@@ -64,7 +64,11 @@ It runs pushes, NOPs, control flow, stack operations, `OP_SIZE`, equality, the n
 It follows Core's errors and check order, also in skipped branches.
 Signature opcodes, CLTV and CSV with their flags, and flags outside the seven of the design record give `unsupported`, never a rejection.
 On Core's `script_tests.json`, 745 records agree with Core, none disagrees, and 448 are unsupported.
-Stage 3, the signature opcodes, is the next Script work.
+
+`Script.SignatureCode` implements push encoding and effective script-code preparation for stage 3.
+Its proofs cover the push reader round trip below 2^32 bytes and the exact traversal of `FindAndDelete`, including malformed suffixes.
+Known answers include all sixteen Core deletion cases and every push-size transition.
+Signature encoding and opcode integration remain the next Script work.
 
 Steps 0 and 0b follow design record 0002: the first contributions adopt audited codec foundations and then define Dogecoin's bounded decoding contract. They replace the original plan to build fixed-width encodings and CompactSize from scratch. Design record 0002 preferred a pinned btc-verified dependency first. The decisions below choose an adaptation instead, because btc-verified's toolchain, file structure and trust policy all differ from EthLib's.
 

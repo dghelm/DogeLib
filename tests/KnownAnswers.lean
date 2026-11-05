@@ -1,4 +1,5 @@
 import DogeLib.Cryptography.Hash.Hash160
+import DogeLib.Cryptography.Hash.Sha1
 import DogeLib.Cryptography.Hash.Sha256
 import DogeLib.Cryptography.Hash.Sha256d
 import DogeLib.Serialization
@@ -105,6 +106,141 @@ def checkFile (path : System.FilePath) (expected : Nat) : IO Nat := do
   return failures
 
 end KnownAnswers.Sha256Cavp
+
+/-!
+## SHA-1
+
+NIST CAVS 11.0 supplies the byte-oriented short and long answers, and CAVS 11.1 supplies the Monte Carlo checkpoints.
+`tests/cryptography/sha1/cavp/README.md` records the files and SHAVS §6.4 procedure.
+Core supplies ten further answers in `sha1_testvectors`, including two million-byte inputs.
+-/
+
+namespace KnownAnswers.Sha1
+
+open Sha256Cavp
+open DogeLib.Cryptography.Hash (sha1)
+
+/-- Checks every SHA-1 vector in a short or long NIST file, including the expected vector count. -/
+def checkFile (path : System.FilePath) (expected : Nat) : IO Nat := do
+  let vectors ← match parse (← IO.FS.readFile path) with
+    | .ok v => pure v
+    | .error e => throw (IO.userError s!"{path}: {e}")
+  let mut failures := 0
+  if vectors.size != expected then
+    IO.eprintln s!"FAIL {path}: {vectors.size} vectors, expected {expected}"
+    failures := failures + 1
+  for v in vectors do
+    let got := sha1 v.message
+    unless v.digest.size == 20 && got.toList == v.digest.toList do
+      IO.eprintln s!"FAIL {path}: Len = {v.bits}: got {toHex got}, expected {toHex v.digest}"
+      failures := failures + 1
+  IO.println s!"{path}: {vectors.size} vectors, {failures} failures"
+  return failures
+
+/-- Reads one 20-byte seed and all 100 sequential Monte Carlo checkpoints, or reports a malformed fixture. -/
+def parseMonte (text : String) : Except String (ByteArray × Array ByteArray) := do
+  let mut seed : Option ByteArray := none
+  let mut pending : Option Nat := none
+  let mut checkpoints := #[]
+  for raw in text.splitOn "\n" do
+    let line := String.ofList (raw.toList.filter (· != '\r'))
+    if let some value := field? "Seed" line then
+      unless seed.isNone && checkpoints.isEmpty && pending.isNone do throw "unexpected Seed"
+      let bytes ← parseHex value
+      unless bytes.size == 20 do throw "SHA-1 seed must have twenty bytes"
+      seed := some bytes
+    else if let some value := field? "COUNT" line then
+      unless seed.isSome && pending.isNone do throw "unexpected COUNT"
+      let some index := value.toNat? | throw "bad COUNT"
+      unless index == checkpoints.size do throw "COUNT out of order"
+      pending := some index
+    else if let some value := field? "MD" line then
+      unless pending.isSome do throw "MD without COUNT"
+      let bytes ← parseHex value
+      unless bytes.size == 20 do throw "SHA-1 digest must have twenty bytes"
+      checkpoints := checkpoints.push bytes
+      pending := none
+  let some initial := seed | throw "missing Seed"
+  unless pending.isNone && checkpoints.size == 100 do throw "expected 100 complete checkpoints"
+  return (initial, checkpoints)
+
+/-- Performs 1,000 hashes of the three prior digests, as SHAVS §6.4, Figure 1 prescribes. -/
+def monteCheckpoint (seed : ByteArray) : ByteArray := Id.run do
+  let mut a := seed
+  let mut b := seed
+  let mut c := seed
+  for _ in [:1000] do
+    let next := sha1 (a ++ b ++ c)
+    a := b
+    b := c
+    c := next
+  return c
+
+/-- Checks all 100 NIST checkpoints in sequence, with 100,000 SHA-1 calls. -/
+def checkMonte (path : System.FilePath) : IO Nat := do
+  let (initial, checkpoints) ← match parseMonte (← IO.FS.readFile path) with
+    | .ok value => pure value
+    | .error e => throw (IO.userError s!"{path}: {e}")
+  let mut seed := initial
+  let mut failures := 0
+  for i in [:checkpoints.size] do
+    seed := monteCheckpoint seed
+    unless seed.toList == checkpoints[i]!.toList do
+      IO.eprintln s!"FAIL {path}: COUNT = {i}: got {toHex seed}, expected {toHex checkpoints[i]!}"
+      failures := failures + 1
+  IO.println s!"{path}: {checkpoints.size} checkpoints, {failures} failures"
+  return failures
+
+/-!
+The message construction and cases below adapt `src/test/crypto_tests.cpp`, lines 190 to 202 and 220 to 233,
+at Dogecoin Core `e0a1c157791544e818c901bd9341896965afbf9d`, under MIT.
+`LICENSES/dogecoin-core-MIT.txt` preserves its licence and copyright notice.
+The adaptation uses Lean byte arrays instead of C++ strings and omits the incremental-write harness.
+The quoted SHA-1 safety sentence is fixture data, not a claim by DogeLib.
+-/
+
+/-- Core's million-byte `LongTestString`, with each integer's five low bytes at four-bit offsets. -/
+def longTestString : ByteArray := Id.run do
+  let mut bytes := ByteArray.emptyWithCapacity 1000000
+  for i in [:200000] do
+    for shift in [0, 4, 8, 12, 16] do
+      bytes := bytes.push (UInt8.ofNat (i >>> shift))
+  return bytes
+
+/-- Core's ten SHA-1 messages and expected digest literals. -/
+def coreCases : List (ByteArray × String) := [
+  ("".toUTF8, "da39a3ee5e6b4b0d3255bfef95601890afd80709"),
+  ("abc".toUTF8, "a9993e364706816aba3e25717850c26c9cd0d89d"),
+  ("message digest".toUTF8, "c12252ceda8be8994d5fa0290a47231c1d16aae3"),
+  ("secure hash algorithm".toUTF8, "d4d6d2f0ebe317513bbd8d967d89bac5819c2f60"),
+  ("SHA1 is considered to be safe".toUTF8, "f2b6650569ad3a8720348dd6ea6c497dee3a842a"),
+  ("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq".toUTF8, "84983e441c3bd26ebaae4aa1f95129e5e54670f1"),
+  ("For this sample, this 63-byte string will be used as input data".toUTF8, "4f0ea5cd0585a23d028abdc1a6684e5a8094dc49"),
+  ("This is exactly 64 bytes long, not counting the terminating byte".toUTF8, "fb679f23e7d1ce053313e66e127ab1b444397057"),
+  (⟨Array.replicate 1000000 0x61⟩, "34aa973cd4c4daa4f61eeb2bdbad27316534016f"),
+  (longTestString, "b7755760681cbfd971451668f32af5774f4656b5") ]
+
+/-- Checks Core's ten SHA-1 expected digests through the compiled function. -/
+def checkCore : IO Nat := do
+  let mut failures := 0
+  for (message, expected) in coreCases do
+    let got := toHex (sha1 message)
+    unless got == expected do
+      IO.eprintln s!"FAIL Core SHA-1 ({message.size} bytes): got {got}, expected {expected}"
+      failures := failures + 1
+  IO.println s!"crypto_tests.cpp SHA-1: {coreCases.length} cases, {failures} failures"
+  return failures
+
+/-- Checks the NIST SHA-1 files and Core cases. -/
+def check : IO Nat := do
+  let dir : System.FilePath := "tests/cryptography/sha1/cavp"
+  let short ← checkFile (dir / "SHA1ShortMsg.rsp") 65
+  let long ← checkFile (dir / "SHA1LongMsg.rsp") 64
+  let monte ← checkMonte (dir / "SHA1Monte.rsp")
+  let core ← checkCore
+  return short + long + monte + core
+
+end KnownAnswers.Sha1
 
 /-!
 ## Double SHA-256: Dogecoin's genesis blocks
@@ -2300,6 +2436,7 @@ end KnownAnswers.Ripemd160
 
 /-- Entry point of `lake test`. -/
 def main : IO UInt32 := do
+  let sha1 ← KnownAnswers.Sha1.check
   let dir : System.FilePath := "tests/cryptography/sha256/cavp"
   let short ← KnownAnswers.Sha256Cavp.checkFile (dir / "SHA256ShortMsg.rsp") 65
   let long ← KnownAnswers.Sha256Cavp.checkFile (dir / "SHA256LongMsg.rsp") 64
@@ -2320,4 +2457,4 @@ def main : IO UInt32 := do
   let nextWork ← KnownAnswers.Work.checkNextWork
   let operators ← KnownAnswers.Work.checkOperators
   let shifts ← KnownAnswers.Work.checkShifts
-  return if blocks + short + long + ripemd + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts + proofOfWork == 0 then 0 else 1
+  return if sha1 + blocks + short + long + ripemd + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts + proofOfWork == 0 then 0 else 1

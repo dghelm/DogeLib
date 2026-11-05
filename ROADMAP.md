@@ -44,6 +44,12 @@ The compact, constructor and byte-conversion paths and the composed word retarge
 [COVERAGE.md](COVERAGE.md#operations) records the operation-level evidence.
 [SOUNDNESS.md](SOUNDNESS.md#256-bit-word-division) explains the division domain, zero-divisor exception and source-review boundaries.
 
+`Cryptography.Hash.Sha1` specifies SHA-1 as a prerequisite of legacy Script execution.
+`hash_eq_spec` relates the executable function to a separate FIPS 180-4 model for messages shorter than 2^61 bytes.
+NIST short, long and Monte Carlo vectors and Core's ten SHA-1 cases check the compiled code.
+[COVERAGE.md](COVERAGE.md#operations) records this implemented coverage, independently of the frozen scope in design record 0003.
+The SHA-1 oracle operation remains deferred in issue #64.
+
 Steps 0 and 0b follow design record 0002: the first contributions adopt audited codec foundations and then define Dogecoin's bounded decoding contract. They replace the original plan to build fixed-width encodings and CompactSize from scratch. Design record 0002 preferred a pinned btc-verified dependency first. The decisions below choose an adaptation instead, because btc-verified's toolchain, file structure and trust policy all differ from EthLib's.
 
 ## Milestones

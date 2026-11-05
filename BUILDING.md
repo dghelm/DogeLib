@@ -59,10 +59,11 @@ Every other opaque dependency remains a finding ([SOUNDNESS.md](SOUNDNESS.md#c1-
 It is empty, and a new finding is fixed, never added to it.
 
 `lake test` runs known answers through the compiled specification.
-Six directories hold fixture files, each with a README that gives their provenance:
+Seven directories hold fixture files, each with a README that gives their provenance:
 
 - `tests/block/`: pure-header and Merkle-root known answers.
 - `tests/cryptography/ripemd160/`: RIPEMD-160 vectors and Hash160 digests checked with hashlib and compiled Core.
+- `tests/cryptography/sha1/cavp/`: the NIST CAVP vectors, for SHA-1.
 - `tests/cryptography/sha256/cavp/`: the NIST CAVP vectors, for SHA-256.
 - `tests/transaction/sighash/`: Dogecoin Core's signature-hash corpus, for the legacy signature hash.
 - `tests/transaction/corpus/`: Dogecoin Core's transaction corpus, for the base-mode reader and codecs and the witness-allowed format.

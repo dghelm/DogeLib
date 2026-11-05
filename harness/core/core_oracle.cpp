@@ -1,7 +1,7 @@
-// The Dogecoin Core harness: answers dogelib-oracle/3 requests by running
+// The Dogecoin Core harness: answers dogelib-oracle/4 requests by running
 // Dogecoin Core's own code, so that scripts/compare_core.py can check the
 // oracle against Core. docs/oracle.md, section "The Core harness", describes
-// its responses, a projection of dogelib-oracle/3.
+// its responses, a projection of dogelib-oracle/4.
 //
 // scripts/build_core_harness.sh builds it against Core's libraries at the
 // commit that SOURCES.md pins.
@@ -17,8 +17,12 @@
 #include "arith_uint256.h"
 #include "chain.h"
 #include "chainparams.h"
+#include "consensus/merkle.h"
+#include "crypto/sha1.h"
 #include "dogecoin.h"
+#include "hash.h"
 #include "pow.h"
+#include "primitives/pureheader.h"
 #include "primitives/transaction.h"
 #include "script/interpreter.h"
 #include "script/script.h"
@@ -30,6 +34,7 @@
 
 #include <univalue.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
@@ -45,7 +50,7 @@ static_assert(std::numeric_limits<unsigned int>::max() == UINT32_MAX, "unsigned 
 
 namespace {
 
-const char* const FORMAT = "dogelib-oracle/3-core-projection";
+const char* const FORMAT = "dogelib-oracle/4-core-projection";
 
 // The stream version of Core's base mode: the reader allows no witness data.
 const int BASE_VERSION = PROTOCOL_VERSION | SERIALIZE_TRANSACTION_NO_WITNESS;
@@ -212,6 +217,28 @@ void pushHash(UniValue& obj, const std::string& name, const uint256& h)
     obj.pushKV(name + "_display", h.GetHex());
 }
 
+// Internal-order hash bytes, without the display-order SetHex conversion.
+uint256 argHash(const UniValue& req, const std::string& key)
+{
+    const auto bytes = argHex(req, key);
+    if (bytes.size() != 32) throw RequestError{"argument " + key + " must contain exactly 32 bytes"};
+    uint256 result;
+    std::copy(bytes.begin(), bytes.end(), result.begin());
+    return result;
+}
+
+UniValue headerJson(const CPureBlockHeader& h)
+{
+    UniValue result(UniValue::VOBJ);
+    result.pushKV("version", static_cast<uint64_t>(static_cast<uint32_t>(h.nVersion)));
+    pushHash(result, "prev_block", h.hashPrevBlock);
+    pushHash(result, "merkle_root", h.hashMerkleRoot);
+    result.pushKV("time", static_cast<uint64_t>(h.nTime));
+    result.pushKV("bits", static_cast<uint64_t>(h.nBits));
+    result.pushKV("nonce", static_cast<uint64_t>(h.nNonce));
+    return result;
+}
+
 UniValue txJson(const CMutableTransaction& tx)
 {
     UniValue inputs(UniValue::VARR);
@@ -274,6 +301,23 @@ void checkArgs(const UniValue& req, const std::string& op, const std::vector<std
         for (const std::string& a : args) known = known || a == key;
         if (!known) throw RequestError{"unknown argument " + key + " for operation " + op};
     }
+}
+
+CPureBlockHeader argHeader(const UniValue& req)
+{
+    const auto& fields = arg(req, "header");
+    if (!fields.isObject()) throw RequestError{"header must be an object"};
+    checkArgs(fields, "header", {"version", "prev_block_hex", "merkle_root_hex", "time", "bits", "nonce"});
+    // checkArgs permits id and op only at the request boundary.
+    if (fields.exists("id") || fields.exists("op")) throw RequestError{"unknown header field"};
+    CPureBlockHeader h;
+    h.nVersion = static_cast<int32_t>(argU32(fields, "version"));
+    h.hashPrevBlock = argHash(fields, "prev_block_hex");
+    h.hashMerkleRoot = argHash(fields, "merkle_root_hex");
+    h.nTime = argU32(fields, "time");
+    h.nBits = argU32(fields, "bits");
+    h.nNonce = argU32(fields, "nonce");
+    return h;
 }
 
 // Work arguments follow docs/oracle.md. No result arithmetic lives here.
@@ -343,6 +387,56 @@ UniValue run(const UniValue& req)
     if (op == "oracle.version") {
         checkArgs(req, op, {});
         ok.pushKV("format", FORMAT);
+    } else if (op == "hash.ripemd160" || op == "hash.hash160" || op == "hash.sha1") {
+        checkArgs(req, op, {"bytes_hex"});
+        const auto bytes = argHex(req, "bytes_hex");
+        static const unsigned char blank[1] = {};
+        const auto data = bytes.empty() ? blank : bytes.data();
+        unsigned char digest[20];
+        if (op == "hash.ripemd160") CRIPEMD160().Write(data, bytes.size()).Finalize(digest);
+        else if (op == "hash.hash160") CHash160().Write(data, bytes.size()).Finalize(digest);
+        else CSHA1().Write(data, bytes.size()).Finalize(digest);
+        ok.pushKV("digest_hex", hex(digest, digest + 20));
+    } else if (op == "header.read") {
+        checkArgs(req, op, {"bytes_hex"});
+        const auto bytes = argHex(req, "bytes_hex");
+        CDataStream ds(bytes, SER_NETWORK, PROTOCOL_VERSION);
+        CPureBlockHeader h;
+        try {
+            ds >> h;
+        } catch (const std::ios_base::failure& e) {
+            throw SpecError{mapCoreFailure(e)};
+        }
+        ok.pushKV("header", headerJson(h));
+        ok.pushKV("consumed", static_cast<uint64_t>(bytes.size() - ds.size()));
+        ok.pushKV("rest_hex", HexStr(ds.begin(), ds.end()));
+    } else if (op == "header.encode" || op == "header.hash") {
+        checkArgs(req, op, {"header"});
+        const auto h = argHeader(req);
+        if (op == "header.hash") pushHash(ok, "hash", h.GetHash());
+        else {
+            CDataStream ds(SER_NETWORK, PROTOCOL_VERSION);
+            ds << h;
+            ok.pushKV("bytes_hex", HexStr(ds.begin(), ds.end()));
+        }
+    } else if (op == "merkle.compute") {
+        checkArgs(req, op, {"leaves_hex"});
+        const auto& entries = arg(req, "leaves_hex");
+        if (!entries.isArray()) throw RequestError{"leaves_hex must be an array"};
+        if (static_cast<uint64_t>(entries.size()) > (uint64_t{1} << 31))
+            throw RequestError{"leaves_hex must have at most 2^31 entries"};
+        std::vector<uint256> leaves;
+        leaves.reserve(entries.size());
+        for (size_t i = 0; i < entries.size(); ++i) {
+            UniValue field(UniValue::VOBJ);
+            const auto key = "leaves_hex[" + std::to_string(i) + "]";
+            field.pushKV(key, entries[i]);
+            leaves.push_back(argHash(field, key));
+        }
+        bool mutated;
+        const auto root = ComputeMerkleRoot(leaves, &mutated);
+        pushHash(ok, "root", root);
+        ok.pushKV("mutated", mutated);
     } else if (op == "work.set_compact") {
         checkArgs(req, op, {"compact"});
         arith_uint256 value;

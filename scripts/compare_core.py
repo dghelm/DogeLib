@@ -3,7 +3,7 @@
 Usage: python3 -I scripts/compare_core.py [--timeout SECONDS] [--quick] <dogelib-oracle> <core-oracle>
 
 The harness, harness/core/core_oracle.cpp, runs Dogecoin Core's own code and
-answers a projection of dogelib-oracle/3 (docs/oracle.md, "The Core harness").
+answers a projection of dogelib-oracle/4 (docs/oracle.md, "The Core harness").
 This script builds a deterministic stream of well-formed requests, runs each
 program once on the whole stream, and requires the two responses to every
 request to be equal as JSON values, with one exception: Core does not expose
@@ -33,7 +33,11 @@ import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-ORACLE_FORMAT = "dogelib-oracle/3"
+# Import only the helper beside this script, including under Python's isolated mode.
+sys.path.insert(0, str(ROOT / "scripts"))
+from oracle_hash_block import header_fields, header_records, header_fixtures, merkle_fixtures, hash_fixtures, sha1_fixtures
+
+ORACLE_FORMAT = "dogelib-oracle/4"
 MAX_SIZE = 0x02000000
 SEED = 20261104
 MAX_REPORTS = 10
@@ -553,8 +557,59 @@ def set_work_headers() -> list[dict]:
     return requests
 
 
+def set_header_prefixes() -> list[dict]:
+    return [{"op": "header.read", "bytes_hex": raw[:n].hex()}
+            for raw, _ in header_records() for n in range(80)]
+
+
+def set_header_boundaries() -> list[dict]:
+    requests = []
+    base = header_fields(bytes(range(80)))
+    for field in ("version", "time", "bits", "nonce"):
+        for value in (0, 1, 255, 256, 257, 0x7fffffff, 0x80000000, 0xffffffff):
+            header = {**base, field: value}
+            raw = (header["version"].to_bytes(4, "little") + bytes.fromhex(header["prev_block_hex"])
+                   + bytes.fromhex(header["merkle_root_hex"])
+                   + b"".join(header[k].to_bytes(4, "little") for k in ("time", "bits", "nonce")))
+            requests.extend([{"op": "header.encode", "header": header},
+                             {"op": "header.hash", "header": header},
+                             {"op": "header.read", "bytes_hex": raw.hex() + "00ff"}])
+    return requests
+
+
+def set_merkle_generated() -> list[dict]:
+    requests = []
+    for n in range(65):
+        leaves = [sha256d(i.to_bytes(4, "little")).hex() for i in range(n)]
+        variants = [leaves]
+        if n >= 2:
+            variants.extend([[leaves[0]] * n, leaves[:-1] + [leaves[-2]]])
+        width = 1
+        while 2 * width <= n:
+            # Equal aligned complete subtrees at each possible level, without padding.
+            variants.append(leaves[:width] * 2 + leaves[2 * width:])
+            width *= 2
+        if n > 1 and n & (n - 1):
+            # Duplicate the final complete subtree, as Core's deterministic test does.
+            width = n & -n
+            variants.append(leaves + leaves[-width:])
+        requests.extend({"op": "merkle.compute", "leaves_hex": xs} for xs in variants)
+    return requests
+
+
+def set_hash_boundaries(algorithm: str) -> list[dict]:
+    lengths = set(range(201))
+    for blocks in range(1, 17):
+        for delta in (-10, -9, -8, -1, 0, 1):
+            lengths.add(64 * blocks + delta)
+    return [{"op": "hash." + algorithm,
+             "bytes_hex": bytes((i * 131 + n) & 255 for i in range(n)).hex()}
+            for n in sorted(lengths)]
+
+
 QUICK_SETS = ("fixtures", "compactsize", "sighash endpoints", "witness flags and stacks",
-              "work compact boundaries", "regtest legacy wrap case", "work missing skip traversal")
+              "work compact boundaries", "regtest legacy wrap case", "work missing skip traversal", "header field boundaries", "Merkle generated",
+              "RIPEMD-160 padding boundaries", "Hash160 padding boundaries", "SHA-1 padding boundaries")
 
 
 def request_sets() -> tuple[list[tuple[str, list[dict]]], list[str]]:
@@ -597,6 +652,18 @@ def request_sets() -> tuple[list[tuple[str, list[dict]]], list[str]]:
         # Height 256 has no skip destination in this suffix. GetAncestor(239) crosses it.
         ("work missing skip traversal", [next_request("mainnet", work_chain(479), 1028800)]),
     ]
+    sets.extend([
+        ("header fixtures", [r for r, _ in header_fixtures()]),
+        ("header truncated prefixes", set_header_prefixes()),
+        ("header field boundaries", set_header_boundaries()),
+        ("Merkle fixtures", [r for r, _ in merkle_fixtures()]),
+        ("Merkle generated", set_merkle_generated()),
+        ("RIPEMD-160 and Hash160 fixtures", [r for r, _ in hash_fixtures()]),
+        ("RIPEMD-160 padding boundaries", set_hash_boundaries("ripemd160")),
+        ("Hash160 padding boundaries", set_hash_boundaries("hash160")),
+        ("SHA-1 fixtures", [r for r, _ in sha1_fixtures()]),
+        ("SHA-1 padding boundaries", set_hash_boundaries("sha1")),
+    ])
     return sets, excluded
 
 

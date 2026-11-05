@@ -28,3 +28,7 @@ Each of 1,000 steps hashes their concatenation and shifts the registers.
 The last digest is the checkpoint and the next seed.
 The test compares every checkpoint with its NIST digest.
 These tests provide finite conformance evidence, not NIST validation or a SHA-1 security property.
+
+The [oracle tests and Core comparison](../../../../docs/oracle.md#the-comparison) use the short and long messages and the final input of each Monte Carlo checkpoint.
+Python hashlib derives those final 60-byte inputs independently, and NIST supplies their expected digests.
+The oracle comparison does not chain its intermediate digests.

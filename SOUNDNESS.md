@@ -1135,6 +1135,16 @@ Its skip-height guard leaves unavailable skip destinations null, so Core uses pr
 
 No theorem covers these JSON conversions, the harness guard or correspondence to Core's traversal.
 
+The hash operations convert exact hex bytes to ByteArray and return twenty digest bytes without reversal.
+The header operations preserve raw u32 fields and both hash byte orders.
+The header prefix reader maps codec failure to `read/truncated` and returns the exact suffix.
+The Merkle adapter requires exact 32-byte internal-order leaves and rejects arrays larger than 2^31 entries before computation.
+
+These JSON conversions have no refinement theorem.
+The Core harness calls the pinned hash classes, pure header methods and `ComputeMerkleRoot` directly.
+Finite fixture and boundary comparisons cover the recorded inputs only.
+They establish no all-input Core equivalence, cryptographic security, AuxPoW validity, scrypt result or full block validity.
+
 A wrong conversion could make the oracle and Core disagree, or agree, for a reason outside the specification.
 
 The Core harness, `harness/core/core_oracle.cpp`, is the other side of the comparison ([docs/oracle.md](docs/oracle.md#the-core-harness)).
@@ -1148,7 +1158,7 @@ A user of the comparison trusts these parts of it:
   Any other exception from Core stops the harness, so it cannot pass as a result.
 - The `plan` label of `sighash.legacy`. The harness computes it from Core's conditions instead of observing it. It stops if the label is `fixed_digest` and Core's digest is not the value one.
 - The comparator, `scripts/compare_core.py`.
-  Its self-test, `scripts/test_compare_core.py`, requires two passing controls and 39 mutations that each fail with the code they target.
+  Its self-test, `scripts/test_compare_core.py`, requires two passing controls and 59 mutations that each fail with the code they target.
 - For `sighash.legacy`, the oracle's preimage is checked by hashing it, not byte by byte: Core does not expose its preimage.
 
 Both programs could be wrong in the same way on an input that the comparison does not send.

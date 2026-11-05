@@ -1,4 +1,4 @@
-{"id": "version", "ok": {"format": "dogelib-oracle/3"}}
+{"id": "version", "ok": {"format": "dogelib-oracle/4"}}
 {"id": "cs-encode-252", "ok": {"bytes_hex": "fc"}}
 {"id": "cs-encode-253", "ok": {"bytes_hex": "fdfd00"}}
 {"id": "cs-encode-65536", "ok": {"bytes_hex": "fe00000100"}}
@@ -44,8 +44,8 @@
 {"id": "hash-type-2^32", "error": {"kind": "request"}}
 {"id": "index-5e-1", "error": {"kind": "request"}}
 {"id": "dup-a", "ok": {"value": "252", "consumed": 1, "rest_hex": ""}}
-{"id": {"k": [1, "x"]}, "ok": {"format": "dogelib-oracle/3"}}
-{"id": null, "ok": {"format": "dogelib-oracle/3"}}
+{"id": {"k": [1, "x"]}, "ok": {"format": "dogelib-oracle/4"}}
+{"id": null, "ok": {"format": "dogelib-oracle/4"}}
 {"id": null, "error": {"kind": "request"}}
 {"id": null, "error": {"kind": "request"}}
 {"id": "witness-item-read_witness", "ok": {"tx": {"version": 1, "inputs": [{"prevout": {"hash_hex": "0000000000000000000000000000000000000000000000000000000000000000", "hash_display": "0000000000000000000000000000000000000000000000000000000000000000", "n": 0}, "script_sig_hex": "", "sequence": 4294967295}], "outputs": [{"value": "0", "script_pubkey_hex": ""}], "lock_time": 0}, "witnesses": [["ab"]], "has_witness": true, "serialized_hex": "0100000000010100000000000000000000000000000000000000000000000000000000000000000000000000ffffffff010000000000000000000101ab00000000", "txid_hex": "89d3fe04e0abfd5038d4c26d8935e3feff1122b429c5f8fb4efb74d12f4de73d", "txid_display": "3de74d2fd174fb4efbf8c529b42211fffee335896dc2d43850fdabe004fed389", "wtxid_hex": "fdd2a381f3fa14a5d4d3a6751ca562c1c7582dad617c8ce9614b837d9b1a991f", "wtxid_display": "1f991a9b7d834b61e98c7c61ad2d58c7c162a51c75a6d3d4a514faf381a3d2fd", "consumed": 65, "rest_hex": ""}}
@@ -190,3 +190,81 @@
 {"id": "work-request-27", "error": {"kind": "request"}}
 {"id": "work-request-28", "error": {"kind": "request"}}
 {"id": "work-request-29", "error": {"kind": "request"}}
+{"id": "v4-hash.ripemd160-missing", "error": {"kind": "request"}}
+{"id": "v4-hash.ripemd160-odd", "error": {"kind": "request"}}
+{"id": "v4-hash.ripemd160-nonhex", "error": {"kind": "request"}}
+{"id": "v4-hash.ripemd160-number", "error": {"kind": "request"}}
+{"id": "v4-hash.ripemd160-unknown", "error": {"kind": "request"}}
+{"id": "v4-hash.hash160-missing", "error": {"kind": "request"}}
+{"id": "v4-hash.hash160-odd", "error": {"kind": "request"}}
+{"id": "v4-hash.hash160-nonhex", "error": {"kind": "request"}}
+{"id": "v4-hash.hash160-number", "error": {"kind": "request"}}
+{"id": "v4-hash.hash160-unknown", "error": {"kind": "request"}}
+{"id": "v4-hash.sha1-missing", "error": {"kind": "request"}}
+{"id": "v4-hash.sha1-odd", "error": {"kind": "request"}}
+{"id": "v4-hash.sha1-nonhex", "error": {"kind": "request"}}
+{"id": "v4-hash.sha1-number", "error": {"kind": "request"}}
+{"id": "v4-hash.sha1-unknown", "error": {"kind": "request"}}
+{"id": "v4-header-truncated-0", "error": {"kind": "read", "reason": "truncated"}}
+{"id": "v4-header-truncated-1", "error": {"kind": "read", "reason": "truncated"}}
+{"id": "v4-header-truncated-79", "error": {"kind": "read", "reason": "truncated"}}
+{"id": "v4-header.read-missing", "error": {"kind": "request"}}
+{"id": "v4-header.encode-missing", "error": {"kind": "request"}}
+{"id": "v4-header.hash-missing", "error": {"kind": "request"}}
+{"id": "v4-merkle.compute-missing", "error": {"kind": "request"}}
+{"id": "v4-header-read-odd", "error": {"kind": "request"}}
+{"id": "v4-header-read-unknown", "error": {"kind": "request"}}
+{"id": "v4-header.encode-null", "error": {"kind": "request"}}
+{"id": "v4-header.encode-array", "error": {"kind": "request"}}
+{"id": "v4-header.encode-empty", "error": {"kind": "request"}}
+{"id": "v4-header.encode-unknown", "error": {"kind": "request"}}
+{"id": "v4-header.encode-display", "error": {"kind": "request"}}
+{"id": "v4-header.encode-negative", "error": {"kind": "request"}}
+{"id": "v4-header.encode-overflow", "error": {"kind": "request"}}
+{"id": "v4-header.encode-fraction", "error": {"kind": "request"}}
+{"id": "v4-header.encode-bool", "error": {"kind": "request"}}
+{"id": "v4-header.encode-short-prev", "error": {"kind": "request"}}
+{"id": "v4-header.encode-long-root", "error": {"kind": "request"}}
+{"id": "v4-header.encode-bad-hash", "error": {"kind": "request"}}
+{"id": "v4-header.encode-missing-version", "error": {"kind": "request"}}
+{"id": "v4-header.encode-missing-prev_block_hex", "error": {"kind": "request"}}
+{"id": "v4-header.encode-missing-merkle_root_hex", "error": {"kind": "request"}}
+{"id": "v4-header.encode-missing-time", "error": {"kind": "request"}}
+{"id": "v4-header.encode-missing-bits", "error": {"kind": "request"}}
+{"id": "v4-header.encode-missing-nonce", "error": {"kind": "request"}}
+{"id": "v4-header.encode-top-extra", "error": {"kind": "request"}}
+{"id": "v4-header.hash-null", "error": {"kind": "request"}}
+{"id": "v4-header.hash-array", "error": {"kind": "request"}}
+{"id": "v4-header.hash-empty", "error": {"kind": "request"}}
+{"id": "v4-header.hash-unknown", "error": {"kind": "request"}}
+{"id": "v4-header.hash-display", "error": {"kind": "request"}}
+{"id": "v4-header.hash-negative", "error": {"kind": "request"}}
+{"id": "v4-header.hash-overflow", "error": {"kind": "request"}}
+{"id": "v4-header.hash-fraction", "error": {"kind": "request"}}
+{"id": "v4-header.hash-bool", "error": {"kind": "request"}}
+{"id": "v4-header.hash-short-prev", "error": {"kind": "request"}}
+{"id": "v4-header.hash-long-root", "error": {"kind": "request"}}
+{"id": "v4-header.hash-bad-hash", "error": {"kind": "request"}}
+{"id": "v4-header.hash-missing-version", "error": {"kind": "request"}}
+{"id": "v4-header.hash-missing-prev_block_hex", "error": {"kind": "request"}}
+{"id": "v4-header.hash-missing-merkle_root_hex", "error": {"kind": "request"}}
+{"id": "v4-header.hash-missing-time", "error": {"kind": "request"}}
+{"id": "v4-header.hash-missing-bits", "error": {"kind": "request"}}
+{"id": "v4-header.hash-missing-nonce", "error": {"kind": "request"}}
+{"id": "v4-header.hash-top-extra", "error": {"kind": "request"}}
+{"id": "v4-merkle-string", "error": {"kind": "request"}}
+{"id": "v4-merkle-null", "error": {"kind": "request"}}
+{"id": "v4-merkle-number", "error": {"kind": "request"}}
+{"id": "v4-merkle-short", "error": {"kind": "request"}}
+{"id": "v4-merkle-long", "error": {"kind": "request"}}
+{"id": "v4-merkle-bad", "error": {"kind": "request"}}
+{"id": "v4-merkle-odd", "error": {"kind": "request"}}
+{"id": "v4-merkle-mixed", "error": {"kind": "request"}}
+{"id": "v4-merkle-extra", "error": {"kind": "request"}}
+{"id": "v4-hash.ripemd160-empty", "ok": {"digest_hex": "9c1185a5c5e9fc54612808977ee8f548b2258d31"}}
+{"id": "v4-hash.hash160-empty", "ok": {"digest_hex": "b472a266d0bd89c13706a4132ccfb16f7c3b9fcb"}}
+{"id": "v4-hash.sha1-empty", "ok": {"digest_hex": "da39a3ee5e6b4b0d3255bfef95601890afd80709"}}
+{"id": "v4-merkle-empty", "ok": {"root_hex": "0000000000000000000000000000000000000000000000000000000000000000", "root_display": "0000000000000000000000000000000000000000000000000000000000000000", "mutated": false}}
+{"id": "v4-header-zero-encode", "ok": {"bytes_hex": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"}}
+{"id": "v4-header-numeric-notation", "ok": {"bytes_hex": "0100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"}}
+{"id": "v4-header-nested-op", "error": {"kind": "request"}}

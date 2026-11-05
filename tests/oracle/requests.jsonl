@@ -190,3 +190,81 @@
 {"id": "work-request-27", "op": "work.next", "network": "mainnet", "chain": [{"height": -1, "time": 1000, "bits": 470955094}], "candidate_time": 0}
 {"id": "work-request-28", "op": "work.next", "network": "mainnet", "chain": [{"height": 0, "time": 4294967296, "bits": 470955094}], "candidate_time": 0}
 {"id": "work-request-29", "op": "work.next", "network": "mainnet", "chain": [], "candidate_time": -1}
+{"id": "v4-hash.ripemd160-missing", "op": "hash.ripemd160"}
+{"id": "v4-hash.ripemd160-odd", "op": "hash.ripemd160", "bytes_hex": "0"}
+{"id": "v4-hash.ripemd160-nonhex", "op": "hash.ripemd160", "bytes_hex": "gg"}
+{"id": "v4-hash.ripemd160-number", "op": "hash.ripemd160", "bytes_hex": 1}
+{"id": "v4-hash.ripemd160-unknown", "op": "hash.ripemd160", "bytes_hex": "", "extra": false}
+{"id": "v4-hash.hash160-missing", "op": "hash.hash160"}
+{"id": "v4-hash.hash160-odd", "op": "hash.hash160", "bytes_hex": "0"}
+{"id": "v4-hash.hash160-nonhex", "op": "hash.hash160", "bytes_hex": "gg"}
+{"id": "v4-hash.hash160-number", "op": "hash.hash160", "bytes_hex": 1}
+{"id": "v4-hash.hash160-unknown", "op": "hash.hash160", "bytes_hex": "", "extra": false}
+{"id": "v4-hash.sha1-missing", "op": "hash.sha1"}
+{"id": "v4-hash.sha1-odd", "op": "hash.sha1", "bytes_hex": "0"}
+{"id": "v4-hash.sha1-nonhex", "op": "hash.sha1", "bytes_hex": "gg"}
+{"id": "v4-hash.sha1-number", "op": "hash.sha1", "bytes_hex": 1}
+{"id": "v4-hash.sha1-unknown", "op": "hash.sha1", "bytes_hex": "", "extra": false}
+{"id": "v4-header-truncated-0", "op": "header.read", "bytes_hex": ""}
+{"id": "v4-header-truncated-1", "op": "header.read", "bytes_hex": "00"}
+{"id": "v4-header-truncated-79", "op": "header.read", "bytes_hex": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"}
+{"id": "v4-header.read-missing", "op": "header.read"}
+{"id": "v4-header.encode-missing", "op": "header.encode"}
+{"id": "v4-header.hash-missing", "op": "header.hash"}
+{"id": "v4-merkle.compute-missing", "op": "merkle.compute"}
+{"id": "v4-header-read-odd", "op": "header.read", "bytes_hex": "a"}
+{"id": "v4-header-read-unknown", "op": "header.read", "bytes_hex": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000", "extra": 0}
+{"id": "v4-header.encode-null", "op": "header.encode", "header": null}
+{"id": "v4-header.encode-array", "op": "header.encode", "header": []}
+{"id": "v4-header.encode-empty", "op": "header.encode", "header": {}}
+{"id": "v4-header.encode-unknown", "op": "header.encode", "header": {"version": 0, "prev_block_hex": "0000000000000000000000000000000000000000000000000000000000000000", "merkle_root_hex": "0000000000000000000000000000000000000000000000000000000000000000", "time": 0, "bits": 0, "nonce": 0, "extra": 0}}
+{"id": "v4-header.encode-display", "op": "header.encode", "header": {"version": 0, "prev_block_hex": "0000000000000000000000000000000000000000000000000000000000000000", "merkle_root_hex": "0000000000000000000000000000000000000000000000000000000000000000", "time": 0, "bits": 0, "nonce": 0, "prev_block_display": "0000000000000000000000000000000000000000000000000000000000000000"}}
+{"id": "v4-header.encode-negative", "op": "header.encode", "header": {"version": -1, "prev_block_hex": "0000000000000000000000000000000000000000000000000000000000000000", "merkle_root_hex": "0000000000000000000000000000000000000000000000000000000000000000", "time": 0, "bits": 0, "nonce": 0}}
+{"id": "v4-header.encode-overflow", "op": "header.encode", "header": {"version": 0, "prev_block_hex": "0000000000000000000000000000000000000000000000000000000000000000", "merkle_root_hex": "0000000000000000000000000000000000000000000000000000000000000000", "time": 4294967296, "bits": 0, "nonce": 0}}
+{"id": "v4-header.encode-fraction", "op": "header.encode", "header": {"version": 0, "prev_block_hex": "0000000000000000000000000000000000000000000000000000000000000000", "merkle_root_hex": "0000000000000000000000000000000000000000000000000000000000000000", "time": 0, "bits": 0.5, "nonce": 0}}
+{"id": "v4-header.encode-bool", "op": "header.encode", "header": {"version": 0, "prev_block_hex": "0000000000000000000000000000000000000000000000000000000000000000", "merkle_root_hex": "0000000000000000000000000000000000000000000000000000000000000000", "time": 0, "bits": 0, "nonce": false}}
+{"id": "v4-header.encode-short-prev", "op": "header.encode", "header": {"version": 0, "prev_block_hex": "00", "merkle_root_hex": "0000000000000000000000000000000000000000000000000000000000000000", "time": 0, "bits": 0, "nonce": 0}}
+{"id": "v4-header.encode-long-root", "op": "header.encode", "header": {"version": 0, "prev_block_hex": "0000000000000000000000000000000000000000000000000000000000000000", "merkle_root_hex": "000000000000000000000000000000000000000000000000000000000000000000", "time": 0, "bits": 0, "nonce": 0}}
+{"id": "v4-header.encode-bad-hash", "op": "header.encode", "header": {"version": 0, "prev_block_hex": "0000000000000000000000000000000000000000000000000000000000000000", "merkle_root_hex": "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg", "time": 0, "bits": 0, "nonce": 0}}
+{"id": "v4-header.encode-missing-version", "op": "header.encode", "header": {"prev_block_hex": "0000000000000000000000000000000000000000000000000000000000000000", "merkle_root_hex": "0000000000000000000000000000000000000000000000000000000000000000", "time": 0, "bits": 0, "nonce": 0}}
+{"id": "v4-header.encode-missing-prev_block_hex", "op": "header.encode", "header": {"version": 0, "merkle_root_hex": "0000000000000000000000000000000000000000000000000000000000000000", "time": 0, "bits": 0, "nonce": 0}}
+{"id": "v4-header.encode-missing-merkle_root_hex", "op": "header.encode", "header": {"version": 0, "prev_block_hex": "0000000000000000000000000000000000000000000000000000000000000000", "time": 0, "bits": 0, "nonce": 0}}
+{"id": "v4-header.encode-missing-time", "op": "header.encode", "header": {"version": 0, "prev_block_hex": "0000000000000000000000000000000000000000000000000000000000000000", "merkle_root_hex": "0000000000000000000000000000000000000000000000000000000000000000", "bits": 0, "nonce": 0}}
+{"id": "v4-header.encode-missing-bits", "op": "header.encode", "header": {"version": 0, "prev_block_hex": "0000000000000000000000000000000000000000000000000000000000000000", "merkle_root_hex": "0000000000000000000000000000000000000000000000000000000000000000", "time": 0, "nonce": 0}}
+{"id": "v4-header.encode-missing-nonce", "op": "header.encode", "header": {"version": 0, "prev_block_hex": "0000000000000000000000000000000000000000000000000000000000000000", "merkle_root_hex": "0000000000000000000000000000000000000000000000000000000000000000", "time": 0, "bits": 0}}
+{"id": "v4-header.encode-top-extra", "op": "header.encode", "header": {"version": 0, "prev_block_hex": "0000000000000000000000000000000000000000000000000000000000000000", "merkle_root_hex": "0000000000000000000000000000000000000000000000000000000000000000", "time": 0, "bits": 0, "nonce": 0}, "extra": 0}
+{"id": "v4-header.hash-null", "op": "header.hash", "header": null}
+{"id": "v4-header.hash-array", "op": "header.hash", "header": []}
+{"id": "v4-header.hash-empty", "op": "header.hash", "header": {}}
+{"id": "v4-header.hash-unknown", "op": "header.hash", "header": {"version": 0, "prev_block_hex": "0000000000000000000000000000000000000000000000000000000000000000", "merkle_root_hex": "0000000000000000000000000000000000000000000000000000000000000000", "time": 0, "bits": 0, "nonce": 0, "extra": 0}}
+{"id": "v4-header.hash-display", "op": "header.hash", "header": {"version": 0, "prev_block_hex": "0000000000000000000000000000000000000000000000000000000000000000", "merkle_root_hex": "0000000000000000000000000000000000000000000000000000000000000000", "time": 0, "bits": 0, "nonce": 0, "prev_block_display": "0000000000000000000000000000000000000000000000000000000000000000"}}
+{"id": "v4-header.hash-negative", "op": "header.hash", "header": {"version": -1, "prev_block_hex": "0000000000000000000000000000000000000000000000000000000000000000", "merkle_root_hex": "0000000000000000000000000000000000000000000000000000000000000000", "time": 0, "bits": 0, "nonce": 0}}
+{"id": "v4-header.hash-overflow", "op": "header.hash", "header": {"version": 0, "prev_block_hex": "0000000000000000000000000000000000000000000000000000000000000000", "merkle_root_hex": "0000000000000000000000000000000000000000000000000000000000000000", "time": 4294967296, "bits": 0, "nonce": 0}}
+{"id": "v4-header.hash-fraction", "op": "header.hash", "header": {"version": 0, "prev_block_hex": "0000000000000000000000000000000000000000000000000000000000000000", "merkle_root_hex": "0000000000000000000000000000000000000000000000000000000000000000", "time": 0, "bits": 0.5, "nonce": 0}}
+{"id": "v4-header.hash-bool", "op": "header.hash", "header": {"version": 0, "prev_block_hex": "0000000000000000000000000000000000000000000000000000000000000000", "merkle_root_hex": "0000000000000000000000000000000000000000000000000000000000000000", "time": 0, "bits": 0, "nonce": false}}
+{"id": "v4-header.hash-short-prev", "op": "header.hash", "header": {"version": 0, "prev_block_hex": "00", "merkle_root_hex": "0000000000000000000000000000000000000000000000000000000000000000", "time": 0, "bits": 0, "nonce": 0}}
+{"id": "v4-header.hash-long-root", "op": "header.hash", "header": {"version": 0, "prev_block_hex": "0000000000000000000000000000000000000000000000000000000000000000", "merkle_root_hex": "000000000000000000000000000000000000000000000000000000000000000000", "time": 0, "bits": 0, "nonce": 0}}
+{"id": "v4-header.hash-bad-hash", "op": "header.hash", "header": {"version": 0, "prev_block_hex": "0000000000000000000000000000000000000000000000000000000000000000", "merkle_root_hex": "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg", "time": 0, "bits": 0, "nonce": 0}}
+{"id": "v4-header.hash-missing-version", "op": "header.hash", "header": {"prev_block_hex": "0000000000000000000000000000000000000000000000000000000000000000", "merkle_root_hex": "0000000000000000000000000000000000000000000000000000000000000000", "time": 0, "bits": 0, "nonce": 0}}
+{"id": "v4-header.hash-missing-prev_block_hex", "op": "header.hash", "header": {"version": 0, "merkle_root_hex": "0000000000000000000000000000000000000000000000000000000000000000", "time": 0, "bits": 0, "nonce": 0}}
+{"id": "v4-header.hash-missing-merkle_root_hex", "op": "header.hash", "header": {"version": 0, "prev_block_hex": "0000000000000000000000000000000000000000000000000000000000000000", "time": 0, "bits": 0, "nonce": 0}}
+{"id": "v4-header.hash-missing-time", "op": "header.hash", "header": {"version": 0, "prev_block_hex": "0000000000000000000000000000000000000000000000000000000000000000", "merkle_root_hex": "0000000000000000000000000000000000000000000000000000000000000000", "bits": 0, "nonce": 0}}
+{"id": "v4-header.hash-missing-bits", "op": "header.hash", "header": {"version": 0, "prev_block_hex": "0000000000000000000000000000000000000000000000000000000000000000", "merkle_root_hex": "0000000000000000000000000000000000000000000000000000000000000000", "time": 0, "nonce": 0}}
+{"id": "v4-header.hash-missing-nonce", "op": "header.hash", "header": {"version": 0, "prev_block_hex": "0000000000000000000000000000000000000000000000000000000000000000", "merkle_root_hex": "0000000000000000000000000000000000000000000000000000000000000000", "time": 0, "bits": 0}}
+{"id": "v4-header.hash-top-extra", "op": "header.hash", "header": {"version": 0, "prev_block_hex": "0000000000000000000000000000000000000000000000000000000000000000", "merkle_root_hex": "0000000000000000000000000000000000000000000000000000000000000000", "time": 0, "bits": 0, "nonce": 0}, "extra": 0}
+{"id": "v4-merkle-string", "op": "merkle.compute", "leaves_hex": "00"}
+{"id": "v4-merkle-null", "op": "merkle.compute", "leaves_hex": null}
+{"id": "v4-merkle-number", "op": "merkle.compute", "leaves_hex": [0]}
+{"id": "v4-merkle-short", "op": "merkle.compute", "leaves_hex": ["00"]}
+{"id": "v4-merkle-long", "op": "merkle.compute", "leaves_hex": ["000000000000000000000000000000000000000000000000000000000000000000"]}
+{"id": "v4-merkle-bad", "op": "merkle.compute", "leaves_hex": ["gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg"]}
+{"id": "v4-merkle-odd", "op": "merkle.compute", "leaves_hex": ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]}
+{"id": "v4-merkle-mixed", "op": "merkle.compute", "leaves_hex": ["0000000000000000000000000000000000000000000000000000000000000000", false]}
+{"id": "v4-merkle-extra", "op": "merkle.compute", "leaves_hex": [], "extra": 0}
+{"id": "v4-hash.ripemd160-empty", "op": "hash.ripemd160", "bytes_hex": ""}
+{"id": "v4-hash.hash160-empty", "op": "hash.hash160", "bytes_hex": ""}
+{"id": "v4-hash.sha1-empty", "op": "hash.sha1", "bytes_hex": ""}
+{"id": "v4-merkle-empty", "op": "merkle.compute", "leaves_hex": []}
+{"id": "v4-header-zero-encode", "op": "header.encode", "header": {"version": 0, "prev_block_hex": "0000000000000000000000000000000000000000000000000000000000000000", "merkle_root_hex": "0000000000000000000000000000000000000000000000000000000000000000", "time": 0, "bits": 0, "nonce": 0}}
+{"id": "v4-header-numeric-notation", "op": "header.encode", "header": {"version": 1.0, "prev_block_hex": "0000000000000000000000000000000000000000000000000000000000000000", "merkle_root_hex": "0000000000000000000000000000000000000000000000000000000000000000", "time": 0, "bits": 0, "nonce": 0}}
+{"id": "v4-header-nested-op", "op": "header.encode", "header": {"version": 0, "prev_block_hex": "0000000000000000000000000000000000000000000000000000000000000000", "merkle_root_hex": "0000000000000000000000000000000000000000000000000000000000000000", "time": 0, "bits": 0, "nonce": 0, "op": "oracle.version"}}

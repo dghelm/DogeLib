@@ -107,7 +107,7 @@ def next : Operation where
     | .ok bits => return Json.mkObj [("bits", natJson bits.toNat)]
     | .error error => throw (.spec (viewErrorJson error))
 
-/-- The four work operations of oracle format /3. -/
+/-- The four work operations of the oracle. -/
 def operations : List Operation := [setCompact, getCompact, calculateNext, next]
 
 end DogeLib.Work.Exports

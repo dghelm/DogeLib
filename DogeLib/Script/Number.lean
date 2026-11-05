@@ -43,11 +43,11 @@ Core's `int64_t` code agrees with these definitions on a smaller domain:
 `decode` checks the size first and the minimality second, as the constructor does.
 Each failure is a `DecodeError`, where Core throws a `scriptnum_error` (lines 192 to 196).
 The interpreter catches the exception and reports `SCRIPT_ERR_UNKNOWN_ERROR` (D3, lines 1037 to 1040).
-That mapping belongs to the evaluator, which is not specified yet.
+`Script.execOpcode` gives that mapping for `OP_PICK` and `OP_ROLL`.
 
 The interpreter passes `fRequireMinimal` as the `SCRIPT_VERIFY_MINIMALDATA` flag (D3, line 269).
 It decodes with the default size of 4 bytes, except for `OP_CHECKLOCKTIMEVERIFY` and `OP_CHECKSEQUENCEVERIFY`, which decode with 5 (D3, lines 377 and 408).
-No opcode is specified here.
+This module specifies no opcode. `DogeLib.Script.Eval` uses these definitions.
 -/
 
 @[expose] public section

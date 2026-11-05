@@ -44,10 +44,10 @@ The copy and restore of the stack for Pay to Script Hash (P2SH) are not specifie
 `ExecState.WithinStackLimit` is Core's combined stack limit.
 `EvalScript` checks it after each instruction (line 1033), not on the stack that the caller passes, so it is separate from `WellFormed`.
 
-No opcode semantics are specified yet.
+The opcode semantics are in `DogeLib.Script.Eval`.
 `DogeLib.Script.Proofs.State` proves the invariants for the start of a call and for the hand-off.
 It also proves them for the move of the cursor past one instruction and for the mark of a code separator.
-That each opcode step preserves them is an obligation of the opcode semantics.
+`DogeLib.Script.Proofs.Eval` proves that each successful step of the evaluator preserves them (`evalInstruction_wellFormed`).
 -/
 
 @[expose] public section
@@ -92,7 +92,7 @@ def ExecState.handOff (s : ExecState) : ExecState := ExecState.init s.stack
 /--
 The invariants between the instructions of a run of `EvalScript` on `script`, until the run fails.
 `DogeLib.Script.Proofs.State` proves them for the start of a call and for the cursor and separator updates.
-That each opcode step preserves `opCount_le` and `vfExec_length_le` is an obligation of the opcode semantics.
+`evalInstruction_wellFormed` in `DogeLib.Script.Proofs.Eval` shows that each successful step of the evaluator preserves them.
 -/
 structure ExecState.WellFormed (script : List UInt8) (s : ExecState) : Prop where
   /-- The cursor is an instruction boundary. -/

@@ -53,13 +53,17 @@ The SHA-1 oracle operation remains deferred in issue #64.
 The Script layer implements stage 1 of [design record 0003](docs/design/0003-legacy-spend-validation.md): the instruction reader and the state of one `EvalScript` call.
 `Script.readInstruction` follows `GetOp2`, including the cursor after each failure, and shares its decoder with the legacy signature serializer.
 `Script.ExecState` gives the per-call reset and the main-stack hand-off of `VerifyScript`.
-The layer executes no opcode, has no oracle operation and gives no verdict on a spend.
-Stage 2, opcode transitions and execution properties, is the next Script work.
+The layer has no oracle operation and gives no verdict on a spend.
 
 The Script layer also has the numeric part of stage 2 of [design record 0003](docs/design/0003-legacy-spend-validation.md): `CScriptNum` and `CastToBool` over integers, in `Script.Number`.
 `isMinimal_iff_encode_value` shows that Core's minimality test accepts exactly the encodings, and the decode theorems give every result, with the size check first.
-No opcode uses them yet. The numeric opcodes come with the evaluator.
 [COVERAGE.md](COVERAGE.md#operations) records the evidence and the exclusions.
+
+`Script.evalScript` implements one `EvalScript` call, stage 2b of [design record 0003](docs/design/0003-legacy-spend-validation.md).
+It runs pushes, NOPs, control flow, stack operations, `OP_SIZE`, equality and `OP_CODESEPARATOR`, with Core's errors and check order, also in skipped branches.
+Numeric, hash and signature opcodes, CLTV and CSV with their flags, and flags outside the seven of the design record give `unsupported`, never a rejection.
+On Core's `script_tests.json`, 516 records agree with Core, none disagrees, and 677 are unsupported.
+Stage 2c, the numeric and hash opcodes, is the next Script work.
 
 Steps 0 and 0b follow design record 0002: the first contributions adopt audited codec foundations and then define Dogecoin's bounded decoding contract. They replace the original plan to build fixed-width encodings and CompactSize from scratch. Design record 0002 preferred a pinned btc-verified dependency first. The decisions below choose an adaptation instead, because btc-verified's toolchain, file structure and trust policy all differ from EthLib's.
 

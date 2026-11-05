@@ -656,8 +656,7 @@ For the state:
 `truncated` reports the opcode byte and the short part, where Core returns `OP_INVALIDOPCODE` and an empty vector.
 Both `atEnd` and `truncated` correspond to Core's `false`.
 
-No opcode semantics are specified, so no theorem says that an opcode step keeps `opCount_le`, `vfExec_length_le` or the combined stack limit.
-Those invariants are justified from a reading of D3 (A1), and the opcode semantics must prove them.
+`evalInstruction_wellFormed` in [Script evaluation](#script-evaluation-one-evalscript-call) shows that each successful step of the evaluator keeps these invariants and the combined stack limit.
 The hand-off theorems cover the two `EvalScript` calls of `VerifyScript`, not the P2SH copy and restore of the stack.
 
 That the definitions are Core's rests on a reading of D24 and D3 (A1) and on the known answers.
@@ -704,8 +703,8 @@ It also runs the 247 integers of the `creation` test of `scriptnum_tests.cpp` (D
 That test compares Core with its own 0.10.0 copy, so it gives the integers but no expected bytes.
 Core itself does not run, and no comparison with Core's compiled code exists.
 
-No opcode is specified.
-The interpreter maps a decode exception to `SCRIPT_ERR_UNKNOWN_ERROR` (D3, lines 1037 to 1040), and the evaluator must specify that mapping.
+`OP_PICK` and `OP_ROLL` in `Script.execOpcode` map a decode failure to `SCRIPT_ERR_UNKNOWN_ERROR`, as the `catch` of `EvalScript` does (D3, lines 1037 to 1040).
+The numeric opcodes are not specified yet.
 The definitions add no hypothesis, axiom or execution boundary.
 By `#print axioms` with Lean `v4.35.0`:
 
@@ -716,6 +715,67 @@ By `#print axioms` with Lean `v4.35.0`:
 | `value_encode`, `isMinimal_iff_encode_value`, `encode_length_le_iff`, `encode_length_le_four`, `encode_add_length_le_five`, `encode_sub_length_le_five`, `decode_encode`, `decode_encode_default`, `decode_int64`, `getint_eq_self_iff`, `getint_mem`, `getint_decode_default`, `castToBool_encode` | `propext`, `Classical.choice`, `Quot.sound` |
 
 The supporting byte and little-endian lemmas of the module use the same three axioms or fewer.
+
+### Script evaluation, one `EvalScript` call
+
+`DogeLib.Script.Eval` specifies one call of Core's `EvalScript` in `SIGVERSION_BASE` (SOURCES.md, D3).
+It covers the opcodes of stage 2 of design record 0003 that do not compute numbers or hashes.
+`DogeLib.Script.Error` gives Core's `ScriptError_t` (D49), and `DogeLib.Script.Flags` gives the flag bits of D25.
+The theorems are in `DogeLib.Script.Proofs.Eval`.
+
+`evalScript flags script stack` returns one of three results.
+`ok` is Core's `true` with `SCRIPT_ERR_OK`, and `rejected e` is Core's `false` with error `e`.
+`unsupported r` means that this stage lacks a capability that the call needs, and says nothing about Core's verdict.
+A flag outside the seven of design record 0003 is unsupported before any other check.
+An executed numeric, hash or signature opcode is unsupported, and so is an executed `OP_CHECKLOCKTIMEVERIFY` or `OP_CHECKSEQUENCEVERIFY` with its flag set.
+
+For every flag set, script and caller stack:
+
+- `evalScript_unsupportedFlags`: a flag bit outside `supportedFlags` gives `unsupported`, with exactly those bits.
+- `evalScript_scriptSize`: with supported flags, a script of more than 10,000 bytes gives `SCRIPT_SIZE`.
+- `evalScript_ok`: a successful call ends at the end of the script, with an empty `vfExec`, in a state that satisfies `ExecState.WellFormed`. If the script is not empty, the two stacks hold at most 1,000 items together.
+- `evalScript_flags_congr`: two supported flag sets that agree on the CLTV and CSV bits give the same result. So `P2SH`, `STRICTENC`, `DERSIG`, `LOW_S` and `NULLDUMMY` do not change one call. This holds for the capabilities of this stage only. The signature opcodes of stage 3 read four of those flags.
+
+For the loop and each instruction:
+
+- `evalLoop_atEnd`: at the end of the script, the call succeeds exactly when `vfExec` is empty, and gives `UNBALANCED_CONDITIONAL` otherwise. `evalLoop_truncated`: a short push gives `BAD_OPCODE`.
+- `evalInstruction_pushSize`, `evalInstruction_opCount` and `evalInstruction_disabled`: the push size, the opcode count and the disabled opcodes are checked in Core's order, whether or not the branch executes. `evalInstruction_verif`: `OP_VERIF` and `OP_VERNOTIF` give `BAD_OPCODE` in a skipped branch too.
+- `evalInstruction_skipped`: in a skipped branch, an opcode outside `OP_IF` to `OP_ENDIF` that passes those checks only counts. The two stacks, `vfExec` and the separator cursor stay unchanged.
+- `evalInstruction_wellFormed`: from a state that satisfies `ExecState.WellFormed`, a successful step and the cursor move give a state that satisfies it, within the combined stack limit.
+- The `execOpcode_*` theorems give the stack effect of each implemented opcode, its underflow error, and each unsupported case.
+
+The evaluator takes no fuel.
+`evalLoop` recurses on the distance from the cursor to the end of the script.
+`readInstruction_progress`, in the specification, shows that each instruction moves the cursor forward.
+So every call returns a result that depends only on the flags, the script and the caller's stack.
+
+Three boundaries limit the claim:
+
+- Core compares the operand of `OP_PICK` and `OP_ROLL` with `(int)stack.size()` (D3, line 657). Here sizes are `Nat` values. The two agree when the main stack has fewer than 2^31 items. After the first instruction the two stacks hold at most 1,000 items. So only a caller's stack of 2^31 items or more lies outside the correspondence.
+- `OP_IF`, `OP_NOTIF`, `OP_VERIFY` and `OP_IFDUP` use `castToBool`, which inherits the boundary of [Script numbers and truth values](#script-numbers-and-truth-values). Core's `CastToBool` counts with an `unsigned int` (D3, line 40), so on an item of more than `UINT_MAX` bytes its loop can repeat without end. `castToBool` returns a result. A push holds at most 520 bytes, so such an item can come only from the caller's stack. Neither Core nor `evalScript` checks the size of a caller's item. For example, `OP_VERIFY` on one caller's item of 2^32 zero bytes gives `VERIFY` here, and Core's loop does not end.
+- `MINIMALDATA`, `DISCOURAGE_UPGRADABLE_NOPS` and `MINIMALIF` are unsupported flags, so the evaluator has no `CheckMinimalPush`, no NOP discouragement and no minimal `OP_IF` check. `MINIMALIF` applies only to `SIGVERSION_WITNESS_V0` at the pin.
+- An unsupported result can hide a Core rejection. For example, `OP_CHECKSIG` on an empty stack is unsupported here, and Core gives `INVALID_STACK_OPERATION`.
+
+That the definitions are Core's rests on a reading of D3 and D24 (A1) and on the known answers.
+`lake test` runs 90 hand cases and 21 underflow cases, with results written by hand from D3 and D24.
+It also runs all 1,193 records of Core's `script_tests.json` (D45) through a test-only composition of two calls, which follows `VerifyScript` without its P2SH branch (D3, lines 1409 to 1435).
+516 records agree with Core's expected result, 273 acceptances and 243 rejections, and none disagrees.
+
+677 records are unsupported.
+Of those, 191 need a numeric opcode, 165 have an unsupported flag and 161 need a signature opcode.
+103 have a witness, 52 need a hash opcode and 5 need `OP_CHECKSEQUENCEVERIFY`.
+Core itself does not run.
+
+The definitions add no hypothesis or axiom.
+The correspondence with Core covers a caller's stack of fewer than 2^31 items, each of at most `UINT_MAX` bytes.
+The two boundaries above are its only execution boundaries.
+By `#print axioms` with Lean `v4.35.0`:
+
+| Theorem | Axioms |
+| --- | --- |
+| `isNumericOpcode_iff` | `propext` |
+| `readInstruction_progress`, `evalScript_unsupportedFlags`, `evalScript_scriptSize`, `evalScript_flags_congr`, `evalLoop_atEnd`, `evalLoop_truncated`, `evalLoop_instruction`, the `evalInstruction_*` theorems except `evalInstruction_wellFormed`, `execOpcode_frame`, `execOpcode_flags_congr`, and the `execOpcode_*` effect theorems except `execOpcode_numeric` | `propext`, `Quot.sound` |
+| `evalInstruction_wellFormed`, `evalLoop_ok`, `evalScript_ok`, `execOpcode_numeric` | `propext`, `Classical.choice`, `Quot.sound` |
 
 ### Compact encoding and difficulty retarget
 

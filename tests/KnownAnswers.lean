@@ -2792,6 +2792,335 @@ def check : IO Nat := do
 
 end KnownAnswers.ScriptNum
 
+
+/-!
+## Script evaluation
+
+Runs `evalScript`, one `EvalScript` call, through the compiled code.
+
+### Core's script corpus
+
+Each record of `tests/script/corpus/script_tests.jsonl` is a `VerifyScript` call (SOURCES.md, D45 and D46), not one `EvalScript` call.
+This test composes two calls of `evalScript` as `VerifyScript` does without its P2SH branch (D3, lines 1409 to 1435).
+It runs `scriptSig` on an empty stack, and then `scriptPubKey` on the resulting main stack.
+An empty final stack or a false top item gives `EVAL_FALSE`.
+The composition is test code. DogeLib does not specify `VerifyScript` yet.
+
+Three cases give an unsupported result instead of a comparison:
+
+- A nonempty witness stack, which design record 0003 reports as unsupported.
+- An unsupported result of either call.
+- Both calls succeed with a true top item, the P2SH flag is set and `scriptPubKey` is the exact P2SH template (D48, `CScript::IsPayToScriptHash`, lines 204 to 211). Core's verdict then depends on the P2SH branch.
+
+The flags are the record's `effective_flags_mask`.
+Every other record must give exactly the record's `expected_error`, where `OK` is acceptance.
+The test fails on any disagreement, on a record outside the milestone that does not give unsupported, and when no record is compared.
+
+### Hand cases
+
+Each hand case fixes a script, flags, a caller stack and the expected result: the final main stack, Core's error, or the unsupported reason.
+Every expected result is written by hand from `EvalScript` (D3, lines 248 to 1046) and the limits of D24 lines 22 to 31.
+The cases cover the limit boundaries, short pushes, unbalanced conditionals, and disabled and reserved opcodes in skipped branches.
+They also cover stack underflow, negative zero, the operands of `OP_PICK` and `OP_ROLL`, and unsupported capabilities.
+-/
+
+namespace KnownAnswers.ScriptEval
+
+open DogeLib.Script
+
+/-- `n` copies of the byte `b`. -/
+def rep (n : Nat) (b : UInt8) : List UInt8 := List.replicate n b
+
+/-- The outcome of one corpus record. -/
+inductive Outcome where
+  | accepted
+  | rejected (e : ScriptError)
+  | unsupported (reason : String)
+  deriving BEq, Repr
+
+/-- The label of an unsupported reason, for the counts. -/
+def reasonLabel : Unsupported → String
+  | .flags _ => "flags"
+  | .numericOpcode _ => "numeric opcode"
+  | .hashOpcode _ => "hash opcode"
+  | .signatureOpcode _ => "signature opcode"
+  | .checkLockTimeVerify => "CHECKLOCKTIMEVERIFY"
+  | .checkSequenceVerify => "CHECKSEQUENCEVERIFY"
+
+/-- Core's `CScript::IsPayToScriptHash` (D48, lines 204 to 211): `OP_HASH160`, a 20-byte push, `OP_EQUAL`, and nothing else. -/
+def isP2SHTemplate (script : List UInt8) : Bool :=
+  script.length == 23 && script[0]? == some 0xa9 && script[1]? == some 0x14 && script[22]? == some 0x87
+
+/-- `VerifyScript` (D3, lines 1409 to 1435) without its P2SH branch, for a record with an empty witness. Test code only. -/
+def verifyWithoutP2SH (flags : UInt32) (scriptSig scriptPubKey : List UInt8) : Outcome :=
+  match evalScript flags scriptSig [] with
+  | .unsupported u => .unsupported (reasonLabel u)
+  | .rejected e => .rejected e
+  | .ok s =>
+    match evalScript flags scriptPubKey s.stack with
+    | .unsupported u => .unsupported (reasonLabel u)
+    | .rejected e => .rejected e
+    | .ok t =>
+      match t.stack.getLast? with
+      | none => .rejected .evalFalse
+      | some top =>
+        if !castToBool top then .rejected .evalFalse
+        else if hasFlag flags ScriptFlags.p2sh && isP2SHTemplate scriptPubKey then .unsupported "P2SH"
+        else .accepted
+
+/-- The fields of one corpus record that this test reads. -/
+structure Record where
+  line : Nat
+  scriptSig : List UInt8
+  scriptPubKey : List UInt8
+  flags : UInt32
+  expected : String
+  witness : Bool
+  inside : Bool
+
+/-- Reads one line of `script_tests.jsonl`. -/
+def parseRecord (text : String) : Except String Record := do
+  let j ← Lean.Json.parse text
+  let hex (k : String) : Except String (List UInt8) := do
+    return (← KnownAnswers.Sha256Cavp.parseHex (← (← j.getObjVal? k).getStr?)).toList
+  let classification ← j.getObjVal? "classification"
+  return {
+    line := ← (← j.getObjVal? "source_line").getNat?
+    scriptSig := ← hex "scriptSig_hex"
+    scriptPubKey := ← hex "scriptPubKey_hex"
+    flags := (← (← j.getObjVal? "effective_flags_mask").getNat?).toUInt32
+    expected := ← (← j.getObjVal? "expected_error").getStr?
+    witness := (← (← j.getObjVal? "witness").getArr?).size != 0
+    inside := (← (← classification.getObjVal? "milestone").getStr?) == "inside" }
+
+/-- The name of an outcome in the corpus's terms. -/
+def outcomeName : Outcome → String
+  | .accepted => "OK"
+  | .rejected e => e.name
+  | .unsupported r => s!"unsupported ({r})"
+
+/-- Runs every corpus record. Returns the number of failures. -/
+def checkCorpus : IO Nat := do
+  let path : System.FilePath := "tests/script/corpus/script_tests.jsonl"
+  let lines := ((← IO.FS.readFile path).splitOn "\n").filter (!·.isEmpty)
+  let mut failures := 0
+  let mut agree := 0
+  let mut agreeAccepted := 0
+  let mut unsupported : List (String × Nat) := [("P2SH", 0)]
+  if lines.length != 1193 then
+    IO.eprintln s!"FAIL {path}: {lines.length} records, expected 1193"
+    failures := failures + 1
+  for text in lines do
+    let r ← match parseRecord text with
+      | .ok r => pure r
+      | .error e => throw (IO.userError s!"{path}: {e}")
+    let got :=
+      if r.witness then Outcome.unsupported "witness"
+      else verifyWithoutP2SH r.flags r.scriptSig r.scriptPubKey
+    match got with
+    | .unsupported reason =>
+      unsupported :=
+        if unsupported.any (·.1 == reason) then unsupported.map fun (k, n) => (k, if k == reason then n + 1 else n)
+        else unsupported ++ [(reason, 1)]
+    | _ =>
+      if !r.inside then
+        IO.eprintln s!"FAIL script_tests.json:{r.line}: outside the milestone, got {outcomeName got}"
+        failures := failures + 1
+      else if outcomeName got == r.expected then
+        agree := agree + 1
+        if r.expected == "OK" then agreeAccepted := agreeAccepted + 1
+      else
+        IO.eprintln s!"FAIL script_tests.json:{r.line}: got {outcomeName got}, expected {r.expected}"
+        failures := failures + 1
+  if agree == 0 then
+    IO.eprintln "FAIL script corpus: no record compared"
+    failures := failures + 1
+  let total := unsupported.foldl (fun acc (_, n) => acc + n) 0
+  let detail := ", ".intercalate (unsupported.map fun (k, n) => s!"{k} {n}")
+  IO.println s!"script corpus: {lines.length} records, {agree} agree with Core ({agreeAccepted} accepted, {agree - agreeAccepted} rejected), {failures} failures, {total} unsupported: {detail}"
+  return failures
+
+/-- The expected result of a hand case. -/
+inductive Expect where
+  /-- Success with this final main stack. -/
+  | ok (stack : List (List UInt8))
+  /-- Success with this final main stack and separator cursor. -/
+  | okSeparator (stack : List (List UInt8)) (beginCodeHash : Nat)
+  /-- Core's error. -/
+  | rejected (e : ScriptError)
+  /-- An unsupported capability. -/
+  | unsupported (u : Unsupported)
+
+/-- Whether `r` is the expected result `e`. -/
+def Expect.matches : Expect → EvalResult → Bool
+  | .ok stack, .ok s => s.stack == stack
+  | .okSeparator stack b, .ok s => s.stack == stack && s.beginCodeHash == b
+  | .rejected e, .rejected e' => e == e'
+  | .unsupported u, .unsupported u' => u == u'
+  | _, _ => false
+
+/-- One hand case: a label, flags, a script, a caller stack and the expected result. -/
+structure Case where
+  label : String
+  flags : UInt32
+  script : List UInt8
+  stack : List (List UInt8)
+  expected : Expect
+
+/-- `OP_PUSHDATA2` of `n` bytes `0x01`, for `n < 65536`. -/
+def push2 (n : Nat) : List UInt8 := [0x4d, (n % 256).toUInt8, (n / 256).toUInt8] ++ rep n 0x01
+
+/-- A script of exactly 10,000 bytes: 19 pushes of 520 bytes, each dropped, a 41-byte push, dropped, and `OP_1`. -/
+def script10000 : List UInt8 :=
+  (List.replicate 19 (push2 520 ++ [0x75])).flatten ++ [0x29] ++ rep 41 0x02 ++ [0x75, 0x51]
+
+/-- The stack opcodes on an empty stack, which give `INVALID_STACK_OPERATION` (D3, lines 478 to 738). -/
+def underflowOps : List UInt8 :=
+  [0x69, 0x6b, 0x6d, 0x6e, 0x6f, 0x70, 0x71, 0x72, 0x73, 0x75, 0x76, 0x77, 0x78, 0x79, 0x7a, 0x7b, 0x7c, 0x7d,
+    0x82, 0x87, 0x88]
+
+/-- The hand cases. -/
+def cases : List Case := [
+  -- MAX_OPS_PER_SCRIPT (D24 line 25, D3 lines 286 and 287).
+  ⟨"201 counted NOPs", 0, rep 201 0x61, [], .ok []⟩,
+  ⟨"202 counted NOPs", 0, rep 202 0x61, [], .rejected .opCount⟩,
+  ⟨"201 counted, 199 of them skipped", 0, [0x00, 0x63] ++ rep 199 0x61 ++ [0x68], [], .ok []⟩,
+  ⟨"202 counted, 200 of them skipped", 0, [0x00, 0x63] ++ rep 200 0x61 ++ [0x68], [], .rejected .opCount⟩,
+  ⟨"OP_RESERVED does not count", 0, [0x00, 0x63, 0x50] ++ rep 199 0x61 ++ [0x68], [], .ok []⟩,
+  ⟨"pushes and OP_1 to OP_16 do not count", 0, rep 201 0x61 ++ [0x00, 0x51, 0x60, 0x01, 0x07], [],
+    .ok [[], [1], [16], [7]]⟩,
+  -- MAX_SCRIPT_ELEMENT_SIZE (D24 line 22, D3 lines 282 and 283).
+  ⟨"520-byte push", 0, push2 520, [], .ok [rep 520 0x01]⟩,
+  ⟨"521-byte push", 0, push2 521, [], .rejected .pushSize⟩,
+  ⟨"521-byte push in a skipped branch", 0, [0x00, 0x63] ++ push2 521 ++ [0x68], [], .rejected .pushSize⟩,
+  -- The combined stack size (D3 line 1033).
+  ⟨"1,000 items", 0, rep 1000 0x51, [], .ok (List.replicate 1000 [1])⟩,
+  ⟨"1,001 items", 0, rep 1001 0x51, [], .rejected .stackSize⟩,
+  ⟨"1,000 items on both stacks", 0, rep 1000 0x51 ++ [0x6b], [], .ok (List.replicate 999 [1])⟩,
+  ⟨"1,001 items on both stacks", 0, rep 1000 0x51 ++ [0x6b, 0x51], [], .rejected .stackSize⟩,
+  ⟨"1,001-item caller stack, empty script", 0, [], List.replicate 1001 [], .ok (List.replicate 1001 [])⟩,
+  ⟨"1,001-item caller stack, OP_NOP", 0, [0x61], List.replicate 1001 [], .rejected .stackSize⟩,
+  -- MAX_SCRIPT_SIZE (D24 line 31, D3 lines 266 and 267), checked before the opcode count.
+  ⟨"10,000-byte script", 0, script10000, [], .ok [[1]]⟩,
+  ⟨"10,001-byte script", 0, script10000 ++ [0x61], [], .rejected .scriptSize⟩,
+  ⟨"10,001 NOPs", 0, rep 10001 0x61, [], .rejected .scriptSize⟩,
+  -- Short pushes (D3 lines 280 and 281).
+  ⟨"short OP_PUSHDATA1 length", 0, [0x4c], [], .rejected .badOpcode⟩,
+  ⟨"short OP_PUSHDATA1 data", 0, [0x4c, 0x01], [], .rejected .badOpcode⟩,
+  ⟨"short OP_PUSHDATA2 length", 0, [0x4d, 0x01], [], .rejected .badOpcode⟩,
+  ⟨"short OP_PUSHDATA4 length", 0, [0x4e, 0x01, 0x00, 0x00], [], .rejected .badOpcode⟩,
+  ⟨"short direct push", 0, [0x02, 0x01], [], .rejected .badOpcode⟩,
+  ⟨"short push in a skipped branch", 0, [0x00, 0x63, 0x02, 0x01], [], .rejected .badOpcode⟩,
+  ⟨"short push after OP_RETURN is not read", 0, [0x6a, 0x02, 0x01], [], .rejected .opReturn⟩,
+  -- Conditionals (D3 lines 437 to 476 and 1042 to 1043).
+  ⟨"OP_IF without OP_ENDIF", 0, [0x51, 0x63], [], .rejected .unbalancedConditional⟩,
+  ⟨"OP_ELSE alone", 0, [0x67], [], .rejected .unbalancedConditional⟩,
+  ⟨"OP_ENDIF alone", 0, [0x68], [], .rejected .unbalancedConditional⟩,
+  ⟨"OP_IF on an empty stack", 0, [0x63, 0x68], [], .rejected .unbalancedConditional⟩,
+  ⟨"OP_IF on an empty stack in a skipped branch", 0, [0x00, 0x63, 0x63, 0x68, 0x68], [], .ok []⟩,
+  ⟨"two OP_ELSE", 0, [0x51, 0x63, 0x52, 0x67, 0x53, 0x67, 0x54, 0x68], [], .ok [[2], [4]]⟩,
+  ⟨"OP_NOTIF", 0, [0x00, 0x64, 0x52, 0x67, 0x53, 0x68], [], .ok [[2]]⟩,
+  ⟨"nested skipped OP_ELSE", 0, [0x00, 0x63, 0x00, 0x63, 0x67, 0x52, 0x68, 0x68], [], .ok []⟩,
+  -- Disabled, reserved and invalid opcodes (D3 lines 289 to 304, 311 and 1028 to 1029).
+  ⟨"OP_CAT in a skipped branch", 0, [0x00, 0x63, 0x7e, 0x68], [], .rejected .disabledOpcode⟩,
+  ⟨"OP_RSHIFT in a skipped branch", 0, [0x00, 0x63, 0x99, 0x68], [], .rejected .disabledOpcode⟩,
+  ⟨"OP_2MUL executed", 0, [0x51, 0x8d], [], .rejected .disabledOpcode⟩,
+  ⟨"reserved and invalid opcodes in a skipped branch", 0,
+    [0x00, 0x63, 0x50, 0x62, 0x89, 0x8a, 0xba, 0xff, 0x68, 0x51], [], .ok [[1]]⟩,
+  ⟨"OP_VERIF in a skipped branch", 0, [0x00, 0x63, 0x65, 0x68], [], .rejected .badOpcode⟩,
+  ⟨"OP_VERNOTIF in a skipped branch", 0, [0x00, 0x63, 0x66, 0x68], [], .rejected .badOpcode⟩,
+  ⟨"OP_RESERVED executed", 0, [0x50], [], .rejected .badOpcode⟩,
+  ⟨"OP_VER executed", 0, [0x62], [], .rejected .badOpcode⟩,
+  ⟨"OP_RESERVED1 executed", 0, [0x89], [], .rejected .badOpcode⟩,
+  ⟨"0xba executed", 0, [0xba], [], .rejected .badOpcode⟩,
+  ⟨"0xff executed", 0, [0xff], [], .rejected .badOpcode⟩,
+  ⟨"OP_RETURN in a skipped branch", 0, [0x00, 0x63, 0x6a, 0x68], [], .ok []⟩,
+  ⟨"OP_RETURN executed", 0, [0x6a], [], .rejected .opReturn⟩,
+  -- Underflow (D3 lines 478 to 738).
+  ⟨"OP_FROMALTSTACK on an empty altstack", 0, [0x51, 0x6c], [], .rejected .invalidAltstackOperation⟩,
+  ⟨"OP_SWAP on one item", 0, [0x51, 0x7c], [], .rejected .invalidStackOperation⟩,
+  ⟨"OP_2ROT on five items", 0, rep 5 0x51 ++ [0x71], [], .rejected .invalidStackOperation⟩,
+  ⟨"OP_PICK on one item", 0, [0x00, 0x79], [], .rejected .invalidStackOperation⟩,
+  -- Negative zero (D3 lines 38 to 51).
+  ⟨"negative zero is false for OP_IF", 0, [0x01, 0x80, 0x63, 0x51, 0x67, 0x52, 0x68], [], .ok [[2]]⟩,
+  ⟨"negative zero is false for OP_VERIFY", 0, [0x01, 0x80, 0x69], [], .rejected .verify⟩,
+  ⟨"negative zero is false for OP_IFDUP", 0, [0x01, 0x80, 0x73], [], .ok [[0x80]]⟩,
+  ⟨"0x0080 is false", 0, [0x02, 0x00, 0x80, 0x73], [], .ok [[0x00, 0x80]]⟩,
+  ⟨"0x8000 is true", 0, [0x02, 0x80, 0x00, 0x73], [], .ok [[0x80, 0x00], [0x80, 0x00]]⟩,
+  ⟨"negative zero and the empty string differ for OP_EQUAL", 0, [0x00, 0x01, 0x80, 0x87], [], .ok [[]]⟩,
+  -- OP_PICK and OP_ROLL (D3 lines 648 to 664).
+  ⟨"OP_PICK 1", 0, [0x52, 0x53, 0x51, 0x79], [], .ok [[2], [3], [2]]⟩,
+  ⟨"OP_ROLL 1", 0, [0x52, 0x53, 0x51, 0x7a], [], .ok [[3], [2]]⟩,
+  ⟨"OP_PICK 0", 0, [0x52, 0x53, 0x00, 0x79], [], .ok [[2], [3], [3]]⟩,
+  ⟨"OP_PICK past the bottom", 0, [0x51, 0x51, 0x79], [], .rejected .invalidStackOperation⟩,
+  ⟨"OP_PICK -1", 0, [0x51, 0x4f, 0x79], [], .rejected .invalidStackOperation⟩,
+  ⟨"OP_PICK with a five-byte operand", 0, [0x51, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x79], [],
+    .rejected .unknownError⟩,
+  ⟨"OP_ROLL with a nonminimal operand", 0, [0x52, 0x53, 0x02, 0x01, 0x00, 0x7a], [], .ok [[3], [2]]⟩,
+  ⟨"OP_PICK with the five-byte operand 2^31", 0, [0x51, 0x51, 0x05, 0x00, 0x00, 0x00, 0x80, 0x00, 0x79], [],
+    .rejected .unknownError⟩,
+  ⟨"OP_PICK with 2^31 - 1", 0, [0x51, 0x51, 0x04, 0xff, 0xff, 0xff, 0x7f, 0x79], [],
+    .rejected .invalidStackOperation⟩,
+  -- Other stack operations (D3 lines 502 to 706).
+  ⟨"OP_2ROT", 0, [0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x71], [], .ok [[3], [4], [5], [6], [1], [2]]⟩,
+  ⟨"OP_2SWAP", 0, [0x51, 0x52, 0x53, 0x54, 0x72], [], .ok [[3], [4], [1], [2]]⟩,
+  ⟨"OP_ROT", 0, [0x51, 0x52, 0x53, 0x7b], [], .ok [[2], [3], [1]]⟩,
+  ⟨"OP_TUCK", 0, [0x51, 0x52, 0x7d], [], .ok [[2], [1], [2]]⟩,
+  ⟨"OP_DEPTH", 0, [0x51, 0x74], [], .ok [[1], [1]]⟩,
+  ⟨"OP_DEPTH of an empty stack", 0, [0x74], [], .ok [[]]⟩,
+  ⟨"OP_SIZE", 0, [0x02, 0x01, 0x02, 0x82], [], .ok [[1, 2], [2]]⟩,
+  ⟨"OP_SIZE of 128 bytes", 0, [0x4c, 0x80] ++ rep 128 0x00 ++ [0x82], [], .ok [rep 128 0x00, [0x80, 0x00]]⟩,
+  ⟨"OP_1NEGATE", 0, [0x4f], [], .ok [[0x81]]⟩,
+  ⟨"altstack round trip", 0, [0x51, 0x52, 0x6b, 0x53, 0x6c], [], .ok [[1], [3], [2]]⟩,
+  ⟨"OP_EQUALVERIFY", 0, [0x51, 0x51, 0x88], [], .ok []⟩,
+  ⟨"OP_EQUALVERIFY fails", 0, [0x51, 0x52, 0x88], [], .rejected .equalVerify⟩,
+  ⟨"OP_CODESEPARATOR", 0, [0x51, 0xab, 0x51], [], .okSeparator [[1], [1]] 2⟩,
+  ⟨"OP_CODESEPARATOR in a skipped branch", 0, [0x00, 0x63, 0xab, 0x68], [], .okSeparator [] 0⟩,
+  -- NOPs and flags (D3 lines 347 to 435).
+  ⟨"OP_NOP1 to OP_NOP10 without their flags", 0, [0xb0, 0xb1, 0xb2, 0xb3, 0xb4, 0xb5, 0xb6, 0xb7, 0xb8, 0xb9], [],
+    .ok []⟩,
+  ⟨"OP_CHECKLOCKTIMEVERIFY with its flag", ScriptFlags.checkLockTimeVerify, [0x51, 0xb1], [],
+    .unsupported .checkLockTimeVerify⟩,
+  ⟨"OP_CHECKSEQUENCEVERIFY with its flag", ScriptFlags.checkSequenceVerify, [0x51, 0xb2], [],
+    .unsupported .checkSequenceVerify⟩,
+  ⟨"OP_CHECKLOCKTIMEVERIFY with its flag, skipped", ScriptFlags.checkLockTimeVerify, [0x00, 0x63, 0xb1, 0x68], [],
+    .ok []⟩,
+  ⟨"all seven supported flags", 0x061f, [0x51], [], .ok [[1]]⟩,
+  ⟨"MINIMALDATA is unsupported", ScriptFlags.minimalData, [0x51], [], .unsupported (.flags 0x0040)⟩,
+  ⟨"unsupported flags before the script size", ScriptFlags.p2sh ||| ScriptFlags.cleanStack ||| 0x10000,
+    rep 10001 0x61, [], .unsupported (.flags 0x10100)⟩,
+  -- Capabilities of later stages.
+  ⟨"OP_ADD executed", 0, [0x51, 0x51, 0x93], [], .unsupported (.numericOpcode 0x93)⟩,
+  ⟨"OP_HASH160 executed", 0, [0x51, 0xa9], [], .unsupported (.hashOpcode 0xa9)⟩,
+  ⟨"OP_CHECKSIG executed", 0, [0xac], [], .unsupported (.signatureOpcode 0xac)⟩,
+  ⟨"later-stage opcodes in a skipped branch", 0, [0x00, 0x63, 0x93, 0xa5, 0xa9, 0xac, 0xaf, 0x68], [], .ok []⟩
+]
+
+/-- Runs every hand case. Returns the number of failures. -/
+def checkCases : IO Nat := do
+  let mut failures := 0
+  for c in cases do
+    let got := evalScript c.flags c.script c.stack
+    unless c.expected.matches got do
+      IO.eprintln s!"FAIL script eval {c.label}: got {repr got}"
+      failures := failures + 1
+  for op in underflowOps do
+    let got := evalScript 0 [op] []
+    unless got == .rejected .invalidStackOperation do
+      IO.eprintln s!"FAIL script eval underflow of {op}: got {repr got}"
+      failures := failures + 1
+  unless script10000.length == 10000 do
+    IO.eprintln s!"FAIL script eval: the 10,000-byte script has {script10000.length} bytes"
+    failures := failures + 1
+  IO.println s!"script eval: {cases.length} hand cases, {underflowOps.length} underflow cases, {failures} failures"
+  return failures
+
+/-- Runs the corpus and the hand cases. Returns the number of failures. -/
+def check : IO Nat := do
+  return (← checkCases) + (← checkCorpus)
+
+end KnownAnswers.ScriptEval
+
 /-- Entry point of `lake test`. -/
 def main : IO UInt32 := do
   let sha1 ← KnownAnswers.Sha1.check
@@ -2817,4 +3146,5 @@ def main : IO UInt32 := do
   let operators ← KnownAnswers.Work.checkOperators
   let shifts ← KnownAnswers.Work.checkShifts
   let scriptNum ← KnownAnswers.ScriptNum.check
-  return if sha1 + blocks + short + long + ripemd + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts + proofOfWork + scriptReader + scriptNum == 0 then 0 else 1
+  let scriptEval ← KnownAnswers.ScriptEval.check
+  return if sha1 + blocks + short + long + ripemd + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts + proofOfWork + scriptReader + scriptNum + scriptEval == 0 then 0 else 1

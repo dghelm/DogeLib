@@ -15,7 +15,7 @@ public import DogeLib.Script.State
 - `WellFormed.pc_le_length` and `WellFormed.beginCodeHash_le_length`: both cursors stay within the script.
 
 These theorems are statements about the definitions. They do not say that the definitions match Core.
-No opcode semantics exist yet, so no theorem here says that an opcode step keeps the invariants.
+`DogeLib.Script.Proofs.Eval` shows that each successful step of the evaluator keeps the invariants.
 -/
 
 @[expose] public section

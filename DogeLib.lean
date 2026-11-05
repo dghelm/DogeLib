@@ -21,5 +21,5 @@ Each layer lives in its own subtree:
 - `DogeLib.Transaction` holds the transaction fields, their base serialization and the transaction ID.
 - `DogeLib.Work` holds the proof-of-work arithmetic: compact targets and the difficulty retarget.
 - `DogeLib.Block` holds pure headers, block hashes and transaction Merkle roots.
-- `DogeLib.Script` holds the instruction reader of the Script interpreter, the state of one `EvalScript` call, Script numbers and the truth value of a stack item.
+- `DogeLib.Script` holds the instruction reader of the Script interpreter, the state of one `EvalScript` call, Script numbers and the truth value of a stack item. It also holds the interpreter's errors and flags, and one `EvalScript` call for the opcodes of stage 2 that do not compute numbers or hashes.
 -/

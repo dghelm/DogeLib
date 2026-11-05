@@ -703,8 +703,8 @@ It also runs the 247 integers of the `creation` test of `scriptnum_tests.cpp` (D
 That test compares Core with its own 0.10.0 copy, so it gives the integers but no expected bytes.
 Core itself does not run, and no comparison with Core's compiled code exists.
 
-`OP_PICK` and `OP_ROLL` in `Script.execOpcode` map a decode failure to `SCRIPT_ERR_UNKNOWN_ERROR`, as the `catch` of `EvalScript` does (D3, lines 1037 to 1040).
-The numeric opcodes are not specified yet.
+`OP_PICK`, `OP_ROLL` and the numeric opcodes in `Script.execOpcode` map a decode failure to `SCRIPT_ERR_UNKNOWN_ERROR`, as the `catch` of `EvalScript` does (D3, lines 1037 to 1040).
+[Script evaluation](#script-evaluation-one-evalscript-call) states how the numeric opcodes stay within the defined domain of Core's `int64_t` operators.
 The definitions add no hypothesis, axiom or execution boundary.
 By `#print axioms` with Lean `v4.35.0`:
 
@@ -719,7 +719,7 @@ The supporting byte and little-endian lemmas of the module use the same three ax
 ### Script evaluation, one `EvalScript` call
 
 `DogeLib.Script.Eval` specifies one call of Core's `EvalScript` in `SIGVERSION_BASE` (SOURCES.md, D3).
-It covers the opcodes of stage 2 of design record 0003 that do not compute numbers or hashes.
+It covers the opcodes of stage 2 of design record 0003: control flow, stack operations, numbers and hashes.
 `DogeLib.Script.Error` gives Core's `ScriptError_t` (D49), and `DogeLib.Script.Flags` gives the flag bits of D25.
 The theorems are in `DogeLib.Script.Proofs.Eval`.
 
@@ -727,7 +727,7 @@ The theorems are in `DogeLib.Script.Proofs.Eval`.
 `ok` is Core's `true` with `SCRIPT_ERR_OK`, and `rejected e` is Core's `false` with error `e`.
 `unsupported r` means that this stage lacks a capability that the call needs, and says nothing about Core's verdict.
 A flag outside the seven of design record 0003 is unsupported before any other check.
-An executed numeric, hash or signature opcode is unsupported, and so is an executed `OP_CHECKLOCKTIMEVERIFY` or `OP_CHECKSEQUENCEVERIFY` with its flag set.
+An executed signature opcode is unsupported, and so is an executed `OP_CHECKLOCKTIMEVERIFY` or `OP_CHECKSEQUENCEVERIFY` with its flag set.
 
 For every flag set, script and caller stack:
 
@@ -744,6 +744,25 @@ For the loop and each instruction:
 - `evalInstruction_wellFormed`: from a state that satisfies `ExecState.WellFormed`, a successful step and the cursor move give a state that satisfies it, within the combined stack limit.
 - The `execOpcode_*` theorems give the stack effect of each implemented opcode, its underflow error, and each unsupported case.
 
+For the numeric and hash opcodes:
+
+- One theorem per opcode, from `execOpcode_1add` to `execOpcode_within` and from `execOpcode_ripemd160` to `execOpcode_hash256`, gives its stack effect. The numeric effect theorems assume successful four-byte decodes without the minimal requirement. The hash effect theorems require only the stated stack shape.
+- `execOpcode_numeric_underflow` and `execOpcode_hash_underflow`: too few items give `INVALID_STACK_OPERATION`. `execOpcode_numeric_decode`: an operand that fails to decode gives `UNKNOWN_ERROR`.
+- `execOpcode_addSub_length`: `OP_1ADD`, `OP_1SUB`, `OP_ADD` and `OP_SUB` push at most five bytes. `execOpcode_numeric_length_le_four`: every other numeric opcode that pushes a result pushes at most four bytes.
+
+Core computes these opcodes in `int64_t` with the operators of `CScriptNum` (D24, lines 244 to 297), and the definitions compute in `Int`.
+They agree where no operator overflows and no assert fires.
+Each operand is a four-byte decode and lies within ±(2^31 − 1) (`decode_default_natAbs_le`), so this holds for every operand:
+
+- `numericOperand_ne_int64Min`: the operand of `OP_NEGATE` and `OP_ABS` is not `INT64_MIN`, which `operator-()` asserts (line 273).
+- `numericOperand_add_one_le` and `numericOperand_sub_one_ge`: the asserts of `operator+=` and `operator-=` with 1 hold for `OP_1ADD` and `OP_1SUB` (lines 285 and 293).
+- `numericOperand_addSub_mem`: the sum and the difference of `OP_ADD` and `OP_SUB` lie within `int64_t`. `operator+` and `operator-` (lines 258 and 259) have no assert.
+
+The comparisons, `OP_MIN`, `OP_MAX` and `OP_WITHIN` only compare values.
+The hash opcodes use the hash definitions of the `Cryptography` layer, and inherit the boundaries that their sections state.
+`OP_NUMEQUALVERIFY` pushes its comparison and pops it again in Core (D3, lines 817 to 823).
+The definition pops both operands directly, which differs only in an intermediate state that no check reads.
+
 The evaluator takes no fuel.
 `evalLoop` recurses on the distance from the cursor to the end of the script.
 `readInstruction_progress`, in the specification, shows that each instruction moves the cursor forward.
@@ -757,13 +776,14 @@ Three boundaries limit the claim:
 - An unsupported result can hide a Core rejection. For example, `OP_CHECKSIG` on an empty stack is unsupported here, and Core gives `INVALID_STACK_OPERATION`.
 
 That the definitions are Core's rests on a reading of D3 and D24 (A1) and on the known answers.
-`lake test` runs 90 hand cases and 21 underflow cases, with results written by hand from D3 and D24.
+`lake test` runs 140 hand cases and 46 underflow cases, with results written by hand from D3 and D24.
+The expected digests of the hash cases come from Core's `script_tests.json` (D45).
 It also runs all 1,193 records of Core's `script_tests.json` (D45) through a test-only composition of two calls, which follows `VerifyScript` without its P2SH branch (D3, lines 1409 to 1435).
-516 records agree with Core's expected result, 273 acceptances and 243 rejections, and none disagrees.
+745 records agree with Core's expected result, 455 acceptances and 290 rejections, and none disagrees.
 
-677 records are unsupported.
-Of those, 191 need a numeric opcode, 165 have an unsupported flag and 161 need a signature opcode.
-103 have a witness, 52 need a hash opcode and 5 need `OP_CHECKSEQUENCEVERIFY`.
+448 records are unsupported.
+Of those, 165 have an unsupported flag, 162 need a signature opcode and 103 have a witness.
+13 reach the P2SH branch, and 5 need `OP_CHECKSEQUENCEVERIFY`.
 Core itself does not run.
 
 The definitions add no hypothesis or axiom.
@@ -773,9 +793,8 @@ By `#print axioms` with Lean `v4.35.0`:
 
 | Theorem | Axioms |
 | --- | --- |
-| `isNumericOpcode_iff` | `propext` |
-| `readInstruction_progress`, `evalScript_unsupportedFlags`, `evalScript_scriptSize`, `evalScript_flags_congr`, `evalLoop_atEnd`, `evalLoop_truncated`, `evalLoop_instruction`, the `evalInstruction_*` theorems except `evalInstruction_wellFormed`, `execOpcode_frame`, `execOpcode_flags_congr`, and the `execOpcode_*` effect theorems except `execOpcode_numeric` | `propext`, `Quot.sound` |
-| `evalInstruction_wellFormed`, `evalLoop_ok`, `evalScript_ok`, `execOpcode_numeric` | `propext`, `Classical.choice`, `Quot.sound` |
+| `readInstruction_progress`, `evalScript_unsupportedFlags`, `evalScript_scriptSize`, `evalScript_flags_congr`, `evalLoop_atEnd`, `evalLoop_truncated`, `evalLoop_instruction`, the `evalInstruction_*` theorems except `evalInstruction_wellFormed`, `execOpcode_frame`, `execOpcode_flags_congr`, `encode_ofBool`, the `execOpcode_*` effect, underflow and decode theorems, `numericOperand_ne_int64Min`, `numericOperand_add_one_le`, `numericOperand_sub_one_ge` | `propext`, `Quot.sound` |
+| `evalInstruction_wellFormed`, `evalLoop_ok`, `evalScript_ok`, `execOpcode_addSub_length`, `execOpcode_numeric_length_le_four`, `numericOperand_addSub_mem` | `propext`, `Classical.choice`, `Quot.sound` |
 
 ### Compact encoding and difficulty retarget
 

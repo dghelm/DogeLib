@@ -59,11 +59,12 @@ The Script layer also has the numeric part of stage 2 of [design record 0003](do
 `isMinimal_iff_encode_value` shows that Core's minimality test accepts exactly the encodings, and the decode theorems give every result, with the size check first.
 [COVERAGE.md](COVERAGE.md#operations) records the evidence and the exclusions.
 
-`Script.evalScript` implements one `EvalScript` call, stage 2b of [design record 0003](docs/design/0003-legacy-spend-validation.md).
-It runs pushes, NOPs, control flow, stack operations, `OP_SIZE`, equality and `OP_CODESEPARATOR`, with Core's errors and check order, also in skipped branches.
-Numeric, hash and signature opcodes, CLTV and CSV with their flags, and flags outside the seven of the design record give `unsupported`, never a rejection.
-On Core's `script_tests.json`, 516 records agree with Core, none disagrees, and 677 are unsupported.
-Stage 2c, the numeric and hash opcodes, is the next Script work.
+`Script.evalScript` implements one `EvalScript` call, stages 2b and 2c of [design record 0003](docs/design/0003-legacy-spend-validation.md).
+It runs pushes, NOPs, control flow, stack operations, `OP_SIZE`, equality, the numeric and hash opcodes and `OP_CODESEPARATOR`.
+It follows Core's errors and check order, also in skipped branches.
+Signature opcodes, CLTV and CSV with their flags, and flags outside the seven of the design record give `unsupported`, never a rejection.
+On Core's `script_tests.json`, 745 records agree with Core, none disagrees, and 448 are unsupported.
+Stage 3, the signature opcodes, is the next Script work.
 
 Steps 0 and 0b follow design record 0002: the first contributions adopt audited codec foundations and then define Dogecoin's bounded decoding contract. They replace the original plan to build fixed-width encodings and CompactSize from scratch. Design record 0002 preferred a pinned btc-verified dependency first. The decisions below choose an adaptation instead, because btc-verified's toolchain, file structure and trust policy all differ from EthLib's.
 

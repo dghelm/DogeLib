@@ -11,6 +11,6 @@ public import DogeLib.Script.State
 # `DogeLib.Script`
 
 Script: the instruction reader of the interpreter, the state of one `EvalScript` call, Script numbers and the truth value of a stack item.
-It also holds the interpreter's errors and flags, and one `EvalScript` call for the opcodes of stage 2 that do not compute numbers or hashes.
+It also holds the interpreter's errors and flags, and one `EvalScript` call for the opcodes of stage 2, including the numeric and hash opcodes.
 No definition here returns a verdict on a spend: `VerifyScript` is not specified yet.
 -/

@@ -2819,9 +2819,11 @@ The test fails on any disagreement, on a record outside the milestone that does 
 ### Hand cases
 
 Each hand case fixes a script, flags, a caller stack and the expected result: the final main stack, Core's error, or the unsupported reason.
-Every expected result is written by hand from `EvalScript` (D3, lines 248 to 1046) and the limits of D24 lines 22 to 31.
+Every expected result is written by hand from `EvalScript` (D3, lines 248 to 1046), the limits of D24 lines 22 to 31, and the encoding of `CScriptNum` (D24, lines 198 to 371).
+The expected digests of the hash cases come from Core's `script_tests.json` (D45), not from DogeLib's hash definitions.
 The cases cover the limit boundaries, short pushes, unbalanced conditionals, and disabled and reserved opcodes in skipped branches.
 They also cover stack underflow, negative zero, the operands of `OP_PICK` and `OP_ROLL`, and unsupported capabilities.
+For the numeric opcodes they cover operand order, five-byte results, negative zero and non-minimal operands, `OP_NUMEQUALVERIFY` failure and the bounds of `OP_WITHIN`.
 -/
 
 namespace KnownAnswers.ScriptEval
@@ -2841,8 +2843,6 @@ inductive Outcome where
 /-- The label of an unsupported reason, for the counts. -/
 def reasonLabel : Unsupported → String
   | .flags _ => "flags"
-  | .numericOpcode _ => "numeric opcode"
-  | .hashOpcode _ => "hash opcode"
   | .signatureOpcode _ => "signature opcode"
   | .checkLockTimeVerify => "CHECKLOCKTIMEVERIFY"
   | .checkSequenceVerify => "CHECKSEQUENCEVERIFY"
@@ -2974,10 +2974,17 @@ def push2 (n : Nat) : List UInt8 := [0x4d, (n % 256).toUInt8, (n / 256).toUInt8]
 def script10000 : List UInt8 :=
   (List.replicate 19 (push2 520 ++ [0x75])).flatten ++ [0x29] ++ rep 41 0x02 ++ [0x75, 0x51]
 
-/-- The stack opcodes on an empty stack, which give `INVALID_STACK_OPERATION` (D3, lines 478 to 738). -/
+/-- The stack, numeric and hash opcodes on an empty stack, which give `INVALID_STACK_OPERATION` (D3, lines 478 to 871). -/
 def underflowOps : List UInt8 :=
   [0x69, 0x6b, 0x6d, 0x6e, 0x6f, 0x70, 0x71, 0x72, 0x73, 0x75, 0x76, 0x77, 0x78, 0x79, 0x7a, 0x7b, 0x7c, 0x7d,
-    0x82, 0x87, 0x88]
+    0x82, 0x87, 0x88, 0x8b, 0x8c, 0x8f, 0x90, 0x91, 0x92, 0x93, 0x94, 0x9a, 0x9b, 0x9c, 0x9d, 0x9e, 0x9f, 0xa0,
+    0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7, 0xa8, 0xa9, 0xaa]
+
+/-- The bytes of a hexadecimal string. A bad digit gives no bytes, which no hash case expects. -/
+def hex (s : String) : List UInt8 :=
+  match KnownAnswers.Sha256Cavp.parseHex s with
+  | .ok b => b.toList
+  | .error _ => []
 
 /-- The hand cases. -/
 def cases : List Case := [
@@ -3089,9 +3096,76 @@ def cases : List Case := [
   ⟨"MINIMALDATA is unsupported", ScriptFlags.minimalData, [0x51], [], .unsupported (.flags 0x0040)⟩,
   ⟨"unsupported flags before the script size", ScriptFlags.p2sh ||| ScriptFlags.cleanStack ||| 0x10000,
     rep 10001 0x61, [], .unsupported (.flags 0x10100)⟩,
+  -- Numeric opcodes (D3, lines 744 to 841, and D24, lines 198 to 371).
+  ⟨"OP_ADD", 0, [0x51, 0x52, 0x93], [], .ok [[3]]⟩,
+  ⟨"OP_SUB subtracts the top item", 0, [0x51, 0x52, 0x94], [], .ok [[0x81]]⟩,
+  ⟨"OP_LESSTHAN 1 2", 0, [0x51, 0x52, 0x9f], [], .ok [[1]]⟩,
+  ⟨"OP_LESSTHAN 2 1", 0, [0x52, 0x51, 0x9f], [], .ok [[]]⟩,
+  ⟨"OP_GREATERTHAN -1 1", 0, [0x4f, 0x51, 0xa0], [], .ok [[]]⟩,
+  ⟨"OP_LESSTHANOREQUAL 2 2", 0, [0x52, 0x52, 0xa1], [], .ok [[1]]⟩,
+  ⟨"OP_GREATERTHANOREQUAL 1 2", 0, [0x51, 0x52, 0xa2], [], .ok [[]]⟩,
+  ⟨"OP_MIN", 0, [0x51, 0x52, 0xa3], [], .ok [[1]]⟩,
+  ⟨"OP_MAX", 0, [0x51, 0x52, 0xa4], [], .ok [[2]]⟩,
+  ⟨"OP_NUMNOTEQUAL", 0, [0x51, 0x52, 0x9e], [], .ok [[1]]⟩,
+  ⟨"OP_NEGATE", 0, [0x52, 0x8f], [], .ok [[0x82]]⟩,
+  ⟨"OP_ABS -2", 0, [0x01, 0x82, 0x90], [], .ok [[2]]⟩,
+  ⟨"OP_NOT 2", 0, [0x52, 0x91], [], .ok [[]]⟩,
+  ⟨"OP_0NOTEQUAL 2", 0, [0x52, 0x92], [], .ok [[1]]⟩,
+  ⟨"OP_1SUB 1", 0, [0x51, 0x8c], [], .ok [[]]⟩,
+  -- Five-byte results are pushed, and a later numeric use gives UNKNOWN_ERROR.
+  ⟨"OP_1ADD of 2^31 - 1", 0, [0x04, 0xff, 0xff, 0xff, 0x7f, 0x8b], [], .ok [[0x00, 0x00, 0x00, 0x80, 0x00]]⟩,
+  ⟨"OP_ADD of 2^31 - 1 twice", 0, [0x04, 0xff, 0xff, 0xff, 0x7f, 0x76, 0x93], [],
+    .ok [[0xfe, 0xff, 0xff, 0xff, 0x00]]⟩,
+  ⟨"OP_1SUB of -(2^31 - 1)", 0, [0x04, 0xff, 0xff, 0xff, 0xff, 0x8c], [], .ok [[0x00, 0x00, 0x00, 0x80, 0x80]]⟩,
+  ⟨"OP_SUB of -(2^31 - 1) and 2^31 - 1", 0, [0x04, 0xff, 0xff, 0xff, 0xff, 0x04, 0xff, 0xff, 0xff, 0x7f, 0x94], [],
+    .ok [[0xfe, 0xff, 0xff, 0xff, 0x80]]⟩,
+  ⟨"a five-byte result fails a later OP_1ADD", 0, [0x04, 0xff, 0xff, 0xff, 0x7f, 0x8b, 0x8b], [],
+    .rejected .unknownError⟩,
+  ⟨"a five-byte result passes OP_SIZE", 0, [0x04, 0xff, 0xff, 0xff, 0x7f, 0x8b, 0x82], [],
+    .ok [[0x00, 0x00, 0x00, 0x80, 0x00], [5]]⟩,
+  ⟨"OP_1ADD on a five-byte operand", 0, [0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x8b], [], .rejected .unknownError⟩,
+  ⟨"OP_ADD on a five-byte top operand", 0, [0x51, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x93], [],
+    .rejected .unknownError⟩,
+  ⟨"OP_ADD on a five-byte second operand", 0, [0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x51, 0x93], [],
+    .rejected .unknownError⟩,
+  ⟨"OP_ADD on one item", 0, [0x51, 0x93], [], .rejected .invalidStackOperation⟩,
+  ⟨"OP_1ADD on a five-byte operand in a skipped branch", 0, [0x00, 0x63, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x8b, 0x68],
+    [], .ok []⟩,
+  -- Negative zero and non-minimal operands, accepted without MINIMALDATA.
+  ⟨"OP_1ADD of negative zero", 0, [0x01, 0x80, 0x8b], [], .ok [[1]]⟩,
+  ⟨"OP_NOT of negative zero", 0, [0x01, 0x80, 0x91], [], .ok [[1]]⟩,
+  ⟨"OP_ABS of negative zero", 0, [0x01, 0x80, 0x90], [], .ok [[]]⟩,
+  ⟨"OP_NEGATE of negative zero", 0, [0x01, 0x80, 0x8f], [], .ok [[]]⟩,
+  ⟨"OP_0NOTEQUAL of 0x0080", 0, [0x02, 0x00, 0x80, 0x92], [], .ok [[]]⟩,
+  ⟨"OP_NUMEQUAL of negative zero and 0", 0, [0x01, 0x80, 0x00, 0x9c], [], .ok [[1]]⟩,
+  ⟨"OP_BOOLAND of negative zero and 1", 0, [0x01, 0x80, 0x51, 0x9a], [], .ok [[]]⟩,
+  ⟨"OP_BOOLOR of negative zero and 1", 0, [0x01, 0x80, 0x51, 0x9b], [], .ok [[1]]⟩,
+  ⟨"OP_NUMEQUAL of 2 and 0x0200", 0, [0x52, 0x02, 0x02, 0x00, 0x9c], [], .ok [[1]]⟩,
+  -- OP_NUMEQUALVERIFY (D3, lines 803 and 817 to 823).
+  ⟨"OP_NUMEQUALVERIFY of 2 and 0x0200", 0, [0x52, 0x02, 0x02, 0x00, 0x9d], [], .ok []⟩,
+  ⟨"OP_NUMEQUALVERIFY fails", 0, [0x51, 0x52, 0x9d], [], .rejected .numEqualVerify⟩,
+  ⟨"OP_NUMEQUALVERIFY of 0 and negative zero", 0, [0x51, 0x00, 0x01, 0x80, 0x9d], [], .ok [[1]]⟩,
+  -- OP_WITHIN (D3, lines 827 to 841): x lo hi gives lo <= x < hi.
+  ⟨"OP_WITHIN at the lower bound", 0, [0x00, 0x00, 0x51, 0xa5], [], .ok [[1]]⟩,
+  ⟨"OP_WITHIN at the upper bound", 0, [0x51, 0x00, 0x51, 0xa5], [], .ok [[]]⟩,
+  ⟨"OP_WITHIN with lo above hi", 0, [0x51, 0x52, 0x00, 0xa5], [], .ok [[]]⟩,
+  ⟨"OP_WITHIN with negative bounds", 0, [0x4f, 0x4f, 0x00, 0xa5], [], .ok [[1]]⟩,
+  ⟨"OP_WITHIN below the lower bound", 0, [0x4f, 0x00, 0x51, 0xa5], [], .ok [[]]⟩,
+  ⟨"OP_WITHIN on two items", 0, [0x51, 0x51, 0xa5], [], .rejected .invalidStackOperation⟩,
+  ⟨"OP_WITHIN on a five-byte bound", 0, [0x51, 0x51, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0xa5], [],
+    .rejected .unknownError⟩,
+  -- Hash opcodes on the empty input (D3, lines 847 to 871). The digests are those of Core's script_tests.json (D45),
+  -- lines 216, 219, 222, 227 and 230.
+  ⟨"OP_RIPEMD160 of the empty input", 0, [0x00, 0xa6], [], .ok [hex "9c1185a5c5e9fc54612808977ee8f548b2258d31"]⟩,
+  ⟨"OP_SHA1 of the empty input", 0, [0x00, 0xa7], [], .ok [hex "da39a3ee5e6b4b0d3255bfef95601890afd80709"]⟩,
+  ⟨"OP_SHA256 of the empty input", 0, [0x00, 0xa8], [],
+    .ok [hex "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"]⟩,
+  ⟨"OP_HASH160 of the empty input", 0, [0x00, 0xa9], [], .ok [hex "b472a266d0bd89c13706a4132ccfb16f7c3b9fcb"]⟩,
+  ⟨"OP_HASH256 of the empty input", 0, [0x00, 0xaa], [],
+    .ok [hex "5df6e0e2761359d30a8275058e299fcc0381534545f55cf43e41983f5d4c9456"]⟩,
+  ⟨"OP_HASH160 is OP_RIPEMD160 of OP_SHA256", 0, [0x01, 0x61, 0x76, 0xa9, 0x7c, 0xa8, 0xa6, 0x87], [], .ok [[1]]⟩,
+  ⟨"OP_HASH256 is OP_SHA256 twice", 0, [0x01, 0x61, 0x76, 0xaa, 0x7c, 0xa8, 0xa8, 0x87], [], .ok [[1]]⟩,
   -- Capabilities of later stages.
-  ⟨"OP_ADD executed", 0, [0x51, 0x51, 0x93], [], .unsupported (.numericOpcode 0x93)⟩,
-  ⟨"OP_HASH160 executed", 0, [0x51, 0xa9], [], .unsupported (.hashOpcode 0xa9)⟩,
   ⟨"OP_CHECKSIG executed", 0, [0xac], [], .unsupported (.signatureOpcode 0xac)⟩,
   ⟨"later-stage opcodes in a skipped branch", 0, [0x00, 0x63, 0x93, 0xa5, 0xa9, 0xac, 0xaf, 0x68], [], .ok []⟩
 ]

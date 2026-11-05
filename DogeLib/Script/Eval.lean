@@ -1,5 +1,10 @@
 module
 
+public import DogeLib.Cryptography.Hash.Hash160
+public import DogeLib.Cryptography.Hash.Ripemd160
+public import DogeLib.Cryptography.Hash.Sha1
+public import DogeLib.Cryptography.Hash.Sha256
+public import DogeLib.Cryptography.Hash.Sha256d
 public import DogeLib.Script.Error
 public import DogeLib.Script.Flags
 public import DogeLib.Script.Number
@@ -8,7 +13,7 @@ public import DogeLib.Script.State
 /-!
 # `Script.Eval`
 
-One call of Core's `EvalScript` in `SIGVERSION_BASE`, for the opcodes of stage 2 that do not compute numbers or hashes.
+One call of Core's `EvalScript` in `SIGVERSION_BASE`, for the opcodes of stage 2: control flow, stack operations, numbers and hashes.
 
 `EvalScript` is in `src/script/interpreter.cpp` lines 248 to 1046 of Dogecoin Core `v1.14.9` (SOURCES.md, D3).
 Design record 0003, section 4, sets the scope of this stage.
@@ -39,10 +44,12 @@ Within the supported flags, this stage implements these opcodes:
 | `OP_IF`, `OP_NOTIF`, `OP_ELSE`, `OP_ENDIF`, `OP_VERIFY` and `OP_RETURN` | `0x63`, `0x64`, `0x67` to `0x6a` |
 | Every stack operation, from `OP_TOALTSTACK` to `OP_TUCK`, and `OP_SIZE` | `0x6b` to `0x7d`, `0x82` |
 | `OP_EQUAL`, `OP_EQUALVERIFY` and `OP_CODESEPARATOR` | `0x87`, `0x88`, `0xab` |
+| The numeric opcodes: `OP_1ADD`, `OP_1SUB`, `OP_NEGATE` to `OP_SUB`, and `OP_BOOLAND` to `OP_WITHIN` | `0x8b`, `0x8c`, `0x8f` to `0x94`, `0x9a` to `0xa5` |
+| The hash opcodes, `OP_RIPEMD160` to `OP_HASH256` | `0xa6` to `0xaa` |
 | The reserved and invalid opcodes, which give Core's `BAD_OPCODE` when they execute | `0x50`, `0x62`, `0x65`, `0x66`, `0x89`, `0x8a`, `0xba` to `0xff` |
 
 An executed opcode outside this table is unsupported.
-The numeric and hash opcodes come in stage 2c, and the signature opcodes in stage 3.
+The signature opcodes come in stage 3.
 `OP_CHECKLOCKTIMEVERIFY` and `OP_CHECKSEQUENCEVERIFY` with their flags set come in stage 4.
 The disabled opcodes give Core's `DISABLED_OPCODE`, executed or not.
 
@@ -51,6 +58,24 @@ Three flag effects are absent here, because the flags that cause them are unsupp
 - `MINIMALDATA`: `CheckMinimalPush` (lines 307 to 309) and the minimal requirement of `CScriptNum`.
 - `DISCOURAGE_UPGRADABLE_NOPS`: the errors of the NOPs (lines 354, 396 and 432).
 - `MINIMALIF`: the operand check of `OP_IF` (line 447). It applies only to `SIGVERSION_WITNESS_V0`.
+
+## Numeric opcodes
+
+Each operand is a four-byte `CScriptNum` decode without the minimal requirement, because `MINIMALDATA` is unsupported.
+A failed decode throws in Core, and the `catch` at lines 1037 to 1040 gives `UNKNOWN_ERROR`.
+Each result is an integer, encoded with `ScriptNum.encode`.
+So `OP_ADD`, `OP_SUB`, `OP_1ADD` and `OP_1SUB` can push a five-byte result, which only a later numeric use rejects.
+A comparison pushes 1 or 0 as a number, which encodes as `[1]` or `[]`.
+
+Core computes in `int64_t` with the operators of `CScriptNum` (D24, lines 244 to 297).
+`OP_1ADD` and `OP_1SUB` use `operator+=` and `operator-=`, whose asserts (lines 285 and 293) require the result to fit `int64_t`.
+`OP_NEGATE` and `OP_ABS` use the unary `operator-`, which asserts that the value is not `INT64_MIN` (line 273).
+`OP_ADD` and `OP_SUB` use `operator+` and `operator-` (lines 258 and 259), which have no assert, but overflow there would be undefined.
+A four-byte operand lies within ±(2^31 − 1), so every result lies within ±2^32.
+No assert fires and no operation overflows, and the integer results here equal Core's (`numericOperand_*` in `DogeLib.Script.Proofs.Eval`).
+
+`OP_NUMEQUALVERIFY` pushes the comparison and pops it again when it is true (lines 817 to 823).
+The stack check runs only after the instruction, so here the opcode pops both operands when they are equal and gives `NUMEQUALVERIFY` otherwise.
 
 ## One instruction
 
@@ -115,10 +140,6 @@ def maxScriptElementSize : Nat := 520
 inductive Unsupported where
   /-- The flag set has these bits outside `supportedFlags`. The evaluator checks them before anything else. -/
   | flags (bits : UInt32)
-  /-- An executed numeric opcode: `OP_1ADD`, `OP_1SUB`, `OP_NEGATE`, `OP_ABS`, `OP_NOT`, `OP_0NOTEQUAL`, `OP_ADD`, `OP_SUB`, or `OP_BOOLAND` to `OP_WITHIN`. Stage 2c. -/
-  | numericOpcode (opcode : UInt8)
-  /-- An executed `OP_RIPEMD160`, `OP_SHA1`, `OP_SHA256`, `OP_HASH160` or `OP_HASH256`. Stage 2c. -/
-  | hashOpcode (opcode : UInt8)
   /-- An executed `OP_CHECKSIG`, `OP_CHECKSIGVERIFY`, `OP_CHECKMULTISIG` or `OP_CHECKMULTISIGVERIFY`. Stage 3. -/
   | signatureOpcode (opcode : UInt8)
   /-- An executed `OP_CHECKLOCKTIMEVERIFY` with `SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY` set. Stage 4. -/
@@ -151,13 +172,6 @@ inductive EvalResult where
 def isDisabled (op : UInt8) : Bool :=
   (0x7e ≤ op && op ≤ 0x81) || (0x83 ≤ op && op ≤ 0x86) || op == 0x8d || op == 0x8e || (0x95 ≤ op && op ≤ 0x99)
 
-/-- The numeric opcodes that are not disabled: `OP_1ADD`, `OP_1SUB` (`0x8b`, `0x8c`), `OP_NEGATE` to `OP_SUB` (`0x8f` to `0x94`), and `OP_BOOLAND` to `OP_WITHIN` (`0x9a` to `0xa5`). -/
-def isNumericOpcode (op : UInt8) : Bool :=
-  op == 0x8b || op == 0x8c || (0x8f ≤ op && op ≤ 0x94) || (0x9a ≤ op && op ≤ 0xa5)
-
-/-- The hash opcodes, `OP_RIPEMD160` to `OP_HASH256` (`0xa6` to `0xaa`). -/
-def isHashOpcode (op : UInt8) : Bool := 0xa6 ≤ op && op ≤ 0xaa
-
 /-- The signature opcodes, `OP_CHECKSIG` to `OP_CHECKMULTISIGVERIFY` (`0xac` to `0xaf`). -/
 def isSignatureOpcode (op : UInt8) : Bool := 0xac ≤ op && op ≤ 0xaf
 
@@ -166,6 +180,41 @@ def countOp (op : UInt8) (opCount : Nat) : Nat := if 0x60 < op then opCount + 1 
 
 /-- The bytes that `OP_EQUAL` pushes (D3, lines 254 to 256): `vchTrue`, one byte `0x01`, or `vchFalse`, no bytes. -/
 def boolBytes (b : Bool) : List UInt8 := if b then [1] else []
+
+/-- A truth value as a script number, as Core assigns a `bool` to a `CScriptNum` (D3, lines 761, 762 and 800 to 808): 1 or 0. -/
+def ofBool (b : Bool) : Int := if b then 1 else 0
+
+/--
+The unary numeric opcodes (D3, lines 744 to 768): pop the top item, decode it as a four-byte script number `a`, and push `encode (f a)`.
+An empty stack gives `INVALID_STACK_OPERATION`.
+A failed decode throws in Core, and the `catch` (lines 1037 to 1040) gives `UNKNOWN_ERROR`.
+-/
+def numUnary (s : ExecState) (f : Int → Int) : StepResult :=
+  match s.stack.reverse with
+  | [] => .rejected .invalidStackOperation
+  | x :: rest =>
+    match ScriptNum.decode x false with
+    | .error _ => .rejected .unknownError
+    | .ok a => .next { s with stack := rest.reverse ++ [ScriptNum.encode (f a)] }
+
+/--
+The binary numeric opcodes other than `OP_NUMEQUALVERIFY` (D3, lines 770 to 825): `x1 x2 → encode (f a b)`, where `x1` decodes as `a` and `x2` as `b`.
+Fewer than two items give `INVALID_STACK_OPERATION`, and a failed decode gives `UNKNOWN_ERROR`.
+Core decodes `x1` first. Both failures give the same error, so the order is not observable.
+-/
+def numBinary (s : ExecState) (f : Int → Int → Int) : StepResult :=
+  match s.stack.reverse with
+  | x2 :: x1 :: rest =>
+    match ScriptNum.decode x1 false, ScriptNum.decode x2 false with
+    | .ok a, .ok b => .next { s with stack := rest.reverse ++ [ScriptNum.encode (f a b)] }
+    | _, _ => .rejected .unknownError
+  | _ => .rejected .invalidStackOperation
+
+/-- The hash opcodes (D3, lines 847 to 871): replace the top item `x` by the digest `h x`. An empty stack gives `INVALID_STACK_OPERATION`. -/
+def hashTop (s : ExecState) (h : ByteArray → ByteArray) : StepResult :=
+  match s.stack.reverse with
+  | [] => .rejected .invalidStackOperation
+  | x :: rest => .next { s with stack := rest.reverse ++ [(h ⟨x.toArray⟩).toList] }
 
 /--
 The `switch` of `EvalScript` (D3, lines 311 to 1030) for opcode `op` with pushed bytes `pushed`.
@@ -329,12 +378,53 @@ def execOpcode (flags : UInt32) (fExec : Bool) (s : ExecState) (op : UInt8) (pus
         if x1 = x2 then .next { s with stack := rest.reverse } else .rejected .equalVerify
       else .next { s with stack := rest.reverse ++ [boolBytes (x1 == x2)] }
     | _ => .rejected .invalidStackOperation
+  -- `OP_1ADD` to `OP_0NOTEQUAL` (lines 744 to 768).
+  | 0x8b => numUnary s (· + 1)
+  | 0x8c => numUnary s (· - 1)
+  | 0x8f => numUnary s (- ·)
+  | 0x90 => numUnary s fun a => if a < 0 then -a else a
+  | 0x91 => numUnary s fun a => ofBool (a = 0)
+  | 0x92 => numUnary s fun a => ofBool (a ≠ 0)
+  -- `OP_ADD` to `OP_MAX` (lines 770 to 825).
+  | 0x93 => numBinary s (· + ·)
+  | 0x94 => numBinary s (· - ·)
+  | 0x9a => numBinary s fun a b => ofBool (a ≠ 0 ∧ b ≠ 0)
+  | 0x9b => numBinary s fun a b => ofBool (a ≠ 0 ∨ b ≠ 0)
+  | 0x9c => numBinary s fun a b => ofBool (a = b)
+  -- `OP_NUMEQUALVERIFY` (lines 803 and 817 to 823). Core pushes `a = b` as a number and pops it when it is true.
+  -- The stack check runs only after the instruction, so the push is not observable.
+  | 0x9d =>
+    match s.stack.reverse with
+    | x2 :: x1 :: rest =>
+      match ScriptNum.decode x1 false, ScriptNum.decode x2 false with
+      | .ok a, .ok b => if a = b then .next { s with stack := rest.reverse } else .rejected .numEqualVerify
+      | _, _ => .rejected .unknownError
+    | _ => .rejected .invalidStackOperation
+  | 0x9e => numBinary s fun a b => ofBool (a ≠ b)
+  | 0x9f => numBinary s fun a b => ofBool (a < b)
+  | 0xa0 => numBinary s fun a b => ofBool (a > b)
+  | 0xa1 => numBinary s fun a b => ofBool (a ≤ b)
+  | 0xa2 => numBinary s fun a b => ofBool (a ≥ b)
+  | 0xa3 => numBinary s fun a b => if a < b then a else b
+  | 0xa4 => numBinary s fun a b => if a > b then a else b
+  -- `OP_WITHIN` (lines 827 to 841): `x lo hi → lo ≤ x < hi`, pushed as `vchTrue` or `vchFalse`.
+  | 0xa5 =>
+    match s.stack.reverse with
+    | x3 :: x2 :: x1 :: rest =>
+      match ScriptNum.decode x1 false, ScriptNum.decode x2 false, ScriptNum.decode x3 false with
+      | .ok a, .ok lo, .ok hi => .next { s with stack := rest.reverse ++ [boolBytes (decide (lo ≤ a ∧ a < hi))] }
+      | _, _, _ => .rejected .unknownError
+    | _ => .rejected .invalidStackOperation
+  -- `OP_RIPEMD160`, `OP_SHA1`, `OP_SHA256`, `OP_HASH160` and `OP_HASH256` (lines 847 to 871).
+  | 0xa6 => hashTop s Cryptography.Hash.ripemd160
+  | 0xa7 => hashTop s Cryptography.Hash.sha1
+  | 0xa8 => hashTop s Cryptography.Hash.sha256
+  | 0xa9 => hashTop s Cryptography.Hash.hash160
+  | 0xaa => hashTop s Cryptography.Hash.Sha256d.hash
   -- `OP_CODESEPARATOR` (lines 873 to 878).
   | 0xab => .next { s with beginCodeHash := next }
   | _ =>
-    if isNumericOpcode op then .unsupported (.numericOpcode op)
-    else if isHashOpcode op then .unsupported (.hashOpcode op)
-    else if isSignatureOpcode op then .unsupported (.signatureOpcode op)
+    if isSignatureOpcode op then .unsupported (.signatureOpcode op)
     -- `default` (lines 1028 and 1029): `OP_RESERVED`, `OP_VER`, `OP_VERIF`, `OP_VERNOTIF`, `OP_RESERVED1`, `OP_RESERVED2` and `0xba` to `0xff`.
     else .rejected .badOpcode
 

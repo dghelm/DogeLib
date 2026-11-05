@@ -2,6 +2,7 @@ module
 
 public import DogeLib.Script.Eval
 public import DogeLib.Script.Proofs.Instruction
+public import DogeLib.Script.Proofs.Number
 public import DogeLib.Script.Proofs.State
 
 /-!
@@ -36,7 +37,15 @@ public import DogeLib.Script.Proofs.State
 The `execOpcode_*` theorems give the stack effect of each implemented opcode.
 Stacks are written bottom first and top last, as in `ExecState`.
 `execOpcode_underflow` gives `INVALID_STACK_OPERATION` for each stack opcode on a stack with too few items.
-`execOpcode_numeric`, `execOpcode_hash`, `execOpcode_signature`, `execOpcode_cltv` and `execOpcode_csv` give the unsupported results.
+`execOpcode_signature`, `execOpcode_cltv` and `execOpcode_csv` give the unsupported results.
+
+## Numeric and hash opcodes
+
+- `execOpcode_1add` to `execOpcode_within`, and `execOpcode_ripemd160` to `execOpcode_hash256`: the stack effect of each opcode, from the decoded operands.
+- `execOpcode_numeric_underflow`, `execOpcode_hash_underflow`: too few items give `INVALID_STACK_OPERATION`.
+- `execOpcode_numeric_decode`: an operand that fails a four-byte decode gives `UNKNOWN_ERROR`.
+- `execOpcode_addSub_length`: `OP_1ADD`, `OP_1SUB`, `OP_ADD` and `OP_SUB` push at most five bytes. `execOpcode_numeric_length_le_four`: the other numeric opcodes that push a result push at most four bytes.
+- `numericOperand_ne_int64Min`, `numericOperand_add_one_le`, `numericOperand_sub_one_ge`, `numericOperand_addSub_mem`: on four-byte operands the asserts of Core's `CScriptNum` operators hold, and no `int64_t` operation overflows.
 
 These theorems are statements about the definitions. They do not say that the definitions match Core.
 -/
@@ -61,7 +70,7 @@ theorem execOpcode_frame {flags : UInt32} {fExec : Bool} {s t : ExecState} {op :
     t.pc = s.pc ∧ t.opCount = s.opCount ∧
       (t.beginCodeHash = s.beginCodeHash ∨ t.beginCodeHash = next) ∧
       t.vfExec.length ≤ s.vfExec.length + (if op = 0x63 ∨ op = 0x64 then 1 else 0) := by
-  unfold execOpcode at h
+  unfold execOpcode numUnary numBinary hashTop at h
   repeat' ((try dsimp only at h); split at h)
   all_goals first
     | (cases h; done)
@@ -109,7 +118,7 @@ theorem evalInstruction_verif {flags : UInt32} {s : ExecState} {i : Instruction}
     (hop : i.opcode = 0x65 ∨ i.opcode = 0x66) : evalInstruction flags s i = .rejected .badOpcode := by
   rcases hop with hop | hop <;> rw [hop] at hc <;>
     simp [evalInstruction, Nat.not_lt.mpr hp, Nat.not_lt.mpr hc, hop, isDisabled, execOpcode,
-      isNumericOpcode, isHashOpcode, isSignatureOpcode]
+      isSignatureOpcode]
 
 /--
 For every flag set, state `s` in a skipped branch (`s.fExec = false`) within the stack limit, and instruction whose opcode lies outside `OP_IF` to `OP_ENDIF` (`0x63` to `0x68`):
@@ -684,6 +693,210 @@ theorem execOpcode_codeSeparator {flags : UInt32} {fExec : Bool} {s : ExecState}
     {next : Nat} : execOpcode flags fExec s 0xab pushed next = .next { s with beginCodeHash := next } := by
   simp [execOpcode]
 
+/-! ## Opcode effects: numbers -/
+
+/-- A truth value as a script number encodes as the bytes of `OP_EQUAL`: `[1]` for true and `[]` for false. -/
+theorem encode_ofBool (b : Bool) : ScriptNum.encode (ofBool b) = boolBytes b := by
+  cases b
+  · simp [ofBool, boolBytes, ScriptNum.encode_zero]
+  · simp [ofBool, boolBytes, ScriptNum.encode, ScriptNum.leBytes_of_lt (c := 1) (by decide) (by decide)]
+    decide
+
+/-- `OP_1ADD` (`0x8b`): `x → encode (a + 1)`, where `x` decodes as the four-byte script number `a`. -/
+theorem execOpcode_1add {flags : UInt32} {fExec : Bool} {s : ExecState} {pushed : List UInt8} {next : Nat}
+    {rest : List (List UInt8)} {x : List UInt8} {a : Int} (h : s.stack = rest ++ [x])
+    (hx : ScriptNum.decode x false = .ok a) :
+    execOpcode flags fExec s 0x8b pushed next = .next { s with stack := rest ++ [ScriptNum.encode (a + 1)] } := by
+  simp [execOpcode, numUnary, h, hx]
+
+/-- `OP_1SUB` (`0x8c`): `x → encode (a - 1)`, where `x` decodes as the four-byte script number `a`. -/
+theorem execOpcode_1sub {flags : UInt32} {fExec : Bool} {s : ExecState} {pushed : List UInt8} {next : Nat}
+    {rest : List (List UInt8)} {x : List UInt8} {a : Int} (h : s.stack = rest ++ [x])
+    (hx : ScriptNum.decode x false = .ok a) :
+    execOpcode flags fExec s 0x8c pushed next = .next { s with stack := rest ++ [ScriptNum.encode (a - 1)] } := by
+  simp [execOpcode, numUnary, h, hx]
+
+/-- `OP_NEGATE` (`0x8f`): `x → encode (-a)`, where `x` decodes as the four-byte script number `a`. -/
+theorem execOpcode_negate {flags : UInt32} {fExec : Bool} {s : ExecState} {pushed : List UInt8} {next : Nat}
+    {rest : List (List UInt8)} {x : List UInt8} {a : Int} (h : s.stack = rest ++ [x])
+    (hx : ScriptNum.decode x false = .ok a) :
+    execOpcode flags fExec s 0x8f pushed next = .next { s with stack := rest ++ [ScriptNum.encode (-a)] } := by
+  simp [execOpcode, numUnary, h, hx]
+
+/-- `OP_ABS` (`0x90`): `x → encode |a|`, where `x` decodes as the four-byte script number `a`. -/
+theorem execOpcode_abs {flags : UInt32} {fExec : Bool} {s : ExecState} {pushed : List UInt8} {next : Nat}
+    {rest : List (List UInt8)} {x : List UInt8} {a : Int} (h : s.stack = rest ++ [x])
+    (hx : ScriptNum.decode x false = .ok a) :
+    execOpcode flags fExec s 0x90 pushed next =
+      .next { s with stack := rest ++ [ScriptNum.encode (a.natAbs : Int)] } := by
+  have : (if a < 0 then -a else a) = (a.natAbs : Int) := by split <;> omega
+  simp [execOpcode, numUnary, h, hx, this]
+
+/-- `OP_NOT` (`0x91`): `x → b`, where `b` is `[1]` when `x` decodes as zero and `[]` otherwise. -/
+theorem execOpcode_not {flags : UInt32} {fExec : Bool} {s : ExecState} {pushed : List UInt8} {next : Nat}
+    {rest : List (List UInt8)} {x : List UInt8} {a : Int} (h : s.stack = rest ++ [x])
+    (hx : ScriptNum.decode x false = .ok a) :
+    execOpcode flags fExec s 0x91 pushed next = .next { s with stack := rest ++ [boolBytes (decide (a = 0))] } := by
+  simp [execOpcode, numUnary, h, hx, ← encode_ofBool]
+
+/-- `OP_0NOTEQUAL` (`0x92`): `x → b`, where `b` is `[1]` when `x` decodes as a nonzero number and `[]` otherwise. -/
+theorem execOpcode_0notequal {flags : UInt32} {fExec : Bool} {s : ExecState} {pushed : List UInt8} {next : Nat}
+    {rest : List (List UInt8)} {x : List UInt8} {a : Int} (h : s.stack = rest ++ [x])
+    (hx : ScriptNum.decode x false = .ok a) :
+    execOpcode flags fExec s 0x92 pushed next = .next { s with stack := rest ++ [boolBytes (decide (a ≠ 0))] } := by
+  simp [execOpcode, numUnary, h, hx, ← encode_ofBool]
+
+/-- `OP_ADD` (`0x93`): `x1 x2 → encode (a + b)`, where `x1` and `x2` decode as the four-byte script numbers `a` and `b`. -/
+theorem execOpcode_add {flags : UInt32} {fExec : Bool} {s : ExecState} {pushed : List UInt8} {next : Nat}
+    {rest : List (List UInt8)} {x1 x2 : List UInt8} {a b : Int} (h : s.stack = rest ++ [x1, x2])
+    (h1 : ScriptNum.decode x1 false = .ok a) (h2 : ScriptNum.decode x2 false = .ok b) :
+    execOpcode flags fExec s 0x93 pushed next = .next { s with stack := rest ++ [ScriptNum.encode (a + b)] } := by
+  simp [execOpcode, numBinary, h, h1, h2]
+
+/-- `OP_SUB` (`0x94`): `x1 x2 → encode (a - b)`, where `x1` and `x2` decode as `a` and `b`. The top item is subtracted. -/
+theorem execOpcode_sub {flags : UInt32} {fExec : Bool} {s : ExecState} {pushed : List UInt8} {next : Nat}
+    {rest : List (List UInt8)} {x1 x2 : List UInt8} {a b : Int} (h : s.stack = rest ++ [x1, x2])
+    (h1 : ScriptNum.decode x1 false = .ok a) (h2 : ScriptNum.decode x2 false = .ok b) :
+    execOpcode flags fExec s 0x94 pushed next = .next { s with stack := rest ++ [ScriptNum.encode (a - b)] } := by
+  simp [execOpcode, numBinary, h, h1, h2]
+
+/-- `OP_BOOLAND` (`0x9a`): `x1 x2 → [1]` when both decode as nonzero numbers, and `[]` otherwise. -/
+theorem execOpcode_boolAnd {flags : UInt32} {fExec : Bool} {s : ExecState} {pushed : List UInt8} {next : Nat}
+    {rest : List (List UInt8)} {x1 x2 : List UInt8} {a b : Int} (h : s.stack = rest ++ [x1, x2])
+    (h1 : ScriptNum.decode x1 false = .ok a) (h2 : ScriptNum.decode x2 false = .ok b) :
+    execOpcode flags fExec s 0x9a pushed next =
+      .next { s with stack := rest ++ [boolBytes (decide (a ≠ 0 ∧ b ≠ 0))] } := by
+  simp [execOpcode, numBinary, h, h1, h2, ← encode_ofBool]
+
+/-- `OP_BOOLOR` (`0x9b`): `x1 x2 → [1]` when either decodes as a nonzero number, and `[]` otherwise. -/
+theorem execOpcode_boolOr {flags : UInt32} {fExec : Bool} {s : ExecState} {pushed : List UInt8} {next : Nat}
+    {rest : List (List UInt8)} {x1 x2 : List UInt8} {a b : Int} (h : s.stack = rest ++ [x1, x2])
+    (h1 : ScriptNum.decode x1 false = .ok a) (h2 : ScriptNum.decode x2 false = .ok b) :
+    execOpcode flags fExec s 0x9b pushed next =
+      .next { s with stack := rest ++ [boolBytes (decide (a ≠ 0 ∨ b ≠ 0))] } := by
+  simp [execOpcode, numBinary, h, h1, h2, ← encode_ofBool]
+
+/-- `OP_NUMEQUAL` (`0x9c`): `x1 x2 → [1]` when they decode as equal numbers, and `[]` otherwise. -/
+theorem execOpcode_numEqual {flags : UInt32} {fExec : Bool} {s : ExecState} {pushed : List UInt8} {next : Nat}
+    {rest : List (List UInt8)} {x1 x2 : List UInt8} {a b : Int} (h : s.stack = rest ++ [x1, x2])
+    (h1 : ScriptNum.decode x1 false = .ok a) (h2 : ScriptNum.decode x2 false = .ok b) :
+    execOpcode flags fExec s 0x9c pushed next = .next { s with stack := rest ++ [boolBytes (decide (a = b))] } := by
+  simp [execOpcode, numBinary, h, h1, h2, ← encode_ofBool]
+
+/-- `OP_NUMEQUALVERIFY` (`0x9d`) pops two items that decode as equal numbers. -/
+theorem execOpcode_numEqualVerify_eq {flags : UInt32} {fExec : Bool} {s : ExecState} {pushed : List UInt8}
+    {next : Nat} {rest : List (List UInt8)} {x1 x2 : List UInt8} {a : Int} (h : s.stack = rest ++ [x1, x2])
+    (h1 : ScriptNum.decode x1 false = .ok a) (h2 : ScriptNum.decode x2 false = .ok a) :
+    execOpcode flags fExec s 0x9d pushed next = .next { s with stack := rest } := by
+  simp [execOpcode, h, h1, h2]
+
+/-- `OP_NUMEQUALVERIFY` gives `NUMEQUALVERIFY` on two items that decode as different numbers. -/
+theorem execOpcode_numEqualVerify_ne {flags : UInt32} {fExec : Bool} {s : ExecState} {pushed : List UInt8}
+    {next : Nat} {rest : List (List UInt8)} {x1 x2 : List UInt8} {a b : Int} (h : s.stack = rest ++ [x1, x2])
+    (h1 : ScriptNum.decode x1 false = .ok a) (h2 : ScriptNum.decode x2 false = .ok b) (hne : a ≠ b) :
+    execOpcode flags fExec s 0x9d pushed next = .rejected .numEqualVerify := by
+  simp [execOpcode, h, h1, h2, hne]
+
+/-- `OP_NUMNOTEQUAL` (`0x9e`): `x1 x2 → [1]` when they decode as different numbers, and `[]` otherwise. -/
+theorem execOpcode_numNotEqual {flags : UInt32} {fExec : Bool} {s : ExecState} {pushed : List UInt8} {next : Nat}
+    {rest : List (List UInt8)} {x1 x2 : List UInt8} {a b : Int} (h : s.stack = rest ++ [x1, x2])
+    (h1 : ScriptNum.decode x1 false = .ok a) (h2 : ScriptNum.decode x2 false = .ok b) :
+    execOpcode flags fExec s 0x9e pushed next = .next { s with stack := rest ++ [boolBytes (decide (a ≠ b))] } := by
+  simp [execOpcode, numBinary, h, h1, h2, ← encode_ofBool]
+
+/-- `OP_LESSTHAN` (`0x9f`): `x1 x2 → [1]` when `a < b`, and `[]` otherwise, where `x1` and `x2` decode as `a` and `b`. -/
+theorem execOpcode_lessThan {flags : UInt32} {fExec : Bool} {s : ExecState} {pushed : List UInt8} {next : Nat}
+    {rest : List (List UInt8)} {x1 x2 : List UInt8} {a b : Int} (h : s.stack = rest ++ [x1, x2])
+    (h1 : ScriptNum.decode x1 false = .ok a) (h2 : ScriptNum.decode x2 false = .ok b) :
+    execOpcode flags fExec s 0x9f pushed next = .next { s with stack := rest ++ [boolBytes (decide (a < b))] } := by
+  simp [execOpcode, numBinary, h, h1, h2, ← encode_ofBool]
+
+/-- `OP_GREATERTHAN` (`0xa0`): `x1 x2 → [1]` when `a > b`, and `[]` otherwise, where `x1` and `x2` decode as `a` and `b`. -/
+theorem execOpcode_greaterThan {flags : UInt32} {fExec : Bool} {s : ExecState} {pushed : List UInt8} {next : Nat}
+    {rest : List (List UInt8)} {x1 x2 : List UInt8} {a b : Int} (h : s.stack = rest ++ [x1, x2])
+    (h1 : ScriptNum.decode x1 false = .ok a) (h2 : ScriptNum.decode x2 false = .ok b) :
+    execOpcode flags fExec s 0xa0 pushed next = .next { s with stack := rest ++ [boolBytes (decide (a > b))] } := by
+  simp [execOpcode, numBinary, h, h1, h2, ← encode_ofBool]
+
+/-- `OP_LESSTHANOREQUAL` (`0xa1`): `x1 x2 → [1]` when `a ≤ b`, and `[]` otherwise, where `x1` and `x2` decode as `a` and `b`. -/
+theorem execOpcode_lessThanOrEqual {flags : UInt32} {fExec : Bool} {s : ExecState} {pushed : List UInt8}
+    {next : Nat} {rest : List (List UInt8)} {x1 x2 : List UInt8} {a b : Int} (h : s.stack = rest ++ [x1, x2])
+    (h1 : ScriptNum.decode x1 false = .ok a) (h2 : ScriptNum.decode x2 false = .ok b) :
+    execOpcode flags fExec s 0xa1 pushed next = .next { s with stack := rest ++ [boolBytes (decide (a ≤ b))] } := by
+  simp [execOpcode, numBinary, h, h1, h2, ← encode_ofBool]
+
+/-- `OP_GREATERTHANOREQUAL` (`0xa2`): `x1 x2 → [1]` when `a ≥ b`, and `[]` otherwise, where `x1` and `x2` decode as `a` and `b`. -/
+theorem execOpcode_greaterThanOrEqual {flags : UInt32} {fExec : Bool} {s : ExecState} {pushed : List UInt8}
+    {next : Nat} {rest : List (List UInt8)} {x1 x2 : List UInt8} {a b : Int} (h : s.stack = rest ++ [x1, x2])
+    (h1 : ScriptNum.decode x1 false = .ok a) (h2 : ScriptNum.decode x2 false = .ok b) :
+    execOpcode flags fExec s 0xa2 pushed next = .next { s with stack := rest ++ [boolBytes (decide (a ≥ b))] } := by
+  simp [execOpcode, numBinary, h, h1, h2, ← encode_ofBool]
+
+/-- `OP_MIN` (`0xa3`): `x1 x2 → encode (min a b)`, where `x1` and `x2` decode as `a` and `b`. -/
+theorem execOpcode_min {flags : UInt32} {fExec : Bool} {s : ExecState} {pushed : List UInt8} {next : Nat}
+    {rest : List (List UInt8)} {x1 x2 : List UInt8} {a b : Int} (h : s.stack = rest ++ [x1, x2])
+    (h1 : ScriptNum.decode x1 false = .ok a) (h2 : ScriptNum.decode x2 false = .ok b) :
+    execOpcode flags fExec s 0xa3 pushed next = .next { s with stack := rest ++ [ScriptNum.encode (min a b)] } := by
+  have : (if a < b then a else b) = min a b := by simp only [Int.min_def]; split <;> split <;> omega
+  simp [execOpcode, numBinary, h, h1, h2, this]
+
+/-- `OP_MAX` (`0xa4`): `x1 x2 → encode (max a b)`, where `x1` and `x2` decode as `a` and `b`. -/
+theorem execOpcode_max {flags : UInt32} {fExec : Bool} {s : ExecState} {pushed : List UInt8} {next : Nat}
+    {rest : List (List UInt8)} {x1 x2 : List UInt8} {a b : Int} (h : s.stack = rest ++ [x1, x2])
+    (h1 : ScriptNum.decode x1 false = .ok a) (h2 : ScriptNum.decode x2 false = .ok b) :
+    execOpcode flags fExec s 0xa4 pushed next = .next { s with stack := rest ++ [ScriptNum.encode (max a b)] } := by
+  have : (if a > b then a else b) = max a b := by simp only [Int.max_def]; split <;> split <;> omega
+  simp [execOpcode, numBinary, h, h1, h2, this]
+
+/--
+`OP_WITHIN` (`0xa5`): `x xlo xhi → [1]` when `lo ≤ a < hi`, and `[]` otherwise.
+Here `x`, `xlo` and `xhi` decode as the four-byte script numbers `a`, `lo` and `hi`.
+-/
+theorem execOpcode_within {flags : UInt32} {fExec : Bool} {s : ExecState} {pushed : List UInt8} {next : Nat}
+    {rest : List (List UInt8)} {x xlo xhi : List UInt8} {a lo hi : Int} (h : s.stack = rest ++ [x, xlo, xhi])
+    (hx : ScriptNum.decode x false = .ok a) (hlo : ScriptNum.decode xlo false = .ok lo)
+    (hhi : ScriptNum.decode xhi false = .ok hi) :
+    execOpcode flags fExec s 0xa5 pushed next =
+      .next { s with stack := rest ++ [boolBytes (decide (lo ≤ a ∧ a < hi))] } := by
+  simp [execOpcode, h, hx, hlo, hhi]
+
+/-! ## Opcode effects: hashes -/
+
+/-- `OP_RIPEMD160` (`0xa6`): `x → RIPEMD-160 (x)`. -/
+theorem execOpcode_ripemd160 {flags : UInt32} {fExec : Bool} {s : ExecState} {pushed : List UInt8} {next : Nat}
+    {rest : List (List UInt8)} {x : List UInt8} (h : s.stack = rest ++ [x]) :
+    execOpcode flags fExec s 0xa6 pushed next =
+      .next { s with stack := rest ++ [(Cryptography.Hash.ripemd160 ⟨x.toArray⟩).toList] } := by
+  simp [execOpcode, hashTop, h]
+
+/-- `OP_SHA1` (`0xa7`): `x → SHA-1 (x)`. -/
+theorem execOpcode_sha1 {flags : UInt32} {fExec : Bool} {s : ExecState} {pushed : List UInt8} {next : Nat}
+    {rest : List (List UInt8)} {x : List UInt8} (h : s.stack = rest ++ [x]) :
+    execOpcode flags fExec s 0xa7 pushed next =
+      .next { s with stack := rest ++ [(Cryptography.Hash.sha1 ⟨x.toArray⟩).toList] } := by
+  simp [execOpcode, hashTop, h]
+
+/-- `OP_SHA256` (`0xa8`): `x → SHA-256 (x)`. -/
+theorem execOpcode_sha256 {flags : UInt32} {fExec : Bool} {s : ExecState} {pushed : List UInt8} {next : Nat}
+    {rest : List (List UInt8)} {x : List UInt8} (h : s.stack = rest ++ [x]) :
+    execOpcode flags fExec s 0xa8 pushed next =
+      .next { s with stack := rest ++ [(Cryptography.Hash.sha256 ⟨x.toArray⟩).toList] } := by
+  simp [execOpcode, hashTop, h]
+
+/-- `OP_HASH160` (`0xa9`): `x → Hash160 (x)`, RIPEMD-160 of SHA-256. -/
+theorem execOpcode_hash160 {flags : UInt32} {fExec : Bool} {s : ExecState} {pushed : List UInt8} {next : Nat}
+    {rest : List (List UInt8)} {x : List UInt8} (h : s.stack = rest ++ [x]) :
+    execOpcode flags fExec s 0xa9 pushed next =
+      .next { s with stack := rest ++ [(Cryptography.Hash.hash160 ⟨x.toArray⟩).toList] } := by
+  simp [execOpcode, hashTop, h]
+
+/-- `OP_HASH256` (`0xaa`): `x → SHA-256 (SHA-256 (x))`. -/
+theorem execOpcode_hash256 {flags : UInt32} {fExec : Bool} {s : ExecState} {pushed : List UInt8} {next : Nat}
+    {rest : List (List UInt8)} {x : List UInt8} (h : s.stack = rest ++ [x]) :
+    execOpcode flags fExec s 0xaa pushed next =
+      .next { s with stack := rest ++ [(Cryptography.Hash.Sha256d.hash ⟨x.toArray⟩).toList] } := by
+  simp [execOpcode, hashTop, h]
+
 /-! ## Underflow -/
 
 /-- The stack opcodes and the number of main-stack items each needs (D3, lines 478 to 738). -/
@@ -708,34 +921,187 @@ theorem execOpcode_underflow {flags : UInt32} {fExec : Bool} {s : ExecState} {op
     generalize s.stack.reverse = r at hr ⊢
     rcases r with _ | ⟨_, _ | ⟨_, _ | ⟨_, _ | ⟨_, _ | ⟨_, _ | ⟨_, _⟩⟩⟩⟩⟩⟩ <;> simp_all <;> omega
 
+/-! ## Numeric and hash failures -/
+
+/-- The numeric opcodes and the number of operands each pops (D3, lines 744 to 841). -/
+def numericArity : List (UInt8 × Nat) :=
+  [(0x8b, 1), (0x8c, 1), (0x8f, 1), (0x90, 1), (0x91, 1), (0x92, 1), (0x93, 2), (0x94, 2), (0x9a, 2), (0x9b, 2),
+    (0x9c, 2), (0x9d, 2), (0x9e, 2), (0x9f, 2), (0xa0, 2), (0xa1, 2), (0xa2, 2), (0xa3, 2), (0xa4, 2), (0xa5, 3)]
+
+/-- For each pair `(op, k)` of `numericArity`: `op` on a main stack of fewer than `k` items gives `INVALID_STACK_OPERATION`. -/
+theorem execOpcode_numeric_underflow {flags : UInt32} {fExec : Bool} {s : ExecState} {op : UInt8} {k : Nat}
+    {pushed : List UInt8} {next : Nat} (hop : (op, k) ∈ numericArity) (h : s.stack.length < k) :
+    execOpcode flags fExec s op pushed next = .rejected .invalidStackOperation := by
+  have hr : s.stack.reverse.length < k := by simpa using h
+  simp only [numericArity, List.mem_cons, Prod.mk.injEq, List.mem_nil_iff, or_false] at hop
+  rcases hop with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ |
+    ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ |
+    ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;>
+  · simp only [execOpcode, numUnary, numBinary]
+    generalize s.stack.reverse = r at hr ⊢
+    rcases r with _ | ⟨_, _ | ⟨_, _ | ⟨_, _⟩⟩⟩ <;> simp_all <;> omega
+
+/--
+For each pair `(op, k)` of `numericArity`, let `args` be the top `k` items of the main stack.
+If one of them fails a four-byte decode, `op` gives `UNKNOWN_ERROR`.
+-/
+theorem execOpcode_numeric_decode {flags : UInt32} {fExec : Bool} {s : ExecState} {op : UInt8} {k : Nat}
+    {pushed : List UInt8} {next : Nat} {rest args : List (List UInt8)} {x : List UInt8}
+    {e : ScriptNum.DecodeError} (hop : (op, k) ∈ numericArity) (h : s.stack = rest ++ args)
+    (hk : args.length = k) (hx : x ∈ args) (he : ScriptNum.decode x false = .error e) :
+    execOpcode flags fExec s op pushed next = .rejected .unknownError := by
+  simp only [numericArity, List.mem_cons, Prod.mk.injEq, List.mem_nil_iff, or_false] at hop
+  rcases hop with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ |
+    ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ |
+    ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;>
+  · rcases args with _ | ⟨x1, _ | ⟨x2, _ | ⟨x3, _ | ⟨_, _⟩⟩⟩⟩ <;> simp only [List.length_cons, List.length_nil] at hk <;>
+      (try omega) <;>
+      simp only [List.mem_cons, List.mem_nil_iff, or_false] at hx <;>
+      rcases hx with rfl | rfl | rfl <;>
+      simp only [execOpcode, numUnary, numBinary, h, List.reverse_append, List.reverse_cons, List.reverse_nil,
+        List.nil_append, List.cons_append, he] <;>
+      (repeat' split) <;> simp_all
+
+/-- Each hash opcode, `0xa6` to `0xaa`, on an empty main stack gives `INVALID_STACK_OPERATION`. -/
+theorem execOpcode_hash_underflow {flags : UInt32} {fExec : Bool} {s : ExecState} {op : UInt8}
+    {pushed : List UInt8} {next : Nat} (hop : op ∈ [0xa6, 0xa7, 0xa8, 0xa9, 0xaa]) (h : s.stack = []) :
+    execOpcode flags fExec s op pushed next = .rejected .invalidStackOperation := by
+  simp only [List.mem_cons, List.mem_nil_iff, or_false] at hop
+  rcases hop with rfl | rfl | rfl | rfl | rfl <;> simp [execOpcode, hashTop, h]
+
+/-! ## Numeric results -/
+
+/-- A successful unary numeric step pops one item that decodes as `a` and pushes `encode (f a)`. -/
+private theorem numUnary_next {s t : ExecState} {f : Int → Int} (h : numUnary s f = .next t) :
+    ∃ rest x a, s.stack = rest ++ [x] ∧ ScriptNum.decode x false = .ok a ∧
+      t.stack = rest ++ [ScriptNum.encode (f a)] := by
+  unfold numUnary at h
+  split at h
+  · cases h
+  · rename_i x rest hr
+    split at h
+    · cases h
+    · rename_i a ha
+      cases h
+      exact ⟨rest.reverse, x, a, by simpa using congrArg List.reverse hr, ha, rfl⟩
+
+/-- A successful binary numeric step pops two items that decode as `a` and `b` and pushes `encode (f a b)`. -/
+private theorem numBinary_next {s t : ExecState} {f : Int → Int → Int} (h : numBinary s f = .next t) :
+    ∃ rest x1 x2 a b, s.stack = rest ++ [x1, x2] ∧ ScriptNum.decode x1 false = .ok a ∧
+      ScriptNum.decode x2 false = .ok b ∧ t.stack = rest ++ [ScriptNum.encode (f a b)] := by
+  unfold numBinary at h
+  split at h
+  · rename_i x2 x1 rest hr
+    split at h
+    · rename_i a b ha hb
+      cases h
+      exact ⟨rest.reverse, x1, x2, a, b, by simpa using congrArg List.reverse hr, ha, hb, rfl⟩
+    · cases h
+  · cases h
+
+/-- A unary numeric step whose function keeps four-byte magnitudes pushes at most four bytes. -/
+private theorem numUnary_length_le_four {s t : ExecState} {f : Int → Int}
+    (hf : ∀ a : Int, a.natAbs ≤ 2 ^ 31 - 1 → (f a).natAbs ≤ 2 ^ 31 - 1) (h : numUnary s f = .next t) :
+    ∃ rest y, t.stack = rest ++ [y] ∧ y.length ≤ 4 := by
+  obtain ⟨rest, _, a, -, ha, ht⟩ := numUnary_next h
+  exact ⟨rest, _, ht, ScriptNum.encode_length_le_four (hf a (ScriptNum.decode_default_natAbs_le ha))⟩
+
+/-- A binary numeric step whose function keeps four-byte magnitudes pushes at most four bytes. -/
+private theorem numBinary_length_le_four {s t : ExecState} {f : Int → Int → Int}
+    (hf : ∀ a b : Int, a.natAbs ≤ 2 ^ 31 - 1 → b.natAbs ≤ 2 ^ 31 - 1 → (f a b).natAbs ≤ 2 ^ 31 - 1)
+    (h : numBinary s f = .next t) : ∃ rest y, t.stack = rest ++ [y] ∧ y.length ≤ 4 := by
+  obtain ⟨rest, _, _, a, b, -, ha, hb, ht⟩ := numBinary_next h
+  exact ⟨rest, _, ht, ScriptNum.encode_length_le_four
+    (hf a b (ScriptNum.decode_default_natAbs_le ha) (ScriptNum.decode_default_natAbs_le hb))⟩
+
+/--
+`OP_1ADD`, `OP_1SUB`, `OP_ADD` and `OP_SUB` succeed only by pushing one item of at most five bytes onto the remaining stack.
+The bound follows from the four-byte operands: each lies within ±(2^31 − 1).
+-/
+theorem execOpcode_addSub_length {flags : UInt32} {fExec : Bool} {s t : ExecState} {op : UInt8}
+    {pushed : List UInt8} {next : Nat} (hop : op = 0x8b ∨ op = 0x8c ∨ op = 0x93 ∨ op = 0x94)
+    (h : execOpcode flags fExec s op pushed next = .next t) :
+    ∃ rest y, t.stack = rest ++ [y] ∧ y.length ≤ 5 := by
+  rcases hop with rfl | rfl | rfl | rfl <;> simp (config := { decide := true }) only [execOpcode, ↓reduceIte] at h
+  · obtain ⟨rest, _, a, -, ha, ht⟩ := numUnary_next h
+    exact ⟨rest, _, ht, ScriptNum.encode_add_length_le_five (ScriptNum.decode_default_natAbs_le ha) (by decide)⟩
+  · obtain ⟨rest, _, a, -, ha, ht⟩ := numUnary_next h
+    exact ⟨rest, _, ht, ScriptNum.encode_sub_length_le_five (ScriptNum.decode_default_natAbs_le ha) (by decide)⟩
+  · obtain ⟨rest, _, _, a, b, -, ha, hb, ht⟩ := numBinary_next h
+    exact ⟨rest, _, ht, ScriptNum.encode_add_length_le_five (ScriptNum.decode_default_natAbs_le ha)
+      (ScriptNum.decode_default_natAbs_le hb)⟩
+  · obtain ⟨rest, _, _, a, b, -, ha, hb, ht⟩ := numBinary_next h
+    exact ⟨rest, _, ht, ScriptNum.encode_sub_length_le_five (ScriptNum.decode_default_natAbs_le ha)
+      (ScriptNum.decode_default_natAbs_le hb)⟩
+
+/--
+The other numeric opcodes, except `OP_NUMEQUALVERIFY`, succeed only by pushing one item of at most four bytes onto the remaining stack.
+`OP_NEGATE`, `OP_ABS`, `OP_MIN` and `OP_MAX` keep the magnitude of an operand, and the others push `[1]` or `[]`.
+-/
+theorem execOpcode_numeric_length_le_four {flags : UInt32} {fExec : Bool} {s t : ExecState} {op : UInt8} {k : Nat}
+    {pushed : List UInt8} {next : Nat} (hop : (op, k) ∈ numericArity) (hne : op ∉ [0x8b, 0x8c, 0x93, 0x94, 0x9d])
+    (h : execOpcode flags fExec s op pushed next = .next t) :
+    ∃ rest y, t.stack = rest ++ [y] ∧ y.length ≤ 4 := by
+  simp only [numericArity, List.mem_cons, Prod.mk.injEq, List.mem_nil_iff, or_false] at hop
+  rcases hop with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ |
+    ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ |
+    ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;>
+    (try (exfalso; exact hne (by decide))) <;> simp (config := { decide := true }) only [execOpcode, ↓reduceIte] at h
+  all_goals first
+    | exact numUnary_length_le_four
+        (fun a ha => by (try simp only [ofBool]); (try dsimp only); (repeat' split) <;> omega) h
+    | exact numBinary_length_le_four
+        (fun a b ha hb => by (try simp only [ofBool]); (try dsimp only); (repeat' split) <;> omega) h
+    | skip
+  -- `OP_WITHIN`.
+  split at h
+  · split at h
+    · cases h
+      exact ⟨_, _, rfl, by simp only [boolBytes]; split <;> simp⟩
+    · cases h
+  · cases h
+
+/-! ## Core's operator asserts -/
+
+/--
+`OP_NEGATE` and `OP_ABS` apply `CScriptNum::operator-()`, which asserts that the value is not `INT64_MIN` (D24, line 273).
+A four-byte operand is never `-2^63`.
+-/
+theorem numericOperand_ne_int64Min {x : List UInt8} {req : Bool} {a : Int} (ha : ScriptNum.decode x req = .ok a) :
+    a ≠ -2 ^ 63 := by
+  have := ScriptNum.decode_default_natAbs_le ha
+  omega
+
+/--
+`OP_1ADD` applies `CScriptNum::operator+=` with 1, which asserts `m_value <= INT64_MAX - 1` (D24, lines 285 and 286).
+A four-byte operand satisfies it.
+-/
+theorem numericOperand_add_one_le {x : List UInt8} {req : Bool} {a : Int} (ha : ScriptNum.decode x req = .ok a) :
+    a ≤ (2 ^ 63 - 1) - 1 := by
+  have := ScriptNum.decode_default_natAbs_le ha
+  omega
+
+/--
+`OP_1SUB` applies `CScriptNum::operator-=` with 1, which asserts `m_value >= INT64_MIN + 1` (D24, lines 293 and 294).
+A four-byte operand satisfies it.
+-/
+theorem numericOperand_sub_one_ge {x : List UInt8} {req : Bool} {a : Int} (ha : ScriptNum.decode x req = .ok a) :
+    -2 ^ 63 + 1 ≤ a := by
+  have := ScriptNum.decode_default_natAbs_le ha
+  omega
+
+/--
+`OP_ADD` and `OP_SUB` compute `m_value + rhs` and `m_value - rhs` in `int64_t` (D24, lines 258 and 259), without an assert.
+For four-byte operands both results lie within `[-2^63, 2^63 - 1]`, so neither overflows.
+-/
+theorem numericOperand_addSub_mem {x y : List UInt8} {req : Bool} {a b : Int}
+    (ha : ScriptNum.decode x req = .ok a) (hb : ScriptNum.decode y req = .ok b) :
+    (-2 ^ 63 ≤ a + b ∧ a + b ≤ 2 ^ 63 - 1) ∧ (-2 ^ 63 ≤ a - b ∧ a - b ≤ 2 ^ 63 - 1) := by
+  have := ScriptNum.decode_default_natAbs_le ha
+  have := ScriptNum.decode_default_natAbs_le hb
+  omega
+
 /-! ## Unsupported opcodes -/
-
-/-- The numeric opcodes that are not disabled. -/
-def numericOpcodes : List UInt8 :=
-  [0x8b, 0x8c, 0x8f, 0x90, 0x91, 0x92, 0x93, 0x94, 0x9a, 0x9b, 0x9c, 0x9d, 0x9e, 0x9f, 0xa0, 0xa1, 0xa2, 0xa3,
-    0xa4, 0xa5]
-
-/-- `isNumericOpcode` holds exactly for the opcodes of `numericOpcodes`. -/
-theorem isNumericOpcode_iff (op : UInt8) : isNumericOpcode op = true ↔ op ∈ numericOpcodes :=
-  allBytes (fun op => isNumericOpcode op = true ↔ op ∈ numericOpcodes) (by decide +kernel) op
-
-/-- An executed numeric opcode is unsupported. -/
-theorem execOpcode_numeric {flags : UInt32} {fExec : Bool} {s : ExecState} {op : UInt8} {pushed : List UInt8}
-    {next : Nat} (hop : isNumericOpcode op = true) :
-    execOpcode flags fExec s op pushed next = .unsupported (.numericOpcode op) := by
-  have h := (isNumericOpcode_iff op).mp hop
-  simp only [numericOpcodes, List.mem_cons, List.mem_nil_iff, or_false] at h
-  rcases h with h | h | h | h | h | h | h | h | h | h | h | h | h | h | h | h | h | h | h | h <;>
-    subst h <;> simp [execOpcode, isNumericOpcode]
-
-/-- An executed hash opcode, `0xa6` to `0xaa`, is unsupported. -/
-theorem execOpcode_hash {flags : UInt32} {fExec : Bool} {s : ExecState} {op : UInt8} {pushed : List UInt8}
-    {next : Nat} (hop : isHashOpcode op = true) :
-    execOpcode flags fExec s op pushed next = .unsupported (.hashOpcode op) := by
-  have h : op ∈ [0xa6, 0xa7, 0xa8, 0xa9, 0xaa] :=
-    allBytes (fun op => isHashOpcode op = true → op ∈ [0xa6, 0xa7, 0xa8, 0xa9, 0xaa]) (by decide +kernel) op hop
-  simp only [List.mem_cons, List.mem_nil_iff, or_false] at h
-  rcases h with h | h | h | h | h <;> subst h <;> simp [execOpcode, isNumericOpcode, isHashOpcode]
 
 /-- An executed signature opcode, `0xac` to `0xaf`, is unsupported. -/
 theorem execOpcode_signature {flags : UInt32} {fExec : Bool} {s : ExecState} {op : UInt8}
@@ -745,6 +1111,6 @@ theorem execOpcode_signature {flags : UInt32} {fExec : Bool} {s : ExecState} {op
     allBytes (fun op => isSignatureOpcode op = true → op ∈ [0xac, 0xad, 0xae, 0xaf]) (by decide +kernel) op hop
   simp only [List.mem_cons, List.mem_nil_iff, or_false] at h
   rcases h with h | h | h | h <;> subst h <;>
-    simp [execOpcode, isNumericOpcode, isHashOpcode, isSignatureOpcode]
+    simp [execOpcode, isSignatureOpcode]
 
 end DogeLib.Script

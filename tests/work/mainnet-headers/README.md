@@ -62,7 +62,9 @@ It does not authenticate the later headers, whose provenance still relies on the
 Those headers link forward from the checkpoint.
 The fixture digest pins their bytes.
 
-These headers supply finite known answers, not an equivalence theorem or a comparison with compiled Core.
+These headers supply finite known answers.
+`scripts/compare_core.py` also compares next-work results with compiled Core for the same 310 candidates.
+Neither check establishes equivalence on every input.
 The checks do not establish proof of work, AuxPoW validity, full header validity or validity of any transaction.
 The fixture contains no AuxPoW data.
 

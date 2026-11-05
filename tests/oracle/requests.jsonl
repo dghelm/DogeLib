@@ -104,3 +104,89 @@
 {"id": "witness-request-53", "op": "tx.decode_witness"}
 {"id": "witness-request-54", "op": "tx.decode_witness", "bytes_hex": "zz"}
 {"id": "witness-request-55", "op": "tx.decode_witness", "bytes_hex": "", "witness": true}
+{"id": "work-d16-set-0", "op": "work.set_compact", "compact": 0}
+{"id": "work-d16-get-0", "op": "work.get_compact", "value_hex": "0000000000000000000000000000000000000000000000000000000000000000", "negative": false}
+{"id": "work-d16-set-1", "op": "work.set_compact", "compact": 1193046}
+{"id": "work-d16-get-1", "op": "work.get_compact", "value_hex": "0000000000000000000000000000000000000000000000000000000000000000", "negative": false}
+{"id": "work-d16-set-2", "op": "work.set_compact", "compact": 16790614}
+{"id": "work-d16-get-2", "op": "work.get_compact", "value_hex": "0000000000000000000000000000000000000000000000000000000000000000", "negative": false}
+{"id": "work-d16-set-3", "op": "work.set_compact", "compact": 33554518}
+{"id": "work-d16-get-3", "op": "work.get_compact", "value_hex": "0000000000000000000000000000000000000000000000000000000000000000", "negative": false}
+{"id": "work-d16-set-4", "op": "work.set_compact", "compact": 50331648}
+{"id": "work-d16-get-4", "op": "work.get_compact", "value_hex": "0000000000000000000000000000000000000000000000000000000000000000", "negative": false}
+{"id": "work-d16-set-5", "op": "work.set_compact", "compact": 67108864}
+{"id": "work-d16-get-5", "op": "work.get_compact", "value_hex": "0000000000000000000000000000000000000000000000000000000000000000", "negative": false}
+{"id": "work-d16-set-6", "op": "work.set_compact", "compact": 9581654}
+{"id": "work-d16-get-6", "op": "work.get_compact", "value_hex": "0000000000000000000000000000000000000000000000000000000000000000", "negative": false}
+{"id": "work-d16-set-7", "op": "work.set_compact", "compact": 25179222}
+{"id": "work-d16-get-7", "op": "work.get_compact", "value_hex": "0000000000000000000000000000000000000000000000000000000000000000", "negative": false}
+{"id": "work-d16-set-8", "op": "work.set_compact", "compact": 41943126}
+{"id": "work-d16-get-8", "op": "work.get_compact", "value_hex": "0000000000000000000000000000000000000000000000000000000000000000", "negative": false}
+{"id": "work-d16-set-9", "op": "work.set_compact", "compact": 58720256}
+{"id": "work-d16-get-9", "op": "work.get_compact", "value_hex": "0000000000000000000000000000000000000000000000000000000000000000", "negative": false}
+{"id": "work-d16-set-10", "op": "work.set_compact", "compact": 75497472}
+{"id": "work-d16-get-10", "op": "work.get_compact", "value_hex": "0000000000000000000000000000000000000000000000000000000000000000", "negative": false}
+{"id": "work-d16-set-11", "op": "work.set_compact", "compact": 17970262}
+{"id": "work-d16-get-11", "op": "work.get_compact", "value_hex": "0000000000000000000000000000000000000000000000000000000000000012", "negative": false}
+{"id": "work-d16-set-12", "op": "work.set_compact", "compact": 33479866}
+{"id": "work-d16-get-12", "op": "work.get_compact", "value_hex": "000000000000000000000000000000000000000000000000000000000000007e", "negative": true}
+{"id": "work-d16-set-13", "op": "work.set_compact", "compact": 34747478}
+{"id": "work-d16-get-13", "op": "work.get_compact", "value_hex": "0000000000000000000000000000000000000000000000000000000000001234", "negative": false}
+{"id": "work-d16-set-14", "op": "work.set_compact", "compact": 51524694}
+{"id": "work-d16-get-14", "op": "work.get_compact", "value_hex": "0000000000000000000000000000000000000000000000000000000000123456", "negative": false}
+{"id": "work-d16-set-15", "op": "work.set_compact", "compact": 68301910}
+{"id": "work-d16-get-15", "op": "work.get_compact", "value_hex": "0000000000000000000000000000000000000000000000000000000012345600", "negative": false}
+{"id": "work-d16-set-16", "op": "work.set_compact", "compact": 76690518}
+{"id": "work-d16-get-16", "op": "work.get_compact", "value_hex": "0000000000000000000000000000000000000000000000000000000012345600", "negative": true}
+{"id": "work-d16-set-17", "op": "work.set_compact", "compact": 83923508}
+{"id": "work-d16-get-17", "op": "work.get_compact", "value_hex": "0000000000000000000000000000000000000000000000000000000092340000", "negative": false}
+{"id": "work-d16-set-18", "op": "work.set_compact", "compact": 538063958}
+{"id": "work-d16-get-18", "op": "work.get_compact", "value_hex": "1234560000000000000000000000000000000000000000000000000000000000", "negative": false}
+{"id": "work-d16-set-19", "op": "work.set_compact", "compact": 4279383126}
+{"id": "work-d16-direct-80", "op": "work.get_compact", "value_hex": "0000000000000000000000000000000000000000000000000000000000000080", "negative": false}
+{"id": "work-d7-get_next_work_difficulty_limit", "op": "work.calculate_next", "network": "mainnet", "selection_height": 0, "last_height": 239, "last_time": 1386475638, "last_bits": 504365040, "first_time": 1386474927}
+{"id": "work-d7-get_next_work_pre_digishield", "op": "work.calculate_next", "network": "mainnet", "selection_height": 0, "last_height": 9599, "last_time": 1386954113, "last_bits": 471470598, "first_time": 1386942008}
+{"id": "work-d7-get_next_work_digishield", "op": "work.calculate_next", "network": "mainnet", "selection_height": 145000, "last_height": 145000, "last_time": 1395094679, "last_bits": 457809405, "first_time": 1395094427}
+{"id": "work-d7-get_next_work_digishield_modulated_upper", "op": "work.calculate_next", "network": "mainnet", "selection_height": 145000, "last_height": 145107, "last_time": 1395101360, "last_bits": 456407501, "first_time": 1395100835}
+{"id": "work-d7-get_next_work_digishield_modulated_lower", "op": "work.calculate_next", "network": "mainnet", "selection_height": 145000, "last_height": 149423, "last_time": 1395380447, "last_bits": 457469729, "first_time": 1395380517}
+{"id": "work-d7-get_next_work_digishield_rounding", "op": "work.calculate_next", "network": "mainnet", "selection_height": 145000, "last_height": 145001, "last_time": 1395094727, "last_bits": 459739234, "first_time": 1395094679}
+{"id": "work-view-short-retarget", "op": "work.next", "network": "testnet", "chain": [{"height": 145000, "time": 1000, "bits": 470955094}], "candidate_time": 1000}
+{"id": "work-view-short-recovery", "op": "work.next", "network": "testnet", "chain": [{"height": 1, "time": 1000, "bits": 504365055}], "candidate_time": 1000}
+{"id": "work-view-gap", "op": "work.next", "network": "testnet", "chain": [{"height": 5, "time": 1000, "bits": 470955094}, {"height": 3, "time": 1000, "bits": 470955094}], "candidate_time": 1000}
+{"id": "work-view-reversed", "op": "work.next", "network": "testnet", "chain": [{"height": 1, "time": 1000, "bits": 470955094}, {"height": 2, "time": 1000, "bits": 470955094}], "candidate_time": 1000}
+{"id": "work-view-height-max", "op": "work.next", "network": "testnet", "chain": [{"height": 2147483647, "time": 1000, "bits": 470955094}], "candidate_time": 1000}
+{"id": "work-view-height-u32", "op": "work.next", "network": "testnet", "chain": [{"height": 4294967295, "time": 1000, "bits": 470955094}], "candidate_time": 1000}
+{"id": "work-view-validate-before-delay", "op": "work.next", "network": "testnet", "chain": [{"height": 157500, "time": 1000, "bits": 470955094}, {"height": 157498, "time": 1000, "bits": 470955094}], "candidate_time": 1000}
+{"id": "work-null-mainnet", "op": "work.next", "network": "mainnet", "chain": [], "candidate_time": 0}
+{"id": "work-null-testnet", "op": "work.next", "network": "testnet", "chain": [], "candidate_time": 0}
+{"id": "work-null-regtest", "op": "work.next", "network": "regtest", "chain": [], "candidate_time": 0}
+{"id": "work-request-0", "op": "work.set_compact"}
+{"id": "work-request-1", "op": "work.set_compact", "compact": -1}
+{"id": "work-request-2", "op": "work.set_compact", "compact": 4294967296}
+{"id": "work-request-3", "op": "work.set_compact", "compact": true}
+{"id": "work-request-4", "op": "work.set_compact", "compact": 1.5}
+{"id": "work-request-5", "op": "work.set_compact", "compact": 0, "extra": 0}
+{"id": "work-request-6", "op": "work.get_compact", "value_hex": "", "negative": false}
+{"id": "work-request-7", "op": "work.get_compact", "value_hex": "000000000000000000000000000000000000000000000000000000000000000", "negative": false}
+{"id": "work-request-8", "op": "work.get_compact", "value_hex": "000000000000000000000000000000000000000000000000000000000000000000", "negative": false}
+{"id": "work-request-9", "op": "work.get_compact", "value_hex": "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg", "negative": false}
+{"id": "work-request-10", "op": "work.get_compact", "value_hex": 5, "negative": false}
+{"id": "work-request-11", "op": "work.get_compact", "value_hex": "0000000000000000000000000000000000000000000000000000000000000000", "negative": 0}
+{"id": "work-request-12", "op": "work.get_compact", "value_hex": "0000000000000000000000000000000000000000000000000000000000000000", "negative": 1}
+{"id": "work-request-13", "op": "work.get_compact", "value_hex": "0000000000000000000000000000000000000000000000000000000000000000", "negative": "false"}
+{"id": "work-request-14", "op": "work.get_compact", "value_hex": "0000000000000000000000000000000000000000000000000000000000000000", "negative": null}
+{"id": "work-request-15", "op": "work.calculate_next", "network": "main", "selection_height": 0, "last_height": 0, "last_time": 0, "last_bits": 0, "first_time": 0}
+{"id": "work-request-16", "op": "work.calculate_next", "network": "mainnet", "selection_height": 4294967296, "last_height": 0, "last_time": 0, "last_bits": 0, "first_time": 0}
+{"id": "work-request-17", "op": "work.calculate_next", "network": "mainnet", "selection_height": 0, "last_height": 2147483647, "last_time": 0, "last_bits": 0, "first_time": 0}
+{"id": "work-request-18", "op": "work.calculate_next", "network": "mainnet", "selection_height": 0, "last_height": -1, "last_time": 0, "last_bits": 0, "first_time": 0}
+{"id": "work-request-19", "op": "work.calculate_next", "network": "mainnet", "selection_height": 0, "last_height": 0, "last_time": 4294967296, "last_bits": 0, "first_time": 0}
+{"id": "work-request-20", "op": "work.calculate_next", "network": "mainnet", "selection_height": 0, "last_height": 0, "last_time": 0, "last_bits": 0, "first_time": -1}
+{"id": "work-request-21", "op": "work.calculate_next", "network": "mainnet", "selection_height": 0, "last_height": 0, "last_time": 0, "last_bits": true, "first_time": 0}
+{"id": "work-request-22", "op": "work.next", "network": 0, "chain": [], "candidate_time": 0}
+{"id": "work-request-23", "op": "work.next", "network": "mainnet", "chain": {}, "candidate_time": 0}
+{"id": "work-request-24", "op": "work.next", "network": "mainnet", "chain": [0], "candidate_time": 0}
+{"id": "work-request-25", "op": "work.next", "network": "mainnet", "chain": [{"height": 0, "time": 0, "bits": 0, "extra": 0}], "candidate_time": 0}
+{"id": "work-request-26", "op": "work.next", "network": "mainnet", "chain": [{"height": 0, "time": 0}], "candidate_time": 0}
+{"id": "work-request-27", "op": "work.next", "network": "mainnet", "chain": [{"height": -1, "time": 1000, "bits": 470955094}], "candidate_time": 0}
+{"id": "work-request-28", "op": "work.next", "network": "mainnet", "chain": [{"height": 0, "time": 4294967296, "bits": 470955094}], "candidate_time": 0}
+{"id": "work-request-29", "op": "work.next", "network": "mainnet", "chain": [], "candidate_time": -1}

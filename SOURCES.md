@@ -77,6 +77,7 @@ Design records and module documentation cite these identifiers.
 | D36 | [Dogecoin block validation: `IsWitnessEnabled`, `ConnectBlock` and `ContextualCheckBlock`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.cpp) |
 | D37 | [Dogecoin portable byte reads: `ReadLE32`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/crypto/common.h) |
 | D38 | [Dogecoin hexadecimal digits: `p_util_hexdigit`, `HexDigit`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/utilstrencodings.cpp) |
+| D39 | [Dogecoin base network parameters: `SelectBaseParams`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/chainparamsbase.cpp) |
 | E1 | [EthLib build definition](https://github.com/ethereum/EthLib/blob/6a93711e7cc062e787fff6747e4101a141d38b7a/lakefile.lean) |
 | E2 | [EthLib architecture](https://github.com/ethereum/EthLib/blob/6a93711e7cc062e787fff6747e4101a141d38b7a/ARCHITECTURE.md) |
 | E3 | [EthLib contribution policy](https://github.com/ethereum/EthLib/blob/6a93711e7cc062e787fff6747e4101a141d38b7a/CONTRIBUTING.md) |
@@ -177,7 +178,10 @@ The Core harness, `harness/core/core_oracle.cpp`, calls these functions of Core 
 | `tx.read_base`, `tx.decode_base` | D4, `UnserializeTransaction` and `SerializeTransaction`, with `SERIALIZE_TRANSACTION_NO_WITNESS`. D23, `CTransaction::ComputeHash`. D11, `base_blob::GetHex` |
 | `tx.read_witness`, `tx.decode_witness` | D4, `UnserializeTransaction`, `SerializeTransaction` and `CTransaction::HasWitness`, without `SERIALIZE_TRANSACTION_NO_WITNESS`. D23, `CTransaction::GetHash` and `GetWitnessHash`. D11, `base_blob::GetHex` |
 | `sighash.legacy` | D3, `SignatureHash` with `SIGVERSION_BASE` |
-| Requests and the build | D31, UniValue, to read requests. D32, `memory_cleanse`. D19, `configure.ac`: without the daemon, utilities, GUI, tests and benchmarks, configure needs no Boost (line 683) and builds no UniValue (line 939) |
+| `work.set_compact`, `work.get_compact` | D13, `arith_uint256::SetCompact` and `GetCompact`, lines 204–245. Known answers: D16, `bignum_SetCompact`, lines 412–538. |
+| `work.calculate_next` | D6, `CalculateDogecoinNextWorkRequired`, lines 41–87. D14, `SelectParams` and `GetConsensus`. Known answers: D7, `get_next_work_*`, lines 123–210. |
+| `work.next` | D17, `GetNextWorkRequired`, lines 32–88. D18, `CBlockIndex`. D35, `BuildSkip` and `GetAncestor`, with `GetSkipHeight` only as a guard on suffix construction. D14, candidate-height parameters. |
+| Requests and the build | D31, UniValue, to read requests. D32, `memory_cleanse`. D19, `configure.ac`: without the daemon, utilities, GUI, tests and benchmarks, configure skips Boost detection (line 683) and builds no UniValue (line 939). The work objects require Boost headers through D6 and D14. D39 supplies `SelectBaseParams` |
 
 ## Known differences
 

@@ -45,7 +45,8 @@ compiles the code itself. -/
 @[default_target]
 lean_lib «Exports» where
   requiresModuleSystem := true
-  roots := #[`DogeLib.Exports, `DogeLib.Serialization.Exports, `DogeLib.Transaction.Exports]
+  roots := #[`DogeLib.Exports, `DogeLib.Serialization.Exports, `DogeLib.Transaction.Exports,
+    `DogeLib.Work.Exports]
   precompileModules := false
 
 /-- The oracle: answers requests in the record format of `docs/oracle.md`,

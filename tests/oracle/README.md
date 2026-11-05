@@ -1,6 +1,6 @@
 # Oracle fixtures
 
-`requests.jsonl` holds 106 requests to `dogelib-oracle`, and `expected.jsonl` holds the expected response on the same line.
+`requests.jsonl` holds 192 requests to `dogelib-oracle`, and `expected.jsonl` holds the expected response on the same line.
 `scripts/test_oracle.py` compares them, with two exceptions.
 It compares a `request` error by kind only.
 An expected `preimage_hex` of `"*"` requires a preimage whose double SHA-256 is the digest.
@@ -19,6 +19,11 @@ No expected value comes from the oracle. The sources, by the `id` of the request
 | `sighash-index-*`, `sighash-single-past-outputs` | Core's `SignatureHash` (D3, `src/script/interpreter.cpp` lines 1225 to 1235) returns `uint256S("00…01")` when `nIn` names no input, or no output under `SIGHASH_SINGLE`. That value is `01` followed by 31 zero bytes in serialization order. The transaction with two inputs and one output was written by hand. `5.0`, `5e0` and `50e-1` are the integer 5 by the rule of `docs/oracle.md`. |
 | `sighash-bad-tx` | `00` is one byte of a 4-byte version: truncated. |
 | `witness-*` except `witness-request-*` | Hand-built cases following D4, `UnserializeTransaction`, `SerializeTransaction` and `HasWitness`, and D23, `GetWitnessHash`. The flag and error-order cases follow `tests/KnownAnswers.lean`, `Witness.cases`, with a zero outpoint. The input has an empty script and sequence `0xffffffff`. The output has value 0 and an empty script. Stacks include `ab`, an empty item, and no items. Empty stacks normalize to base serialization. Python's `hashlib` computes `txid` from the base form and `wtxid` from the extended form when a stack is not empty. Otherwise `wtxid` hashes the base form. Prefix and trailing-byte expectations follow the consumed lengths. |
+| `work-d16-*` | Core D16, `src/test/arith_uint256_tests.cpp`, `bignum_SetCompact`, lines 412–538. The literal magnitudes, flags and compact results come from Core's assertions. The final overflow has magnitude zero because its shift discards all bits (D13). `work-d16-direct-80` is the assignment at line 490. |
+| `work-d7-*` | Core D7, `src/test/dogecoin_tests.cpp`, the six `get_next_work_*` cases, lines 123–210. Inputs and expected compact results are Core's literals. |
+| `work-null-*` | D17, null-tip return, and D14, network `powLimit`. Mainnet and testnet encode as `0x1e0fffff`. Regtest encodes as `0x207fffff`. |
+| `work-view-*` | `Work.validateWorkView` and `Work.getNextWorkRequiredFromView`: height bounds, adjacency checks and missing history. These typed adapter errors have no Core consensus counterpart. |
+| `work-request-*` | Argument rules of `docs/oracle.md`, with unknown fields, missing fields, wrong types, fractional numbers and range endpoints. |
 | The other ids, and requests with no `id` | Request errors and the `id` rules of `docs/oracle.md`. `dup-a` repeats a key: Lean core's parser keeps the last value. |
 
 `scripts/test_oracle.py` also sends two of Core's corpora to the oracle.

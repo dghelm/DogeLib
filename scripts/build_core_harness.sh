@@ -33,7 +33,7 @@ tree=$build/core
 src=$tree/src
 
 # Core's configure adds -std=c++11 to CXX. The harness is compiled the same way.
-core_cxxflags="-O2"
+core_cxxflags="-O2 -ffunction-sections -fdata-sections"
 core_cflags="-O2"
 
 stamp_text() {
@@ -47,6 +47,11 @@ stamp_text() {
 }
 
 libs=(
+  "$build/pow.o"
+  "$build/chain.o"
+  "$build/dogecoin.o"
+  "$build/chainparams.o"
+  "$build/chainparamsbase.o"
   "$src/libdogecoin_consensus.a"
   "$src/crypto/libdogecoin_crypto.a"
   "$src/secp256k1/.libs/libsecp256k1.a"
@@ -82,6 +87,14 @@ else
     make -C src -j"$jobs" libdogecoin_consensus.a crypto/libdogecoin_crypto.a \
       secp256k1/libsecp256k1.la
   )
+  # Compile work and parameter objects without the rest of the server.
+  # The linker discards unrelated functions and their server dependencies.
+  # chainparams.cpp and dogecoin.cpp require Boost headers, not Boost libraries.
+  for unit in pow chain dogecoin chainparams chainparamsbase; do
+    "$cxx" -std=c++11 $core_cxxflags -DHAVE_CONFIG_H \
+      -I"$src" -I"$src/config" -I"$src/univalue/include" \
+      -c "$src/$unit.cpp" -o "$build/$unit.o"
+  done
   libs_present || { echo "error: a Core library is missing after the build" >&2; exit 1; }
   stamp_text > "$build/core.stamp"
 fi
@@ -101,7 +114,7 @@ done
 # support/cleanse.cpp defines memory_cleanse, which CDataStream's allocator
 # calls. It belongs to libdogecoin_util, which this build does not make.
 set -x
-"$cxx" -std=c++11 $core_cxxflags -DHAVE_CONFIG_H \
+"$cxx" -std=c++11 $core_cxxflags -Wl,--gc-sections -DHAVE_CONFIG_H \
   -I"$src" -I"$src/config" -I"$src/univalue/include" -I"$src/secp256k1/include" \
   -o "$build/core-oracle" \
   "$here/harness/core/core_oracle.cpp" "$src/support/cleanse.cpp" "${univalue_paths[@]}" \

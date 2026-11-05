@@ -2,11 +2,12 @@ module
 
 public import DogeLib.Serialization.Exports.Oracle
 public import DogeLib.Transaction.Exports.Oracle
+public import DogeLib.Work.Exports.Oracle
 
 /-!
 # `Exports.Oracle`
 
-The oracle's response to one line of input, in the record format `dogelib-oracle/2` of `docs/oracle.md`.
+The oracle's response to one line of input, in the record format `dogelib-oracle/3` of `docs/oracle.md`.
 
 A line is one JSON object, the request: `{"id": ..., "op": "...", ...arguments}`.
 The response is `{"id": ..., "ok": {...}}` or `{"id": ..., "error": {...}}`.
@@ -22,7 +23,7 @@ namespace DogeLib.Exports
 open Lean (Json)
 
 /-- The name of the record format. -/
-def formatName : String := "dogelib-oracle/2"
+def formatName : String := "dogelib-oracle/3"
 
 /-- The `ok` object of `oracle.version`. -/
 def versionJson : Json := Json.mkObj [("format", .str formatName)]
@@ -35,7 +36,7 @@ def oracleVersion : Operation where
 
 /-- Every operation of the oracle. -/
 def operations : List Operation :=
-  oracleVersion :: Serialization.Exports.operations ++ Transaction.Exports.operations
+  oracleVersion :: Serialization.Exports.operations ++ Transaction.Exports.operations ++ Work.Exports.operations
 
 /-- The `error` object of a failure. -/
 def failureJson : Failure → Json

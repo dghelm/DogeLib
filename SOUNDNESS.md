@@ -1029,6 +1029,15 @@ They expose `hasWitness`, witness-allowed serialization, the transaction ID and 
 No theorem covers these JSON conversions.
 Core comparisons check these fields, consumption and errors on the recorded requests only.
 
+The work operations convert target magnitudes in most-significant-byte-first hexadecimal and preserve compact values as UInt32 fields.
+They select network parameters and pass UInt32 times to the retarget arithmetic.
+`work.next` converts a newest-first JSON array to the specification's finite view.
+Its `work_view` errors are adapter errors, not Core consensus rejection codes.
+The harness checks caller preconditions before it invokes Core and excludes those errors from the comparison.
+Its skip-height guard leaves unavailable skip destinations null, so Core uses predecessor links instead.
+
+No theorem covers these JSON conversions, the harness guard or correspondence to Core's traversal.
+
 A wrong conversion could make the oracle and Core disagree, or agree, for a reason outside the specification.
 
 The Core harness, `harness/core/core_oracle.cpp`, is the other side of the comparison ([docs/oracle.md](docs/oracle.md#the-core-harness)).
@@ -1036,12 +1045,13 @@ A user of the comparison trusts these parts of it:
 
 - Core's libraries at the pin, compiled by the compiler of the machine that runs the comparison: GCC 13 in CI, on `ubuntu-24.04`.
   Core v1.14.9 was released for older compilers.
-  The build script passes only `-O2` as compiler flags, and Core's configure selects C++11.
+  The build script uses `-O2 -ffunction-sections -fdata-sections`, and Core's configure selects C++11.
+  GNU ld discards unused sections with `--gc-sections`.
 - The harness's own code. It converts hexadecimal text and JSON numbers to Core's arguments, writes Core's results as JSON, and maps four exception messages to read errors.
   Any other exception from Core stops the harness, so it cannot pass as a result.
 - The `plan` label of `sighash.legacy`. The harness computes it from Core's conditions instead of observing it. It stops if the label is `fixed_digest` and Core's digest is not the value one.
 - The comparator, `scripts/compare_core.py`.
-  Its self-test, `scripts/test_compare_core.py`, requires a passing control, and 25 mutations that each fail with the code they target.
+  Its self-test, `scripts/test_compare_core.py`, requires two passing controls and 39 mutations that each fail with the code they target.
 - For `sighash.legacy`, the oracle's preimage is checked by hashing it, not byte by byte: Core does not expose its preimage.
 
 Both programs could be wrong in the same way on an input that the comparison does not send.

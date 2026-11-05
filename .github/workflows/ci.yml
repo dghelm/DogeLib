@@ -135,3 +135,12 @@ jobs:
           (cd tests/transaction/corpus && sha256sum -c SHA256SUMS)
           (cd tests/work/mainnet-headers && sha256sum -c SHA256SUMS)
           (cd tests/block && sha256sum -c SHA256SUMS)
+          (cd tests/script/corpus && sha256sum -c SHA256SUMS)
+
+      - name: script corpus freshness
+        if: ${{ !cancelled() }}
+        run: python3 -I scripts/convert_script_tests.py --check
+
+      - name: script corpus converter tests
+        if: ${{ !cancelled() }}
+        run: python3 -I scripts/test_convert_script_tests.py

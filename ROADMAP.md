@@ -50,6 +50,13 @@ NIST short, long and Monte Carlo vectors and Core's ten SHA-1 cases check the co
 [COVERAGE.md](COVERAGE.md#operations) records this implemented coverage, independently of the frozen scope in design record 0003.
 The SHA-1 oracle operation remains deferred in issue #64.
 
+The Script layer implements stage 1 of [design record 0003](docs/design/0003-legacy-spend-validation.md): the instruction reader and the state of one `EvalScript` call.
+`Script.readInstruction` follows `GetOp2`, including the cursor after each failure, and shares its decoder with the legacy signature serializer.
+`Script.ExecState` gives the per-call reset and the main-stack hand-off of `VerifyScript`.
+The layer executes no opcode, has no oracle operation and gives no verdict on a spend.
+Stage 2, opcode transitions and execution properties, is the next Script work.
+[COVERAGE.md](COVERAGE.md#operations) records the evidence and the exclusions.
+
 Steps 0 and 0b follow design record 0002: the first contributions adopt audited codec foundations and then define Dogecoin's bounded decoding contract. They replace the original plan to build fixed-width encodings and CompactSize from scratch. Design record 0002 preferred a pinned btc-verified dependency first. The decisions below choose an adaptation instead, because btc-verified's toolchain, file structure and trust policy all differ from EthLib's.
 
 ## Milestones

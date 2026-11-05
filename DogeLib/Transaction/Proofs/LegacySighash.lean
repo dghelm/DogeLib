@@ -15,6 +15,10 @@ public import DogeLib.Transaction.Proofs.Txid
 - `scanOps_prefix` and `scanOps_eq_of_complete`: the bytes of the instructions that `scanOps` reads, then the bytes of its failing call, start the script. When no instruction parse failed, the instructions' bytes are the whole script.
 - `scriptCodeBytes_eq_encode`: when no instruction parse failed and no instruction is `OP_CODESEPARATOR`, the script code is written as its ordinary encoding.
 - `LegacyHashPlan.digest_fixedDigest` and `LegacyHashPlan.digest_hashBytes_val`: the digest of each kind of plan.
+- `readOp_cons_eq`: one uniform form of `readOp` on a nonempty script, in terms of `lengthFieldWidth` and `pushSize`.
+- `readOp_eq_op_iff`: `readOp` reads an instruction exactly when the bytes start with an opcode, its length field and its data.
+- `readOp_eq_stop_iff`: `readOp` stops exactly on a short push or on the empty script.
+- `readPush_eq_op_iff` and `readPush_eq_stop_iff`: the two results of `readPush`.
 
 These are statements about the definitions. They do not say that the definitions match Core. The known answers in `tests/KnownAnswers.lean` compare them with Core's corpus and with preimages derived from Core's source.
 -/
@@ -192,5 +196,208 @@ theorem LegacyHashPlan.digest_fixedDigest (d : Hash256) : (LegacyHashPlan.fixedD
 theorem LegacyHashPlan.digest_hashBytes_val (p : List UInt8) :
     (LegacyHashPlan.hashBytes p).digest.val = (Cryptography.Hash.Sha256d.hash p.toByteArray).toList :=
   digestToHash256_val _ (Cryptography.Hash.Sha256d.size_hash _)
+
+/-! ## Characterization of `readOp`
+
+These theorems state `readOp` in terms of `lengthFieldWidth` and `pushSize`, without its nested cases.
+`DogeLib.Script.Proofs.Instruction` uses them for the cursor reader of the Script interpreter.
+-/
+
+/-- For every decidable condition `c` that fails, `if c then a else b` is `b`. -/
+private theorem ite_neg_eq {α : Sort _} {c : Prop} [Decidable c] {a b : α} (h : ¬c) :
+    (if c then a else b) = b := by simp [h]
+
+/-- For every decidable condition `c` that holds, `if c then a else b` is `a`. -/
+private theorem ite_pos_eq {α : Sort _} {c : Prop} [Decidable c] {a b : α} (h : c) :
+    (if c then a else b) = a := by simp [h]
+
+/-! ## Opcode classes -/
+
+/-- For every opcode above `OP_PUSHDATA4`, the length field has width 0. -/
+theorem lengthFieldWidth_of_gt {op : UInt8} (h : 0x4e < op) : lengthFieldWidth op = 0 := by
+  have h1 : op ≠ 0x4c := by rintro rfl; exact absurd h (by decide)
+  have h2 : op ≠ 0x4d := by rintro rfl; exact absurd h (by decide)
+  have h3 : op ≠ 0x4e := by rintro rfl; exact absurd h (by decide)
+  simp [lengthFieldWidth, h1, h2, h3]
+
+/-- For every direct push opcode, below `OP_PUSHDATA1`, the length field has width 0. -/
+theorem lengthFieldWidth_of_lt {op : UInt8} (h : op < 0x4c) : lengthFieldWidth op = 0 := by
+  have h1 : op ≠ 0x4c := by rintro rfl; exact absurd h (by decide)
+  have h2 : op ≠ 0x4d := by rintro rfl; exact absurd h (by decide)
+  have h3 : op ≠ 0x4e := by rintro rfl; exact absurd h (by decide)
+  simp [lengthFieldWidth, h1, h2, h3]
+
+/-- For every opcode above `OP_PUSHDATA4` and every length field, the data size is 0. -/
+theorem pushSize_of_gt {op : UInt8} (h : 0x4e < op) (lf : List UInt8) : pushSize op lf = 0 := by
+  have h1 : ¬ op < 0x4c := fun h' => absurd (UInt8.lt_trans h' (UInt8.lt_trans (by decide) h))
+    (UInt8.lt_irrefl _)
+  have h2 : ¬ op ≤ 0x4e := fun h' => absurd (UInt8.lt_of_lt_of_le h h') (UInt8.lt_irrefl _)
+  simp [pushSize, h1, h2]
+
+/-! ## `readPush` -/
+
+/-- For all inputs: `readPush` reads an instruction if and only if `size` bytes follow, and then the instruction is `header` and those bytes. -/
+theorem readPush_eq_op_iff {opcode o : UInt8} {header r b rest : List UInt8} {size : Nat} :
+    readPush opcode header size r = .op o b rest ↔
+      size ≤ r.length ∧ o = opcode ∧ b = header ++ r.take size ∧ rest = r.drop size := by
+  unfold readPush
+  split
+  · simp only [reduceCtorEq, false_iff]
+    omega
+  · constructor
+    · intro h; cases h; exact ⟨by omega, rfl, rfl, rfl⟩
+    · rintro ⟨-, rfl, rfl, rfl⟩; rfl
+
+/-- For all inputs: `readPush` stops if and only if fewer than `size` bytes follow, and then it passes `header`. -/
+theorem readPush_eq_stop_iff {opcode : UInt8} {header r p : List UInt8} {size : Nat} :
+    readPush opcode header size r = .stop p ↔ r.length < size ∧ p = header := by
+  unfold readPush
+  split
+  · constructor
+    · intro h; cases h; exact ⟨by omega, rfl⟩
+    · rintro ⟨-, rfl⟩; rfl
+  · simp only [reduceCtorEq, false_iff]
+    omega
+
+/-! ## A uniform form of `readOp` -/
+
+/--
+For every opcode `op` and bytes `t`, `readOp (op :: t)` in one form for all opcodes.
+A push opcode reads a length field of `lengthFieldWidth op` bytes and then `pushSize op` bytes of data.
+It stops after the opcode when the length field is short.
+Every other opcode is one byte.
+-/
+theorem readOp_cons_eq (op : UInt8) (t : List UInt8) :
+    readOp (op :: t) =
+      if op ≤ 0x4e then
+        if t.length < lengthFieldWidth op then .stop [op]
+        else readPush op (op :: t.take (lengthFieldWidth op))
+          (pushSize op (t.take (lengthFieldWidth op))) (t.drop (lengthFieldWidth op))
+      else .op op [op] t := by
+  by_cases hlt : op < 0x4c
+  · have hle : op ≤ 0x4e := UInt8.le_of_lt (UInt8.lt_trans hlt (by decide))
+    simp [readOp, hlt, hle, lengthFieldWidth_of_lt hlt, pushSize]
+  · by_cases h4c : op = 0x4c
+    · subst h4c
+      cases t with
+      | nil => rfl
+      | cons b r => simp [readOp, lengthFieldWidth, pushSize, leValue]
+    · by_cases h4d : op = 0x4d
+      · subst h4d
+        match t with
+        | [] => rfl
+        | [_] => rfl
+        | b0 :: b1 :: r => simp [readOp, lengthFieldWidth, pushSize, leValue]; omega
+      · by_cases h4e : op = 0x4e
+        · subst h4e
+          match t with
+          | [] => rfl
+          | [_] => rfl
+          | [_, _] => rfl
+          | [_, _, _] => rfl
+          | b0 :: b1 :: b2 :: b3 :: r =>
+            simp [readOp, lengthFieldWidth, pushSize, leValue]
+            split
+            · omega
+            · congr 1; omega
+        · have hgt : 0x4e < op := by
+            have : ¬ op.toNat < 0x4c := fun h => hlt (UInt8.lt_iff_toNat_lt.mpr h)
+            have h1 : op.toNat ≠ 0x4c := fun h => h4c (UInt8.toNat_inj.mp h)
+            have h2 : op.toNat ≠ 0x4d := fun h => h4d (UInt8.toNat_inj.mp h)
+            have h3 : op.toNat ≠ 0x4e := fun h => h4e (UInt8.toNat_inj.mp h)
+            exact UInt8.lt_iff_toNat_lt.mpr (by simp; omega)
+          have hnle : ¬ op ≤ 0x4e := fun h => absurd (UInt8.lt_of_lt_of_le hgt h) (UInt8.lt_irrefl _)
+          simp [readOp, hlt, h4c, h4d, h4e, hnle]
+
+/-- For every byte that is not at most `OP_PUSHDATA4`, the byte is above it. -/
+private theorem gt_of_not_le {op : UInt8} (h : ¬ op ≤ 0x4e) : 0x4e < op :=
+  UInt8.lt_iff_toNat_lt.mpr (by
+    have : ¬ op.toNat ≤ (0x4e : UInt8).toNat := fun h' => h (UInt8.le_iff_toNat_le.mpr h')
+    omega)
+
+/-! ## `readOp` against the instruction encoding -/
+
+/--
+For all bytes `bs`, `o`, `b` and `r`: `readOp bs` returns `.op o b r` if and only if two conditions hold.
+The bytes `bs` are `b ++ r`, and `b` is `o :: lf ++ data`.
+The length field `lf` has the width that `o` requires, and `data` has the size that `o` and `lf` give.
+-/
+theorem readOp_eq_op_iff {bs : List UInt8} {o : UInt8} {b r : List UInt8} :
+    readOp bs = .op o b r ↔
+      ∃ lf data, lf.length = lengthFieldWidth o ∧ data.length = pushSize o lf ∧
+        b = o :: lf ++ data ∧ bs = b ++ r := by
+  constructor
+  · intro h
+    match bs with
+    | [] => simp [readOp] at h
+    | op :: t =>
+      rw [readOp_cons_eq] at h
+      split at h
+      · split at h
+        · cases h
+        · rename_i hw
+          obtain ⟨hn, rfl, rfl, rfl⟩ := readPush_eq_op_iff.mp h
+          refine ⟨t.take (lengthFieldWidth o),
+            (t.drop (lengthFieldWidth o)).take (pushSize o (t.take (lengthFieldWidth o))),
+            ?_, ?_, rfl, ?_⟩
+          · simp only [List.length_take]; omega
+          · simp only [List.length_take]; omega
+          · simp only [List.cons_append, List.append_assoc]
+            rw [List.take_append_drop, List.take_append_drop]
+      · rename_i hle
+        cases h
+        have hgt := gt_of_not_le hle
+        exact ⟨[], [], by simp [lengthFieldWidth_of_gt hgt], by simp [pushSize_of_gt hgt],
+          rfl, rfl⟩
+  · rintro ⟨lf, data, hlf, hdata, rfl, rfl⟩
+    rw [List.cons_append, List.cons_append, readOp_cons_eq]
+    by_cases hle : o ≤ 0x4e
+    · simp only [hle, ↓reduceIte, ← hlf, List.append_assoc, List.take_left, List.drop_left,
+        List.length_append]
+      rw [ite_neg_eq (by omega)]
+      exact readPush_eq_op_iff.mpr ⟨by simp; omega, rfl, by simp [← hdata],
+        by simp [← hdata]⟩
+    · have hgt := gt_of_not_le hle
+      have hl : lf = [] := List.eq_nil_of_length_eq_zero (by rw [hlf, lengthFieldWidth_of_gt hgt])
+      have hd : data = [] := List.eq_nil_of_length_eq_zero (by rw [hdata, pushSize_of_gt hgt])
+      subst hl hd
+      simp [hle]
+
+/--
+For all bytes `bs` and `p`: `readOp bs` returns `.stop p` if and only if one of two cases holds.
+Either `bs` and `p` are empty, or `bs` starts with a push opcode `op` whose length field or data is short.
+When the length field is short, `p` is the opcode. When the data is short, `p` is the opcode and the length field.
+-/
+theorem readOp_eq_stop_iff {bs p : List UInt8} :
+    readOp bs = .stop p ↔
+      (bs = [] ∧ p = []) ∨
+      ∃ op t, bs = op :: t ∧ op ≤ 0x4e ∧
+        ((t.length < lengthFieldWidth op ∧ p = [op]) ∨
+         (lengthFieldWidth op ≤ t.length ∧
+           (t.drop (lengthFieldWidth op)).length < pushSize op (t.take (lengthFieldWidth op)) ∧
+           p = op :: t.take (lengthFieldWidth op))) := by
+  match bs with
+  | [] => simp [readOp, eq_comm]
+  | op :: t =>
+    rw [readOp_cons_eq]
+    simp only [reduceCtorEq, false_and, List.cons.injEq, false_or]
+    constructor
+    · intro h
+      refine ⟨op, t, ⟨rfl, rfl⟩, ?_⟩
+      split at h
+      · rename_i hle
+        refine ⟨hle, ?_⟩
+        split at h
+        · cases h; exact Or.inl ⟨by omega, rfl⟩
+        · obtain ⟨hn, rfl⟩ := readPush_eq_stop_iff.mp h
+          exact Or.inr ⟨by omega, hn, rfl⟩
+      · cases h
+    · rintro ⟨op', t', ⟨rfl, rfl⟩, hle, h⟩
+      simp only [hle, ↓reduceIte]
+      rcases h with ⟨hw, rfl⟩ | ⟨hw, hn, rfl⟩
+      · rw [ite_pos_eq hw]
+      · rw [ite_neg_eq (by omega)]
+        exact readPush_eq_stop_iff.mpr ⟨hn, rfl⟩
+
 
 end DogeLib.Transaction

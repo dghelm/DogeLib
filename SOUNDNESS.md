@@ -532,6 +532,7 @@ For every script code, transaction, input index and hash type:
 - `legacySignatureHashPlan_eq_hashBytes`: otherwise the plan is `hashBytes (legacyPreimage …)`.
 - `legacyPreimage_eq`: the preimage is a body, then the 4 bytes of the hash type. The body depends on the hash type only through its ANYONECANPAY, NONE and SINGLE flags. `HashType.flags_eq_of_and` says that the flags depend only on the bits `0x9f`.
 - `scriptCodeBytes_eq_encode`: when no instruction parse failed and no instruction is `OP_CODESEPARATOR`, the script code is written as the ordinary encoding of the script.
+- `readOp_eq_op_iff` and `readOp_eq_stop_iff`: `readOp` reads an instruction exactly when the bytes start with an opcode, its length field and its data. The field has the width that the opcode requires, and the data has the size that they give. It stops exactly on a short push or the empty script.
 
 Two plans that are equal give equal digests for any hash function, so no collision assumption is needed for that equality.
 No theorem says anything about which digests a plan can produce.
@@ -557,7 +558,9 @@ By `#print axioms` with Lean `v4.35.0`:
 | Theorem | Axioms |
 | --- | --- |
 | `readPush_stop` | None |
-| `readPush_op_append`, `readOp_op_append`, `readOp_stop_nil` | `propext` |
+| `readPush_op_append`, `readOp_op_append`, `readOp_stop_nil`, `lengthFieldWidth_of_gt`, `lengthFieldWidth_of_lt`, `pushSize_of_gt` | `propext` |
+| `readPush_eq_op_iff`, `readPush_eq_stop_iff` | `propext`, `Quot.sound` |
+| `readOp_cons_eq`, `readOp_eq_op_iff`, `readOp_eq_stop_iff` | `propext`, `Classical.choice`, `Quot.sound` |
 | `readOp_rest_length`, `readOp_stop_prefix`, `scanOps_prefix`, `scanOps_eq_of_complete`, `legacySignatureHashPlan_eq_fixedDigest_iff`, `legacySignatureHashPlan_eq_hashBytes`, `legacyPreimage_eq`, `HashType.flags_eq_of_and`, `LegacyHashPlan.digest_fixedDigest`, `LegacyHashPlan.digest_hashBytes_val` | `propext`, `Quot.sound` |
 | `scriptCodeBytes_eq_encode` | `propext`, `Classical.choice`, `Quot.sound` |
 
@@ -656,8 +659,10 @@ Both `atEnd` and `truncated` correspond to Core's `false`.
 No opcode semantics are specified, so no theorem says that an opcode step keeps `opCount_le`, `vfExec_length_le` or the combined stack limit.
 Those invariants are justified from a reading of D3 (A1), and the opcode semantics must prove them.
 The hand-off theorems cover the two `EvalScript` calls of `VerifyScript`, not the P2SH copy and restore of the stack.
+
 That the definitions are Core's rests on a reading of D24 and D3 (A1) and on the known answers.
-`lake test` runs 44 single reads and 8 loops with hand-derived results, 14 of them from Core's `script_tests.json`.
+`lake test` runs 50 single reads and 8 loops with hand-derived results, 14 of them from Core's `script_tests.json`.
+It also runs `init` and `handOff` on one state with nonempty locals and raw stack entries.
 Core itself does not run.
 
 The definitions add no hypothesis, axiom or execution boundary.
@@ -665,10 +670,10 @@ By `#print axioms` with Lean `v4.35.0`:
 
 | Theorem | Axioms |
 | --- | --- |
-| `drop_header`, `init_fExec`, `handOff_stack`, `handOff_altstack`, `handOff_pc`, `handOff_beginCodeHash`, `handOff_vfExec`, `handOff_opCount` | None |
-| `lengthFieldWidth_of_gt`, `lengthFieldWidth_of_lt`, `pushSize_of_gt`, `ite_neg_eq`, `ite_pos_eq`, `readInstruction_atEnd_iff`, `drop_eq_cons_iff`, `readInstruction_instruction_unique`, `init_wellFormed`, `handOff_eq_iff`, `handOff_wellFormed`, `WellFormed.markSeparator` | `propext` |
-| `readPush_eq_op_iff`, `readPush_eq_stop_iff`, `gt_of_not_le`, `readInstruction_eq_instruction_iff_readOp`, `readInstruction_eq_fail_iff_readOp`, `readInstruction_eq_truncated_iff_readOp`, `WithinStackLimit.handOff` | `propext`, `Quot.sound` |
-| `readOp_cons_eq`, `readOp_eq_op_iff`, `readOp_eq_stop_iff`, `readInstruction_eq_instruction_iff`, `readInstruction_consumes`, `readInstruction_nonpush`, `readInstruction_truncated_iff`, `IsBoundary.le_length`, `IsBoundary.eq_or_next_le`, `IsBoundary.not_inside`, `WellFormed.advance`, `WellFormed.pc_le_length`, `WellFormed.beginCodeHash_le_length` | `propext`, `Classical.choice`, `Quot.sound` |
+| `init_fExec`, `handOff_stack`, `handOff_altstack`, `handOff_pc`, `handOff_beginCodeHash`, `handOff_vfExec`, `handOff_opCount` | None |
+| `readInstruction_atEnd_iff`, `readInstruction_instruction_unique`, `init_wellFormed`, `handOff_eq_iff`, `handOff_wellFormed`, `WellFormed.markSeparator` | `propext` |
+| `readInstruction_eq_instruction_iff_readOp`, `readInstruction_eq_fail_iff_readOp`, `readInstruction_eq_truncated_iff_readOp`, `WithinStackLimit.handOff` | `propext`, `Quot.sound` |
+| `readInstruction_eq_instruction_iff`, `readInstruction_consumes`, `readInstruction_nonpush`, `readInstruction_truncated_iff`, `IsBoundary.le_length`, `IsBoundary.eq_or_next_le`, `IsBoundary.not_inside`, `WellFormed.advance`, `WellFormed.pc_le_length`, `WellFormed.beginCodeHash_le_length` | `propext`, `Classical.choice`, `Quot.sound` |
 
 ### Compact encoding and difficulty retarget
 

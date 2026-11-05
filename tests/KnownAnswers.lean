@@ -2445,6 +2445,7 @@ A case from `script_tests.json` (SOURCES.md, D24 for the reader) names its line 
 The asm of the fixture is written here as its bytes, and the expected result follows from `GetOp2`, `src/script/script.h` lines 502 to 552.
 A case marked `GetOp2` comes from that function alone.
 
+The `OP_0`, high-length-byte and state reset cases are adapted from an independent implementation of this stage (branch `feat/script-state-codex`), with citations to Core added here.
 Each case fixes a script, a cursor and the full `ReadResult`.
 That result is the opcode, the instruction bytes, the pushed bytes and the next cursor, or the failure, its part and its cursor.
 A loop case fixes the results of `readInstruction` calls from cursor 0.
@@ -2503,6 +2504,16 @@ def cases : List Case := [
   ⟨"script_tests.json:722 0x4d0200ff", [0x4d, 0x02, 0x00, 0xff], 0, .truncated 0x4d .payload 3⟩,
   ⟨"script_tests.json:723 0x4e03000000ffff", [0x4e, 0x03, 0x00, 0x00, 0x00, 0xff, 0xff], 0,
     .truncated 0x4e .payload 5⟩,
+  -- GetOp2: OP_0 pushes an empty byte string.
+  ⟨"GetOp2: OP_0", [0x00], 0, ins 0x00 [0x00] [] 1⟩,
+  -- GetOp2: lengths with a nonzero high byte, read in little-endian order.
+  ⟨"GetOp2: 4d 0001 and 256 bytes", [0x4d, 0x00, 0x01] ++ rep 256 0xab, 0,
+    ins 0x4d ([0x4d, 0x00, 0x01] ++ rep 256 0xab) (rep 256 0xab) 259⟩,
+  ⟨"GetOp2: 4e 00010000 and 256 bytes", [0x4e, 0x00, 0x01, 0x00, 0x00] ++ rep 256 0xab, 0,
+    ins 0x4e ([0x4e, 0x00, 0x01, 0x00, 0x00] ++ rep 256 0xab) (rep 256 0xab) 261⟩,
+  ⟨"GetOp2: 4d 0001, no data", [0x4d, 0x00, 0x01], 0, .truncated 0x4d .payload 3⟩,
+  ⟨"GetOp2: 4e 00000100, no data", [0x4e, 0x00, 0x00, 0x01, 0x00], 0, .truncated 0x4e .payload 5⟩,
+  ⟨"GetOp2: 4e 00000001, no data", [0x4e, 0x00, 0x00, 0x00, 0x01], 0, .truncated 0x4e .payload 5⟩,
   -- GetOp2: the end of the script.
   ⟨"GetOp2: empty script", [], 0, .atEnd⟩,
   ⟨"GetOp2: cursor at the end", [0x61], 1, .atEnd⟩,
@@ -2579,8 +2590,8 @@ where
 /-- Runs every case. Returns the number of failures. -/
 def check : IO Nat := do
   let mut failures := 0
-  if cases.length != 44 || loopCases.length != 8 then
-    IO.eprintln s!"FAIL script reader: {cases.length} cases and {loopCases.length} loop cases, expected 44 and 8"
+  if cases.length != 50 || loopCases.length != 8 then
+    IO.eprintln s!"FAIL script reader: {cases.length} cases and {loopCases.length} loop cases, expected 50 and 8"
     failures := failures + 1
   for c in cases do
     let got := readInstruction c.script c.pc
@@ -2592,7 +2603,21 @@ def check : IO Nat := do
     unless got == c.expected do
       IO.eprintln s!"FAIL {c.label}: got {repr got}, expected {repr c.expected}"
       failures := failures + 1
-  IO.println s!"script reader: {cases.length} cases, {loopCases.length} loop cases, {failures} failures"
+  -- EvalScript resets every local at the start of a call (interpreter.cpp lines 258 to 268).
+  -- VerifyScript passes only `stack` to the next call (lines 1424 and 1429).
+  -- The prior state has a nonempty altstack, cursors, conditional stack and count.
+  -- Its stack holds an empty item, negative zero and a two-byte zero, which stay raw.
+  let prior : ExecState :=
+    { stack := [[], [0x80], [0, 0]], altstack := [[0xff]], pc := 99, beginCodeHash := 80,
+      vfExec := [true, false], opCount := 201 }
+  let reset : ExecState :=
+    { stack := [[], [0x80], [0, 0]], altstack := [], pc := 0, beginCodeHash := 0,
+      vfExec := [], opCount := 0 }
+  unless prior.handOff == reset && ExecState.init prior.stack == reset && reset.fExec &&
+      !prior.fExec do
+    IO.eprintln s!"FAIL script state reset and hand-off: got {repr prior.handOff}, expected {repr reset}"
+    failures := failures + 1
+  IO.println s!"script reader: {cases.length} cases, {loopCases.length} loop cases, state reset and hand-off, {failures} failures"
   return failures
 
 end KnownAnswers.Script

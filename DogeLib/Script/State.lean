@@ -28,7 +28,7 @@ A cursor is an offset from `begin()`, as in `DogeLib.Script.Instruction`.
 
 Every local of `EvalScript` starts again in each call, and only `stack` comes from the caller.
 `ExecState.init` is the state at the start of a call.
-`VerifyScript` (lines 1409 to 1533) passes one `stack` vector to the call for `scriptSig` and then to the call for `scriptPubKey`, at lines 1424 and 1429.
+`VerifyScript` (lines 1409 to 1526) passes one `stack` vector to the call for `scriptSig` and then to the call for `scriptPubKey`, at lines 1424 and 1429.
 `ExecState.handOff` is the state at the start of the second call: the main stack of the first call, with every other part reset.
 The copy and restore of the stack for Pay to Script Hash (P2SH) are not specified here.
 
@@ -103,7 +103,7 @@ structure ExecState.WellFormed (script : List UInt8) (s : ExecState) : Prop wher
   beginCodeHash_le_pc : s.beginCodeHash ≤ s.pc
   /-- The opcode count is at most `MAX_OPS_PER_SCRIPT`. -/
   opCount_le : s.opCount ≤ maxOpsPerScript
-  /-- Each entry of `vfExec` comes from a counted `OP_IF` or `OP_NOTIF`. -/
+  /-- The conditional-stack length is at most the opcode count. -/
   vfExec_length_le : s.vfExec.length ≤ s.opCount
 
 /-- Core's combined stack limit (D3, line 1033): at most 1,000 items on the main stack and the altstack together. -/

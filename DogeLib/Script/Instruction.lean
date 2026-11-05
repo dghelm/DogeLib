@@ -23,7 +23,7 @@ An opcode up to `OP_PUSHDATA4` (`0x4e`) is a push, and its size `nSize` comes fr
 A push then copies the next `nSize` bytes into the vector and moves the cursor past them.
 Every other opcode is one byte, and its vector stays empty.
 
-`GetOp2` returns false in three cases, and the cursor stays where the last successful read left it:
+`GetOp2` returns false in three cases. The table gives the cursor after each:
 
 | Case | Cursor after the call |
 | --- | --- |
@@ -39,6 +39,7 @@ The reader does not normalize push encodings.
 A nonminimal push, such as `4c 01 07` for the byte that `OP_7` also pushes, keeps its own bytes.
 
 `readInstruction` is defined through `Transaction.readOp`, which the legacy signature serializer uses (`DogeLib.Transaction.LegacySighash`).
+That module also defines `lengthFieldWidth`, `leValue` and `pushSize`, the length field and data size of a push.
 So the interpreter and the serializer decode a script with the same definition.
 `readOp` takes the bytes after the cursor and returns the bytes after the instruction.
 `readInstruction` takes the whole script and a cursor, and returns cursors.
@@ -63,23 +64,6 @@ So a loop from `begin()` never reads a byte of a length field or of pushed data 
 namespace DogeLib.Script
 
 open DogeLib.Transaction
-
-/-- The width in bytes of the length field after an opcode. `OP_PUSHDATA1` has 1, `OP_PUSHDATA2` has 2, `OP_PUSHDATA4` has 4, and every other opcode has 0. -/
-def lengthFieldWidth (op : UInt8) : Nat :=
-  if op = 0x4c then 1 else if op = 0x4d then 2 else if op = 0x4e then 4 else 0
-
-/-- The value of a length field, in little-endian order: `ReadLE16` and `ReadLE32` (D37) for fields of 2 and 4 bytes. -/
-def leValue : List UInt8 → Nat
-  | [] => 0
-  | b :: bs => b.toNat + 2 ^ 8 * leValue bs
-
-/--
-The size `nSize` of the data that `GetOp2` reads after an opcode and its length field.
-A direct push is its own size, and `OP_PUSHDATA1`, `OP_PUSHDATA2` and `OP_PUSHDATA4` take the value of the length field.
-Every other opcode has no data.
--/
-def pushSize (op : UInt8) (lengthField : List UInt8) : Nat :=
-  if op < 0x4c then op.toNat else if op ≤ 0x4e then leValue lengthField else 0
 
 /-- The part of a push that `GetOp2` found short. -/
 inductive ShortPart where
@@ -116,7 +100,7 @@ inductive ReadResult where
 
 The definition reads `script.drop pc` with `Transaction.readOp`, which the legacy signature serializer also uses.
 The pushed bytes are the bytes of the instruction after its opcode and its length field.
-On a failure, `readOp` passes the opcode and the part of the length field that it read.
+On a failure, `readOp` passes the opcode, and also the whole length field when the data is short.
 The cursor moves past those bytes.
 -/
 def readInstruction (script : List UInt8) (pc : Nat) : ReadResult :=

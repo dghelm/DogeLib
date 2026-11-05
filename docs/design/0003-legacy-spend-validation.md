@@ -176,7 +176,7 @@ Numeric decode exceptions map to `SCRIPT_ERR_UNKNOWN_ERROR`, as Core's catch cla
 
 The hash opcodes are part of execution, not signature-verifier behavior [C3, lines 847–867].
 DogeLib has SHA-256 and double SHA-256, but lacks SHA-1, RIPEMD-160 and HASH160 definitions.
-Separate prerequisite lanes add pure SHA-1 and RIPEMD-160 primitives, each with independent vectors, review and precise functional-proof claims.
+Separate prerequisite lanes add pure SHA-1 and RIPEMD-160 primitives, each with independent vectors, review and precise proof claims.
 HASH160 then composes RIPEMD-160 with SHA-256.
 `OP_HASH256` uses the existing double SHA-256 definition.
 
@@ -315,7 +315,7 @@ It records the source commit, file digest and importer revision.
 A manifest lists supported cases and excluded cases with reasons, so skipped cases cannot inflate a comparison count.
 Unsupported cases never count as successful rejection comparisons.
 
-The proposed progression uses these corpora:
+The progression uses these corpora:
 
 | Stage | Known answers and comparison evidence |
 | --- | --- |
@@ -384,7 +384,6 @@ The resource hypotheses must state these bounds explicitly:
 - Every parsed push has at most 520 payload bytes, including pushes in skipped branches.
 - Each decoded instruction prefix leaves at most 1,000 items across the main stack and altstack.
 - Each call counts at most 201 operations, including skipped opcodes above `OP_16` and the active multisig key count.
-- The fixed ordinary branch uses three keys and two signatures. The general target requires `1 <= k <= n <= 20`.
 - Transaction input and output counts are below 2^32, and the input index selects an input.
 
 The encoding predicates concern only the signature/key pairs that Core reaches, in Core's matching order [C2, C3].
@@ -438,7 +437,7 @@ The maintainer adopted this scope:
 | Errors | Preserve Core's exact `ScriptError` categories and their order at the pin. Keep unsupported capabilities distinct. |
 | Module placement | Script sits above Transaction, with separate proof and export modules. Preserve the dependency direction without an import cycle. |
 | Signature verifier | Use a raw-byte verifier parameter and a trusted backend for comparison. Name the agreement assumption explicitly. |
-| Hash primitives | SHA-1 and RIPEMD-160 each need a separate prerequisite lane, independent review, independent vectors and precise functional-proof claims. |
+| Hash primitives | SHA-1 and RIPEMD-160 each need a separate prerequisite lane, independent review, independent vectors and precise proof claims. |
 | Hash types | The generic interpreter supports every one-byte hash type that the selected flags admit. A later bridge property may require `SIGHASH_ALL` without `ANYONECANPAY`. |
 | Worked property | Use the generic multisig and recovery template. A production bridge script is a separate application of these semantics. |
 | Rust work | Implementation refinement and Rust extraction remain outside this milestone. |

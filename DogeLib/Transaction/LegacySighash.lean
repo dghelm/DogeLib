@@ -136,6 +136,23 @@ def readOp : List UInt8 → OpRead
       | _ => .stop [op]
     else .op op [op] r
 
+/-- The width in bytes of the length field after an opcode. `OP_PUSHDATA1` has 1, `OP_PUSHDATA2` has 2, `OP_PUSHDATA4` has 4, and every other opcode has 0. -/
+def lengthFieldWidth (op : UInt8) : Nat :=
+  if op = 0x4c then 1 else if op = 0x4d then 2 else if op = 0x4e then 4 else 0
+
+/-- The value of a length field, in little-endian order: `ReadLE16` and `ReadLE32` (D37) for fields of 2 and 4 bytes. -/
+def leValue : List UInt8 → Nat
+  | [] => 0
+  | b :: bs => b.toNat + 2 ^ 8 * leValue bs
+
+/--
+The size `nSize` of the data that `GetOp2` reads after an opcode and its length field.
+A direct push is its own size, and `OP_PUSHDATA1`, `OP_PUSHDATA2` and `OP_PUSHDATA4` take the value of the length field.
+Every other opcode has no data.
+-/
+def pushSize (op : UInt8) (lengthField : List UInt8) : Nat :=
+  if op < 0x4c then op.toNat else if op ≤ 0x4e then leValue lengthField else 0
+
 /-- An instruction leaves fewer bytes than it started with. `scanOps` needs this to terminate. -/
 theorem readOp_rest_length {bs : List UInt8} {o : UInt8} {b r : List UInt8}
     (h : readOp bs = .op o b r) : r.length < bs.length := by

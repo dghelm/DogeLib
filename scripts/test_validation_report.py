@@ -176,7 +176,8 @@ class Reports(unittest.TestCase):
                               '(cd tests/transaction/sighash && sha256sum -c SHA256SUMS) && '
                               '(cd tests/transaction/corpus && sha256sum -c SHA256SUMS) && '
                               '(cd tests/work/mainnet-headers && sha256sum -c SHA256SUMS) && '
-                              '(cd tests/block && sha256sum -c SHA256SUMS)',
+                              '(cd tests/block && sha256sum -c SHA256SUMS) && '
+                              '(cd tests/script/corpus && sha256sum -c SHA256SUMS)',
             'refinement': 'lake -d Refinement build --wfail',
             'soundness-review': None,
             'writing': 'uv run --no-project --python 3.12 python scripts/check_writing.py --base main',
@@ -188,6 +189,8 @@ class Reports(unittest.TestCase):
                                            'python3 -I scripts/compare_core.py --rust-compactsize Refinement/Rust/target/debug/examples/compactsize_oracle .lake/build/bin/dogelib-oracle build/core-harness/core-oracle',
             'comparator-self-test': 'python3 -I scripts/test_compare_core.py .lake/build/bin/dogelib-oracle',
             'writing-checker-tests': 'uv run --no-project --python 3.12 python -m unittest scripts/test_check_writing.py',
+            'script-corpus-freshness': 'python3 -I scripts/convert_script_tests.py --check',
+            'script-corpus-converter-tests': 'python3 -I scripts/test_convert_script_tests.py',
             'validation-report-tests': 'python3 -I scripts/test_validation_report.py',
             'lane-tool': 'bash scripts/test_lane.sh',
         }

@@ -1,0 +1,32 @@
+{
+  "converter_sha256": "42b7961955544aac9e804e56e9efe9b5f7e4670f6d7b748b15edb8be768de8f0",
+  "estimated_cumulative_stages": {
+    "2": 743,
+    "3": 906,
+    "4": 925
+  },
+  "estimated_earliest_stage": {
+    "2": 743,
+    "3": 163,
+    "4": 19
+  },
+  "exclusion_reasons_nonexclusive": {
+    "flag:CLEANSTACK": 3,
+    "flag:DISCOURAGE_UPGRADABLE_NOPS": 14,
+    "flag:DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM": 1,
+    "flag:MINIMALDATA": 115,
+    "flag:MINIMALIF": 46,
+    "flag:NULLFAIL": 7,
+    "flag:SIGPUSHONLY": 3,
+    "flag:WITNESS": 123,
+    "flag:WITNESS_PUBKEYTYPE": 20,
+    "nonempty_witness": 103
+  },
+  "inside_milestone": 925,
+  "outside_milestone": 268,
+  "records": 1193,
+  "source_commit": "e0a1c157791544e818c901bd9341896965afbf9d",
+  "source_file": "src/test/data/script_tests.json",
+  "source_sha256": "5b9b7fcfbdf6741bb98e612173ff0a242d4d033d5a099c851ee395a8d1e43a48",
+  "stage_estimate_method": "conservative instruction scan; cumulative counts are lower bounds for completed stages"
+}

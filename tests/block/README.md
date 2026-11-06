@@ -73,6 +73,9 @@ The explorer is untrusted. The independent checks below make the bytes acceptabl
 python3 -I tests/block/import_auxpow_headers.py <fetch-dir> tests/block/auxpow-headers.json
 ```
 
+Before the import, `--self-test` checks its transaction reader on three hand-written transactions.
+They are an empty input list with zero flags, which Core ends without an output count (D4, lines 220 to 226), a base form and an extended form with one empty stack.
+
 It checks each block in these ways, and fails on any mismatch:
 
 - The double SHA-256 of the first 80 bytes equals the Core checkpoint for the height (D9, `src/chainparams.cpp` lines 180 to 205).

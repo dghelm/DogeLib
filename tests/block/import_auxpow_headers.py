@@ -1,6 +1,7 @@
 """Build tests/block/auxpow-headers.json from Blockchair raw blocks, with independent checks.
 
 Usage: python3 -I tests/block/import_auxpow_headers.py <fetch-dir> tests/block/auxpow-headers.json
+       python3 -I tests/block/import_auxpow_headers.py --self-test
 
 The parser below is written from Dogecoin Core's stream format (D41, D54, D4, D1), not from DogeLib.
 `<fetch-dir>/<height>.json` is the response of
@@ -62,7 +63,10 @@ class R:
 
 
 def read_tx(r):
-    """Core's UnserializeTransaction with witness allowed. Returns (raw bytes, base bytes)."""
+    """Core's UnserializeTransaction with witness allowed (D4, lines 210 to 243).
+
+    Returns (raw bytes, base bytes). The base bytes are what Core's base-mode writer emits.
+    """
     start = r.i
     version = r.take(4)
     flags = 0
@@ -70,9 +74,12 @@ def read_tx(r):
     nin = r.cs()
     if nin == 0:
         flags = r.u8()
-        if flags != 0:
-            vin_start = r.i
-            nin = r.cs()
+        if flags == 0:
+            # Zero flags: no inputs and no outputs, and no output count to read (lines 222 to 226).
+            lock = r.take(4)
+            return r.b[start:r.i], version + bytes([0x00, 0x00]) + lock
+        vin_start = r.i
+        nin = r.cs()
     for _ in range(nin):
         r.take(36)
         r.take(r.cs())
@@ -94,6 +101,25 @@ def read_tx(r):
     return raw, base
 
 
+def self_test():
+    """Hand-written transactions from Core's format, each followed by one extra byte that must remain."""
+    one_input = bytes([0x01]) + bytes(36) + bytes([0x00, 0xFF, 0xFF, 0xFF, 0xFF])
+    cases = [
+        # Empty input list, flags 00: Core reads the lock time next.
+        (bytes.fromhex("01000000" "00" "00" "0d000000"), bytes.fromhex("01000000" "0000" "0d000000")),
+        # One input, no outputs, base form.
+        (bytes.fromhex("01000000") + one_input + b"\x00" + bytes(4),
+         bytes.fromhex("01000000") + one_input + b"\x00" + bytes(4)),
+        # The same transaction in the extended form with one empty stack.
+        (bytes.fromhex("01000000" "0001") + one_input + b"\x00" + b"\x00" + bytes(4),
+         bytes.fromhex("01000000") + one_input + b"\x00" + bytes(4)),
+    ]
+    for raw, base in cases:
+        r = R(raw + b"\xaa")
+        got_raw, got_base = read_tx(r)
+        assert got_raw == raw and got_base == base and r.b[r.i:] == b"\xaa", raw.hex()
+
+
 def merkle_root(ids):
     level = list(ids)
     if not level:
@@ -106,6 +132,7 @@ def merkle_root(ids):
 
 
 def main(fetch_dir, out_path):
+    self_test()
     rows = []
     for height, block_hash in sorted(CHECKPOINTS.items()):
         data = json.load(open(f"{fetch_dir}/{height}.json"))["data"][block_hash]
@@ -169,4 +196,8 @@ def main(fetch_dir, out_path):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2])
+    if sys.argv[1:] == ["--self-test"]:
+        self_test()
+        print("self-test passed")
+    else:
+        main(sys.argv[1], sys.argv[2])

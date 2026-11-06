@@ -159,7 +159,7 @@ public import DogeLib.Cryptography.Hash.Sha256
 A public import keeps the names that clients receive through the library roots.
 An exposed definition keeps its body visible, so that the reductions client proofs rely on still work.
 The proof of a theorem stays private, even inside an exposed section.
-EthLib's [`BUILDING.md`](https://github.com/ethereum/EthLib/blob/6a93711e7cc062e787fff6747e4101a141d38b7a/BUILDING.md) explains the reasons in more detail.
+EthLib's [`BUILDING.md`](https://github.com/ethereum/EthLib/blob/bb6dfe55198243682bc2eaf94611af2dbce1be6f/BUILDING.md) explains the reasons in more detail.
 
 ## A new layer
 

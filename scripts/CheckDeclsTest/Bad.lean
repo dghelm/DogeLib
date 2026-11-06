@@ -7,7 +7,7 @@ public import CheckDeclsForeign
 
 One declaration for each finding the declaration check must report.
 
-Adapted from EthLib, `scripts/CheckDeclsTest/Bad.lean` at commit `6a93711`, dedicated to the public domain under CC0 1.0.
+Adapted from EthLib, `scripts/CheckDeclsTest/Bad.lean` at commit `bb6dfe5`, dedicated to the public domain under CC0 1.0.
 -/
 
 @[expose] public section

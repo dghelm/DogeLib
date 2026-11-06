@@ -4,7 +4,10 @@ This guide sets the standard for the English of DogeLib.
 Developers all over the world read DogeLib, many of them in their second language, so its prose must be clear on the first reading.
 The guide is based on ASD-STE100 Simplified Technical English (STE), Issue 9, January 2025.
 It is adapted from EthLib's [`WRITING.md`](https://github.com/ethereum/EthLib/blob/6a93711e7cc062e787fff6747e4101a141d38b7a/WRITING.md), which is dedicated to the public domain under CC0 1.0.
-The rules are EthLib's. The vocabulary is DogeLib's own.
+
+DogeLib retains the rules of that adaptation and uses its own vocabulary.
+The current EthLib pin `bb6dfe5` revises the guide in `ad1185d6`.
+DogeLib has not adopted that policy rewrite.
 
 STE is the reference for correcting prose, not for keeping it as it is.
 A habit of this repository is not a reason to keep an unclear sentence.

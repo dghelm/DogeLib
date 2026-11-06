@@ -17,6 +17,8 @@ This does not prove that `hash` equals a second, independent model of the algori
 The known answers pin the whole computation at the inputs below, and nothing more.
 
 Adapted from EthLib, `EthLib/Cryptography/Proofs/Hash/Ripemd160.lean`, at commit `6a93711e7cc062e787fff6747e4101a141d38b7a` (CC0 1.0).
+The current EthLib pin `bb6dfe5` changes the executable helpers in `4f798a14`, which DogeLib has not ported.
+DogeLib also retains the kernel known answers that upstream removed in `914ea4ec`.
 The adaptation changes the namespace and documentation.
 It preserves the definitions and theorem statements.
 

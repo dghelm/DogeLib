@@ -41,6 +41,32 @@ class WritingRuleTests(unittest.TestCase):
         self.assertNotIn("now", history)
         self.assertNotIn("new", history)
 
+    def test_avoid_words_across_lines_and_dropped_e(self) -> None:
+        for text in ["We utilize the lemma.", "We are utilizing the lemma.",
+                     "We act in order\nto finish."]:
+            self.assertIn("W1", findings(text))
+        pattern = WRITING.word_pattern(["see"])
+        self.assertIsNone(pattern.search("seing"))
+        self.assertIsNotNone(pattern.search("seeing"))
+
+    def test_fences_match_character_and_minimum_width(self) -> None:
+        for fence, other in [("````", "```"), ("~~~", "```")]:
+            text = f"{fence}text\n{other}\nWe utilize the lemma.\n{fence}\nPlain text."
+            self.assertEqual(findings(text), [])
+            self.assertEqual(findings(text + "\n\nWe utilize the lemma."), ["W1"])
+        self.assertEqual(findings("```text\nWe utilize the lemma.\n````\nWe utilize it."), ["W1"])
+
+    def test_fenced_comments_do_not_hide_later_prose(self) -> None:
+        for marker in ["<!--", "<!-- generated: facts -->"]:
+            text = f"```text\n{marker}\n```\n\nWe utilize the lemma."
+            self.assertEqual(findings(text), ["W1"])
+
+    def test_thematic_breaks_are_not_yaml_front_matter(self) -> None:
+        text = "---\nWe utilize the lemma.\n---\nPlain text."
+        self.assertEqual(findings(text), ["W1"])
+        yaml = "---\ntitle: We utilize the lemma.\n---\nPlain text."
+        self.assertEqual(findings(yaml), [])
+
     def test_sentence_length(self) -> None:
         long_sentence = " ".join(["word"] * 26) + "."
         self.assertEqual(findings(long_sentence), ["S1"])

@@ -2,7 +2,7 @@
 # The declaration check must report exactly the findings planted in
 # scripts/CheckDeclsTest, pass once a baseline lists them, and fail on a
 # baseline entry that no longer matches. Run from anywhere.
-# Adapted from EthLib, scripts/test_check_decls.sh at commit 6a93711 (CC0 1.0).
+# Adapted from EthLib, scripts/test_check_decls.sh at commit bb6dfe5 (CC0 1.0).
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 FAIL=0

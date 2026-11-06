@@ -1,6 +1,10 @@
 #!/usr/bin/env -S uv run --no-project --python 3.12 python
 """Report editing suggestions for selected rules of the DogeLib writing standard (adapted from EthLib, CC0 1.0).
 
+The adaptation originates at EthLib `6a93711` (CC0 1.0).
+It includes selected parsing fixes from `ad1185d6` at the current pin `bb6dfe5`.
+DogeLib retains its writing rules and vocabulary instead of the upstream policy rewrite.
+
 The standard is `WRITING.md`. This script reports patterns that a search can find:
 
 - S1: sentence length (20 words in a numbered list item, 25 words elsewhere)
@@ -165,7 +169,10 @@ def word_pattern(words: list[str]) -> re.Pattern[str] | None:
     def alternative(word: str) -> str:
         # A single word also matches its inflected forms: "utilize" matches "utilizes".
         suffix = r"(?:s|es|d|ed|ing)?" if re.fullmatch(r"[a-z]+", word) else ""
-        return re.escape(word) + suffix
+        pattern = re.escape(word).replace(r"\ ", r"\s+") + suffix
+        if word.endswith("e") and not word.endswith("ee") and suffix:
+            pattern = rf"(?:{pattern}|{re.escape(word[:-1])}ing)"
+        return pattern
 
     alternatives = sorted((alternative(word) for word in words), key=len, reverse=True)
     return re.compile(r"(?<![\w.])(?:" + "|".join(alternatives) + r")(?![\w])", re.IGNORECASE)
@@ -185,7 +192,7 @@ def markdown_blocks(path: str, text: str, first_line: int = 1) -> list[Block]:
     last = 0
     procedural = False
     paragraph = True
-    fence = False
+    fence: tuple[str, int] | None = None
     comment = False
     generated = False
     header_row = True
@@ -202,7 +209,10 @@ def markdown_blocks(path: str, text: str, first_line: int = 1) -> list[Block]:
     if lines and lines[0].strip() == "---":
         for index in range(1, len(lines)):
             if lines[index].strip() == "---":
-                index += 1
+                if any(re.match(r"[A-Za-z_][\w-]*:", line) for line in lines[1:index]):
+                    index += 1
+                else:
+                    index = 0  # Two thematic breaks do not imply YAML front matter.
                 break
         else:
             index = 0
@@ -213,6 +223,16 @@ def markdown_blocks(path: str, text: str, first_line: int = 1) -> list[Block]:
         if generated:
             if GENERATED_END.search(stripped):
                 generated = False
+            continue
+        if fence is not None:
+            character, width = fence
+            if re.fullmatch(re.escape(character) + "{" + str(width) + r",}\s*", stripped):
+                fence = None
+            continue
+        opening = re.match(r"(`{3,}|~{3,})", stripped) if not comment else None
+        if opening:
+            flush()
+            fence = (opening.group()[0], len(opening.group()))
             continue
         if GENERATED_START.match(stripped):
             flush()
@@ -225,12 +245,6 @@ def markdown_blocks(path: str, text: str, first_line: int = 1) -> list[Block]:
         if stripped.startswith("<!--"):
             flush()
             comment = "-->" not in stripped
-            continue
-        if stripped.startswith(("```", "~~~")):
-            flush()
-            fence = not fence
-            continue
-        if fence:
             continue
         stripped = re.sub(r"^(?:>\s?)+", "", stripped)
         heading = re.fullmatch(r"(#{1,6})\s+(.+?)(?:\s+#+)?", stripped)

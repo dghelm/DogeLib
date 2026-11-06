@@ -10,5 +10,5 @@ import CheckDeclsTest.Exports
 Fixtures for the declaration check: what it must report, and what it must pass.
 `scripts/test_check_decls.sh` builds them and checks the report.
 
-Adapted from EthLib, `scripts/CheckDeclsTest.lean` at commit `6a93711`, dedicated to the public domain under CC0 1.0.
+Adapted from EthLib, `scripts/CheckDeclsTest.lean` at commit `bb6dfe5`, dedicated to the public domain under CC0 1.0.
 -/

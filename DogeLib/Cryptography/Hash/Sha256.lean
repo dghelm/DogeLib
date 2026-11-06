@@ -3,7 +3,8 @@ module
 /-!
 # `Sha256`
 
-SHA-256, as FIPS 180-4 defines it, for messages of whole bytes.
+SHA-256, as FIPS 180-4 defines it, for messages of whole bytes shorter than 2^61 bytes.
+For longer messages, the definition wraps the bit length modulo 2^64 and lies outside the FIPS domain.
 
 Each step of the standard is one definition here:
 
@@ -22,7 +23,9 @@ Neither use needs constant time, so this is written for clarity.
 
 Adapted from EthLib, [`EthLib/Cryptography/Hash/Sha256.lean`](https://github.com/ethereum/EthLib/blob/6a93711e7cc062e787fff6747e4101a141d38b7a/EthLib/Cryptography/Hash/Sha256.lean),
 commit `6a93711`, dedicated to the public domain under CC0 1.0.
-The changes are the namespace and this paragraph and the one before it.
+The current EthLib pin `bb6dfe5` restructures this file in `d59f0e3a`.
+DogeLib retains the earlier definitions and theorem contracts, so that restructuring is not ported.
+The adaptation changes the namespace and documentation.
 -/
 
 @[expose] public section
@@ -166,7 +169,9 @@ end DogeLib.Cryptography.Hash.Sha256
 
 namespace DogeLib.Cryptography.Hash
 
-/-- SHA-256 of an arbitrary-length `ByteArray`. -/
+/-- SHA-256 of a byte string shorter than 2^61 bytes, as FIPS 180-4 §1 requires.
+A longer input wraps its bit length modulo 2^64 and lies outside the FIPS domain.
+-/
 @[inline] def sha256 (data : ByteArray) : ByteArray := Sha256.hash data
 
 end DogeLib.Cryptography.Hash

@@ -5,7 +5,7 @@ module
 
 A proof module: its `native_decide` is a finding, which a baseline may allow.
 
-Adapted from EthLib, `scripts/CheckDeclsTest/Proofs/Native.lean` at commit `6a93711`, dedicated to the public domain under CC0 1.0.
+Adapted from EthLib, `scripts/CheckDeclsTest/Proofs/Native.lean` at commit `bb6dfe5`, dedicated to the public domain under CC0 1.0.
 -/
 
 @[expose] public section

@@ -31,6 +31,8 @@ The hash has no network, activation or serialization-mode parameter.
 This specification makes no constant-time guarantee.
 
 Adapted from EthLib, `EthLib/Cryptography/Hash/Ripemd160.lean`, at commit `6a93711e7cc062e787fff6747e4101a141d38b7a` (CC0 1.0).
+The current EthLib pin `bb6dfe5` restructures this file in `4f798a14`.
+DogeLib retains the earlier definitions and theorem contracts, so that restructuring is not ported.
 The adaptation changes the namespace and documentation.
 
 -/

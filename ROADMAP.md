@@ -78,12 +78,18 @@ The signature opcodes run these checks.
 `checkMultisigStep_matching` proves that `OP_CHECKMULTISIG` succeeds exactly when the signatures pair in order with a subsequence of the keys, given total checker answers.
 The `/6` oracle keeps `none` as the default checker and accepts an explicit `base` selection for `script.eval`.
 
+The parsed-script obligation of stage 3 is discharged for the multisig-with-recovery template.
+`MultisigRecoverySpend.sigAccepted_ordinary_iff_reference` and `sigAccepted_recovery_iff_reference` prove that every checker call of both branches hashes the `SignatureHashOld` reference digest.
+For other scripts, `effectiveScriptCode_scanOps` reduces the obligation to the parse of the script suffix from the separator cursor.
+
 `Script.Verify` and the lock-time opcodes complete stage 4.
 CLTV and CSV follow Core with a checker, and `transactionChecker` gives Core's `CheckLockTime` and `CheckSequence` for the selected input.
 `verifyScript` follows `VerifyScript` with an empty witness, including the P2SH branch, and `verifyLegacySpend` checks one input of an `InputContext`.
 `verifyScript_p2sh` gives the P2SH composition, and it assumes nothing about HASH160.
 On Core's `script_tests.json`, 881 records agree with Core and none disagrees.
 312 are unsupported: 165 for flags, 103 for witness and 44 that reach the verifier.
+
+`InputContext.ofDecoded` builds the input context from a successful `decodeBaseComplete`.
 
 With a checker, all seven selected flags and all legacy opcode behaviors have defined results.
 The one exception is a checker answer of `none`, which gives `unsupported`.

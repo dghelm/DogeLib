@@ -59,13 +59,12 @@ The record also cites these documents outside Core:
 | Reference | Document | Subject |
 | --- | --- | --- |
 | X1 | [SEC 1 v2](https://www.secg.org/sec1-v2.pdf) §2.2.1, §2.3.3–§2.3.6 and §4.1.4, [SEC 2 v2](https://www.secg.org/sec2-v2.pdf) §2.4.1 | The group law, point encodings, ECDSA verification and the curve parameters. |
-| X2 | EthLib `bb6dfe55`, `EthLib/Cryptography/Inverse.lean`, `EthLib/Cryptography/Jacobian.lean` and `EthLib/Cryptography/Secp256k1/` `Field.lean`, `Curve.lean`, `Errors.lean`, `Encoding.lean` and `Ecdsa.lean`, with the proofs under `EthLib/Cryptography/Proofs/` | A pure Lean ECDSA verifier under CC0 1.0, with an extended Euclidean inverse, Jacobian scalar multiplication and a joint multiplication `mulAdd`. |
-| X4 | EthLib `6a93711`, the same `Secp256k1` files | The earlier affine verifier with a Fermat inverse. SOURCES.md pins this commit, and E6 cites its `Encoding.lean`. It is the origin of the EthLib code that DogeLib has already adapted. |
+| X2 | EthLib `bb6dfe55`, `EthLib/Cryptography/Inverse.lean`, `EthLib/Cryptography/Jacobian.lean` and `EthLib/Cryptography/Secp256k1/` `Field.lean`, `Curve.lean`, `Errors.lean`, `Encoding.lean` and `Ecdsa.lean`, with the proofs under `EthLib/Cryptography/Proofs/` | A pure Lean ECDSA verifier under CC0 1.0, with an extended Euclidean inverse, Jacobian scalar multiplication and a joint multiplication `mulAdd`. SOURCES.md pins this commit, and E6 cites its `Encoding.lean`. |
+| X4 | EthLib `6a93711`, the same `Secp256k1` files | The earlier affine verifier with a Fermat inverse, timed in section 5.5 only. It was the EthLib pin before `bb6dfe5`, and SOURCES.md E5 still cites it as the origin of adapted code. |
 | X3 | `C2SP/wycheproof` at `d17cc89fa5c8f4f4d378b5385ebf75da5d0926c9`, `ecdsa_secp256k1_sha256_bitcoin_test.json` and `ecdsa_secp256k1_sha256_p1363_test.json` | Edge cases of ECDSA verification under the Apache License 2.0. EthLib pins 818 cases from them. |
 
 An implementation lane adds the identifiers it uses to [SOURCES.md](../../SOURCES.md).
-The plan cites EthLib at `bb6dfe5`, which pull request #91 proposes as the new EthLib pin.
-This record therefore depends on #91 (decision 1). It changes no pin itself.
+The plan cites EthLib at `bb6dfe5`, the EthLib pin in SOURCES.md.
 The findings come from source inspection, without a Core comparison run.
 
 ## 3. Contract for implementation
@@ -265,7 +264,7 @@ SOUNDNESS.md changes in the implementation lanes:
 
 ### Stage 1: the curve and ECDSA
 
-After #91 merges, adapt the EthLib modules of section 6 at `bb6dfe5`, except the key parser.
+Adapt the EthLib modules of section 6 at `bb6dfe5`, except the key parser.
 Add the known answers of section 8 for `Ecdsa.verify` on points and scalars.
 Exit: the build and `lake test` pass, `check-decls` reports no finding, and the licence and source rows exist.
 
@@ -379,7 +378,7 @@ Each proposal awaits the maintainer's decision:
 
 | Number | Topic | Proposal | Status |
 | --- | --- | --- | --- |
-| 1 | Verifier backend | Option A: a pure Lean verifier adapted from EthLib at `bb6dfe5`, with the curve arithmetic unchanged. It depends on #91, which moves the EthLib pin to that commit. It replaces the choice of "a trusted backend for comparison" in design record 0003, section 8. Options B and C stay out of scope. | Proposed |
+| 1 | Verifier backend | Option A: a pure Lean verifier adapted from EthLib at `bb6dfe5`, with the curve arithmetic unchanged. It replaces the choice of "a trusted backend for comparison" in design record 0003, section 8. Options B and C stay out of scope. | Proposed |
 | 2 | Speed | Keep EthLib's arithmetic at `bb6dfe5`, at about 1.15 milliseconds per verification. No further fast path is in scope. | Proposed |
 | 3 | Proofs that need Mathlib | No adopted proof in the first lanes. The theorems of section 9 that need no Mathlib come first. A later lane proposes a package for the others. | Proposed |
 | 4 | Oracle surface | Approve the scope: the `transaction` checker uses `coreVerifier`, the reason `signature_verifier` is removed, and an operation verifies one signature in both programs. The field names and result shapes of section 7 are routine details for the stage 3 review under the [development policy](../oracle.md#format-stability) of `dogelib-oracle/1`. | Proposed |
@@ -395,10 +394,10 @@ Each proposal awaits the maintainer's decision:
 | A high S fails because normalization is missing. | `coreVerifier_normalize`, and the Wycheproof bitcoin cases with a high S through the Core comparison. |
 | The overflow case of `parseDerLax` gives a nonzero scalar. | `parseDerLax` keeps that case, and a known answer checks it through `coreVerifier`. |
 | Verification is too slow for a large stream. | The budget of section 5.5, measured on `bb6dfe5`. |
-| #91 does not merge, or merges a different EthLib commit. | Stage 1 waits for the pin. A different commit needs a new timing and a review of section 6. |
+| A later change of the EthLib pin changes the adapted code. | A pin change follows its own review, and it needs a new timing and a review of section 6. |
 | A 32-bit build of Core parses a long length field differently. | Every agreement claim names a 64-bit build, and the harness is one. |
 | The fixtures and Core share a signer, so a signing fault is invisible. | The signer only makes inputs. The Lean verifier is an independent implementation that must accept them, and the mutations must fail in both. |
 | The harness build differs from a release build of Core. | The harness records its build options, as it does for the existing comparison. |
 
-This record changes no pin and makes no trust-policy exception, public API implementation or fixture-format change. Its plan depends on the pin change of #91.
+There is no pin change, trust-policy exception, public API implementation or fixture-format change in this record.
 Adoption of the scope does not establish any target theorem, and it does not authorize the merge of a later implementation.

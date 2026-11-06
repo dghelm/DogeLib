@@ -11,13 +11,14 @@ This module states what such a hash type commits to, for the legacy signature ha
 
 ## The committed fields
 
-`HashType.IsAllOnly h` holds when the ANYONECANPAY bit of `h` is clear and its low five bits are neither NONE (2) nor SINGLE (3), as Core's serializer tests them.
+`HashType.IsAllOnly h` holds when the ANYONECANPAY bit of `h` is clear and its low five bits are neither NONE (2) nor SINGLE (3).
+Core's serializer tests the same bits.
 `legacyAllFields tx` is the version, each input's outpoint and sequence in order, the outputs and the lock time.
 It leaves out every scriptSig: the serializer writes the empty script, or the script code for input `nIn`, in their place.
 
 ## The theorems
 
-- `legacyReferencePlan_allOnly_commits`: two transformation plans for the same script code, input index and `IsAllOnly` hash type, with the index in range, are equal only if the two transactions have equal `legacyAllFields`. It needs no other hypothesis.
+- `legacyReferencePlan_allOnly_commits`: fix the script code, an `IsAllOnly` hash type and an input index in range. Then equal transformation plans give equal `legacyAllFields`. It needs no other hypothesis.
 - `legacySignatureHashPlan_allOnly_commits`: the same for the production plan. It also needs the hypotheses of `legacySignatureHashPlan_eq_reference` for both transactions: a fully parsed script code, and fewer than 2^32 inputs and outputs.
 - `legacySignatureHashPlan_eq_of_allFields`, `legacyReferencePlan_eq_of_allFields`: the converse, with no hypothesis beyond `IsAllOnly`.
 - `legacyReferencePlan_eq_iff_allFields`, `legacySignatureHashPlan_eq_iff_allFields`: the two directions together.
@@ -30,7 +31,7 @@ It leaves out every scriptSig: the serializer writes the empty script, or the sc
 The forward theorems are about plans, so about the bytes that are hashed. They need no assumption about double SHA-256.
 No theorem here goes from equal digests to equal fields. That would need collision resistance of double SHA-256, which DogeLib does not assume.
 
-These are statements about the definitions. They do not say that the definitions match Core.
+These theorems are statements about the definitions. They do not say that the definitions match Core.
 -/
 
 @[expose] public section
@@ -58,15 +59,17 @@ instance (h : UInt32) : Decidable (HashType.IsAllOnly h) :=
 def TxIn.signedFields (i : TxIn) : OutPoint × UInt32 := (i.prevout, i.sequence)
 
 /--
-The fields that a legacy digest with an `IsAllOnly` hash type commits to:
-the version, each input's outpoint and sequence in order, so also the number of inputs, the outputs, and the lock time.
+The fields that a legacy digest with an `IsAllOnly` hash type commits to.
+They are the version, each input's outpoint and sequence in order, the outputs, and the lock time.
+So they include the number of inputs.
 No scriptSig is among them.
 -/
 def legacyAllFields (tx : Transaction) : UInt32 × List (OutPoint × UInt32) × List TxOut × UInt32 :=
   (tx.version, tx.inputs.val.map TxIn.signedFields, tx.outputs.val, tx.lockTime)
 
 /--
-For all transactions `tx` and `tx'`, `legacyAllFields` agree exactly when these agree: the version, the lock time, the number of inputs, each input's outpoint and sequence, and the outputs.
+For all transactions `tx` and `tx'`, `legacyAllFields` agree exactly when five things agree.
+They are the version, the lock time, the number of inputs, each input's outpoint and sequence, and the outputs.
 -/
 theorem legacyAllFields_eq_iff (tx tx' : Transaction) :
     legacyAllFields tx = legacyAllFields tx' ↔
@@ -119,8 +122,8 @@ theorem legacyInputBytes_congr (sc : Script) (n : Nat) (z : Bool) (i : Nat) {x y
     · simp [hi, hp]
 
 /--
-For every script code, index and pair of transactions with the same input outpoints, without ANYONECANPAY:
-the inputs are written the same when the sequences agree, at every index if `z` is false, at index `nIn` if `z` is true.
+Take a script code, an index, and two transactions with the same input outpoints. Let ANYONECANPAY be clear.
+Then the inputs are written the same when the sequences agree: at every index if `z` is false, at index `nIn` if `z` is true.
 -/
 theorem legacyInputsBytes_congr (sc : Script) (tx tx' : Transaction) (nIn : UInt32) (z : Bool)
     (hp : tx.inputs.val.map (·.prevout) = tx'.inputs.val.map (·.prevout))
@@ -143,8 +146,8 @@ theorem legacyInputsBytes_congr (sc : Script) (tx tx' : Transaction) (nIn : UInt
   · exact hs i hi1 hi2
 
 /--
-For every script code and pair of transactions, with ANYONECANPAY:
-the inputs are written the same when input `nIn` has the same outpoint and sequence in both, or is missing from both.
+For every script code and pair of transactions, with ANYONECANPAY: the inputs are written the same in two cases.
+Input `nIn` has the same outpoint and sequence in both, or it is missing from both.
 -/
 theorem legacyInputsBytes_anyoneCanPay_congr (sc : Script) (tx tx' : Transaction) (nIn : UInt32) (z : Bool)
     (hi : (tx.inputs.val[nIn.toNat]?).map TxIn.signedFields = (tx'.inputs.val[nIn.toNat]?).map TxIn.signedFields) :
@@ -217,7 +220,10 @@ theorem legacySignatureHashPlan_eq_of_allFields (sc : Script) (tx tx' : Transact
     simp only [Bool.or_self]
     rw [legacyInputsBytes_congr sc tx tx' n false hp (fun i h1 h2 _ => (hi i h1 h2).2)]
 
-/-- For every list of inputs, index and script: without the zero-sequence step, the copy's inputs are the outpoints and sequences of the inputs, with the script `code` at index `n` and the empty script elsewhere. -/
+/--
+For every list of inputs, index and script, without the zero-sequence step: the copy's inputs keep the outpoints and sequences.
+Input `n` gets the script `code`, and every other input gets the empty script.
+-/
 theorem referenceSequencedInputs_false_eq (code : Script) (l : List TxIn) (n : Nat) :
     referenceSequencedInputs code l n false =
       (l.map TxIn.signedFields).mapIdx fun i p => ⟨p.1, if i = n then code else Script.empty, p.2⟩ := by
@@ -312,7 +318,10 @@ theorem legacyReferencePlan_eq_hashBytes_of_allOnly (sc : Script) (tx : Transact
   unfold legacyReferencePlan
   simp [Nat.not_le_of_lt hn, hh.2.2]
 
-/-- For every script code, input index and `IsAllOnly` hash type: when the transformation plan hashes bytes for `tx`, a transformation plan equal to it also has its index in range. -/
+/--
+For every script code and `IsAllOnly` hash type: let the transformation plan of `tx` hash bytes.
+Then a transformation plan equal to it also has its index in range.
+-/
 theorem lt_of_legacyReferencePlan_eq (sc : Script) (tx tx' : Transaction) (n n' h : UInt32)
     (hh : HashType.IsAllOnly h) (hn : n.toNat < tx.inputs.val.length)
     (heq : legacyReferencePlan sc tx n h = legacyReferencePlan sc tx' n' h) :
@@ -335,9 +344,11 @@ theorem referenceTransaction_eq_of_legacyReferencePlan_eq (sc : Script) (tx tx' 
 
 /--
 **Commitment, transformation reference.**
-Take a script code, an input index `n` and an `IsAllOnly` hash type `h`, and two transactions `tx` and `tx'`, with `n` an input index of `tx`.
-If their transformation plans are equal, then `legacyAllFields tx = legacyAllFields tx'`:
-the version, the lock time, the number of inputs, each input's outpoint and sequence, and the outputs agree.
+Take a script code, an input index `n`, an `IsAllOnly` hash type `h`, and two transactions `tx` and `tx'`.
+Let `n` be an input index of `tx`.
+If their transformation plans are equal, then `legacyAllFields tx = legacyAllFields tx'`.
+So the version, the lock time, the number of inputs, each input's outpoint and sequence, and the outputs agree.
+
 No other hypothesis is needed.
 The hypothesis on `n` is needed: when `n` is not an input index of either transaction, both plans are the fixed digest `one`.
 -/
@@ -397,7 +408,8 @@ theorem legacySignatureHash_eq_of_allFields (sc : Script) (tx tx' : Transaction)
 /-! ## The signed input's position -/
 
 /--
-**Position.** Take a script code whose copy `referenceScriptCode sc` is not empty, an `IsAllOnly` hash type, and input indices `n` and `n'`, with `n` an input index of `tx`.
+**Position.** Take a script code whose copy `referenceScriptCode sc` is not empty, and an `IsAllOnly` hash type.
+Take input indices `n` and `n'`, with `n` an input index of `tx`.
 If the transformation plans of `tx` at `n` and `tx'` at `n'` are equal, then `n = n'` and `legacyAllFields tx = legacyAllFields tx'`.
 
 The copy gives input `n` the script code and every other input the empty script, so the position of the script code is the index.
@@ -442,8 +454,9 @@ theorem HashType.isNone_eq_false_of_isSingle {h : UInt32} (hs : HashType.isSingl
     cases hs
 
 /--
-**ALL with ANYONECANPAY.** For every script code, input index and hash type with the ANYONECANPAY bit and neither NONE nor SINGLE:
-two transactions have equal production plans when they agree on the version, the lock time, the outputs, and the outpoint and sequence of input `n`.
+**ALL with ANYONECANPAY.** Take a script code, an input index, and a hash type with the ANYONECANPAY bit and neither NONE nor SINGLE.
+Two transactions have equal production plans when they agree on four things.
+They are the version, the lock time, the outputs, and the outpoint and sequence of input `n`.
 Input `n` may be missing from both. The other inputs, and the number of inputs, are not committed.
 -/
 theorem legacySignatureHashPlan_eq_of_anyoneCanPay (sc : Script) (tx tx' : Transaction) (n h : UInt32)
@@ -465,8 +478,9 @@ theorem legacySignatureHashPlan_eq_of_anyoneCanPay (sc : Script) (tx tx' : Trans
       legacyInputsBytes_anyoneCanPay_congr sc tx tx' n _ hi]
 
 /--
-**NONE without ANYONECANPAY.** For every script code, input index and hash type that is NONE without the ANYONECANPAY bit:
-two transactions have equal production plans when they agree on the version, the lock time, every input's outpoint, and the sequence of input `n`.
+**NONE without ANYONECANPAY.** Take a script code, an input index, and a hash type that is NONE without the ANYONECANPAY bit.
+Two transactions have equal production plans when they agree on four things.
+They are the version, the lock time, every input's outpoint, and the sequence of input `n`.
 The outputs and the other inputs' sequences are not committed.
 -/
 theorem legacySignatureHashPlan_eq_of_none (sc : Script) (tx tx' : Transaction) (n h : UInt32)
@@ -492,8 +506,10 @@ theorem legacySignatureHashPlan_eq_of_none (sc : Script) (tx tx' : Transaction) 
     simpa [List.getElem?_eq_getElem h1, List.getElem?_eq_getElem h2] using hs
 
 /--
-**SINGLE without ANYONECANPAY.** For every script code, input index and hash type that is SINGLE without the ANYONECANPAY bit:
-two transactions have equal production plans when they agree on the version, the lock time, every input's outpoint, the sequence of input `n`, and output `n`.
+**SINGLE without ANYONECANPAY.** Take a script code, an input index, and a hash type that is SINGLE without the ANYONECANPAY bit.
+Two transactions have equal production plans when they agree on five things.
+They are the version, the lock time, every input's outpoint, the sequence of input `n`, and output `n`.
+
 Output `n` may be missing from both. Then both plans are the fixed digest `one`.
 The other outputs, beyond their number being more than `n`, and the other inputs' sequences are not committed.
 -/

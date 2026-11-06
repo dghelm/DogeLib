@@ -672,8 +672,9 @@ For the same script code `sc`, input index `n` and hash type `h` with `IsAllOnly
 - `legacyReferencePlan_eq_iff_allFields` and `legacySignatureHashPlan_eq_iff_allFields` join the two directions.
 - `legacyReferencePlan_allOnly_index_eq`: if the copy of the script code, `referenceScriptCode sc`, is not empty, equal transformation plans at indices `n` and `n'` give `n = n'`.
 
-Each hypothesis is needed.
+The index and count restrictions are needed. This proof additionally requires a fully parsed script code.
 When `n` is an input index of neither transaction, both plans are the fixed digest `one`.
+
 The production serializer writes the counts modulo 2^32, and only that many inputs or outputs.
 So a transaction with 2^32 inputs or more commits to fewer inputs.
 With an empty script code, every input of the copy has the empty script.
@@ -1191,6 +1192,10 @@ Every hash type that the flags admit is allowed, including NONE, SINGLE and ANYO
 `MultisigRecoverySpend.sigAccepted_ordinary_allOnly_commits` and `MultisigRecoverySpend.sigAccepted_recovery_allOnly_commits` restrict to an `IsAllOnly` hash type.
 Then an accepted signature also verifies against the reference digest of every transaction `tx'` with the same `legacyAllFields` as `ctx.tx`, at the same input index.
 They do not say that `tx'` passes the template: a different scriptSig of the input changes the execution.
+
+They state invariance of an accepted verifier result under equal fields, not that changing a field invalidates the signature.
+A verifier that accepts every digest satisfies them.
+The commitment of the preimage to the fields is `legacyReferencePlan_allOnly_commits`. A signature-binding claim also needs cryptographic and verifier assumptions.
 
 The lock-time conditions compare the operand with fields of the spending transaction.
 A claim that recovery cannot enter a chain before a height or time needs transaction-finality and chain-context results that DogeLib does not have.

@@ -47,7 +47,7 @@ Every checker call of both branches hashes the digest of `legacyReferencePlan`, 
 - `ordinaryCode_scanOps`, `recoveryCode_scanOps`: for every signature list, every instruction of each branch's script code parses. That property is the parsed-script hypothesis of design record 0003, stage 3.
 - `transactionChecker_verify_reference`, `sigAccepted_iff_reference`: for any `InputContext` and fully parsed script code, the checker passes the reference digest to `verify`.
 - `MultisigRecoverySpend.sigAccepted_ordinary_iff_reference`, `MultisigRecoverySpend.sigAccepted_recovery_iff_reference`, `MultisigRecoverySpend.checkSig_ordinary_reference`, `MultisigRecoverySpend.checkSig_recovery_reference`: the two compose under `MultisigRecoverySpend`.
-- `MultisigRecoverySpend.sigAccepted_ordinary_allOnly_commits`, `MultisigRecoverySpend.sigAccepted_recovery_allOnly_commits`: with ALL and without ANYONECANPAY, an accepted signature also verifies against the reference digest of every transaction with the same `legacyAllFields`. They do not say that such a transaction passes the template.
+- `MultisigRecoverySpend.sigAccepted_ordinary_allOnly_commits`, `MultisigRecoverySpend.sigAccepted_recovery_allOnly_commits`: with ALL and without ANYONECANPAY, an accepted signature also verifies against the reference digest of every transaction with the same `legacyAllFields`. The result is invariance under equal fields. It says nothing about changed fields, and does not say that such a transaction passes the template.
 
 ## Resource bounds
 
@@ -1762,7 +1762,7 @@ theorem multisigRecovery_twoOfThree_accepted_iff {P1 P2 P3 : List UInt8}
   multisigRecovery_accepted_iff h (by simp [maxStackItems]; omega) hverify
 
 
-/-! ## What an ALL-only signature commits to -/
+/-! ## Accepted ALL-only signatures under equal committed fields -/
 
 /--
 **Commitment, ordinary branch.** Under `MultisigRecoverySpend`, take any signature list `sigs`, and a signature `s ++ [hashType]` that `sigAccepted` accepts for `key` with the script code of the ordinary branch.
@@ -1770,8 +1770,11 @@ Let the hash type be `IsAllOnly`: ALL, without ANYONECANPAY.
 Take any transaction `tx'` with the same `legacyAllFields` as `ctx.tx`.
 Then `verify` returns `some true` on `s`, the key and the reference digest of `tx'` at the same input index.
 
-So the signature commits to the version, the lock time, each input's outpoint and sequence, and the outputs.
-It commits to no scriptSig.
+So the accepted result is invariant over transactions with the same committed fields, whatever their scriptSigs.
+The theorem says nothing about a transaction whose fields differ. `verify := fun _ _ _ => some true` satisfies its conclusion for every digest.
+The commitment of the preimage to those fields is `legacyReferencePlan_allOnly_commits`.
+A claim that the signature binds the fields also needs cryptographic and verifier assumptions, which DogeLib does not make.
+
 The theorem does not say that `tx'` passes the template. A different scriptSig of input `ctx.index` changes the execution, and `tx'` is not an `InputContext` here.
 The theorem applies to each pair that Core reaches in `multisigVisits`.
 -/
@@ -1796,6 +1799,7 @@ Let the hash type be `IsAllOnly`: ALL, without ANYONECANPAY.
 Take any transaction `tx'` with the same `legacyAllFields` as `ctx.tx`.
 Then `verify` returns `some true` on `s`, the key and the reference digest of `tx'` at the same input index.
 
+The result is invariance only. The theorem says nothing about a transaction whose fields differ, and a signature-binding claim also needs cryptographic and verifier assumptions.
 The theorem does not say that `tx'` passes the template. A different scriptSig of input `ctx.index` changes the execution, and `tx'` is not an `InputContext` here.
 -/
 theorem MultisigRecoverySpend.sigAccepted_recovery_allOnly_commits

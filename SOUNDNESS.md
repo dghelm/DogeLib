@@ -2282,8 +2282,9 @@ A user of the comparison trusts these parts of it:
   Any other exception from Core stops the harness, so it cannot pass as a result.
 - The `plan` label of `sighash.legacy`. The harness computes it from Core's conditions instead of observing it. It stops if the label is `fixed_digest` and Core's digest is not the value one.
 - The comparator, `scripts/compare_core.py`.
-  Its self-test, `scripts/test_compare_core.py`, runs 99 cases.
-  They are two passing controls, a check of its refusal and timelock constructions, and 96 mutations that each fail with the code they target.
+  Its self-test, `scripts/test_compare_core.py`, counts 99 cases: two passing controls and 97 negative checks that each fail with the code they target.
+  The negative checks are 88 stream mutations, eight Rust-side mutations and one acceptance-count gap.
+  Assertions about its refusal and timelock constructions run outside that count.
 - For `sighash.legacy`, the oracle's preimage is checked by hashing it, not byte by byte: Core does not expose its preimage.
 
 The separate `core-signer` tool generates [signed recovery-template fixtures](tests/script/signed-spends/README.md) with Core's `SignatureHash` and `CKey::Sign`.

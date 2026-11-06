@@ -24,10 +24,10 @@ Each item below links to its evidence.
 - **Rust refinement.** `decode_refines` relates a Lean model extracted from a Rust CompactSize reader to the bounded reader ([Rust reader](SOUNDNESS.md#rust-bounded-compactsize-reader)).
 
 Script verification takes a signature checker as a parameter.
-DogeLib has no ECDSA backend.
 `transactionChecker` returns the answer of the verifier that its caller supplies.
-The oracle supplies a verifier that is always unavailable, so an oracle signature check that reaches it gives `unsupported`, not a verdict ([signature opcodes and the checker](SOUNDNESS.md#script-signature-opcodes-and-the-checker)).
-A Core-compatible signature verifier is proposed in design record 0005, in pull request #90.
+`Script.coreVerifier` is DogeLib's verifier: Core's `CPubKey::Verify` in Lean, with the ECDSA arithmetic adapted from EthLib ([design record 0005](docs/design/0005-signature-verifier.md)).
+`lake test` runs Core's script and transaction corpora with it.
+The oracle still supplies a verifier that is always unavailable, so an oracle signature check that reaches it gives `unsupported`, not a verdict ([signature opcodes and the checker](SOUNDNESS.md#script-signature-opcodes-and-the-checker)).
 
 The `dogelib-oracle` program runs the specification on JSON requests, and a harness runs the pinned Core code on the same requests ([docs/oracle.md](docs/oracle.md)).
 The recorded comparison at DogeLib `c822efa` processed 372,486 stream requests with zero failures ([counts](docs/oracle.md#the-comparison)).

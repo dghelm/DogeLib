@@ -9,7 +9,8 @@ Update the *Status* column when the pull request merges, not when work starts.
 
 The signature-verifier work follows [design record 0005](docs/design/0005-signature-verifier.md).
 Stage 1 adapts the secp256k1 curve arithmetic and scalar ECDSA verifier with independent Wycheproof known answers.
-The next stages add Core's public-key parser and verifier wrapper, connect the oracle, and compare signed spends.
+Stage 2 adds Core's public-key parser and `coreVerifier`, Core's `CPubKey::Verify`, and runs Core's script and transaction corpora with it in `lake test`.
+The next stages connect the oracle and compare signed spends.
 Mathlib-dependent curve proofs require a later package proposal.
 
 ## Work order
@@ -58,7 +59,10 @@ Each item below is complete.
    HMAC-SHA256 and the full header codec of stage 2 are complete.
    The Lean side of `CAuxPow::check`, stage 3, is complete. Its Core-recorded inputs are pending stage 5, by maintainer decision on pull request #99.
    PBKDF2, scrypt and the composition remain.
-2. **Signature verifier, design record 0005.** A Core-compatible verifier for executable checks, proposed in pull request #90 and not yet adopted.
+2. **Signature verifier, design record 0005.** Stages 1 and 2 are complete.
+   Stage 3 connects `coreVerifier` to the oracle and the Core harness.
+   Its comparison must cover the step that no proof covers: `Point.mulAdd` against Core's `secp256k1_ecmult` (SOUNDNESS.md).
+   Stage 4 verifies signed spends of the multisig-with-recovery template. The harness signer and the recovery fixtures of pull request #97 exist.
 3. **Release 0.1.0.** A reproducible release of the completed capabilities, by the steps in [docs/release.md](docs/release.md).
    The release does not wait for items 1 and 2.
 

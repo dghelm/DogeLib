@@ -369,10 +369,73 @@ The fixture README records their provenance and the distinction.
 These finite checks establish no all-input correctness claim.
 `#print axioms` reports `propext`, `Classical.choice` and `Quot.sound` for `Ecdsa.wycheproof_p1363_1`.
 
-The public-key parser, `CPubKey::Verify` wrapper and Script connection are outside this stage.
-`transactionChecker` still takes its verifier as a parameter, and the oracle's verifier is still unavailable.
+Four theorems relate `verify` to Core's final test, `secp256k1_ecdsa_sig_verify` (SOURCES.md D60, lines 207 to 275):
+
+- `verify_r_zero` and `verify_s_zero`: a zero R or S gives `false`, as Core's lines 216 to 218 do.
+- `verify_of_valid`: for `0 < r < n`, `0 < s < n` and a key on the curve other than infinity, `verify` is the test on `Point.mulAdd u1 G u2 Q`. It gives `false` at infinity and otherwise compares `x mod n` with R.
+- `xmod_eq_iff`: for `x < p` and `r < n`, `x mod n = r` holds exactly when `x = r`, or `r + n < p` and `x = r + n`. Core tests those two cases in Jacobian coordinates (lines 244 to 272), so on an affine `x` the two tests agree.
+
+The [public-key parser and Core's verifier](#secp256k1-public-key-parser-and-cores-verifier) connect `verify` to Script.
 No foreign code decides a scalar verification in the Lean specification.
 Compiled evaluation still depends on the compiler and runtime (B1 and B2).
+
+### Secp256k1 public-key parser and Core's verifier
+
+`Cryptography.Secp256k1.parsePubKey` is `secp256k1_ec_pubkey_parse` of the libsecp256k1 copy in Core at the pin (SOURCES.md D5, D52, D58 and D59).
+It is written from that source, not adapted from EthLib, and it accepts the hybrid encodings `06` and `07`.
+It omits the subgroup test, which returns true outside libsecp256k1's exhaustive-test build because the cofactor of secp256k1 is 1.
+`Script.coreVerifier` is `CPubKey::Verify` (D50, lines 168 to 186) on a 64-bit build.
+It runs Core's steps in order: `isValidPubKey`, `parsePubKey`, the empty-signature test, `parseDerLax`, S normalization and `Ecdsa.verify`.
+The theorems are in `DogeLib.Cryptography.Proofs.Secp256k1.PubKey` and `DogeLib.Script.Proofs.CoreVerifier`.
+
+For every input:
+
+- `parsePubKey_valid`: a parsed key is a point on the curve other than infinity.
+- `parsePubKey_hybrid_even` and `parsePubKey_hybrid_odd`: a hybrid key parses as the `04` key with the same coordinates. The result stays only when the parity of `y` matches the first byte.
+- `isValidPubKey_of_parsePubKey`: a parsed key passes `isValidPubKey`.
+- `coreVerifier_some`: `coreVerifier` always answers `some`. `transactionChecker_coreVerifier_some`: so does every `checkSig` request of `transactionChecker` with a script code shorter than 2^64 bytes.
+- `coreVerifier_invalidKey`, `coreVerifier_badPoint`, `coreVerifier_emptySig` and `coreVerifier_badDer`: Core's first four steps give `some false`.
+- `coreVerifier_eq_verify`: otherwise the result is `Ecdsa.verify` on the parsed point, the digest, R and `normalizeS S`.
+- `parseDerLax_lt`: the lax parser stores scalars below `n`, for every size of `size_t`. `normalizeS_le_half`: after normalization S is at most half the order, so the high-S test of `secp256k1_ecdsa_verify` never rejects. `normalizeS_lt`: the normalized S is below `n`, and zero only when S is.
+- `coreVerifier_normalize`: two signatures that parse to `(r, s)` and `(r, n − s)` give the same result for every key and digest.
+- `coreVerify_valid`: on the request of `coreVerifier_eq_verify`, R and the normalized S are below `n` and the point passes the key test. With `verify_r_zero`, `verify_s_zero` and `verify_of_valid`, `coreVerifier` then rejects a zero R or S, as Core does, and otherwise computes the test on `Point.mulAdd`.
+- `hashToInt_legacyOne`: the fixed digest one of `SIGHASH_SINGLE` gives `e = 2^248`, the value that Core's storage-order read gives.
+- `multisigRecovery_sound_coreVerifier`: the soundness direction of the worked property with `coreVerifier`, with no verifier hypothesis.
+
+These theorems leave one step of the agreement with Core unproved.
+
+**Stage 3 obligation (design record 0005, section 4.3).**
+Take R and S in `[1, n − 1]`, a key `Q` from `parsePubKey` and the digest scalar `e`.
+Then `Point.mulAdd (e · s⁻¹) G (r · s⁻¹) Q`, with `Fn.inv`, must be the affine form of Core's `secp256k1_ecmult` result `u1 G + u2 Q` (D60, lines 220 to 227).
+This includes the case in which that result is the point at infinity.
+A proof needs the group law, correct Jacobian formulas, a correct `Fn.inv` and the primality of `n`.
+Each of these needs Mathlib (design record 0005, decision 3), so until a proof exists, this step is an A1 claim.
+Its evidence is the Core comparison of stage 3, where every request must agree with Core:
+
+- `pubkey.verify` on the inputs of design record 0005, section 8.
+- The 44 corpus records and 60 transaction inputs that reach a signature check.
+
+`decompress` relies on `Fp.sqrt`, which returns a root only after it checks the square.
+No theorem says that it finds a root whenever `x^3 + 7` is a square.
+That needs Euler's criterion, and the known answers are its present evidence.
+
+The claim covers a 64-bit build of Core, because `parseDerLax` fixes `sizeof(size_t)` at 8 bytes.
+A 32-bit build can differ only on a signature of at least 2^24 bytes (design record 0005, section 3).
+
+`lake test` checks the parser on libsecp256k1's own `ec_pubkey_parse_pointtest` at the pin (D57).
+The test tries 23 points with every first byte and every length from 3 to 65, and its formulas give the expectations.
+`lake test` also runs 11 `coreVerifier` hand cases and both Core corpora with `coreVerifier`, as [Script signature opcodes and the checker](#script-signature-opcodes-and-the-checker) states.
+These finite checks establish no all-input correctness claim.
+The oracle still answers the `transaction` checker with a verifier that is always unavailable, and the Core harness does not yet run `coreVerifier`.
+
+By `#print axioms` with Lean `v4.35.0`:
+
+| Theorem | Axioms |
+| --- | --- |
+| `modulus_lt_two_mul`, `secp256k1Order_eq`, `secp256k1Order_eq_half` | None |
+| `hashToInt_legacyOne` | `propext` |
+| `parseDerLax_nil`, `normalizeS_le_half`, `normalizeS_sub` | `propext`, `Quot.sound` |
+| `Fp.neg_mul_neg`, `decompress_valid`, `parsePubKey_valid`, `parsePubKey_hybrid_even`, `parsePubKey_hybrid_odd`, `isValidPubKey_of_parsePubKey`, `verify_r_zero`, `verify_s_zero`, `xmod_eq_iff`, `verify_of_valid`, the `coreVerifier_*` theorems, `coreVerify_valid`, `laxStore_lt`, `parseDerLaxWith_lt`, `parseDerLax_lt`, `normalizeS_lt`, `transactionChecker_coreVerifier_some`, `multisigRecovery_sound_coreVerifier` | `propext`, `Classical.choice`, `Quot.sound` |
 
 ### Codecs
 
@@ -1105,11 +1168,11 @@ That the definitions are Core's rests on a reading of D3 and D24 (A1) and on the
 `lake test` runs 140 hand cases and 46 underflow cases, with results written by hand from D3 and D24.
 The expected digests of the hash cases come from Core's `script_tests.json` (D45).
 It also runs all 1,193 records of Core's `script_tests.json` (D45) through `verifyScript`.
-The checker is `transactionChecker` over the record's spending transaction, with a verifier that is always unavailable.
-881 records agree with Core's expected result, 531 acceptances and 350 rejections, and none disagrees.
+The checker is `transactionChecker` over the record's spending transaction, with `coreVerifier`.
+925 records agree with Core's expected result, 563 acceptances and 362 rejections, and none disagrees.
 
-312 records are unsupported.
-Of those, 165 have an unsupported flag, 103 have a witness, and 44 reach the verifier.
+268 records are unsupported.
+Of those, 165 have an unsupported flag and 103 have a witness.
 Core itself does not run.
 
 The definitions add no hypothesis or axiom.
@@ -1222,13 +1285,15 @@ Then the step pushes `[1]` exactly when `OrderedMatch R sigs keys` holds, and `[
 `checkMultisigStep_matching_pushOrder` states the property for the lists in script push order.
 
 The checker is the boundary of these claims.
-The scalar ECDSA definition does not instantiate this checker.
-DogeLib does not specify `CPubKey::Verify` or libsecp256k1.
 A result of `evalScript` with `transactionChecker` holds for Core only under the verifier-agreement hypothesis.
 That hypothesis says that `verify sig key d` returns `some b` only when Core's `CPubKey::Verify` returns `b` on the same signature, key and digest.
-No theorem establishes that hypothesis, and no test checks it.
+`Script.coreVerifier` is DogeLib's instance of the parameter, and for it the hypothesis becomes an A1 claim about a definition.
+[Secp256k1 public-key parser and Core's verifier](#secp256k1-public-key-parser-and-cores-verifier) states what is proved about it and the step that stage 3's Core comparison must cover.
+For any other verifier, no theorem establishes the hypothesis.
 
-The corpus test uses a verifier that is always unavailable, so it compares only records whose result does not need a verification.
+The two `lake test` corpus runners use `coreVerifier`.
+All 925 inside-milestone records of `script_tests.json` agree with Core's expected result, including the 44 that need a verification.
+All 91 required acceptances among the 159 eligible transaction inputs accept, and no input is unsupported.
 A repeated key in a multisig script does not show that different people signed.
 
 `NULLFAIL` is unsupported, so `evalScript` reports any flag set with it before it runs.
@@ -1298,7 +1363,7 @@ A result of `verifyLegacySpend` holds for Core only under the verifier-agreement
 
 That the definitions are Core's rests on a reading of D3, D4, D24 and D48 (A1), and on the known answers.
 `lake test` runs 38 lock-time cases, 20 `verifyScript` cases, 11 `isPushOnly` cases and 3 `verifyLegacySpend` cases, with results written by hand from those sources.
-On `script_tests.json`, `verifyScript` with `transactionChecker` agrees with Core's expected result on 881 records, from 867, and disagrees on none.
+On `script_tests.json`, `verifyScript` with `transactionChecker` and `coreVerifier` agrees with Core's expected result on 925 records, from 881 with an unavailable verifier, and disagrees on none.
 The oracle exposes `verifyScript` through `script.verify_legacy`, with base and transaction checker selections.
 By `#print axioms` with Lean `v4.35.0`:
 
@@ -1802,6 +1867,8 @@ Whatever those hypotheses leave unproved is part of what a reader trusts.
 
 `transactionChecker` takes the elliptic-curve check as a parameter `verify`.
 A Script result that uses it holds for Core only under the verifier-agreement hypothesis of [Script signature opcodes and the checker](#script-signature-opcodes-and-the-checker).
+With `verify := coreVerifier`, the theorem keeps no verifier hypothesis.
+The agreement is then an A1 claim, with the open step of [Secp256k1 public-key parser and Core's verifier](#secp256k1-public-key-parser-and-cores-verifier).
 The ordered-matching theorems of that subsection also assume a checker answer and passing encoding checks on every pair of signatures and keys.
 
 The worked property of [multisig with recovery](#script-worked-property-multisig-with-recovery) assumes a checker answer only on the pairs that Core visits, and its soundness direction assumes none.

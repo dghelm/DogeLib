@@ -1,5 +1,6 @@
 module
 
+public import DogeLib.Script.CoreVerifier
 public import DogeLib.Script.Error
 public import DogeLib.Script.Eval
 public import DogeLib.Script.Flags

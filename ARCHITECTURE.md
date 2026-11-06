@@ -76,22 +76,26 @@ Bottom-up. Each layer imports only the layers above it in this list.
 | --- | --- |
 | `Base` | Bytes, fixed-width field meanings, endianness, hash representations |
 | `Serialization` | Codecs, prefix decoders, CompactSize, counted lists, packed representations |
-| `Cryptography` | SHA-1, SHA-256, double SHA-256, HMAC-SHA-256, PBKDF2-HMAC-SHA-256, RIPEMD-160 and Hash160, and secp256k1 curve arithmetic and ECDSA verification on scalars |
+| `Cryptography` | SHA-1, SHA-256, double SHA-256, HMAC-SHA-256, PBKDF2-HMAC-SHA-256, RIPEMD-160 and Hash160, secp256k1 curve arithmetic, ECDSA verification on scalars, and libsecp256k1's public-key parser |
 | `Work` | Proof-of-work arithmetic: 256-bit targets, their compact encoding, and the difficulty retarget |
 | `Transaction` | Raw transaction types, base serialization, transaction IDs, legacy signature hashing |
 | `Block` | Pure block headers, full headers with the AuxPoW payload and their codec, the AuxPoW check, block hashes and transaction Merkle roots |
-| `Script` | The instruction reader of the Script interpreter, the state of one `EvalScript` call, Script numbers (`CScriptNum`) and the truth value of a stack item. The interpreter's errors and flags, and one `EvalScript` call for the opcodes of stages 2 to 4, including the numeric, hash, signature and lock-time opcodes. The encoding checks of signatures and public keys, and the signature checker that the evaluator takes as a parameter. `VerifyScript` without a witness, and the spend predicate of one legacy input. |
+| `Script` | The instruction reader of the Script interpreter, the state of one `EvalScript` call, Script numbers (`CScriptNum`) and the truth value of a stack item. The interpreter's errors and flags, and one `EvalScript` call for the opcodes of stages 2 to 4, including the numeric, hash, signature and lock-time opcodes. The encoding checks of signatures and public keys, the signature checker that the evaluator takes as a parameter, and `coreVerifier`, Core's `CPubKey::Verify`. `VerifyScript` without a witness, and the spend predicate of one legacy input. |
 
 `Cryptography.Inverse` and `Cryptography.Jacobian` support `Cryptography.Secp256k1.Field`, `Curve` and `Ecdsa`.
 These specification modules adapt EthLib's arithmetic with Lean core as their only external dependency.
 `Ecdsa.verify` consumes coordinates, scalars and `Base.Hash256` directly.
-The curve layer has no byte-level key parser or Script dependency.
+`Cryptography.Secp256k1.PubKey` holds `parsePubKey`, the byte-level key parser of libsecp256k1, written from Core's source.
+The curve layer has no Script dependency.
 The proof library adds one kernel-checked ECDSA known answer and no Mathlib dependency.
 
 `Script` imports `Transaction`, because the interpreter and the legacy signature serializer share one instruction reader, `Transaction.readOp`, and later stages hash with `Transaction.legacySignatureHash`.
 `Script.Eval` also imports the hash definitions of `Cryptography` for the hash opcodes.
 `Script.Signature` imports `Transaction.legacySignatureHash` for `transactionChecker`. It takes the elliptic-curve check as a parameter and does no elliptic-curve arithmetic.
 `Transaction` never imports `Script`.
+
+`Script.CoreVerifier` imports `Cryptography.Secp256k1.PubKey` and `Script.Signature`.
+It composes `isValidPubKey`, `parsePubKey`, `parseDerLax` and `Ecdsa.verify` into `coreVerifier`, an instance of the verifier parameter of `transactionChecker`.
 
 `Script.Number` imports no other layer.
 `Script.SignatureEncoding` imports only the errors and flags of `Script`. It checks bytes and does no elliptic-curve arithmetic.

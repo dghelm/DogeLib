@@ -232,7 +232,9 @@ They also cover only the generic Core variant, not the SSE2 variant.
 With `DOGELIB_SCRYPT_MODEL` set, it also runs the first pair through the compiled model.
 The [test report](tests/cryptography/scrypt/README.md#dogecoin-header-digests) records the cost.
 These runs rely on the compiler and runtime (B1).
-There is no Core comparison, and no theorem composes the digest with `checkProofOfWork` or `CheckAuxPowProofOfWork`.
+There is no Core comparison.
+
+[Header proof of work](#header-proof-of-work) composes the digest with `checkProofOfWork` and `CheckAuxPowProofOfWork`.
 The executable makes no constant-time or resource-bound claim (A3).
 
 ### Double SHA-256
@@ -257,7 +259,9 @@ Those belong to the definitions of the objects that are hashed.
 `encode_length` establishes exactly 80 bytes, and `getHash_val` identifies their double SHA-256 digest.
 These claims cover the pure header even when its version sets the AuxPoW bit.
 Core's full `CBlockHeader` then carries an AuxPoW payload, which the full header codec of the next subsection reads (D41).
-No theorem establishes scrypt proof of work, `CheckAuxPowProofOfWork` or contextual header validity.
+
+[Header proof of work](#header-proof-of-work) covers scrypt proof of work and `CheckAuxPowProofOfWork`.
+No theorem establishes contextual header validity beyond [version gating](#version-gating).
 
 [The AuxPoW check](#the-auxpow-check) covers `CAuxPow::check` alone.
 
@@ -385,6 +389,61 @@ The six mainnet headers are accepted with mainnet's `fStrictChainId`.
 Core's result for them belongs to the stage 5 harness.
 
 By `#print axioms`, the search and `getExpectedIndex_mod64` theorems depend on `propext` and `Quot.sound`, and the others on `propext`, `Classical.choice` and `Quot.sound`.
+
+### Header proof of work
+
+`checkAuxPowProofOfWork` follows `CheckAuxPowProofOfWork` (D6, lines 89 to 125) in source order, with one `CheckPowError` constructor for each `return error`.
+`checkBlockHeader` follows `CheckBlockHeader` with `fCheckPOW` true (D33, lines 2927 to 2937): the predicate on the height-zero record of a network.
+`PureBlockHeader.powHash` is `GetPoWHash` (D40, lines 25 to 30): the scrypt digest of the 80 encoded header bytes.
+The source review, not a theorem, connects these definitions to Core.
+
+`checkAuxPowProofOfWork_iff` characterizes acceptance for every parameter record and every full header.
+A header that is not legacy, under `fStrictChainId`, must carry `nAuxpowChainId`.
+
+Without a payload, the flag must be clear and the header's own digest must satisfy `checkProofOfWork` with its `nBits`.
+With a payload, the flag must be set.
+The digest of the 80 parent bytes, including the parent's `nBits`, must satisfy `checkProofOfWork` with the `nBits` of the merge-mined header.
+`AuxPow.check` must also accept, with the merge-mined header's hash and chain ID.
+
+The theorem keeps both flag mismatches, and `checkAuxPowProofOfWork_read` shows that a header from `BlockHeader.read` reaches neither.
+`powHash_eq` and `powHash_eq_spec` relate the digest to `scrypt_1024_1_1_256` and to the RFC 7914 model, as [Dogecoin's scrypt digest](#dogecoins-scrypt-digest) describes.
+
+The record carries `nAuxpowChainId`, `fStrictChainId` and the retarget fields of the Core record, of which only `powLimit` is read.
+`checkAuxPowProofOfWork_congr` shows that the result depends on the record only through those three fields.
+
+`ParamsTree.getConsensus` repeats the search of `GetConsensus` (D14, lines 494 to 506) over the AuxPoW projection of each network's records.
+`getAuxPowParams_eq_work` shows that it selects the same effective height and retarget fields as `Work.getConsensus`, at every UInt32 height.
+`checkAuxPowProofOfWork_getAuxPowParams` proves that, in each network, every selected record gives the result of the height-zero record.
+So `CheckBlockHeader`, which reads the height-zero record, and the disk reads, which read the record of the block's height, agree on every header.
+The theorem is about the transcribed records.
+A transcription mistake in D14 would make it a claim about the wrong records (A1).
+
+`checkBlockHeader` takes the network as an argument.
+DogeLib does not model the selection of `Params()` or the other checks of `CheckBlock` and `ContextualCheckBlockHeader`, except `checkVersion`.
+A valid AuxPoW header before activation passes `checkBlockHeader`, as it passes Core's `CheckBlockHeader`.
+Only [version gating](#version-gating) rejects it.
+
+The equalities concern computed digests only, with no cryptographic claim, as for [the AuxPoW check](#the-auxpow-check).
+A comparison with Core keeps the execution assumptions of design record 0004, section 6.
+They are a little-endian host without padding between the header fields, an arithmetic right shift and the generic scrypt variant.
+
+`lake test` runs `checkBlockHeader` on mainnet headers through the compiled code (B1).
+Chain acceptance supplies the expected acceptance of the six AuxPoW checkpoint headers and 315 pre-AuxPoW headers.
+
+Each expected rejection of a mutation is argued from D6's order of checks.
+Where it depends on a changed digest failing its target, a random 256-bit digest would pass with probability about target / 2^256.
+That probability is about 2^-20 for the initial target of the header at height 1, and about 2^-33 at heights 3000 and 4000.
+For every other target here it is below 2^-41.
+No theorem relies on that argument.
+There is no Core comparison: the harness and the `block.check_pow` operation belong to stage 5.
+
+By `#print axioms` with Lean `v4.35.0`:
+
+| Axioms | Theorems in `Block.Proofs.ProofOfWork` |
+| --- | --- |
+| None | `getAuxPowParams_mainnet`, `getAuxPowParams_regtest` |
+| `propext`, `Quot.sound` | `PureBlockHeader.powHash_eq`, `getAuxPowParams_testnet`, `getAuxPowParams_eq_work` |
+| `propext`, `Classical.choice`, `Quot.sound` | `PureBlockHeader.powHash_eq_spec`, `checkAuxPowProofOfWork_iff`, `checkAuxPowProofOfWork_read`, `checkAuxPowProofOfWork_congr`, `checkAuxPowProofOfWork_getAuxPowParams`, `checkBlockHeader_eq` |
 
 ### Version gating
 
@@ -1695,6 +1754,7 @@ It also requires target validity for all 312 pinned mainnet headers.
 Core's `src/test/auxpow_tests.cpp` lines 333-355 mines passing and failing digests at runtime, rather than supplies fixed digest fixtures.
 The Lean tests do not compute scrypt or compare with compiled Core.
 A supplied-hash check does not establish that the hash is the correct scrypt digest, or that a header or AuxPoW is valid.
+[Header proof of work](#header-proof-of-work) supplies the scrypt digest and composes this check with the AuxPoW check.
 
 By `#print axioms` with Lean `v4.35.0`:
 

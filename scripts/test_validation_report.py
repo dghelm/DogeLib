@@ -178,7 +178,8 @@ class Reports(unittest.TestCase):
                               '(cd tests/transaction/corpus && sha256sum -c SHA256SUMS) && '
                               '(cd tests/work/mainnet-headers && sha256sum -c SHA256SUMS) && '
                               '(cd tests/block && sha256sum -c SHA256SUMS) && '
-                              '(cd tests/script/corpus && sha256sum -c SHA256SUMS)',
+                              '(cd tests/script/corpus && sha256sum -c SHA256SUMS) && '
+                              '(cd tests/script/signed-spends && sha256sum -c SHA256SUMS)',
             'refinement': 'lake -d Refinement build --wfail',
             'soundness-review': None,
             'writing': 'uv run --no-project --python 3.12 python scripts/check_writing.py --base main',
@@ -188,6 +189,7 @@ class Reports(unittest.TestCase):
             'rust-compactsize-comparison': 'cargo +nightly-2026-09-17 build --locked --manifest-path Refinement/Rust/Cargo.toml --example compactsize_oracle --jobs 4 && '
                                            'scripts/build_core_harness.sh <dogecoin-git-clone> build/core-harness && '
                                            'python3 -I scripts/compare_core.py --rust-compactsize Refinement/Rust/target/debug/examples/compactsize_oracle .lake/build/bin/dogelib-oracle build/core-harness/core-oracle',
+            'signed-spend-regeneration': 'python3 -I scripts/check_signed_spends.py build/core-harness/core-signer',
             'comparator-self-test': 'python3 -I scripts/test_compare_core.py .lake/build/bin/dogelib-oracle',
             'writing-checker-tests': 'uv run --no-project --python 3.12 python -m unittest scripts/test_check_writing.py',
             'script-corpus-freshness': 'python3 -I scripts/convert_script_tests.py --check',

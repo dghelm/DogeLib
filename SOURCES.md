@@ -256,6 +256,12 @@ The Core harness, `harness/core/core_oracle.cpp`, calls these functions of Core 
 | `work.next` | D17, `GetNextWorkRequired`, lines 32–88. D18, `CBlockIndex`. D35, `BuildSkip` and `GetAncestor`, with `GetSkipHeight` only as a guard on suffix construction. D14, candidate-height parameters. |
 | Requests and the build | D31, UniValue, to read requests. D32, `memory_cleanse`. D19, `configure.ac`: without the daemon, utilities, GUI, tests and benchmarks, configure skips Boost detection (line 683) and builds no UniValue (line 939). The work objects require Boost headers through D6 and D14. D39 supplies `SelectBaseParams` |
 
+The fixture generator, `harness/core/core_signer.cpp`, also calls Core at the same pin.
+It uses `src/key.cpp`, `CKey::Sign` (lines 169–182), `CKey::GetPubKey` and `ECC_Start`, and D50's `ECCVerifyHandle`.
+D3 supplies `SignatureHash` and `VerifyScript`, with D4's base transaction serialization.
+The template follows `DogeLib.Script.multisigRecoveryScript` and design record 0005, section 8.
+[The fixtures](tests/script/signed-spends/README.md) record the signing inputs, generator source blob and Core verdicts.
+
 ## Known differences
 
 Differences between DogeLib's targets and related upstream definitions. DogeLib expects these differences and handles them by design.

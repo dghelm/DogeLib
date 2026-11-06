@@ -6,7 +6,7 @@
 #
 # The script exports the pinned tree with `git archive`, so the build never
 # touches the clone's working tree, and the clone may be checked out at any
-# commit that contains the pin. It writes <build-dir>/core-oracle.
+# commit that contains the pin. It writes <build-dir>/core-oracle and <build-dir>/core-signer.
 #
 # The Core libraries are reused when <build-dir>/core.stamp matches the pin,
 # this script, the compilers and the flags. The harness itself is always
@@ -122,3 +122,13 @@ set -x
 set +x
 echo "built $build/core-oracle against:"
 cat "$build/core.stamp"
+
+# The fixture signer uses Core's key and randomness code, plus its secure pool.
+"$cxx" -std=c++11 $core_cxxflags -Wl,--gc-sections -DHAVE_CONFIG_H \
+  -I"$src" -I"$src/config" -I"$src/univalue/include" -I"$src/secp256k1/include" \
+  "-DCORE_SIGNER_BLOB=\"$(git hash-object "$here/harness/core/core_signer.cpp")\"" \
+  -o "$build/core-signer" \
+  "$here/harness/core/core_signer.cpp" "$src/key.cpp" "$src/random.cpp" \
+  "$src/support/lockedpool.cpp" "$src/support/cleanse.cpp" "${univalue_paths[@]}" \
+  "${libs[@]}" -lcrypto -pthread
+echo "built $build/core-signer"

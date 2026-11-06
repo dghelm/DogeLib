@@ -427,6 +427,11 @@ python3 -I scripts/test_compare_core.py .lake/build/bin/dogelib-oracle
 python3 -I scripts/compare_core.py .lake/build/bin/dogelib-oracle build/core-harness/core-oracle
 ```
 
+The build also produces `core-signer`, a fixture generator that calls Core's `SignatureHash`, `CKey::Sign` and `VerifyScript`.
+Its fixed private keys are public test data.
+[Signed recovery-template fixtures](../tests/script/signed-spends/README.md) record its inputs, signatures, Core verdicts and reproduction commands.
+It runs outside the oracle comparison loop.
+
 The build script exports the pinned commit from the clone with `git archive`.
 The clone must contain that commit, but its working tree may be at any other.
 It builds Core's consensus, cryptography and secp256k1 libraries, and compiles Core's bundled UniValue to read the requests.

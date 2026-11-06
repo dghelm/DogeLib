@@ -94,7 +94,7 @@ The converter does not execute Script, call DogeLib or obtain expected values fr
 | `test_expectation` | Transaction-level `valid` or `invalid`, according to the source file. |
 | `per_input_expectation` | `accept` for `tx_valid`, and null for `tx_invalid`. |
 | `per_input_expectation_source`, `per_input_expectation_reason` | Runner lines and the reason for that expectation or its absence. |
-| `comment` | Array of strings in the nearest preceding comment block, or an empty array. Adjacent tests share that block until another occurs. |
+| `comment` | Array of strings in the nearest preceding comment block, or an empty array. Adjacent tests share that block until another occurs. The first test's block includes the file-header comments. |
 | `classification` | The same milestone and stage fields as Script records, plus `check_transaction`. |
 | `classification.check_transaction` | An `estimated` marker, `rejects_before_script`, the first rejection `reason` or null, and source lines. |
 
@@ -102,8 +102,8 @@ The [transaction runner's flag table and parser](https://github.com/dogecoin/dog
 The transaction runner passes the parsed flags unchanged.
 It does not add P2SH and WITNESS when CLEANSTACK appears.
 
-The [valid-input loop](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/test/transaction_tests.cpp#L150-L176) requires `CheckTransaction` acceptance and `VerifyScript` acceptance for every input.
-The [invalid-input loop](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/test/transaction_tests.cpp#L235-L261) stops after `CheckTransaction` rejects or an input fails.
+The [valid-input loop](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/test/transaction_tests.cpp#L155-L176) requires `CheckTransaction` acceptance and `VerifyScript` acceptance for every input.
+The [invalid-input loop](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/test/transaction_tests.cpp#L239-L261) stops after `CheckTransaction` rejects or an input fails.
 Thus null means an unknown individual outcome, including for later inputs that the runner never checks.
 No record derives an individual Script rejection or error from transaction rejection.
 
@@ -133,6 +133,9 @@ The estimate follows [CheckTransaction](https://github.com/dogecoin/dogecoin/blo
 | A null prevout in a transaction that is not coinbase | `src/validation.cpp:566–570` |
 
 Dogecoin's `MAX_MONEY` is 10,000,000,000 times 100,000,000 satoshis, which differs from Bitcoin's value.
+The `tx_invalid.json` comments name “MAX_MONEY + 1 output” at line 41 and “MAX_MONEY output + 1 output” at line 45.
+Both entries have output values and totals below Dogecoin's limit, so the estimate finds no `CheckTransaction` rejection.
+
 The size check uses base bytes directly, without a weight multiplier.
 Base size excludes witness data and trailing bytes.
 Every estimate has `estimated: true`.

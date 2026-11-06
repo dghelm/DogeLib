@@ -1,6 +1,6 @@
 # RFC 7914 scrypt known answers
 
-`tests/KnownAnswers.lean`, namespace `KnownAnswers.Scrypt`, records the input and expected output bytes from [RFC 7914](https://www.rfc-editor.org/rfc/rfc7914).
+`tests/KnownAnswers/Scrypt.lean`, namespace `KnownAnswers.Scrypt`, records the input and expected output bytes from [RFC 7914](https://www.rfc-editor.org/rfc/rfc7914).
 The test calls the compiled list model without a replacement for its reference ROMix fill.
 No expected value comes from DogeLib or from a separate run of the model.
 

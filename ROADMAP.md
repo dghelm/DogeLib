@@ -58,7 +58,8 @@ Each item below is complete.
    The AuxPoW payload, and the composition of both with the compact-target check.
    HMAC-SHA256 and the full header codec of stage 2 are complete.
    The Lean side of `CAuxPow::check`, stage 3, is complete. Its Core-recorded inputs are pending stage 5, by maintainer decision on pull request #99.
-   PBKDF2, scrypt and the composition remain.
+   PBKDF2 and the RFC 7914 scrypt model are complete.
+   The fixed Dogecoin scrypt executable, its refinement proof and the header composition remain.
 2. **Signature verifier, design record 0005.** Stages 1 and 2 are complete.
    Stage 3 connects `coreVerifier` to the oracle and the Core harness.
    Its comparison must cover the step that no proof covers: `Point.mulAdd` against Core's `secp256k1_ecmult` (SOUNDNESS.md).

@@ -416,7 +416,7 @@ def set_flips(txs: list[bytes], rng: random.Random, count: int, witness: bool = 
 
 
 def set_witness_cases() -> list[dict]:
-    """Source-derived flag and stack cases from tests/KnownAnswers.lean, Witness.cases."""
+    """Source-derived flag and stack cases from tests/KnownAnswers/Transaction.lean, Witness.cases."""
     version, lock = bytes.fromhex("01000000"), bytes(4)
     txin = bytes(36) + b"\x00" + bytes.fromhex("ffffffff")
     txout = bytes(9)

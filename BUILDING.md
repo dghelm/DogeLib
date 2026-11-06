@@ -69,13 +69,13 @@ Seven directories hold fixture files, each with a README that gives their proven
 - `tests/transaction/corpus/`: Dogecoin Core's transaction corpus, for the base-mode reader and codecs and the witness-allowed format.
 - `tests/work/mainnet-headers/`: public mainnet headers, for next-work selection across DigiShield activation.
 
-The other known answers, and their provenance, are in `tests/KnownAnswers.lean`.
+The other known answers, and their provenance, are in the topic modules under `tests/KnownAnswers/`.
 
 `bash scripts/test_oracle.sh` builds the oracle, `dogelib-oracle`, and tests it through its standard input and output.
 It needs Python 3.10 or later, with only the standard library.
 [docs/oracle.md](docs/oracle.md) defines the oracle's record format, and `tests/oracle/README.md` gives the provenance of its fixtures.
 Dogecoin Core's own test cases test the compact target encoding and the difficulty retarget.
-`tests/KnownAnswers.lean` gives the file and line of each case.
+`tests/KnownAnswers/Work.lean` gives the file and line of each case.
 
 ## Comparison with Dogecoin Core
 

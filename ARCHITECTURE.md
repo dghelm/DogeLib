@@ -62,6 +62,7 @@ Refinement/Refinement/              extracted Lean models and refinement proofs
 Refinement/Rust/                     Rust sources and extraction scripts
 tests/<layer>/                       fixtures with recorded provenance
 tests/KnownAnswers.lean              the driver that `lake test` runs
+tests/KnownAnswers/                  known answers by topic and shared fixture readers
 harness/core/                        the Dogecoin Core harness: Core's code on the oracle's requests
 scripts/                             repository tools and checks
 ```

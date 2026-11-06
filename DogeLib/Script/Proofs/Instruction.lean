@@ -13,7 +13,7 @@ public import DogeLib.Transaction.Proofs.LegacySighash
 - `IsBoundary.le_length` and `IsBoundary.not_inside`: boundaries lie within the script, and none lies inside an instruction that starts at a boundary.
 
 These theorems are statements about the definitions. They do not say that the definitions match Core.
-The known answers in `tests/KnownAnswers.lean` compare `readInstruction` with cases from Core's `script_tests.json` and with cases derived from `GetOp2`.
+The known answers in `tests/KnownAnswers/Script.lean` compare `readInstruction` with cases from Core's `script_tests.json` and with cases derived from `GetOp2`.
 -/
 
 @[expose] public section
@@ -318,7 +318,7 @@ theorem IsBoundary.not_inside {s : List UInt8} {pc k : Nat} {i : Instruction}
 /-! ## Examples
 
 These examples check the reader in the kernel on three short scripts.
-The known answers in `tests/KnownAnswers.lean` check the compiled code on more cases.
+The known answers in `tests/KnownAnswers/Script.lean` check the compiled code on more cases.
 -/
 
 -- `OP_CODESEPARATOR` (`0xab`) as pushed data, then as an instruction at cursor 2.

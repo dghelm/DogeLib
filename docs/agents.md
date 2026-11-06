@@ -81,6 +81,18 @@ A lane follows the pull request steps of [AGENTS.md](../AGENTS.md#pull-requests)
 2. Record the pull request number and its state in `STATUS.md`.
 3. After the merge, update the main checkout with `git pull --ff-only`, and remove the lane with `scripts/lane rm`.
 
+## Add known answers
+
+Add test functions and named checks to the appropriate topic module under `tests/KnownAnswers/`.
+Keep its check list in alphabetical order.
+The driver sums the failure counts from every topic list.
+A check in an existing topic needs no change to the driver.
+
+For a separate topic, add a module with its own named check list.
+Add its import and list entry to `tests/KnownAnswers.lean`, in alphabetical order.
+Put shared fixture readers in `tests/KnownAnswers/Common.lean`.
+Keep expected values and their provenance with the test functions.
+
 ## Shared machines
 
 On a machine that other builds share, limit the CPUs of each heavy process.

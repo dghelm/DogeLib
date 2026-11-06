@@ -414,7 +414,7 @@ If the transformation plans of `tx` at `n` and `tx'` at `n'` are equal, then `n 
 
 The copy gives input `n` the script code and every other input the empty script, so the position of the script code is the index.
 The hypothesis on the script code is needed. When the script code is empty, or holds only `OP_CODESEPARATOR` instructions, every input of the copy has the empty script.
-Then a transaction with two inputs has the same plan at index 0 and at index 1. A known answer in `tests/KnownAnswers.lean` shows such a case.
+Then a transaction with two inputs has the same plan at index 0 and at index 1. A known answer in `tests/KnownAnswers/Transaction.lean` shows such a case.
 -/
 theorem legacyReferencePlan_allOnly_index_eq (sc : Script) (tx tx' : Transaction) (n n' h : UInt32)
     (hh : HashType.IsAllOnly h) (hcode : (referenceScriptCode sc).bytes.val ≠ [])

@@ -27,7 +27,7 @@ The correspondence between Core's source and each Lean model is checked by revie
 `DogeLib.Work.ArithUint256Division` models word division, comparison, addition, negation and subtraction.
 `DogeLib.Work.Proofs.ArithUint256Division` proves arithmetic equivalence for every word input, with a nonzero divisor for successful division.
 The division model also represents Core's zero-divisor exception.
-Core's own tests of the compact encoding run through these definitions in `tests/KnownAnswers.lean`.
+Core's own tests of the compact encoding run through these definitions in `tests/KnownAnswers/Work.lean`.
 
 The compact encoding packs a number into 32 bits, like a floating-point number in base 256:
 

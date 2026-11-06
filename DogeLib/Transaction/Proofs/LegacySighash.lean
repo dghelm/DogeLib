@@ -20,7 +20,7 @@ public import DogeLib.Transaction.Proofs.Txid
 - `readOp_eq_stop_iff`: `readOp` stops exactly on a short push or on the empty script.
 - `readPush_eq_op_iff` and `readPush_eq_stop_iff`: the two results of `readPush`.
 
-These are statements about the definitions. They do not say that the definitions match Core. The known answers in `tests/KnownAnswers.lean` compare them with Core's corpus and with preimages derived from Core's source.
+These are statements about the definitions. They do not say that the definitions match Core. The known answers in `tests/KnownAnswers/Transaction.lean` compare them with Core's corpus and with preimages derived from Core's source.
 -/
 
 @[expose] public section

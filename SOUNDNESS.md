@@ -232,7 +232,7 @@ They also cover only the generic Core variant, not the SSE2 variant.
 With `DOGELIB_SCRYPT_MODEL` set, it also runs the first pair through the compiled model.
 The [test report](tests/cryptography/scrypt/README.md#dogecoin-header-digests) records the cost.
 These runs rely on the compiler and runtime (B1).
-There is no Core comparison.
+`scrypt.hash` compares the five exact output digests and seeded header mutations with generic Core scrypt.
 
 [Header proof of work](#header-proof-of-work) composes the digest with `checkProofOfWork` and `CheckAuxPowProofOfWork`.
 The executable makes no constant-time or resource-bound claim (A3).
@@ -326,7 +326,8 @@ No theorem says which error the reader reports.
 The mainnet fixtures come from a third-party explorer, Blockchair, on 2026-11-06.
 An independent Python parser checks each block against Core's checkpoint hash, the explorer's separately decoded fields and the block's own Merkle root (`tests/block/README.md`).
 The checkpoint fixes only the 80-byte pure header, because the block hash does not cover the payload (D41, D40).
-The pinned Core harness has not yet read these full headers. That check belongs to stage 5 of design record 0004.
+The pinned Core harness reads these full headers in both transaction modes and compares all decoded fields, consumption and remainder.
+It also checks their proof of work, as the [fixture report](tests/block/core-header-pow.json) records.
 
 By `#print axioms`, the round trips and truncation theorems depend on `propext`, `Classical.choice` and `Quot.sound`, and the other codec theorems on `propext` and `Quot.sound`.
 The two concrete examples are checked by kernel reduction with `rfl`.
@@ -375,18 +376,14 @@ The known answers in `tests/block/check-auxpow.json` have two kinds of input.
 The 26 `check_auxpow` cases transcribe the construction of Core's test (D56, lines 186 to 323) into an independent Python builder.
 Their expected Booleans come from the `BOOST_CHECK` assertions.
 
-The transcription has not yet been checked against bytes that Core itself writes.
-A transcription mistake changes the bytes but not the expected Boolean.
-For an accepted case, such a mistake would very likely make the test fail.
-For a rejected case, wrong bytes can still be rejected, so the Boolean alone would not detect the mistake.
-The expected error line narrows that gap, but it comes from the same reading of the source as the transcription.
+The Core harness reconstructs all 26 cases with Core's own classes and requires exact serialized byte agreement.
+It also requires Core verdicts and arguments to match those records.
+This closes the deferred byte-transcription check of stage 3 from pull request #99.
 
-The maintainer deferred the Core-recorded inputs of stage 3 to stage 5 on pull request #99, without waiving them.
-Stage 5 does not exit until the Core harness builds these 26 cases with Core's own classes and their bytes match the fixture.
-
-The 16 boundary cases take both their bytes and their expectations from the author's reading of D55, so a misreading can be shared by both.
-The six mainnet headers are accepted with mainnet's `fStrictChainId`.
-Core's result for them belongs to the stage 5 harness.
+The 16 boundary cases take their expectations from the author's reading of D55, and the comparator checks Core's verdict on each payload.
+Both implementations also accept the six historical mainnet payloads with their own child hashes and mainnet strictness.
+These finite checks do not establish all-input equivalence with Core.
+[The comparison report](docs/oracle.md#header-proof-of-work-evidence) describes the streams and mutation seed.
 
 By `#print axioms`, the search and `getExpectedIndex_mod64` theorems depend on `propext` and `Quot.sound`, and the others on `propext`, `Classical.choice` and `Quot.sound`.
 
@@ -435,7 +432,21 @@ Where it depends on a changed digest failing its target, a random 256-bit digest
 That probability is about 2^-20 for the initial target of the header at height 1, and about 2^-33 at heights 3000 and 4000.
 For every other target here it is below 2^-41.
 No theorem relies on that argument.
-There is no Core comparison: the harness and the `block.check_pow` operation belong to stage 5.
+
+The `block.check_pow` comparison checks all 321 headers against Core's `CheckAuxPowProofOfWork` and its real selected parameters.
+The [fixture report](tests/block/core-header-pow.json) records the byte identities, network, parameters and Core verdicts.
+The [comparison](docs/oracle.md#header-proof-of-work-evidence) also changes parent and child targets, nonces and version bits.
+Lean diagnostics stay outside the compared verdict.
+
+The Core harness ports `mineBlock` and `auxpow_pow` and mines their nonces again on every comparison.
+It checks the 12 predicate assertions, 11 mining assertions and two version/hash assertions against the source test.
+The [comparison records](tests/block/auxpow-pow.json) preserve the exact components and Core verdicts.
+Lean and Core replay all 12 predicate cases on those bytes, including the two flag/payload mismatches.
+
+Those mismatches use the oracle's split-input form because `checkAuxPowProofOfWork_read` excludes them for a decoded full header.
+The ten serializable cases also run through the full-header reader.
+These checks close the runtime-mined comparison item of design record 0004, section 7.
+These checks add finite evidence and no theorem or trust-policy exception.
 
 By `#print axioms` with Lean `v4.35.0`:
 
@@ -460,7 +471,8 @@ A legacy version has a clear AuxPoW flag, so at most one of the two checks can r
 
 The record is an argument that carries only `fAllowLegacyBlocks`.
 Core takes the record from `GetConsensus` at the height of the new header (D14, lines 494 to 506).
-DogeLib does not model that selection for this field, and no theorem says which record a caller should pass.
+The specification does not model that selection for this field, and no theorem says which record a caller should pass.
+The oracle adapter projects the field from the D14 parameter trees and compares 207 boundaries with Core's actual selected records.
 A caller that passes the wrong record gets the result of the wrong era.
 The known answers state the record that Core selects on each side of each activation height, from D14.
 
@@ -2261,6 +2273,15 @@ These checks cover the three 2-of-3 signer pairs, the recovery branch and every 
 They provide finite comparison evidence, without a theorem about all signed spends.
 
 Both programs could be wrong in the same way on an input that the comparison does not send.
+
+The five header PoW operations are IO-adapter entry points into the existing specification definitions.
+Their JSON conversion and Lean diagnostic strings have no refinement theorem.
+The Core harness transcribes only the two contextual version branches and calls Core's own version predicates.
+Its `LogPrintStr` replacement writes errors to standard error and does not replace any consensus predicate.
+
+The build disables SSE2, and its stamp records the generic scrypt variant and configure options.
+The comparison still assumes Core's little-endian header memory layout and arithmetic shift of signed versions.
+Neither the oracle nor the harness checks complete contextual header validity or block validity.
 
 Any later foreign boundary, such as a C or Rust binding, is listed here with its size and its error handling.
 

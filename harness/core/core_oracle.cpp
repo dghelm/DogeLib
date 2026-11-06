@@ -6,15 +6,19 @@
 // scripts/build_core_harness.sh builds it against Core's libraries at the
 // commit that SOURCES.md pins.
 //
-// Every result value comes from Core's code, with two exceptions that the
+// Every result value comes from Core's code, with three exceptions that the
 // documentation names: `plan` of sighash.legacy is a label computed here from
 // Core's conditions, and sighash.legacy has no `preimage_hex`, because Core
-// hashes its preimage without exposing it.
+// hashes its preimage without exposing it. The third exception is the
+// block.check_version verdict, from two transcribed branches and Core predicates.
 //
 // An exception from Core that is not one of the four mapped read errors ends
 // the program with status 3, so it shows as a failed comparison.
 
 #include "arith_uint256.h"
+#include "auxpow.h"
+#include "primitives/block.h"
+#include "crypto/scrypt.h"
 #include "chain.h"
 #include "chainparams.h"
 #include "consensus/merkle.h"
@@ -48,6 +52,13 @@
 static_assert(std::numeric_limits<int>::min() == INT32_MIN && std::numeric_limits<int>::max() == INT32_MAX,
               "int must be a 32-bit two's complement integer");
 static_assert(std::numeric_limits<unsigned int>::max() == UINT32_MAX, "unsigned int must have 32 bits");
+
+// Core error() calls this logging sink. Keep logs off the JSONL stream.
+int LogPrintStr(const std::string& message)
+{
+    std::cerr << message;
+    return message.size();
+}
 
 namespace {
 
@@ -340,6 +351,55 @@ void selectWorkNetwork(const UniValue& req)
     else throw RequestError{"unknown network"};
 }
 
+// Explicit transaction stream mode for full headers and payloads.
+int headerStreamVersion(const UniValue& req)
+{
+    const auto& mode = arg(req, "mode");
+    if (!mode.isStr()) throw RequestError{"mode must be a string"};
+    if (mode.get_str() == "base") return BASE_VERSION;
+    if (mode.get_str() == "allow_witness") return PROTOCOL_VERSION;
+    throw RequestError{"unknown mode"};
+}
+
+void requireEmpty(const CDataStream& ds)
+{
+    if (!ds.empty()) {
+        UniValue error(UniValue::VOBJ);
+        error.pushKV("kind", "trailing_bytes");
+        error.pushKV("count", static_cast<uint64_t>(ds.size()));
+        throw SpecError{error};
+    }
+}
+
+UniValue payloadJson(const CAuxPow& a)
+{
+    UniValue transaction(UniValue::VOBJ), witnesses(UniValue::VARR);
+    for (const auto& in : a.tx->vin) {
+        UniValue stack(UniValue::VARR);
+        for (const auto& item : in.scriptWitness.stack) stack.push_back(UniValue(hexOf(item)));
+        witnesses.push_back(stack);
+    }
+    CDataStream out(SER_NETWORK, PROTOCOL_VERSION);
+    out << *a.tx;
+    transaction.pushKV("tx", txJson(CMutableTransaction(*a.tx)));
+    transaction.pushKV("witnesses", witnesses);
+    transaction.pushKV("has_witness", a.tx->HasWitness());
+    transaction.pushKV("serialized_hex", HexStr(out.begin(), out.end()));
+    pushHash(transaction, "txid", a.tx->GetHash());
+    pushHash(transaction, "wtxid", a.tx->GetWitnessHash());
+    UniValue result(UniValue::VOBJ), branch(UniValue::VARR), chain(UniValue::VARR);
+    for (const auto& h : a.vMerkleBranch) branch.push_back(UniValue(hex(h.begin(), h.end())));
+    for (const auto& h : a.vChainMerkleBranch) chain.push_back(UniValue(hex(h.begin(), h.end())));
+    result.pushKV("transaction", transaction);
+    pushHash(result, "hash_block", a.hashBlock);
+    result.pushKV("merkle_branch_hex", branch);
+    result.pushKV("index", static_cast<uint64_t>(static_cast<uint32_t>(a.nIndex)));
+    result.pushKV("chain_merkle_branch_hex", chain);
+    result.pushKV("chain_index", static_cast<uint64_t>(static_cast<uint32_t>(a.nChainIndex)));
+    result.pushKV("parent", headerJson(a.parentBlock));
+    return result;
+}
+
 // Core's GetSkipHeight (D35), used only to guard BuildSkip on a suffix.
 // Adapted from Dogecoin Core e0a1c15, src/chain.cpp, MIT licence.
 // Copyright (c) 2009-2010 Satoshi Nakamoto
@@ -555,6 +615,72 @@ UniValue run(const UniValue& req)
         else if (op == "hash.hash160") CHash160().Write(data, bytes.size()).Finalize(digest);
         else CSHA1().Write(data, bytes.size()).Finalize(digest);
         ok.pushKV("digest_hex", hex(digest, digest + 20));
+    } else if (op == "scrypt.hash") {
+        checkArgs(req, op, {"bytes_hex"});
+        const auto bytes = argHex(req, "bytes_hex");
+        if (bytes.size() != 80) throw RequestError{"bytes_hex must contain exactly 80 bytes"};
+        unsigned char digest[32];
+        std::vector<char> scratch(SCRYPT_SCRATCHPAD_SIZE);
+        scrypt_1024_1_1_256_sp_generic(reinterpret_cast<const char*>(bytes.data()),
+                                    reinterpret_cast<char*>(digest), scratch.data());
+        ok.pushKV("digest_hex", hex(digest, digest + 32));
+    } else if (op == "block.header.read" || op == "block.check_pow" || op == "auxpow.check") {
+        if (op == "block.header.read") checkArgs(req, op, {"bytes_hex", "mode"});
+        else if (op == "block.check_pow") checkArgs(req, op, {"bytes_hex", "mode", "network", "selection_height", "payload_hex"});
+        else checkArgs(req, op, {"bytes_hex", "mode", "hash_hex", "chain_id", "strict_chain_id"});
+        const auto version = headerStreamVersion(req);
+        const auto bytes = argHex(req, "bytes_hex");
+        CDataStream ds(bytes, SER_NETWORK, version);
+        CBlockHeader h;
+        CAuxPow a;
+        try {
+            if (op == "auxpow.check") ds >> a;
+            else if (op == "block.check_pow" && req.exists("payload_hex")) {
+                if (bytes.size() != 80) throw RequestError{"split bytes_hex must contain exactly 80 bytes"};
+                ds >> static_cast<CPureBlockHeader&>(h);
+                if (!arg(req, "payload_hex").isNull()) {
+                    CDataStream payload(argHex(req, "payload_hex"), SER_NETWORK, version);
+                    h.auxpow.reset(new CAuxPow());
+                    payload >> *h.auxpow;
+                    requireEmpty(payload);
+                }
+            } else ds >> h;
+        } catch (const std::ios_base::failure& e) { throw SpecError{mapCoreFailure(e)}; }
+        if (op == "block.header.read") {
+            UniValue full(UniValue::VOBJ);
+            full.pushKV("pure", headerJson(h));
+            full.pushKV("auxpow", h.auxpow ? payloadJson(*h.auxpow) : UniValue());
+            ok.pushKV("header", full);
+            ok.pushKV("consumed", static_cast<uint64_t>(bytes.size() - ds.size()));
+            ok.pushKV("rest_hex", HexStr(ds.begin(), ds.end()));
+        } else {
+            requireEmpty(ds);
+            if (op == "auxpow.check") {
+                Consensus::Params params = Params(CBaseChainParams::MAIN).GetConsensus(0);
+                params.fStrictChainId = argBool(req, "strict_chain_id");
+                const auto hash = argHash(req, "hash_hex");
+                const auto chainId = argInt(req, "chain_id", INT32_MIN, INT32_MAX);
+                ok.pushKV("valid", a.check(hash, chainId, params));
+            } else {
+                selectWorkNetwork(req);
+                const auto height = argInt(req, "selection_height", 0, INT32_MAX);
+                ok.pushKV("valid", CheckAuxPowProofOfWork(h, Params().GetConsensus(height)));
+            }
+        }
+    } else if (op == "block.check_version") {
+        checkArgs(req, op, {"bytes_hex", "network", "selection_height"});
+        const auto bytes = argHex(req, "bytes_hex");
+        if (bytes.size() != 80) throw RequestError{"bytes_hex must contain exactly 80 bytes"};
+        CDataStream ds(bytes, SER_NETWORK, PROTOCOL_VERSION);
+        CPureBlockHeader h;
+        ds >> h;
+        selectWorkNetwork(req);
+        const auto& params = Params().GetConsensus(argInt(req, "selection_height", 0, INT32_MAX));
+        // The two branches of ContextualCheckBlockHeader, D33 lines 3072-3086.
+        bool valid = true;
+        if (!params.fAllowLegacyBlocks && h.IsLegacy()) valid = false;
+        else if (params.fAllowLegacyBlocks && h.IsAuxpow()) valid = false;
+        ok.pushKV("valid", valid);
     } else if (op == "header.read") {
         checkArgs(req, op, {"bytes_hex"});
         const auto bytes = argHex(req, "bytes_hex");
@@ -784,10 +910,20 @@ UniValue respond(const std::string& line)
     return response;
 }
 
+#include "auxpow_fixtures.inc"
+
 } // namespace
 
 int main(int argc, char** argv)
 {
+    if (argc == 2 && std::string(argv[1]) == "--auxpow-pow-fixtures") {
+        std::cout << reconstructAuxPowPowFixtures().write() << std::endl;
+        return 0;
+    }
+    if (argc == 2 && std::string(argv[1]) == "--check-auxpow-fixtures") {
+        std::cout << reconstructAuxPowFixtures().write() << std::endl;
+        return 0;
+    }
     if (argc == 2 && std::string(argv[1]) == "--version") {
         UniValue v(UniValue::VOBJ);
         v.pushKV("format", FORMAT);
@@ -795,7 +931,7 @@ int main(int argc, char** argv)
         return 0;
     }
     if (argc != 1) {
-        std::cerr << "usage: core-oracle [--version]\n"
+        std::cerr << "usage: core-oracle [--version | --check-auxpow-fixtures | --auxpow-pow-fixtures]\n"
                   << "Reads one JSON request per line of standard input. See docs/oracle.md." << std::endl;
         return 2;
     }

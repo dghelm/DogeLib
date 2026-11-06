@@ -44,7 +44,13 @@ Each item below is complete.
   Full headers with the AuxPoW payload, read and written in each read mode of the embedded transaction ([full headers](SOUNDNESS.md#full-headers-and-the-auxpow-payload)).
   This codec is stage 2 of [design record 0004](docs/design/0004-header-proof-of-work.md).
   `CAuxPow::check`, stage 3, with its merged-mining search and expected index ([the AuxPoW check](SOUNDNESS.md#the-auxpow-check)).
-  Its Lean side is complete. The Core-recorded inputs of its `check_auxpow` known answers are pending stage 5.
+  The Core harness reconstructs all 26 `check_auxpow` payloads with exact byte agreement and compares their verdicts.
+- **Header proof of work, [design record 0004](docs/design/0004-header-proof-of-work.md).** Stages 0, 1, 2, 3, 4a, 4b and 5 have their implementation evidence.
+  HMAC-SHA256, PBKDF2, the RFC 7914 scrypt model and the fixed Dogecoin executable have their models, agreement theorems and independent vectors.
+  The header codec, AuxPoW check, proof-of-work composition and two version gates have their stated theorems and compiled checks.
+  The oracle and Core comparison close the three deferred items: exact construction of 26 payloads, Core checks of all 321 historical headers and version-gate comparison.
+  The harness also re-mines all 12 `auxpow_pow` cases, including the in-memory flag/payload mismatches, and compares Lean on identical components.
+  [The comparison evidence](docs/oracle.md#header-proof-of-work-evidence) records the streams, seeds and limits.
 - **SHA-1, RIPEMD-160 and Hash160.** The hash prerequisites of legacy Script, with known answers ([SHA-1](SOUNDNESS.md#sha-1), [RIPEMD-160 and Hash160](SOUNDNESS.md#ripemd-160-and-hash160)).
 - **Legacy Script, stages 1 to 5 of [design record 0003](docs/design/0003-legacy-spend-validation.md).** The instruction reader, Script numbers, one `EvalScript` call, signature-code preparation, encoding checks, the signature and lock-time opcodes, `VerifyScript` with P2SH, and `verifyLegacySpend` for one input.
   Script verification takes a signature checker as a parameter, and `coreVerifier` supplies ECDSA verification ([the checker](SOUNDNESS.md#script-signature-opcodes-and-the-checker)).
@@ -54,15 +60,7 @@ Each item below is complete.
 
 ## Next work
 
-1. **Header proof of work, [design record 0004](docs/design/0004-header-proof-of-work.md).** The scrypt digest of a pure header, with HMAC-SHA256 and PBKDF2.
-   The AuxPoW payload, and the composition of both with the compact-target check.
-   HMAC-SHA256 and the full header codec of stage 2 are complete.
-   The Lean side of `CAuxPow::check`, stage 3, is complete. Its Core-recorded inputs are pending stage 5, by maintainer decision on pull request #99.
-   PBKDF2 and the RFC 7914 scrypt model are complete.
-   The fixed Dogecoin scrypt executable and its proof against the RFC 7914 model are complete.
-   Stage 4a, `CheckAuxPowProofOfWork` and `CheckBlockHeader`, is complete ([header proof of work](SOUNDNESS.md#header-proof-of-work)).
-   The oracle operations and the Core comparison of stage 5 remain.
-2. **Signature verifier, design record 0005.** Stages 1 to 4 are complete.
+1. **Signature verifier, design record 0005.** Stages 1 to 4 are complete.
    The oracle uses `coreVerifier`.
    Its verdicts agree with Core on 598 dedicated public-key inputs and the Script and transaction corpora.
    The public-key inputs include constructed infinity and x-above-order cases.
@@ -70,8 +68,8 @@ Each item below is complete.
    All 25 Core-signed recovery-template fixtures agree in verdict and error through `lake test`.
    The oracle comparison rechecks the same records with live Core.
    The three 2-of-3 signer pairs, recovery branch and recorded mutations meet the stage 4 exit conditions.
-3. **Release 0.1.0.** A reproducible release of the completed capabilities, by the steps in [docs/release.md](docs/release.md).
-   The release does not wait for items 1 and 2.
+2. **Release 0.1.0.** A reproducible release of the completed capabilities, by the steps in [docs/release.md](docs/release.md).
+   The release does not wait for item 1.
 
 ## Milestones
 

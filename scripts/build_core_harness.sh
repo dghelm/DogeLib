@@ -42,11 +42,14 @@ stamp_text() {
   echo "cc $("$cc" --version | head -n1)"
   echo "cxx $("$cxx" --version | head -n1)"
   echo "machine $(uname -m)"
+  echo "scrypt generic (--disable-scrypt-sse2)"
+  echo "configure --with-libs --without-daemon --without-utils --without-gui --disable-scrypt-sse2 --disable-wallet --disable-tests --disable-bench --disable-zmq --without-miniupnpc --disable-shared --with-pic"
   echo "cflags $core_cflags"
   echo "cxxflags $core_cxxflags"
 }
 
 libs=(
+  "$build/auxpow.o"
   "$build/pow.o"
   "$build/chain.o"
   "$build/dogecoin.o"
@@ -81,7 +84,7 @@ else
     cd "$tree"
     ./autogen.sh
     ./configure --with-libs --without-daemon --without-utils --without-gui \
-      --disable-wallet --disable-tests --disable-bench --disable-zmq \
+      --disable-scrypt-sse2 --disable-wallet --disable-tests --disable-bench --disable-zmq \
       --without-miniupnpc --disable-shared --with-pic \
       CC="$cc" CXX="$cxx" CFLAGS="$core_cflags" CXXFLAGS="$core_cxxflags"
     make -C src -j"$jobs" libdogecoin_consensus.a crypto/libdogecoin_crypto.a \
@@ -90,7 +93,7 @@ else
   # Compile work and parameter objects without the rest of the server.
   # The linker discards unrelated functions and their server dependencies.
   # chainparams.cpp and dogecoin.cpp require Boost headers, not Boost libraries.
-  for unit in pow chain dogecoin chainparams chainparamsbase; do
+  for unit in auxpow pow chain dogecoin chainparams chainparamsbase; do
     "$cxx" -std=c++11 $core_cxxflags -DHAVE_CONFIG_H \
       -I"$src" -I"$src/config" -I"$src/univalue/include" \
       -c "$src/$unit.cpp" -o "$build/$unit.o"

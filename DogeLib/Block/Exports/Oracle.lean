@@ -3,6 +3,9 @@ module
 public import DogeLib.Exports.Json
 public import DogeLib.Block.Header
 public import DogeLib.Block.Merkle
+public import DogeLib.Block.ProofOfWork
+public import DogeLib.Transaction.Exports.Oracle
+public import DogeLib.Work.Exports.Oracle
 
 /-!
 # Block oracle operations
@@ -10,7 +13,7 @@ public import DogeLib.Block.Merkle
 The adapter exposes the pure header codec, block hash and transaction Merkle computation.
 SOURCES.md D10, D40 and D42 name the pinned Core functions.
 `docs/oracle.md` defines the JSON contract and the Merkle leaf bound.
-These operations check no header or block validity rule.
+The full-header operations also expose the AuxPoW and header proof-of-work checks.
 -/
 
 @[expose] public section
@@ -79,7 +82,135 @@ def computeMerkle : Operation where
     let result := computeMerkleRoot leaves
     return Json.mkObj (hashFields "root" result.root ++ [("mutated", .bool result.mutated)])
 
-/-- The pure header and Merkle operations of the oracle. -/
-def operations : List Operation := [readHeader, encodeHeader, hashHeader, computeMerkle]
+/-- The explicit transaction mode of a full-header or payload reader. -/
+def argMode (fields : Args) : Except Failure TxReadMode := do
+  match ← arg fields "mode" with
+  | .str "base" => return .base
+  | .str "allow_witness" => return .allowWitness
+  | _ => throw (.request "mode must be base or allow_witness")
+
+/-- All decoded payload fields, with unsigned bits for the two signed indices. -/
+def auxPowJson (a : AuxPow) : Json :=
+  Json.mkObj ([("transaction", Json.mkObj (Transaction.Exports.witnessFields a.tx)),
+    ("merkle_branch_hex", .arr (a.merkleBranch.val.map (fun h => Json.str (hexOf h.val))).toArray),
+    ("index", natJson a.index.toNat),
+    ("chain_merkle_branch_hex", .arr (a.chainMerkleBranch.val.map (fun h => Json.str (hexOf h.val))).toArray),
+    ("chain_index", natJson a.chainIndex.toNat), ("parent", headerJson a.parentBlock)] ++
+    hashFields "hash_block" a.hashBlock)
+
+/-- A decoded full header, with null for an absent payload. -/
+def blockHeaderJson (h : BlockHeader) : Json :=
+  Json.mkObj [("pure", headerJson h.pure), ("auxpow", h.auxpow.map auxPowJson |>.getD .null)]
+
+/-- Predicate verdict and the separate Lean diagnostic, which is not compared with Core. -/
+def verdictJson {ε : Type} [Repr ε] (result : Except ε Unit) : Json :=
+  match result with
+  | .ok () => Json.mkObj [("valid", .bool true), ("diagnostic", .null)]
+  | .error e => Json.mkObj [("valid", .bool false), ("diagnostic", .str (reprStr e))]
+
+/-- Scrypt-1024-1-1-256 of exactly 80 bytes, in output byte order. -/
+def scryptHash : Operation where
+  name := "scrypt.hash"
+  args := ["bytes_hex"]
+  run fields := do
+    let bs ← argHex fields "bytes_hex"
+    let some bytes := Bytes.ofListExact? (n := 80) bs
+      | throw (.request "bytes_hex must contain exactly 80 bytes")
+    return Json.mkObj [("digest_hex", .str (hexOf (Cryptography.Hash.Scrypt.scrypt_1024_1_1_256 bytes).val))]
+
+/-- Read a full-header prefix with an explicit embedded-transaction mode. -/
+def readBlockHeader : Operation where
+  name := "block.header.read"
+  args := ["bytes_hex", "mode"]
+  run fields := do
+    let mode ← argMode fields
+    let bs ← argHex fields "bytes_hex"
+    match BlockHeader.read mode bs with
+    | .error e => throw (.spec (Transaction.Exports.witnessReadErrorJson e))
+    | .ok (h, rest) => return Json.mkObj [("header", blockHeaderJson h),
+        ("consumed", natJson (bs.length - rest.length)), ("rest_hex", .str (hexOf rest))]
+
+/-- Check a complete payload against an explicit child hash, chain ID and strictness flag. -/
+def checkAuxPow : Operation where
+  name := "auxpow.check"
+  args := ["bytes_hex", "mode", "hash_hex", "chain_id", "strict_chain_id"]
+  run fields := do
+    let mode ← argMode fields
+    let bs ← argHex fields "bytes_hex"
+    let hash ← argHash fields "hash_hex"
+    let chainId := Int32.ofInt (← argInt fields "chain_id" (-2147483648) 2147483647)
+    let strict ← Work.Exports.argBool fields "strict_chain_id"
+    match AuxPow.read mode bs with
+    | .error e => throw (.spec (Transaction.Exports.witnessReadErrorJson e))
+    | .ok (a, rest) =>
+      unless rest.isEmpty do
+        throw (.spec (Json.mkObj [("kind", "trailing_bytes"), ("count", natJson rest.length)]))
+      return verdictJson (a.check hash chainId strict)
+
+/-- A complete header, or exact pure bytes with an explicit optional payload.
+The split form can represent the flag/payload mismatches that a full-header reader excludes. -/
+def argPowHeader (fields : Args) (mode : TxReadMode) (bs : List UInt8) : Except Failure BlockHeader := do
+  match fields.get? "payload_hex" with
+  | none =>
+    match BlockHeader.decodeComplete mode bs with
+    | .error (.read e) => throw (.spec (Transaction.Exports.witnessReadErrorJson e))
+    | .error (.trailingBytes n) =>
+      throw (.spec (Json.mkObj [("kind", "trailing_bytes"), ("count", natJson n)]))
+    | .ok h => return h
+  | some payload =>
+    unless bs.length == 80 do throw (.request "split bytes_hex must contain exactly 80 bytes")
+    let some (pure, _) := Codec.decode (α := PureBlockHeader) bs
+      | throw (.request "split bytes_hex must contain exactly 80 bytes")
+    if payload == Json.null then return ⟨pure, none⟩
+    let raw ← argHex fields "payload_hex"
+    match AuxPow.read mode raw with
+    | .error e => throw (.spec (Transaction.Exports.witnessReadErrorJson e))
+    | .ok (a, rest) =>
+      unless rest.isEmpty do
+        throw (.spec (Json.mkObj [("kind", "trailing_bytes"), ("count", natJson rest.length)]))
+      return ⟨pure, some a⟩
+
+/-- Check complete full-header bytes with the selected network record. -/
+def checkPow : Operation where
+  name := "block.check_pow"
+  args := ["bytes_hex", "mode", "network", "selection_height", "payload_hex"]
+  run fields := do
+    let mode ← argMode fields
+    let bs ← argHex fields "bytes_hex"
+    let network ← Work.Exports.argNetwork fields
+    let height := (← argInt fields "selection_height" 0 2147483647).toNat.toUInt32
+    let h ← argPowHeader fields mode bs
+    return verdictJson (checkAuxPowProofOfWork (getAuxPowParams network height) h)
+
+/-- The legacy-block field of Core's parameter trees (SOURCES.md D14), with its actual search links. -/
+def legacyGateTree : Work.WorkNetwork → ParamsTree Bool
+  | .mainnet => .node 145000 true
+      (some (.node 0 true none none)) (some (.node 371337 false none none))
+  | .testnet => .node 145000 true
+      (some (.node 0 true none none))
+      (some (.node 157500 true none (some (.node 158100 false none none))))
+  | .regtest => .node 10 true
+      (some (.node 0 true none none)) (some (.node 20 false none none))
+
+/-- The activation field selected by network and height in Core's records (SOURCES.md D14). -/
+def allowLegacyAt (network : Work.WorkNetwork) (height : UInt32) : Bool :=
+  ((legacyGateTree network).getConsensus height).2
+
+/-- The two version gates on an exact pure header and a selected network record. -/
+def checkHeaderVersion : Operation where
+  name := "block.check_version"
+  args := ["bytes_hex", "network", "selection_height"]
+  run fields := do
+    let bs ← argHex fields "bytes_hex"
+    unless bs.length == 80 do throw (.request "bytes_hex must contain exactly 80 bytes")
+    let network ← Work.Exports.argNetwork fields
+    let height := (← argInt fields "selection_height" 0 2147483647).toNat.toUInt32
+    let some (h, _) := Codec.decode (α := PureBlockHeader) bs
+      | throw (.request "bytes_hex must contain exactly 80 bytes")
+    return verdictJson (checkVersion ⟨allowLegacyAt network height⟩ h)
+
+/-- The block, Merkle and header proof-of-work operations of the oracle. -/
+def operations : List Operation := [readHeader, encodeHeader, hashHeader, computeMerkle,
+  scryptHash, readBlockHeader, checkAuxPow, checkPow, checkHeaderVersion]
 
 end DogeLib.Block.Exports

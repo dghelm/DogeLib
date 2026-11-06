@@ -41,6 +41,7 @@ from oracle_hash_block import header_fields, header_records, header_fixtures, me
 from oracle_script import script_sets, corpus_records, evaluation, validate_eval, adapter_limit_cases, legacy_sets, harness_refused, refused_set, tx_spend_sets, locktime_sets, refusal_precedence_set
 
 from oracle_pubkey import pubkey_sets, signature_spends
+from oracle_header_pow import header_pow_sets, CODES as HEADER_CODES, EXPECTATIONS as HEADER_EXPECTATIONS, key as header_key
 
 ORACLE_FORMAT = "dogelib-oracle/1"
 MAX_SIZE = 0x02000000
@@ -612,7 +613,7 @@ def set_hash_boundaries(algorithm: str) -> list[dict]:
             for n in sorted(lengths)]
 
 
-QUICK_SETS = ("pubkey Core signatures", "Script signature verdict", "fixtures", "compactsize", "sighash endpoints", "witness flags and stacks",
+QUICK_SETS = ("header PoW fixtures", "full header readers", "header version boundaries", "pubkey Core signatures", "Script signature verdict", "fixtures", "compactsize", "sighash endpoints", "witness flags and stacks",
               "work compact boundaries", "regtest legacy wrap case", "work missing skip traversal", "header field boundaries", "Merkle generated",
               "RIPEMD-160 padding boundaries", "Hash160 padding boundaries", "SHA-1 padding boundaries", "Script reader truncations", "Script resource boundaries", "Script resource boundaries base",
               "Script legacy corpus base", "Script legacy corpus transaction", "Script harness refusal domain", "Script refusal precedence",
@@ -672,6 +673,7 @@ def request_sets() -> tuple[list[tuple[str, list[dict]]], list[str]]:
         ("SHA-1 fixtures", [r for r, _ in sha1_fixtures()]),
         ("SHA-1 padding boundaries", set_hash_boundaries("sha1")),
     ])
+    sets.extend(header_pow_sets())
     sets.extend(pubkey_sets())
     sets.append(("Script signature verdict", signature_spends()))
     sets.extend(script_sets())
@@ -750,6 +752,30 @@ def compare(req: dict, ours: dict, core: dict, peer: str = "core") -> tuple[str,
     for side, resp in (("oracle", ours), (peer, core)):
         if resp.get("error", {}).get("kind") == "request":
             return "REQUEST_ERROR", f"{side} rejected the request: {resp['error'].get('message')}"
+    if req["op"] in HEADER_CODES:
+        op = req["op"]
+        code = HEADER_CODES[op]
+        for side, response in (("oracle", ours), (peer, core)):
+            if "ok" in response:
+                ok = dict(response["ok"])
+                if op in ("auxpow.check", "block.check_pow", "block.check_version"):
+                    # Only Lean's diagnostic is excluded. All other fields remain contractual.
+                    if side == "oracle":
+                        if "diagnostic" not in ok or (ok["diagnostic"] is not None and not isinstance(ok["diagnostic"], str)):
+                            return code, "missing or malformed Lean diagnostic"
+                        ok.pop("diagnostic", None)
+                    if set(ok) != {"valid"} or type(ok["valid"]) is not bool:
+                        return code, "expected one Boolean valid field"
+                expected = HEADER_EXPECTATIONS.get(header_key(req))
+                if expected is not None and not json_equal(ok, expected):
+                    return code, f"{side} disagrees with committed fixture"
+        if op in ("auxpow.check", "block.check_pow", "block.check_version") and "ok" in ours:
+            ours = {**ours, "ok": {k: v for k, v in ours["ok"].items() if k != "diagnostic"}}
+        if header_key(req) in HEADER_EXPECTATIONS and ("ok" not in ours or "ok" not in core):
+            return code, "fixture must return a verdict or digest"
+        if not json_equal(ours, core):
+            return code, f"first difference at {first_difference(ours, core)}"
+        return None
     if req["op"] == "pubkey.verify":
         for resp in (ours, core):
             if "ok" in resp and (set(resp["ok"]) != {"valid"} or type(resp["ok"]["valid"]) is not bool):
@@ -864,6 +890,42 @@ def compare_compositions(oracle, harness, timeout):
     return failures
 
 
+def check_auxpow_reconstruction(harness, timeout):
+    """Core's independently constructed check_auxpow bytes and verdicts match the pinned records."""
+    from oracle_header_pow import payload_cases
+    try:
+        rows = json.loads(run_program(harness, ["--check-auxpow-fixtures"], "", timeout))
+        expected = payload_cases()[:26]
+        if not isinstance(rows, list) or len(rows) != 26:
+            raise ValueError("expected 26 reconstructed cases")
+        fields = ("line", "payload_hex", "hash_aux_block_hex", "chain_id", "strict_chain_id", "expected")
+        for actual, wanted in zip(rows, expected):
+            if not isinstance(actual, dict) or any(not json_equal(actual.get(k), wanted[k]) for k in fields):
+                raise ValueError(f"reconstructed bytes or arguments differ at line {wanted['line']}")
+            if type(actual.get("valid")) is not bool or actual["valid"] != wanted["expected"]:
+                raise ValueError(f"Core verdict differs at line {wanted['line']}")
+    except (RunError, ValueError, TypeError) as error:
+        print(f"FAIL AUXPOW_RECONSTRUCTION {error}")
+        return ["AUXPOW_RECONSTRUCTION"]
+    print("AuxPoW reconstruction: 26 payloads, exact bytes and Core verdicts agree")
+    return []
+
+
+def check_auxpow_pow_reconstruction(harness, timeout):
+    """Repeat Core's nonce mining and require every recorded byte and assertion to agree."""
+    from oracle_header_pow import mined_fixture
+    try:
+        actual = json.loads(run_program(harness, ["--auxpow-pow-fixtures"], "", timeout))
+        expected = {k: v for k, v in mined_fixture().items() if k not in ("generator", "capture_date")}
+        if not json_equal(actual, expected):
+            raise ValueError(f"Core auxpow_pow differs at {first_difference(actual, expected)}")
+    except (RunError, ValueError, TypeError) as error:
+        print(f"FAIL AUXPOW_POW_RECONSTRUCTION {error}")
+        return ["AUXPOW_POW_RECONSTRUCTION"]
+    print("AuxPoW PoW reconstruction: 12 predicate cases, 11 mining checks and two hash checks agree")
+    return []
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--timeout", type=float, default=600.0)
@@ -879,7 +941,7 @@ def main() -> int:
     dirty = subprocess.run(["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True)
     print(f"DogeLib revision: {revision.stdout.strip()}" + (" (dirty tree)" if dirty.stdout else ""))
     print("Expected Core source revision: e0a1c157791544e818c901bd9341896965afbf9d")
-    print("Seeds: transaction mutations 20261104, Script evaluation 20261105, legacy spends 20261106, targeted timelocks 20261107")
+    print("Seeds: transaction mutations 20261104, Script evaluation 20261105, legacy spends 20261106, targeted timelocks 20261107, header PoW 20261108")
 
     rust_args = []
     if args.rust_compactsize:
@@ -906,6 +968,10 @@ def main() -> int:
     failures = check_versions(args.oracle, args.harness, args.timeout, oracle_format)
     for line in failures:
         print(line)
+
+    if not args.rust_compactsize:
+        failures.extend(check_auxpow_reconstruction(args.harness, args.timeout))
+        failures.extend(check_auxpow_pow_reconstruction(args.harness, args.timeout))
 
     if args.rust_compactsize:
         fixtures, excluded = load_fixtures()

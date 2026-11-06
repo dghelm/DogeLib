@@ -1,6 +1,7 @@
 # Signature verifier
 
-**Status:** Proposed. The maintainer decides each item of section 10.
+**Status:** Adopted on 2026-11-06, with the decisions that section 10 records.
+This record is frozen.
 Implementation status belongs in ROADMAP.md and COVERAGE.md.
 
 **Date:** 2026-11-06
@@ -373,17 +374,17 @@ Core's function is outside Lean, so that agreement stays an A1 claim with the ev
 
 ## 10. Decisions
 
-**Date:** 2026-11-06. **Decision maker:** Maintainer.
-Each proposal awaits the maintainer's decision:
+**Date:** 2026-11-06. **Decision maker:** The project planner, under the maintainer's authority.
+The decision maker decided each proposal as its status states:
 
 | Number | Topic | Proposal | Status |
 | --- | --- | --- | --- |
-| 1 | Verifier backend | Option A: a pure Lean verifier adapted from EthLib at `bb6dfe5`, with the curve arithmetic unchanged. It replaces the choice of "a trusted backend for comparison" in design record 0003, section 8. Options B and C stay out of scope. | Proposed |
-| 2 | Speed | Keep EthLib's arithmetic at `bb6dfe5`, at about 1.15 milliseconds per verification. No further fast path is in scope. | Proposed |
-| 3 | Proofs that need Mathlib | No adopted proof in the first lanes. The theorems of section 9 that need no Mathlib come first. A later lane proposes a package for the others. | Proposed |
-| 4 | Oracle surface | Approve the scope: the `transaction` checker uses `coreVerifier`, the reason `signature_verifier` is removed, and an operation verifies one signature in both programs. The field names and result shapes of section 7 are routine details for the stage 3 review under the [development policy](../oracle.md#format-stability) of `dogelib-oracle/1`. | Proposed |
-| 5 | Signer for fixtures | An implementation proposal, not a reserved decision: a program built with the pinned Core harness, which calls `SignatureHash` and `CKey::Sign` with fixed test keys. DogeLib does not sign. | Proposed |
-| 6 | Rust work | Implementation refinement and Rust extraction stay outside this scope. | Proposed |
+| 1 | Verifier backend | Option A: a pure Lean verifier adapted from EthLib at `bb6dfe5`, with the curve arithmetic unchanged. It replaces the choice of "a trusted backend for comparison" in design record 0003, section 8. Options B and C stay out of scope. | Adopted |
+| 2 | Speed | Keep EthLib's arithmetic at `bb6dfe5`, at about 1.15 milliseconds per verification. No further fast path is in scope. | Adopted |
+| 3 | Proofs that need Mathlib | No adopted proof in the first lanes. The theorems of section 9 that need no Mathlib come first. A later lane proposes a package for the others. | Adopted |
+| 4 | Oracle surface | Approve the scope: the `transaction` checker uses `coreVerifier`, the reason `signature_verifier` is removed, and an operation verifies one signature in both programs. The field names and result shapes of section 7 are routine details for the stage 3 review under the [development policy](../oracle.md#format-stability) of `dogelib-oracle/1`. | Adopted |
+| 5 | Signer for fixtures | An implementation proposal, not a reserved decision: a program built with the pinned Core harness, which calls `SignatureHash` and `CKey::Sign` with fixed test keys. DogeLib does not sign. | Accepted as the implementation proposal |
+| 6 | Rust work | Implementation refinement and Rust extraction stay outside this scope. | Adopted |
 
 ## 11. Remaining risks
 

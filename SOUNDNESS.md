@@ -1083,9 +1083,9 @@ The lock-time conditions compare the operand with fields of the spending transac
 A claim that recovery cannot enter a chain before a height or time needs transaction-finality and chain-context results that DogeLib does not have.
 The template is a property target. A production bridge instance needs its own fixtures and custody review.
 
-`lake test` runs 24 hand cases through `verifyLegacySpend` with a table verifier, a test backend that ignores the digest.
+`lake test` runs 25 hand cases through `verifyLegacySpend` with a table verifier, a test backend that ignores the digest.
 They cover both branches, signatures in the wrong order, a missing signature, and the lock-time and sequence boundaries.
-They also cover a negative-zero selector, the dummy with and without `NULLDUMMY`, the CLTV flag clear, and each encoding error.
+They also cover a negative-zero selector, the dummy with and without `NULLDUMMY`, the CLTV flag clear, and each encoding error: DER, high S, hash type and key type.
 No comparison with Core's compiled code covers the template.
 By `#print axioms` with Lean `v4.35.0`:
 

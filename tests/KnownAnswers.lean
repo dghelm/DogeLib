@@ -4063,6 +4063,8 @@ def sigR : List UInt8 := [0xa4, 0x01]
 def derSigR : List UInt8 := hex "300602010102010101"
 /-- The same signature with the undefined hash type `00`. -/
 def derSigR0 : List UInt8 := hex "300602010102010100"
+/-- A strict DER signature with R = 1 and S = ⌊n/2⌋ + 1, one above the LOW_S bound, and the hash type `01`. -/
+def highSigR : List UInt8 := hex "30250201010220" ++ KnownAnswers.SignatureEncoding.halfPlusOneBytes ++ [0x01]
 /-- The LOW_S overflow case: R = 2^256 − 1 and S = 2^255 − 1, which `CheckLowS` accepts after lax parsing sets both to zero. -/
 def overflowSigR : List UInt8 := hex "3045022100" ++ rep 32 0xff ++ hex "02207f" ++ rep 31 0xff ++ [0x01]
 
@@ -4124,6 +4126,8 @@ def cases : List (String × UInt32 × List UInt8 × List UInt8 × UInt32 × UInt
     .rejected .sigHashtype),
   ("LOW_S overflow case passes the encoding check", base ||| ScriptFlags.lowS, recovery overflowSigR [], redeem,
     1000000, 0, .accepted),
+  ("S one above the half order under LOW_S", base ||| ScriptFlags.lowS, recovery highSigR [], redeem, 1000000, 0,
+    .rejected .sigHighS),
   ("arbitrary signature bytes under DERSIG", base ||| ScriptFlags.derSig, recovery sigR [], redeem, 1000000, 0,
     .rejected .sigDer),
   ("33-byte key with prefix 06 under STRICTENC", base ||| ScriptFlags.strictEnc,

@@ -13,7 +13,14 @@ These extensions follow the pinned VG model, whereas RFC 8018 requires positive 
 
 This executable uses whole-message HMAC, without cached hash states.
 It makes no constant-time or resource-bound claim.
-The proof `pbkdf2_eq_spec` relates it to the separate list model.
+`pbkdf2_eq_spec` relates it to the list model with executable SHA-256.
+`pbkdf2_eq_fips` uses the FIPS 180-4 model under explicit password and salt bounds.
+
+The definitions transcribe pyca/verified-garbage `lean/VerifiedGarbage/Spec/Pbkdf2.lean` at
+`28428ba6b81bfd8c438b7cdbcab1f8537f6bc13e` over `ByteArray`, under BSD-3-Clause.
+The licence and copyright notice are in `LICENSES/verified-garbage-BSD-3-Clause.txt`.
+The adaptation specializes the PRF to HMAC-SHA-256, uses `Nat.fold` for output blocks,
+and replaces the list prefix with a byte-array extraction.
 -/
 
 @[expose] public section

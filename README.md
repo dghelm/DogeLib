@@ -25,7 +25,8 @@ Each item below links to its evidence.
 
 Script verification takes a signature checker as a parameter.
 DogeLib has no ECDSA backend.
-With `transactionChecker`, a signature check that reaches the elliptic-curve verifier gives `unsupported`, not a verdict ([signature opcodes and the checker](SOUNDNESS.md#script-signature-opcodes-and-the-checker)).
+`transactionChecker` returns the answer of the verifier that its caller supplies.
+The oracle supplies a verifier that is always unavailable, so an oracle signature check that reaches it gives `unsupported`, not a verdict ([signature opcodes and the checker](SOUNDNESS.md#script-signature-opcodes-and-the-checker)).
 A Core-compatible signature verifier is proposed in design record 0005, in pull request #90.
 
 The `dogelib-oracle` program runs the specification on JSON requests, and a harness runs the pinned Core code on the same requests ([docs/oracle.md](docs/oracle.md)).

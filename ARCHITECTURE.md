@@ -90,7 +90,7 @@ These specification modules adapt EthLib's arithmetic with Lean core as their on
 The curve layer has no Script dependency.
 The proof library adds one kernel-checked ECDSA known answer and no Mathlib dependency.
 
-`Script` imports `Transaction`, because the interpreter and the legacy signature serializer share one instruction reader, `Transaction.readOp`, and later stages hash with `Transaction.legacySignatureHash`.
+`Script` imports `Transaction`, because the interpreter and the legacy signature serializer share one instruction reader, `Transaction.readOp`.
 `Script.Eval` also imports the hash definitions of `Cryptography` for the hash opcodes.
 `Script.Signature` imports `Transaction.legacySignatureHash` for `transactionChecker`. It takes the elliptic-curve check as a parameter and does no elliptic-curve arithmetic.
 `Transaction` never imports `Script`.

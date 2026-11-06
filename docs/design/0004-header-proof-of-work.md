@@ -48,7 +48,7 @@ The line ranges identify the inspected source for each contract:
 | C1 | [pureheader.h, lines 23–155](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/primitives/pureheader.h#L23-L155) | `VERSION_AUXPOW`, `VERSION_CHAIN_START`, the six fields, `GetBaseVersion`, `GetChainId`, `IsAuxpow` and `IsLegacy`. |
 | C2 | [pureheader.cpp, lines 13–30](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/primitives/pureheader.cpp#L13-L30) | `SetBaseVersion`, `GetHash` and `GetPoWHash`. |
 | C3 | [block.h, lines 23–48](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/primitives/block.h#L23-L48) | `CBlockHeader` serialization: the AuxPoW payload follows the pure header exactly when the flag is set. |
-| C4 | [auxpow.h, lines 23–172](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/auxpow.h#L23-L172) | The marker `pchMergedMiningHeader`, and the serialization of `CMerkleTx` and `CAuxPow`. |
+| C4 | [auxpow.h, lines 23–183](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/auxpow.h#L23-L183) | The marker `pchMergedMiningHeader`, the serialization of `CMerkleTx` and `CAuxPow`, and `getParentBlockPoWHash`. |
 | C5 | [auxpow.cpp, lines 80–161](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/auxpow.cpp#L80-L161) | `CAuxPow::check`. |
 | C6 | [auxpow.cpp, lines 163–206](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/auxpow.cpp#L163-L206) | `getExpectedIndex` and `CheckMerkleBranch`. |
 | C7 | [dogecoin.cpp, lines 89–125](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/dogecoin.cpp#L89-L125) | `CheckAuxPowProofOfWork`. |
@@ -60,7 +60,7 @@ The line ranges identify the inspected source for each contract:
 | C13 | [scrypt.cpp, lines 64–218](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/crypto/scrypt.cpp#L64-L218), [lines 259–264](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/crypto/scrypt.cpp#L259-L264), [scrypt.h, lines 15–37](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/crypto/scrypt.h#L15-L37) | `PBKDF2_SHA256`, `xor_salsa8`, `scrypt_1024_1_1_256_sp_generic` and the variant selection. |
 | C14 | [hmac_sha256.cpp, lines 9–34](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/crypto/hmac_sha256.cpp#L9-L34) | `CHMAC_SHA256`, including the key digest for keys longer than 64 bytes. |
 | C15 | [configure.ac, lines 210–214](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/configure.ac#L210-L214), [lines 793–795](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/configure.ac#L793-L795), [init.cpp, lines 1254–1258](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/init.cpp#L1254-L1258) | The SSE2 scrypt variant: off by default, selected at build time and detected at start-up. |
-| C16 | [transaction.h, lines 210–252](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/primitives/transaction.h#L210-L252), [serialize.h, lines 676–692](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/serialize.h#L676-L692) | The transaction reader and its witness flag, and the vector reader. |
+| C16 | [transaction.h, lines 210–272](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/primitives/transaction.h#L210-L272), [serialize.h, lines 676–692](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/serialize.h#L676-L692) | The transaction reader and writer with their witness flag, and the vector reader. |
 | C17 | [net.cpp, lines 696–698](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/net.cpp#L696-L698), [net_processing.cpp, lines 1551–1553](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/net_processing.cpp#L1551-L1553), [lines 2397–2408](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/net_processing.cpp#L2397-L2408), [lines 2547–2550](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/net_processing.cpp#L2547-L2550), [line 2878](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/net_processing.cpp#L2878), [version.h, lines 14–17](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/version.h#L14-L17), [clientversion.h, lines 55–59](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/clientversion.h#L55-L59) | The stream versions of the network and disk readers. |
 | C18 | [chain.cpp, lines 14–36](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/chain.cpp#L14-L36), [rpc/blockchain.cpp, lines 726–731](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/rpc/blockchain.cpp#L726-L731) | `CBlockIndex::GetBlockHeader` and the raw form of `getblockheader`. |
 | C19 | [hash.h, lines 80–89](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/hash.h#L80-L89) | `Hash` of two byte ranges: double SHA-256 of their concatenation. |
@@ -172,8 +172,9 @@ The specification must keep each behaviour, and a theorem or a known answer must
     3. With a payload, the flag must be set (line 115).
     4. The scrypt digest of the parent header must satisfy the `nBits` of this header (line 118).
     5. `CAuxPow::check` must accept, with this header's double SHA-256 hash and this header's own chain ID (line 121).
-11. The parent's proof of work uses the `nBits` of the merge-mined header, not the parent's own `nBits` [C7, line 118].
-    The parent's `nBits` has no effect on the result.
+11. The target of the parent's proof of work comes from the `nBits` of the merge-mined header, not from the parent's own `nBits` [C7, line 118].
+    The digest is the scrypt digest of all 80 parent bytes, including the parent's `nBits` [C4, lines 179–183, and C2, lines 25–30].
+    So the parent's `nBits` selects no target, but a change to it changes the digest and can change the result.
 12. The two mismatch rejections, a payload with a clear flag and a set flag without a payload, cannot follow from bytes.
     The reader creates a payload exactly when the flag is set [C3, lines 40–47].
     Core's tests reach the mismatches only through in-memory headers [C21, lines 388–399 and 425–439].
@@ -306,10 +307,25 @@ The read mode of the embedded transaction is a parameter.
 
 The stage exits with these results:
 
-- Round trip and canonicality of the encoder and reader in each read mode, for every payload that the encoder can produce.
+- A round trip of the encoder and reader in each read mode, under the restrictions below.
+- Canonicality over encoder output: the reader accepts the encoding of a full header and returns that header.
+  The stage does not claim that each accepted byte string is the encoding of its result.
 - A theorem that a decoded header carries a payload exactly when its flag is set (item 12).
 - Exact remainder and truncation behaviour, tested at every proper prefix of each fixture.
 - Agreement of the encoded pure header with the existing 80-byte codec.
+
+The round trip of the embedded transaction inherits the restrictions of `WitnessTransaction.readAllowWitness_encode`.
+Its counts must be within `MAX_SIZE`.
+In the witness-allowed mode, the transaction must have witness data, or an input, or no output.
+`noInputsExample_not_roundTrip` shows a transaction outside that shape: with no inputs, one output and no witness data, it is not read back.
+In the base mode, the round trip applies to the base projection of the transaction, without witness data.
+The header theorem also assumes that the payload is present exactly when the flag is set, and that its branch counts are within `MAX_SIZE`.
+
+The reader must keep Core's acceptance of noncanonical witness encodings [C16, lines 214–243].
+At the pin, Core's reader has no check for a witness section whose stacks are all empty.
+It accepts such an extended encoding, and Core's writer then emits the base form [C16, lines 252–263].
+So two byte strings decode to one transaction, with one transaction ID, and the payload lengths differ.
+The specification must accept both, and must not reject the extended form to gain a canonicality theorem.
 
 ### Stage 3: `CAuxPow::check`
 
@@ -353,8 +369,18 @@ Its exit conditions are an exact characterization theorem and known answers at t
 
 The proposed operations are `scrypt.hash` for 80 bytes, `block.header.read` for a full header, `auxpow.check` and `block.check_pow`.
 Each takes exact bytes and an explicit parameter record or network.
-Responses give the Boolean result and the Lean diagnostic separately.
-The comparator compares only the Boolean, the decoded fields and the consumed length.
+Responses give the result and the Lean diagnostic separately, and the comparator never compares the diagnostic.
+The comparison outputs differ by operation:
+
+| Operation | Compared outputs |
+| --- | --- |
+| `scrypt.hash` | The exact 32 digest bytes, in the order that `scrypt_1024_1_1_256` writes them to its output [C13, line 217]. That order is the internal order of `uint256`, which `UintToArith256` reads as little-endian. |
+| `block.header.read` | Success or failure, the decoded fields of the pure header and the payload, and the consumed length. |
+| `auxpow.check` | The Boolean result of `CAuxPow::check`. |
+| `block.check_pow` | The Boolean result of `CheckAuxPowProofOfWork`. |
+
+The C20 digests are written in display order, the reverse of the output order, because the test compares `uint256::ToString` [C20, lines 19 and 31–35].
+A fixture importer must reverse them, and the fixture must record that order.
 
 These operations need a new oracle format revision.
 The implementer proposes the schemas and the format name in the relevant pull request.
@@ -441,8 +467,8 @@ Each theorem states its domain and hypotheses in its doc comment:
 | `checkMerkleBranch_eq_fold` | The branch computation equals a left fold that chooses the side from the index bits, and the zero hash for index −1. |
 | Search characterization | The marker and root conditions of items 20 to 24 hold exactly when the search accepts, stated over byte offsets of the first occurrences. |
 | Binding | If `check` accepts, the parent's `hashMerkleRoot` is the index-zero fold of the transaction ID. The script contains the reversed chain root at the stated offset, followed by the size and nonce words. The chain root is the fold of the merge-mined hash at `nChainIndex`, and `nChainIndex` equals the expected index. |
-| Codec | Round trip, canonicality, and a payload exactly when the flag is set. |
-| `checkAuxPowProofOfWork_iff` | The predicate holds exactly when the chain ID condition holds and one of two branches holds. Without a payload, the header's own digest satisfies `checkProofOfWork_iff`. With a payload, the parent digest satisfies it and `check` accepts. |
+| Codec | A decoded header has a payload exactly when its flag is set. The round trip holds under the restrictions of stage 2. They are counts within `MAX_SIZE`, payload presence equal to the flag, and a transaction condition for each read mode. Canonicality covers encoder output only, and the reader keeps Core's acceptance of noncanonical witness encodings. |
+| `checkAuxPowProofOfWork_iff` | The predicate holds exactly when the chain ID condition holds and one of two branches holds. Without a payload, the AuxPoW flag is clear, and the header's own digest satisfies `checkProofOfWork_iff` with the header's `nBits`. With a payload, the flag is set, the parent's digest satisfies `checkProofOfWork_iff` with the merge-mined header's `nBits`, and `check` accepts. |
 | Record independence | For each network and every height, the predicate on the selected record equals the predicate on the height-zero record. |
 
 No target assumes collision resistance or another cryptographic property.
@@ -458,7 +484,7 @@ No target assumes collision resistance or another cryptographic property.
 | 3 | Scrypt model | A general RFC 7914 model with parameters N, r, p and the output length, and a separate executable fixed to Core's parameters, related by `powHash_eq_spec`. | Proposed |
 | 4 | Read mode of the embedded transaction | An explicit parameter. The Core paths use witness-allowed, as section 4.6 shows from the source. | Proposed |
 | 5 | Fixtures of full AuxPoW headers | A node RPC dump with `getblockheader <hash> false`, recorded with the node version, network, command and date, and checked against the checkpoint hashes. The maintainer chooses the source. | Proposed |
-| 6 | Oracle comparison | Compare the Boolean result, the decoded fields and the consumed length. Expose the first failing check as a Lean diagnostic that the comparator does not compare. | Proposed |
+| 6 | Oracle comparison | Compare the outputs of each operation as stage 5 lists them. For `scrypt.hash`, they are the exact digest bytes in output order. Expose the first failing check as a Lean diagnostic that the comparator does not compare. | Proposed |
 | 7 | Oracle format | The implementer proposes the schemas and the format name in the stage 5 pull request. The format change needs the maintainer's approval. | Proposed |
 | 8 | Rust work | Implementation refinement and Rust extraction stay outside this scope. | Proposed |
 
@@ -470,7 +496,7 @@ No target assumes collision resistance or another cryptographic property.
 | A byte-order mistake in the chain-root search: internal order instead of display order, or a reversed size or nonce word. | Known answers from `check_auxpow` with both orders, a theorem that states the reversal, and mutations that reverse the root in the Core comparison. |
 | The first-occurrence semantics of `std::search` become "any occurrence" in the specification. | The search characterization theorem uses first occurrences, and the `check_auxpow` cases with two roots pin the order [C21, lines 266–292]. |
 | The embedded transaction decodes in the wrong mode, so a payload with witness data is rejected or consumes a different length. | An explicit mode parameter, fixtures in both modes, and a Core comparison with the stream version of section 4.6. |
-| The proof of work of the parent uses the parent's `nBits`. | The composition theorem names the merge-mined header's `nBits`, and a mutation of the parent's `nBits` must not change the result. |
+| The specification takes the parent's target from the parent's `nBits`, or omits the parent's `nBits` from the digest input. | The composition theorem names the merge-mined header's `nBits` as the target and the 80 parent bytes as the digest input. Mutations of the parent's `nBits` recompute the parent digest and check it against the unchanged target of the merge-mined header, in Lean and in Core. Mutations of the merge-mined header's `nBits` change the target. |
 | A record-selection mistake: a caller uses a record of the wrong network. | The predicate takes the record explicitly, and the record-independence theorem covers the heights within each network. |
 | Test time of scrypt in `lake test`. | The cost budget of section 5, with the time measured and recorded by the first lane. |
 

@@ -27,6 +27,9 @@ Script verification takes a signature checker as a parameter.
 `transactionChecker` returns the answer of the verifier that its caller supplies.
 `Script.coreVerifier` is DogeLib's verifier: Core's `CPubKey::Verify` in Lean, with the ECDSA arithmetic adapted from EthLib ([design record 0005](docs/design/0005-signature-verifier.md)).
 `lake test` runs Core's script and transaction corpora with it.
+
+`lake test` also checks all 25 [signed recovery-template fixtures](tests/script/signed-spends/README.md), including each signer pair and every recorded mutation.
+Their verdicts and errors agree with Core's recorded expectations, and the oracle comparison rechecks these spends with live Core.
 The oracle uses `coreVerifier` for its transaction checker and exposes single-signature verification through `pubkey.verify`.
 
 The `dogelib-oracle` program runs the specification on JSON requests, and a harness runs the pinned Core code on the same requests ([docs/oracle.md](docs/oracle.md)).

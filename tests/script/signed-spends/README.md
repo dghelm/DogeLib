@@ -3,7 +3,14 @@
 `recovery.jsonl` contains 25 signed spends and mutations from design record 0005, section 8.
 The source of every digest, signature and expected verdict is Dogecoin Core at `e0a1c157791544e818c901bd9341896965afbf9d` ([SOURCES.md](../../../SOURCES.md)).
 No DogeLib result supplies an expectation.
-Lean does not consume these fixtures yet.
+`lake test` runs all 25 records through `verifyLegacySpend` with `coreVerifier`, using each record's flags.
+It compares both the Boolean verdict and the ScriptError name, and rejects every unsupported result.
+
+For the four baselines, a compiled sanity check also checks the premises of `multisigRecovery_sound_coreVerifier`.
+It checks the template commitment, supported flags, key lengths, push-only input and successful `scriptSig` evaluation with the redeem script last.
+Acceptance supplies the remaining premise.
+This check constructs no proof term.
+The Core comparison sends the same records through `script.verify_legacy` with the transaction checker and rechecks them against live Core.
 
 ## Provenance
 

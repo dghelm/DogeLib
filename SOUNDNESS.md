@@ -342,6 +342,31 @@ Core's result for them belongs to the stage 5 harness.
 
 By `#print axioms`, the search and `getExpectedIndex_mod64` theorems depend on `propext` and `Quot.sound`, and the others on `propext`, `Classical.choice` and `Quot.sound`.
 
+### Version gating
+
+`checkVersion` follows the two version checks at the start of `ContextualCheckBlockHeader` (D33, lines 3072 to 3086), in source order.
+With `fAllowLegacyBlocks` false, a legacy version is rejected as `late-legacy-block`.
+With `fAllowLegacyBlocks` true, a set AuxPoW flag is rejected as `early-auxpow-block`.
+`PureBlockHeader.isLegacy` is Core's `IsLegacy` (D10, lines 150 to 155): version 1, or version 2 with chain ID zero.
+The source review, not a theorem, connects these definitions to Core.
+
+`checkVersion_eq_ok_iff` and the two rejection theorems characterize the result for every record and every pure header.
+`PureBlockHeader.isLegacy_iff` shows that a version is legacy exactly when its bits are 1 or 2.
+So the chain ID test of `IsLegacy` never changes its result.
+A legacy version has a clear AuxPoW flag, so at most one of the two checks can reject a header.
+
+The record is an argument that carries only `fAllowLegacyBlocks`.
+Core takes the record from `GetConsensus` at the height of the new header (D14, lines 494 to 506).
+DogeLib does not model that selection for this field, and no theorem says which record a caller should pass.
+A caller that passes the wrong record gets the result of the wrong era.
+The known answers state the record that Core selects on each side of each activation height, from D14.
+
+The operation covers only these two checks.
+It omits the rest of `ContextualCheckBlockHeader`: `nBits` against `GetNextWorkRequired`, the checkpoints, the time checks and the rejection of outdated versions.
+So an accepted result does not mean that Core accepts the header in context.
+
+By `#print axioms`, `PureBlockHeader.isLegacy_iff` depends on `propext`, and the other theorems on `propext` and `Quot.sound`.
+
 ### RIPEMD-160 and Hash160
 
 `Ripemd160.hash` adapts EthLib's executable definition at `6a93711`, as SOURCES.md records.
@@ -1956,6 +1981,7 @@ The legacy signature hash is the `SIGVERSION_BASE` mode of `SignatureHash`, and 
 
 The work-parameter search covers each network and height, and the next-work wrapper selects the candidate height.
 The caller's hard-coded activation checks use the previous height, as the next-work subsection explains.
+Version gating takes its record from the caller, and does not select it from a height.
 Script and ledger work will need explicit context.
 
 ## Gap B: does the code that runs match the definitions?

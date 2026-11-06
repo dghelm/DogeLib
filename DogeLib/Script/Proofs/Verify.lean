@@ -2,6 +2,7 @@ module
 
 public import DogeLib.Script.Verify
 public import DogeLib.Script.Proofs.Eval
+public import DogeLib.Transaction.Proofs.Serialization
 
 /-!
 # Proofs: `Script.Verify`
@@ -34,6 +35,7 @@ public import DogeLib.Script.Proofs.Eval
 ## The spend predicate
 
 - `verifyLegacySpend_eq`: `verifyLegacySpend` is `verifyScript` with `transactionChecker` on the input's `scriptSig`.
+- `InputContext.ofDecoded`: the input context of an input of a transaction that `decodeBaseComplete` read. The reader gives the count bounds. `verifyLegacySpend_ofDecoded` unfolds the spend predicate on it.
 
 These theorems are statements about the definitions. They do not say that the definitions match Core.
 -/
@@ -372,6 +374,39 @@ theorem verifyLegacySpend_eq (ctx : InputContext) (prevScriptPubKey : Transactio
     (verify : SignatureVerifier) :
     verifyLegacySpend ctx prevScriptPubKey flags verify =
       verifyScript (transactionChecker ctx.tx ctx.index verify) flags ctx.input.scriptSig.bytes.val
+        prevScriptPubKey.bytes.val := rfl
+
+/--
+The input context of input `index` of a transaction `tx` that `decodeBaseComplete` read from `bs`.
+The caller supplies an index below the number of inputs.
+The reader gives the bounds on the numbers of inputs and outputs: a successful read has at most `MAX_SIZE` of each (`Transaction.readBase_eq_ok_iff`).
+-/
+def InputContext.ofDecoded {bs : List UInt8} {tx : Transaction} (hRead : Transaction.decodeBaseComplete bs = .ok tx)
+    (index : UInt32) (hIndex : index.toNat < tx.inputs.val.length) : InputContext :=
+  have hb : tx.WithinMaxSize :=
+    ((Transaction.readBase_eq_ok_iff bs tx []).mp ((Transaction.decodeBaseComplete_eq_ok_iff bs tx).mp hRead)).2
+  ⟨tx, index, hIndex, hb.inputs_lt, hb.outputs_lt⟩
+
+/-- The transaction of `InputContext.ofDecoded` is the transaction that the reader returned. -/
+theorem InputContext.ofDecoded_tx {bs : List UInt8} {tx : Transaction}
+    (hRead : Transaction.decodeBaseComplete bs = .ok tx) (index : UInt32) (hIndex : index.toNat < tx.inputs.val.length) :
+    (InputContext.ofDecoded hRead index hIndex).tx = tx := rfl
+
+/-- The index of `InputContext.ofDecoded` is the supplied index. -/
+theorem InputContext.ofDecoded_index {bs : List UInt8} {tx : Transaction}
+    (hRead : Transaction.decodeBaseComplete bs = .ok tx) (index : UInt32) (hIndex : index.toNat < tx.inputs.val.length) :
+    (InputContext.ofDecoded hRead index hIndex).index = index := rfl
+
+/--
+Take a transaction that `decodeBaseComplete` read and an index below its number of inputs.
+The spend predicate on `InputContext.ofDecoded` is `verifyScript` with `transactionChecker` for that index.
+It runs on the input's `scriptSig` and the previous-output script.
+-/
+theorem verifyLegacySpend_ofDecoded {bs : List UInt8} {tx : Transaction}
+    (hRead : Transaction.decodeBaseComplete bs = .ok tx) (index : UInt32) (hIndex : index.toNat < tx.inputs.val.length)
+    (prevScriptPubKey : Transaction.Script) (flags : UInt32) (verify : SignatureVerifier) :
+    verifyLegacySpend (InputContext.ofDecoded hRead index hIndex) prevScriptPubKey flags verify =
+      verifyScript (transactionChecker tx index verify) flags (tx.inputs.val[index.toNat]'hIndex).scriptSig.bytes.val
         prevScriptPubKey.bytes.val := rfl
 
 end DogeLib.Script

@@ -4033,6 +4033,9 @@ The verifier is a lookup table, a test backend that says nothing about consensus
 It answers `some true` for the listed pairs of stripped signature and key, and `some false` for every other request.
 It ignores the digest, which `transactionChecker_verify` in `DogeLib.Script.Proofs.Signature` characterizes.
 The keys are 33 bytes with the prefix `02`, which every encoding flag accepts.
+
+`checkSighash` compares, for three script codes of the template and six hash types, the production digest with the digest of the transformation reference.
+Both sides are DogeLib definitions, so that check is a consistency check, not independent evidence.
 -/
 
 namespace KnownAnswers.MultisigRecovery
@@ -4138,9 +4141,53 @@ def cases : List (String × UInt32 × List UInt8 × List UInt8 × UInt32 × UInt
     .rejected .evalFalse)
 ]
 
+/-- A transaction with two inputs and two outputs, so that every hash type below hashes a preimage for input 0. -/
+def sighashTx : DogeLib.Transaction.Transaction :=
+  { version := 1
+    inputs := ⟨[{ prevout := DogeLib.Transaction.OutPoint.null, scriptSig := toScript (recovery sigR []), sequence := 0 },
+      { prevout := DogeLib.Transaction.OutPoint.null, scriptSig := toScript [], sequence := 0xfffffffe }], by simp⟩
+    outputs := ⟨[⟨100000, toScript (p2shOf redeem)⟩, ⟨5000, toScript [0x51]⟩], by simp⟩
+    lockTime := 1000000 }
+
+/--
+Three script codes of the template, with their expected lengths:
+
+- the ordinary code, with `sig2` and then `sig1` removed, nearest the stack top first
+- the recovery code, with `sigR` removed
+- a code with the push of `P1` removed, so that FindAndDelete deletes 34 bytes
+-/
+def sighashCodes : List (String × List UInt8 × Nat) := [
+  ("ordinary", effectiveScriptCode redeem 0 [sig2, sig1], 149),
+  ("recovery", effectiveScriptCode redeem 0 [sigR], 149),
+  ("P1 removed", effectiveScriptCode redeem 0 [P1], 115)
+]
+
+/-- SIGHASH_ALL, NONE and SINGLE, each with and without ANYONECANPAY. -/
+def sighashTypes : List UInt32 := [1, 2, 3, 0x81, 0x82, 0x83]
+
+/--
+For each template code and hash type, the production digest `legacySignatureHash` equals the digest of `legacyReferencePlan`, and the code parses completely.
+This compares two DogeLib definitions with each other: a consistency check of the template corollaries, not an expected value from an independent source.
+The independent evidence for `legacySignatureHash` is Core's `sighash.json`.
+-/
+def checkSighash : IO Nat := do
+  let mut failures := 0
+  for (label, code, len) in sighashCodes do
+    unless code.length == len && (DogeLib.Transaction.scanOps code).2 == [] do
+      IO.eprintln s!"FAIL multisig recovery digest {label}: length {code.length} or the parse differs"
+      failures := failures + 1
+    for h in sighashTypes do
+      let prod := DogeLib.Transaction.legacySignatureHash (toScript code) sighashTx 0 h
+      let ref := (DogeLib.Transaction.legacyReferencePlan (toScript code) sighashTx 0 h).digest
+      unless prod.val == ref.val do
+        IO.eprintln s!"FAIL multisig recovery digest {label}, hash type {h}: production and reference differ"
+        failures := failures + 1
+  return failures
+
 /-- Runs every case. Returns the number of failures. -/
 def check : IO Nat := do
   let mut failures := 0
+  failures := failures + (← checkSighash)
   unless redeem.length == 149 && multisigRecoveryScript 2 [P1, P2, P3] R == redeem do
     IO.eprintln "FAIL multisig recovery: the template bytes differ from section 7"
     failures := failures + 1
@@ -4149,7 +4196,7 @@ def check : IO Nat := do
     unless expected.matches got do
       IO.eprintln s!"FAIL multisig recovery {label}: got {repr got}"
       failures := failures + 1
-  IO.println s!"multisig recovery: {cases.length + 1} hand cases, {failures} failures"
+  IO.println s!"multisig recovery: {cases.length + 1} hand cases, {sighashCodes.length * sighashTypes.length} digest comparisons, {failures} failures"
   return failures
 
 end KnownAnswers.MultisigRecovery

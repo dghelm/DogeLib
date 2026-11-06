@@ -633,6 +633,23 @@ The reader corollaries and their supporting bounds have these axiom dependencies
 | `legacySignatureHashPlan_eq_reference_of_decodeBaseComplete`, `legacySignatureHash_eq_reference_of_decodeBaseComplete` | `propext`, `Classical.choice`, `Quot.sound` |
 | `legacySignatureHashPlan_eq_reference_of_readAllowWitness`, `legacySignatureHash_eq_reference_of_readAllowWitness` | `propext`, `Classical.choice`, `Quot.sound` |
 
+`DogeLib.Transaction.Proofs.ScanOps` proves that the hypothesis `hParse` survives the operations that build script code.
+An instruction that `readOp` reads depends only on its own bytes (`readOp_append`, `readOp_bytes`).
+So after a fully parsed head, a concatenation parses exactly as its tail does (`scanOps_append`, `scanOps_append_snd`).
+
+`scanOps_drop`: in a fully parsed script, the suffix from a cursor at an instruction boundary parses completely.
+The cursor is at a boundary when the bytes before it parse completely.
+`findAndDelete_scanOps`: `FindAndDelete` keeps a fully parsed script fully parsed, when the pattern parses completely or is longer than the script.
+
+The pattern hypothesis is needed.
+The script `02 4c 01` parses as one push. The pattern `02` matches at its start, and the bytes that remain, `4c 01`, are a short `OP_PUSHDATA1`.
+By `#print axioms` with Lean `v4.35.0`:
+
+| Theorem | Axioms |
+| --- | --- |
+| `scanOps_nil` | `propext`, `Quot.sound` |
+| `readOp_append`, `readOp_bytes`, `scanOps_bytes`, `scanOps_opcode`, `scanOps_append`, `scanOps_append_snd`, `scanOps_drop`, `dropMatches_scanOps`, `findAndDeleteLoop_scanOps`, `findAndDelete_scanOps` | `propext`, `Classical.choice`, `Quot.sound` |
+
 ### Script instruction reader and execution state
 
 `DogeLib.Script.Instruction` specifies one call of Core's `GetOp2` at a cursor (SOURCES.md, D24).
@@ -714,6 +731,20 @@ By `#print axioms` with Lean `v4.35.0`:
 | `pushLengthBytes_length` | `propext` |
 | `readInstruction_pushEncoding` | `propext`, `Classical.choice`, `Quot.sound` |
 | `leValue_pushLengthBytes`, `pushHeader_encoding`, `findAndDelete_empty`, `dropMatches_decomposition`, `dropMatches_exhausted`, `findAndDeleteLoop_traversal`, `DeletionTraversal.zero`, `findAndDeleteLoop_empty`, `findAndDelete_eq_loop`, `findAndDelete_traversal`, `findAndDeleteLoop_malformed`, `effectiveScriptCode_nil`, `effectiveScriptCode_single`, `effectiveScriptCode_append` | `propext`, `Quot.sound` |
+
+The effective script code keeps the parsed-script hypothesis of the transformation-reference theorem.
+`readOp_pushEncoding`: `readOp` reads the push encoding of a payload shorter than 2^32 bytes as one instruction, and `scanOps_pushEncoding` follows.
+`effectiveScriptCode_scanOps` takes a script of at most 2^32 bytes whose suffix from the cursor parses completely.
+For every signature list, the effective script code then parses completely.
+
+It needs no hypothesis on the signatures.
+A push of a signature of 2^32 bytes or more is longer than the script code, so it never matches.
+By `#print axioms` with Lean `v4.35.0`:
+
+| Theorem | Axioms |
+| --- | --- |
+| `length_lt_pushEncoding` | `propext`, `Quot.sound` |
+| `readOp_pushEncoding`, `scanOps_pushEncoding`, `effectiveScriptCode_scanOps` | `propext`, `Classical.choice`, `Quot.sound` |
 
 ### Script numbers and truth values
 
@@ -1025,6 +1056,17 @@ By `#print axioms` with Lean `v4.35.0`:
 | `transactionChecker_checkLockTime`, `transactionChecker_checkSequence`, `transactionChecker_checkLockTime_none`, `transactionChecker_checkSequence_none`, `sequenceSatisfied_iff`, `checkLockTimeStep_next`, `checkSequenceStep_next`, the `execOpcode_cltv*` and `execOpcode_csv*` theorems, `execOpcode_checker_congr`, `execOpcode_script_congr`, `isPushOnlyFrom_atEnd`, `isPushOnlyFrom_truncated`, `isPushOnlyFrom_instruction`, `verifyScript_unsupportedFlags`, `hasFlag_sigPushOnly_eq_false`, `hasFlag_cleanStack_eq_false`, `hasFlag_witness_eq_false`, `verifyScript_noP2sh`, `verifyScript_p2sh`, `verifyScript_p2sh_notPushOnly`, `verifyLegacySpend_eq` | `propext`, `Quot.sound` |
 | `isPushOnlyFrom_iff`, `isPushOnly_iff`, `isPayToScriptHash_iff`, `evalScript_p2shTemplate`, `evalScript_p2shTemplate_nil`, `verifyScript_p2sh_saved_ne_nil`, `verifyScript_p2sh_hash`, `verifyScript_p2sh_hash_ne` | `propext`, `Classical.choice`, `Quot.sound` |
 
+`InputContext.ofDecoded`, in `DogeLib.Script.Proofs.Verify`, builds the input context of an input of a transaction that `decodeBaseComplete` read.
+The caller supplies an index below the number of inputs.
+`Transaction.decodeBaseComplete_eq_ok_iff` and `Transaction.readBase_eq_ok_iff` give `WithinMaxSize`, and so the two count bounds.
+`verifyLegacySpend_ofDecoded` unfolds the spend predicate on it to `verifyScript` with `transactionChecker` for the index.
+The definition lives in the proof library, because `WithinMaxSize` does.
+By `#print axioms` with Lean `v4.35.0`:
+
+| Theorem | Axioms |
+| --- | --- |
+| `InputContext.ofDecoded_tx`, `InputContext.ofDecoded_index`, `verifyLegacySpend_ofDecoded` | `propext`, `Classical.choice`, `Quot.sound` |
+
 ### Script worked property: multisig with recovery
 
 `DogeLib.Script.MultisigRecovery` builds the redeem script of design record 0003, section 7, for `k` of `n` keys with `1 ≤ k ≤ n ≤ 16`:
@@ -1072,6 +1114,17 @@ The theorems:
   Without the flag, `OP_CHECKLOCKTIMEVERIFY` is `OP_NOP2`, and a known answer accepts the recovery branch with lock time 0.
 - `verifyLegacySpend_scriptSig_rejected` and `verifyLegacySpend_scriptSig_unsupported`: a failed `scriptSig` evaluation passes through.
 
+Every checker call of both branches hashes the transformation-reference digest, Core's `SignatureHashOld`.
+`multisigRecoveryScript_scanOps`: for `1 ≤ k ≤ n ≤ 16`, 33-byte keys and a 33-byte recovery key, every instruction of the template parses.
+`ordinaryCode_scanOps` and `recoveryCode_scanOps`: so does the script code of each branch, for every signature list, by `effectiveScriptCode_scanOps`.
+These discharge the parsed-script hypothesis of design record 0003, stage 3, for the template.
+
+`transactionChecker_verify_reference` and `sigAccepted_iff_reference` compose a fully parsed script code with `legacySignatureHash_eq_reference` and the count bounds of the `InputContext`.
+`MultisigRecoverySpend.sigAccepted_ordinary_iff_reference` and `MultisigRecoverySpend.sigAccepted_recovery_iff_reference` restate `sigAccepted` on each branch's script code.
+It holds exactly when the key passes `isValidPubKey` and `verify` answers `some true` on the stripped signature, the key and the digest of `legacyReferencePlan`.
+`MultisigRecoverySpend.checkSig_ordinary_reference` and `MultisigRecoverySpend.checkSig_recovery_reference` give the checker's answer as that `verify` call.
+These results concern the digest that the checker passes to `verify`. They add nothing about `verify` itself.
+
 The theorems hold relative to the verifier parameter, under the verifier-agreement hypothesis of [Script signature opcodes and the checker](#script-signature-opcodes-and-the-checker).
 They do not establish unforgeability, private-key ownership, distinct signers or bridge custody.
 
@@ -1087,6 +1140,10 @@ The template is a property target. A production bridge instance needs its own fi
 They cover both branches, signatures in the wrong order, a missing signature, and the lock-time and sequence boundaries.
 They also cover a negative-zero selector, the dummy with and without `NULLDUMMY`, and the CLTV flag clear.
 Each encoding error has a case: DER, high S, hash type and key type.
+
+`lake test` also compares, for three script codes of the template and six hash types, `legacySignatureHash` with the digest of `legacyReferencePlan`.
+Both are DogeLib definitions, so these 18 comparisons are a consistency check, not independent evidence.
+The independent evidence for `legacySignatureHash` is Core's `sighash.json`.
 No comparison with Core's compiled code covers the template.
 By `#print axioms` with Lean `v4.35.0`:
 
@@ -1096,6 +1153,8 @@ By `#print axioms` with Lean `v4.35.0`:
 | `multisigLoop_cons`, `multisigLoop_visits_error`, `pushEncoding_small`, `countOp_small`, `multisigRecoveryScript_eq`, `trueTop_boolBytes` | `propext` |
 | `multisigLoop_visits_ok`, `multisigLoop_ok_visits`, `checkSignatureEncoding_ok_iff`, `checkPubKeyEncoding_ok_iff`, `multisigCheck_eq_ok_iff`, `sigAccepted_iff`, `sigAccepted_of_checkSig`, `multisigRecoveryScript_length`, `checkSigStep_recovery`, `effectiveScriptCode_length_le`, `transactionChecker_checkSig_ne_none`, `hash160_toList_length`, `verifyLegacySpend_scriptSig_rejected`, `verifyLegacySpend_scriptSig_unsupported` and the other layout lemmas | `propext`, `Quot.sound` |
 | `multisigRecovery_sound`, `multisigRecovery_ordinary_complete`, `multisigRecovery_recovery_complete`, `multisigRecovery_accepted_iff`, `multisigRecovery_twoOfThree_accepted_iff`, `multisigRecovery_ordinary_unsupported`, `multisigRecovery_recovery_unsupported`, `multisigRecovery_lockTime_lt`, `multisigRecovery_accepted_lockTime_lt`, `multisigRecoveryScript_twoOfThree` and the evaluation lemmas | `propext`, `Classical.choice`, `Quot.sound` |
+| `multisigRecoveryScript_length_le`, `ordinaryCode_length_lt`, `recoveryCode_length_lt` | `propext`, `Quot.sound` |
+| `scanOps_cons_opcode`, `keys_scanOps`, `redeemTail_scanOps`, `multisigRecoveryScript_scanOps`, `ordinaryCode_scanOps`, `recoveryCode_scanOps`, `transactionChecker_verify_reference`, `sigAccepted_iff_reference`, `MultisigRecoverySpend.sigAccepted_ordinary_iff_reference`, `MultisigRecoverySpend.sigAccepted_recovery_iff_reference`, `MultisigRecoverySpend.checkSig_ordinary_reference`, `MultisigRecoverySpend.checkSig_recovery_reference` | `propext`, `Classical.choice`, `Quot.sound` |
 
 ### Compact encoding and difficulty retarget
 
@@ -1473,6 +1532,9 @@ A conditional theorem is only as strong as its hypotheses.
 `legacySignatureHashPlan_eq_reference` equates the field-by-field production plan with the transaction-transformation reference for every input index and hash type.
 It requires fully parsed script code, fewer than 2^32 inputs and fewer than 2^32 outputs.
 The transformation-reference subsection states these hypotheses and explains the short-push difference.
+
+For the script code of the multisig-with-recovery template, `ordinaryCode_scanOps` and `recoveryCode_scanOps` discharge the parse hypothesis, and the `InputContext` gives the count bounds.
+For other scripts, `effectiveScriptCode_scanOps` reduces it to the parse of the script suffix from the cursor.
 Whatever those hypotheses leave unproved is part of what a reader trusts.
 
 `transactionChecker` takes the elliptic-curve check as a parameter `verify`.
@@ -1483,7 +1545,8 @@ The worked property of [multisig with recovery](#script-worked-property-multisig
 Its converses also assume a bound on the stack below the redeem script.
 
 `verifyLegacySpend` requires an `InputContext`, whose index selects an input and whose transaction has fewer than 2^32 inputs and outputs.
-Core's transaction reader gives the two count bounds. A caller that builds a transaction from fields must supply them.
+Core's transaction reader gives the two count bounds, and `InputContext.ofDecoded` takes them from a successful `decodeBaseComplete`.
+A caller that builds a transaction from fields must supply them.
 
 `no_wrap_of_validProofOfWorkTarget` discharges the old-target bound of `no_wrap_of_le_powLimit` from Core's target-validity predicate.
 Its numerical bound holds for every selected mainnet and testnet record.

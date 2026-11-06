@@ -39,6 +39,14 @@ It also holds the P2SH commitment to the exact redeem bytes, a push-only `script
 - `multisigRecovery_lockTime_lt`, `multisigRecovery_accepted_lockTime_lt`: under `CHECKLOCKTIMEVERIFY`, a lock time below 1,000,000 cannot pass the recovery branch.
 - `verifyLegacySpend_scriptSig_rejected`, `verifyLegacySpend_scriptSig_unsupported`: a failed `scriptSig` evaluation passes through.
 
+## The reference digest
+
+Every checker call of both branches hashes the digest of `legacyReferencePlan`, Core's `SignatureHashOld` transformation.
+
+- `ordinaryCode_scanOps`, `recoveryCode_scanOps`: for every signature list, every instruction of each branch's script code parses. That property is the parsed-script hypothesis of design record 0003, stage 3.
+- `transactionChecker_verify_reference`, `sigAccepted_iff_reference`: for any `InputContext` and fully parsed script code, the checker passes the reference digest to `verify`.
+- `MultisigRecoverySpend.sigAccepted_ordinary_iff_reference`, `MultisigRecoverySpend.sigAccepted_recovery_iff_reference`, `MultisigRecoverySpend.checkSig_ordinary_reference`, `MultisigRecoverySpend.checkSig_recovery_reference`: the two compose under `MultisigRecoverySpend`.
+
 ## Resource bounds
 
 The template discharges the redeem-script size (`multisigRecoveryScript_length`: `34 n + 47` bytes), the push sizes (33 bytes at most) and the opcode count (at most `n + 7`).
@@ -1507,6 +1515,220 @@ theorem verifyLegacySpend_scriptSig_unsupported {u : Unsupported} (hf : unsuppor
     verifyLegacySpend ctx prevScriptPubKey flags verify = .unsupported u := by
   have h1 : ¬unsupportedFlagBits flags ≠ 0 := by simp [hf]
   simp only [verifyLegacySpend, verifyScript, h1, ite_false, hss]
+
+/-! ## The reference digest -/
+
+/-- For every opcode above `OP_PUSHDATA4` and every fully parsed tail, the opcode followed by the tail parses completely. -/
+theorem scanOps_cons_opcode {op : UInt8} (h : 0x4e < op) {t : List UInt8} (ht : (scanOps t).2 = []) :
+    (scanOps (op :: t)).2 = [] := by
+  rw [show op :: t = [op] ++ t from rfl, scanOps_append_snd (scanOps_opcode h)]
+  exact ht
+
+/-- For 33-byte keys and every fully parsed tail, the key pushes followed by the tail parse completely. -/
+theorem keys_scanOps {keys : List (List UInt8)} (hkeys : ∀ P ∈ keys, P.length = 33) {t : List UInt8}
+    (ht : (scanOps t).2 = []) : (scanOps ((keys.map pushEncoding).flatten ++ t)).2 = [] := by
+  induction keys with
+  | nil => simpa using ht
+  | cons P ks ih =>
+    simp only [List.map_cons, List.flatten_cons, List.append_assoc]
+    rw [scanOps_append_snd (scanOps_pushEncoding P (by rw [hkeys P (by simp)]; decide))]
+    exact ih (fun Q hQ => hkeys Q (by simp [hQ]))
+
+/-- For `1 ≤ n ≤ 16` and a 33-byte recovery key, the bytes after the key pushes parse completely. -/
+theorem redeemTail_scanOps {n : Nat} {recovery : List UInt8} (h1 : 1 ≤ n) (hn : n ≤ 16) (hR : recovery.length = 33) :
+    (scanOps (redeemTail n recovery)).2 = [] := by
+  have hop := (smallIntOpcode_facts n (by omega) h1).1
+  have e : redeemTail n recovery = smallIntOpcode n :: 0xae :: 0x67 ::
+      ([0x03, 0x40, 0x42, 0x0f] ++ (0xb1 :: 0x75 :: (pushEncoding recovery ++ [0xac, 0x68]))) := by
+    simp [redeemTail]
+  have hpush : readOp [0x03, 0x40, 0x42, 0x0f] = .op 0x03 [0x03, 0x40, 0x42, 0x0f] [] := rfl
+  rw [e]
+  refine scanOps_cons_opcode hop (scanOps_cons_opcode (by decide) (scanOps_cons_opcode (by decide) ?_))
+  rw [scanOps_append_snd (scanOps_bytes hpush)]
+  refine scanOps_cons_opcode (by decide) (scanOps_cons_opcode (by decide) ?_)
+  rw [scanOps_append_snd (scanOps_pushEncoding recovery (by rw [hR]; decide))]
+  exact scanOps_cons_opcode (by decide) (scanOps_cons_opcode (by decide) (by rw [scanOps_nil]))
+
+/-- For `1 ≤ k ≤ n ≤ 16`, `n` keys of 33 bytes and a 33-byte recovery key, every instruction of the template parses. -/
+theorem multisigRecoveryScript_scanOps {k : Nat} {keys : List (List UInt8)} {R : List UInt8}
+    (hk1 : 1 ≤ k) (hkn : k ≤ keys.length) (hn : keys.length ≤ 16) (hkeys : ∀ P ∈ keys, P.length = 33)
+    (hR : R.length = 33) : (scanOps (multisigRecoveryScript k keys R)).2 = [] := by
+  rw [multisigRecoveryScript_eq]
+  exact scanOps_cons_opcode (by decide) (scanOps_cons_opcode (smallIntOpcode_facts k (by omega) hk1).1
+    (keys_scanOps hkeys (redeemTail_scanOps (by omega) hn hR)))
+
+/-- For `n ≤ 16` keys of 33 bytes and a 33-byte recovery key, the template has at most 2^32 bytes. -/
+theorem multisigRecoveryScript_length_le {k : Nat} {keys : List (List UInt8)} {R : List UInt8}
+    (hn : keys.length ≤ 16) (hkeys : ∀ P ∈ keys, P.length = 33) (hR : R.length = 33) :
+    (multisigRecoveryScript k keys R).length ≤ 2 ^ 32 := by
+  rw [multisigRecoveryScript_length hkeys hR]
+  omega
+
+/--
+For `1 ≤ k ≤ n ≤ 16`, `n` keys of 33 bytes, a 33-byte recovery key and every signature list `sigs`:
+every instruction of the script code of the ordinary branch parses.
+-/
+theorem ordinaryCode_scanOps {k : Nat} {keys : List (List UInt8)} {R : List UInt8}
+    (hk1 : 1 ≤ k) (hkn : k ≤ keys.length) (hn : keys.length ≤ 16) (hkeys : ∀ P ∈ keys, P.length = 33)
+    (hR : R.length = 33) (sigs : List (List UInt8)) :
+    (scanOps (ordinaryCode (multisigRecoveryScript k keys R) sigs)).2 = [] :=
+  effectiveScriptCode_scanOps _ 0 _ (by simpa using multisigRecoveryScript_scanOps hk1 hkn hn hkeys hR)
+    (multisigRecoveryScript_length_le hn hkeys hR)
+
+/--
+For `1 ≤ k ≤ n ≤ 16`, `n` keys of 33 bytes, a 33-byte recovery key and every signature `sigR`:
+every instruction of the script code of the recovery branch parses.
+-/
+theorem recoveryCode_scanOps {k : Nat} {keys : List (List UInt8)} {R : List UInt8}
+    (hk1 : 1 ≤ k) (hkn : k ≤ keys.length) (hn : keys.length ≤ 16) (hkeys : ∀ P ∈ keys, P.length = 33)
+    (hR : R.length = 33) (sigR : List UInt8) :
+    (scanOps (recoveryCode (multisigRecoveryScript k keys R) sigR)).2 = [] :=
+  effectiveScriptCode_scanOps _ 0 _ (by simpa using multisigRecoveryScript_scanOps hk1 hkn hn hkeys hR)
+    (multisigRecoveryScript_length_le hn hkeys hR)
+
+/-- For `n ≤ 16` keys of 33 bytes and a 33-byte recovery key, the script code of the ordinary branch is shorter than 2^64 bytes. -/
+theorem ordinaryCode_length_lt {k : Nat} {keys : List (List UInt8)} {R : List UInt8}
+    (hn : keys.length ≤ 16) (hkeys : ∀ P ∈ keys, P.length = 33) (hR : R.length = 33) (sigs : List (List UInt8)) :
+    (ordinaryCode (multisigRecoveryScript k keys R) sigs).length < 2 ^ 64 := by
+  have := effectiveScriptCode_length_le (multisigRecoveryScript k keys R) 0 sigs.reverse
+  have := multisigRecoveryScript_length_le (k := k) hn hkeys hR
+  simp only [ordinaryCode]
+  omega
+
+/-- For `n ≤ 16` keys of 33 bytes and a 33-byte recovery key, the script code of the recovery branch is shorter than 2^64 bytes. -/
+theorem recoveryCode_length_lt {k : Nat} {keys : List (List UInt8)} {R : List UInt8}
+    (hn : keys.length ≤ 16) (hkeys : ∀ P ∈ keys, P.length = 33) (hR : R.length = 33) (sigR : List UInt8) :
+    (recoveryCode (multisigRecoveryScript k keys R) sigR).length < 2 ^ 64 := by
+  have := effectiveScriptCode_length_le (multisigRecoveryScript k keys R) 0 [sigR]
+  have := multisigRecoveryScript_length_le (k := k) hn hkeys hR
+  simp only [recoveryCode]
+  omega
+
+/--
+The checker's answer on `s ++ [hashType]` is `verify` on `s`, the key and the digest of `legacyReferencePlan`, Core's `SignatureHashOld` transformation.
+It holds for every input context, verifier, signature bytes `s` and hash-type byte, under two hypotheses:
+
+- the key passes `isValidPubKey`
+- the script code is shorter than 2^64 bytes, and all its instructions parse
+
+The input context gives the bounds on the numbers of inputs and outputs.
+-/
+theorem transactionChecker_verify_reference (ctx : InputContext) (verify : SignatureVerifier)
+    (s : List UInt8) (hashType : UInt8) {key code : List UInt8} (hk : isValidPubKey key = true)
+    (hc : code.length < 2 ^ 64) (hParse : (scanOps code).2 = []) :
+    (transactionChecker ctx.tx ctx.index verify).checkSig (s ++ [hashType]) key code =
+      verify s key (legacyReferencePlan ⟨⟨code, hc⟩⟩ ctx.tx ctx.index hashType.toUInt32).digest := by
+  rw [transactionChecker_verify _ _ _ _ _ hk hc,
+    legacySignatureHash_eq_reference _ _ _ _ hParse ctx.inputs_lt ctx.outputs_lt]
+
+/--
+Take any input context and verifier, and a script code shorter than 2^64 bytes whose instructions all parse.
+Then `sigAccepted` holds for `sig` and `key` exactly when these hold:
+
+- the key passes `isValidPubKey`
+- `sig` is `s ++ [hashType]`
+- `verify` returns `some true` on `s`, the key, and the digest of `legacyReferencePlan` with `hashType` as the hash type
+-/
+theorem sigAccepted_iff_reference (ctx : InputContext) (verify : SignatureVerifier) {code : List UInt8}
+    (hc : code.length < 2 ^ 64) (hParse : (scanOps code).2 = []) (sig key : List UInt8) :
+    sigAccepted ctx verify code sig key = true ↔
+      isValidPubKey key = true ∧ ∃ s hashType, sig = s ++ [hashType] ∧
+        verify s key (legacyReferencePlan ⟨⟨code, hc⟩⟩ ctx.tx ctx.index hashType.toUInt32).digest = some true := by
+  have e : ∀ h, legacySignatureHash ⟨⟨code, hc⟩⟩ ctx.tx ctx.index h =
+      (legacyReferencePlan ⟨⟨code, hc⟩⟩ ctx.tx ctx.index h).digest := fun h =>
+    legacySignatureHash_eq_reference _ _ _ h hParse ctx.inputs_lt ctx.outputs_lt
+  rw [sigAccepted_iff ctx verify hc]
+  simp only [e]
+
+/--
+**The reference digest, ordinary branch.** Under `MultisigRecoverySpend`, for every signature list `sigs`:
+`sigAccepted` with the script code of the ordinary branch holds for `sig` and `key` exactly when these hold:
+
+- the key passes `isValidPubKey`
+- `sig` is `s ++ [hashType]`
+- `verify` returns `some true` on `s`, the key, and the digest of `legacyReferencePlan` for the script code, the input and `hashType`
+
+`legacyReferencePlan` is Core's `SignatureHashOld` transformation.
+So every checker call of the ordinary branch, in `OrdinaryBranch` and `multisigVisits`, hashes the reference digest.
+
+The hypotheses used are the template sizes of `MultisigRecoverySpend`: `1 ≤ k ≤ n ≤ 16`, `n` keys of 33 bytes and a 33-byte recovery key `R`.
+They give the parsed-script hypothesis of `legacySignatureHash_eq_reference` for every signature list.
+The input context gives an input index that selects an input, and fewer than 2^32 inputs and outputs.
+-/
+theorem MultisigRecoverySpend.sigAccepted_ordinary_iff_reference
+    (h : MultisigRecoverySpend ctx prevScriptPubKey flags verify k keys R S) (sigs : List (List UInt8))
+    (sig key : List UInt8) :
+    sigAccepted ctx verify (ordinaryCode (multisigRecoveryScript k keys R) sigs) sig key = true ↔
+      isValidPubKey key = true ∧ ∃ s hashType, sig = s ++ [hashType] ∧
+        verify s key (legacyReferencePlan
+          ⟨⟨ordinaryCode (multisigRecoveryScript k keys R) sigs,
+            ordinaryCode_length_lt h.n_le h.keys_length h.recovery_length sigs⟩⟩
+          ctx.tx ctx.index hashType.toUInt32).digest = some true :=
+  sigAccepted_iff_reference ctx verify _
+    (ordinaryCode_scanOps h.one_le_k h.k_le_n h.n_le h.keys_length h.recovery_length sigs) sig key
+
+/--
+**The reference digest, recovery branch.** Under `MultisigRecoverySpend`, for every signature `sigR`:
+`sigAccepted` with the script code of the recovery branch holds for `sig` and `key` exactly when these hold:
+
+- the key passes `isValidPubKey`
+- `sig` is `s ++ [hashType]`
+- `verify` returns `some true` on `s`, the key, and the digest of `legacyReferencePlan` for the script code, the input and `hashType`
+
+`legacyReferencePlan` is Core's `SignatureHashOld` transformation.
+So the checker call of `RecoveryBranch` hashes the reference digest.
+
+The hypotheses used are the template sizes of `MultisigRecoverySpend`: `1 ≤ k ≤ n ≤ 16`, `n` keys of 33 bytes and a 33-byte recovery key `R`.
+The input context gives an input index that selects an input, and fewer than 2^32 inputs and outputs.
+-/
+theorem MultisigRecoverySpend.sigAccepted_recovery_iff_reference
+    (h : MultisigRecoverySpend ctx prevScriptPubKey flags verify k keys R S) (sigR sig key : List UInt8) :
+    sigAccepted ctx verify (recoveryCode (multisigRecoveryScript k keys R) sigR) sig key = true ↔
+      isValidPubKey key = true ∧ ∃ s hashType, sig = s ++ [hashType] ∧
+        verify s key (legacyReferencePlan
+          ⟨⟨recoveryCode (multisigRecoveryScript k keys R) sigR,
+            recoveryCode_length_lt h.n_le h.keys_length h.recovery_length sigR⟩⟩
+          ctx.tx ctx.index hashType.toUInt32).digest = some true :=
+  sigAccepted_iff_reference ctx verify _
+    (recoveryCode_scanOps h.one_le_k h.k_le_n h.n_le h.keys_length h.recovery_length sigR) sig key
+
+/--
+**The checker call, ordinary branch.** Under `MultisigRecoverySpend`, take any signature list `sigs`, signature bytes `s` and hash-type byte, and a key that passes `isValidPubKey`.
+With the script code of the ordinary branch, the checker's answer on `s ++ [hashType]` is `verify` on `s`, the key and the digest of `legacyReferencePlan`.
+
+The hypotheses used are the template sizes of `MultisigRecoverySpend`: `1 ≤ k ≤ n ≤ 16`, `n` keys of 33 bytes and a 33-byte recovery key `R`.
+The input context gives an input index that selects an input, and fewer than 2^32 inputs and outputs.
+-/
+theorem MultisigRecoverySpend.checkSig_ordinary_reference
+    (h : MultisigRecoverySpend ctx prevScriptPubKey flags verify k keys R S) (sigs : List (List UInt8))
+    (s : List UInt8) (hashType : UInt8) {key : List UInt8} (hk : isValidPubKey key = true) :
+    (transactionChecker ctx.tx ctx.index verify).checkSig (s ++ [hashType]) key
+        (ordinaryCode (multisigRecoveryScript k keys R) sigs) =
+      verify s key (legacyReferencePlan
+        ⟨⟨ordinaryCode (multisigRecoveryScript k keys R) sigs,
+          ordinaryCode_length_lt h.n_le h.keys_length h.recovery_length sigs⟩⟩
+        ctx.tx ctx.index hashType.toUInt32).digest :=
+  transactionChecker_verify_reference ctx verify s hashType hk _
+    (ordinaryCode_scanOps h.one_le_k h.k_le_n h.n_le h.keys_length h.recovery_length sigs)
+
+/--
+**The checker call, recovery branch.** Under `MultisigRecoverySpend`, take any signature `sigR`, signature bytes `s` and hash-type byte, and a key that passes `isValidPubKey`.
+With the script code of the recovery branch, the checker's answer on `s ++ [hashType]` is `verify` on `s`, the key and the digest of `legacyReferencePlan`.
+
+The hypotheses used are the template sizes of `MultisigRecoverySpend`: `1 ≤ k ≤ n ≤ 16`, `n` keys of 33 bytes and a 33-byte recovery key `R`.
+The input context gives an input index that selects an input, and fewer than 2^32 inputs and outputs.
+-/
+theorem MultisigRecoverySpend.checkSig_recovery_reference
+    (h : MultisigRecoverySpend ctx prevScriptPubKey flags verify k keys R S) (sigR s : List UInt8)
+    (hashType : UInt8) {key : List UInt8} (hk : isValidPubKey key = true) :
+    (transactionChecker ctx.tx ctx.index verify).checkSig (s ++ [hashType]) key
+        (recoveryCode (multisigRecoveryScript k keys R) sigR) =
+      verify s key (legacyReferencePlan
+        ⟨⟨recoveryCode (multisigRecoveryScript k keys R) sigR,
+          recoveryCode_length_lt h.n_le h.keys_length h.recovery_length sigR⟩⟩
+        ctx.tx ctx.index hashType.toUInt32).digest :=
+  transactionChecker_verify_reference ctx verify s hashType hk _
+    (recoveryCode_scanOps h.one_le_k h.k_le_n h.n_le h.keys_length h.recovery_length sigR)
 
 /-! ## The 2-of-3 instance of section 7 -/
 

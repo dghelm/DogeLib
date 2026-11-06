@@ -3,6 +3,7 @@ module
 public import DogeLib.Script.SignatureCode
 public import DogeLib.Script.Proofs.Instruction
 public import DogeLib.Transaction.Proofs.LegacySighashReference
+public import DogeLib.Transaction.Proofs.ScanOps
 
 /-!
 # Proofs: `Script.SignatureCode`
@@ -223,5 +224,56 @@ theorem effectiveScriptCode_single (s sig : List UInt8) (pc : Nat) :
 theorem effectiveScriptCode_append (s : List UInt8) (pc : Nat) (a b : List (List UInt8)) :
     effectiveScriptCode s pc (a ++ b) = effectiveScriptCode (effectiveScriptCode s pc a) 0 b := by
   simp [effectiveScriptCode, List.foldl_append]
+
+/-! ## Complete parses -/
+
+/-- For every payload shorter than 2^32 bytes, `readOp` reads its push encoding as one instruction, with the first byte as the opcode and nothing after it. -/
+theorem readOp_pushEncoding (data : List UInt8) (h : data.length < 2 ^ 32) :
+    readOp (pushEncoding data) = .op (pushEncoding data).head! (pushEncoding data) [] := by
+  obtain ⟨o, lf, hh, he⟩ := pushHeader_encoding data h
+  have hb : pushEncoding data = o :: lf ++ data := by simp [pushEncoding, hh]
+  have hhead : (pushEncoding data).head! = o := by rw [hb]; rfl
+  rw [hhead]
+  exact readOp_eq_op_iff.mpr ⟨lf, data, he.1, he.2, hb, by simp⟩
+
+/-- For every payload shorter than 2^32 bytes, its push encoding parses completely. -/
+theorem scanOps_pushEncoding (data : List UInt8) (h : data.length < 2 ^ 32) :
+    (scanOps (pushEncoding data)).2 = [] :=
+  scanOps_bytes (readOp_pushEncoding data h)
+
+/-- For every payload, its push encoding is longer than the payload. -/
+theorem length_lt_pushEncoding (data : List UInt8) : data.length < (pushEncoding data).length := by
+  have : 0 < (pushHeader data.length).length := by
+    unfold pushHeader
+    split
+    · simp
+    · split
+      · simp
+      · split <;> simp
+  simp only [pushEncoding, List.length_append]
+  omega
+
+/--
+For every script of at most 2^32 bytes, cursor `pc` whose suffix parses completely, and signature list `sigs`: the effective script code parses completely.
+The suffix parses completely when the script does and `pc` is at an instruction boundary (`Transaction.scanOps_drop`).
+No hypothesis on the signatures is needed.
+A push of a signature of 2^32 bytes or more is longer than the script code, so it never matches.
+-/
+theorem effectiveScriptCode_scanOps (script : List UInt8) (pc : Nat) (sigs : List (List UInt8))
+    (h : (scanOps (script.drop pc)).2 = []) (hlen : script.length ≤ 2 ^ 32) :
+    (scanOps (effectiveScriptCode script pc sigs)).2 = [] := by
+  unfold effectiveScriptCode
+  suffices ∀ code : List UInt8, (scanOps code).2 = [] → code.length ≤ 2 ^ 32 →
+      (scanOps (sigs.foldl (fun code sig => (Transaction.findAndDelete code (pushEncoding sig)).1) code)).2 = [] from
+    this _ h (by simp only [List.length_drop]; omega)
+  induction sigs with
+  | nil => intro code hc _; exact hc
+  | cons sig sigs ih =>
+    intro code hc hl
+    refine ih _ (findAndDelete_scanOps hc ?_) (Nat.le_trans (findAndDelete_length_le _ _) hl)
+    by_cases hs : sig.length < 2 ^ 32
+    · exact .inl (scanOps_pushEncoding sig hs)
+    · have := length_lt_pushEncoding sig
+      exact .inr (by omega)
 
 end DogeLib.Script

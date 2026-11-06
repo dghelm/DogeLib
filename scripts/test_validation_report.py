@@ -3,6 +3,7 @@
 
 import importlib.util
 import os
+import shlex
 import signal
 import threading
 import time
@@ -20,6 +21,19 @@ spec.loader.exec_module(runner)
 def registry(rows):
     return ('| Gate | Command | Exists | In CI |\n| --- | --- | --- | --- |\n' +
             ''.join(f'| {name} | {command} | {exists} | No |\n' for name, command, exists in rows))
+
+
+class WorkflowDependencies(unittest.TestCase):
+    def test_core_packages_match_validation(self):
+        packages = {}
+        for workflow in ('core', 'validation'):
+            text = (ROOT / f'.github/workflows/{workflow}.yml').read_text()
+            installs = [shlex.split(line.strip()) for line in text.splitlines()
+                        if line.strip().startswith('sudo apt-get install ')]
+            self.assertEqual(len(installs), 1, workflow)
+            packages[workflow] = {word for word in installs[0][3:] if not word.startswith('-')}
+            self.assertIn('libboost-dev', packages[workflow], workflow)
+        self.assertEqual(packages['core'], packages['validation'])
 
 
 class Reports(unittest.TestCase):

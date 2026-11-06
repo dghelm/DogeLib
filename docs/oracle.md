@@ -263,6 +263,7 @@ The harness rejects flag combinations that violate these dependencies as request
 The Lean oracle still reports those unsupported flags.
 
 The comparator classifies these combinations as `harness-refused` only after complete base decoding, input bounds and script limits pass.
+The classifier requires the operation's exact arguments, permits an optional `id`, and requires an integer `input_index`.
 Earlier decode or adapter errors retain their ordinary comparison path.
 The comparator requires a harness request error and an exact Lean unsupported-flags result, or fails the request.
 A checked refusal counts as neither agreement nor disagreement.
@@ -545,7 +546,10 @@ The transaction inputs and targeted timelocks have these counts:
 
 Agreement in the unknown streams means agreement with Core on the input, not agreement with a fixture expectation.
 All 91 independent Core acceptance requirements passed, including the 42 unavailable-verifier inputs.
+
 All 932 CLTV requests and 940 CSV requests reach their target opcode by construction.
+The comparator counts only Core acceptance or a `NEGATIVE_LOCKTIME` or `UNSATISFIED_LOCKTIME` rejection as evidence of the target opcode.
+Any other Core outcome fails the run.
 The outcome counts are CLTV: 151 accepted, 84 negative-locktime and 697 unsatisfied-locktime rejections.
 CSV gives 414 accepted, 60 negative-locktime and 466 unsatisfied-locktime rejections.
 
@@ -596,6 +600,7 @@ The Script comparison reports these sets separately:
 - All 159 inside-milestone inputs of `tx_spends.jsonl`, with each checker and separate streams for accept and unknown expectations.
   Requests retain the exact transaction bytes, input index, previous-output script and flags.
   Core must accept all 91 accept inputs with its transaction checker, even when Lean reaches its unavailable verifier.
+  The run also fails if the number of acceptance checks differs from the size of that stream.
   The 68 null expectations supply outcome counts without fixture agreement claims.
 - Targeted transaction-checker streams for CLTV and CSV under seed `20261107`.
   Each script pushes its operand, executes its named opcode, then drops the operand and pushes true.
@@ -673,6 +678,10 @@ Two refusal mutations replace either the required Core refusal or Lean's unsuppo
 Each must fail with its own refusal error code, and the failed refusal must stay outside the compared count.
 A transaction-corpus mutation makes Core reject an accept input where Lean reaches the unavailable verifier.
 That mutation must fail the independent Core acceptance requirement.
+
+Another mutation moves one required acceptance into the refusal path and must fail the acceptance-check count.
+A targeted-stream mutation gives both programs the same `BAD_OPCODE` rejection and must fail the reached-opcode check.
+Classifier assertions cover argument keys, index types and the `scriptSig` size boundary at 1,048,576 and 1,048,577 bytes.
 
 ### Compiled Rust CompactSize
 

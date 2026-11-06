@@ -328,7 +328,9 @@ def base_spend_domain(tx_hex, index):
 
 def harness_refused(request):
     """Core's VerifyScript asserts these flag dependencies, before it can return a verdict."""
-    if request["op"] != "script.verify_legacy":
+    required = {"op", "tx_hex", "input_index", "prevout_script_hex", "flags", "checker"}
+    if (set(request) - {"id"} != required or request.get("op") != "script.verify_legacy" or
+            type(request["input_index"]) is not int):
         return False
     flags = request["flags"]
     unsafe = bool((flags & 2048 and not flags & 1) or

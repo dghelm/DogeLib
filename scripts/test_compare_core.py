@@ -23,11 +23,12 @@ import time
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 COMPARE = ROOT / "scripts" / "compare_core.py"
 sys.path.insert(0, str(ROOT / "scripts"))
-from oracle_script import harness_refused, refused_set, refusal_precedence_set, tx_spend_sets, locktime_sets
+from oracle_script import harness_refused, refused_set, refusal_precedence_set, tx_spend_sets, locktime_sets, spend_tx
 
 # mode: (role of the wrapper, expected failure code). The role "core" stands
 # in for the harness, "oracle" for dogelib-oracle.
 MUTATIONS = {
+    "targeted_early_error": ("both", "TARGETED_OPCODE"),
     "tx_valid_core_rejection": ("core", "TX_VALID_CORE"),
     "refused_core_verdict": ("core", "HARNESS_REFUSAL"),
     "refused_oracle_verdict": ("oracle", "ORACLE_REFUSAL"),
@@ -150,7 +151,14 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
     def set_ok(field, value):
         return lambda r: r["ok"].__setitem__(field, value)
 
-    if mode == "tx_valid_core_rejection":
+    if mode == "targeted_early_error":
+        target = locktime_sets()[0][1][0]
+        ids = {r["id"] for r in requests if {k: v for k, v in r.items() if k != "id"} == target}
+        # Auxiliary adapter-limit and composition calls contain no targeted request.
+        if ids:
+            mutate_first(responses, lambda r: r["id"] in ids,
+                         lambda r: r.update(ok={"result": "rejected", "script_error": "BAD_OPCODE"}))
+    elif mode == "tx_valid_core_rejection":
         eligible = tx_spend_sets()[2][1]
         ids = {r["id"] for r in requests if any({k: v for k, v in r.items() if k != "id"} == q for q in eligible)}
         mutate_first(responses, lambda r: r["id"] in ids & unavailable_ids,
@@ -343,12 +351,27 @@ def wrapper(tmp: pathlib.Path, mode: str, role: str, oracle: str) -> str:
     return str(path)
 
 
-def compare(oracle: str, harness: str, extra: list[str], env=None) -> subprocess.CompletedProcess:
-    return subprocess.run([sys.executable, "-I", str(COMPARE), *extra, oracle, harness],
+def compare(oracle: str, harness: str, extra: list[str], env=None, driver=COMPARE) -> subprocess.CompletedProcess:
+    return subprocess.run([sys.executable, "-I", str(driver), *extra, oracle, harness],
                           capture_output=True, text=True, env=env, timeout=900)
 
 
 def main() -> int:
+    if len(sys.argv) > 1 and sys.argv[1] == "--compare-sanity-gap":
+        # Move one required acceptance into the actual refusal path, without a verdict error.
+        import compare_core
+        original_sets = compare_core.request_sets
+
+        def fewer_checks():
+            sets, excluded = original_sets()
+            for name, requests in sets:
+                if name == "Script tx spends accept transaction":
+                    requests[0] = {**requests[0], "flags": 256}
+            return sets, excluded
+
+        compare_core.request_sets = fewer_checks
+        del sys.argv[1]
+        return compare_core.main()
     if len(sys.argv) >= 5 and sys.argv[1] == "--wrap":
         return wrap(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5:])
     if len(sys.argv) != 2:
@@ -363,6 +386,13 @@ def main() -> int:
     assert not harness_refused({**valid, "tx_hex": valid["tx_hex"] + "00"})
     assert not harness_refused({**valid, "tx_hex": "01000000000000000000"})
     assert not harness_refused({**valid, "prevout_script_hex": "00" * 1048577})
+    assert harness_refused({**valid, "tx_hex": spend_tx(bytes(1048576))})
+    assert not harness_refused({**valid, "tx_hex": spend_tx(bytes(1048577))})
+    assert not harness_refused({**valid, "extra": 1})
+    assert not harness_refused({**valid, "input_index": False})
+    assert not harness_refused({**valid, "input_index": 0.0})
+    assert not harness_refused({k: v for k, v in valid.items() if k != "checker"})
+    assert harness_refused({**valid, "id": "optional-id"})
     # Each stream names its target and constructs one push before that opcode.
     for name, requests in locktime_sets():
         op = 177 if "CLTV" in name else 178
@@ -384,6 +414,16 @@ def main() -> int:
         else:
             print(f"ok   positive control: {total[0]}")
 
+        result = compare(oracle, wrapper(tmp, "none", "core", oracle),
+                         ["--compare-sanity-gap", "--quick"], driver=__file__)
+        codes = {line.split()[1] for line in result.stdout.splitlines() if line.startswith("FAIL ")}
+        if (result.returncode != 1 or codes != {"TX_VALID_CORE_COUNT"} or
+                "FAIL TX_VALID_CORE_COUNT 90 acceptance checks, expected 91" not in result.stdout):
+            failures += 1
+            print(f"FAIL acceptance check count: exit {result.returncode}\n{result.stdout[-2000:]}{result.stderr[-2000:]}")
+        else:
+            print("ok   acceptance check count: FAIL TX_VALID_CORE_COUNT")
+
         rust_modes = {"none": None, "version": "VERSION", "consumed": "MISMATCH", "reason": "MISMATCH",
                       "rest_hex": "MISMATCH", "request_error": "REQUEST_ERROR", "drop": "COUNT",
                       "id": "ID", "malformed": "MALFORMED"}
@@ -401,15 +441,22 @@ def main() -> int:
             env = dict(os.environ)
             pidfile = tmp / f"{mode}.pid"
             env["COMPARE_SELFTEST_PIDFILE"] = str(pidfile)
-            w = wrapper(tmp, mode, role, oracle)
-            oracle_side, harness_side = (w, wrapper(tmp, "none", "core", oracle)) if role == "oracle" else (oracle, w)
-            extra = ([] if mode == "composition_stack" else ["--quick"]) + ["--timeout", "5" if mode == "hang" else "120"]
+            if role == "both":
+                oracle_side, harness_side = wrapper(tmp, mode, "oracle", oracle), wrapper(tmp, mode, "core", oracle)
+            else:
+                w = wrapper(tmp, mode, role, oracle)
+                oracle_side, harness_side = (w, wrapper(tmp, "none", "core", oracle)) if role == "oracle" else (oracle, w)
+            extra = ([] if mode in ("composition_stack", "targeted_early_error") else ["--quick"]) + ["--timeout", "5" if mode == "hang" else "120"]
             result = compare(oracle_side, harness_side, extra, env)
             codes = {line.split()[1] for line in result.stdout.splitlines() if line.startswith("FAIL ")}
             if result.returncode != 1 or code not in codes:
                 failures += 1
                 print(f"FAIL {mode}: expected exit 1 with FAIL {code}, got exit {result.returncode}, codes {sorted(codes)}")
                 print(result.stdout[-1500:] + result.stderr[-1500:])
+                continue
+            if mode == "targeted_early_error" and codes != {"TARGETED_OPCODE"}:
+                failures += 1
+                print(f"FAIL {mode}: expected matching early errors, got failure codes {sorted(codes)}")
                 continue
             if mode.startswith("refused_"):
                 summaries = [line for line in result.stdout.splitlines() if line.startswith("Script harness refusal domain:")]
@@ -430,7 +477,7 @@ def main() -> int:
                 except ProcessLookupError:
                     pass
             print(f"ok   {mode}: FAIL {code}")
-    print(f"{len(MUTATIONS) + len(rust_modes) + 1} cases, {failures} failures")
+    print(f"{len(MUTATIONS) + len(rust_modes) + 2} cases, {failures} failures")
     return 1 if failures else 0
 
 

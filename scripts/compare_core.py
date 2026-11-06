@@ -925,6 +925,8 @@ def main() -> int:
     unsupported = {name: {} for name, _ in sets}
     refused = {name: 0 for name, _ in sets}
     agreements = {name: 0 for name, _ in sets}
+    reached = {name: 0 for name, _ in sets}
+    sanity_expected = next((len(reqs) for name, reqs in sets if name == "Script tx spends accept transaction"), None)
     sanity_checks = 0
     sanity_failures = 0
     reported = 0
@@ -944,6 +946,11 @@ def main() -> int:
                 if b.get("ok") != {"result": "accepted", "script_error": "OK"}:
                     sanity_failures += 1
                     result = ("TX_VALID_CORE", "Core transaction checker must accept every tx_valid input")
+        if name.startswith("Script targeted "):
+            if outcome(b) in {"accepted:OK", "rejected:NEGATIVE_LOCKTIME", "rejected:UNSATISFIED_LOCKTIME"}:
+                reached[name] += 1
+            else:
+                result = ("TARGETED_OPCODE", "Core outcome does not establish that the target opcode was reached")
         if result is None and rust is not None:
             result = compare(req, a, rust[i], "rust")
         if result is None:
@@ -961,12 +968,15 @@ def main() -> int:
             print(f"  core:    {json.dumps(b)[:400]}")
             if rust is not None:
                 print(f"  rust:    {json.dumps(rust[i])[:400]}")
+    if sanity_expected is not None and sanity_checks != sanity_expected:
+        failures.append("TX_VALID_CORE_COUNT")
+        print(f"FAIL TX_VALID_CORE_COUNT {sanity_checks} acceptance checks, expected {sanity_expected}")
     for name, (total, bad) in per_set.items():
         skipped = sum(unsupported[name].values())
         print(f"{name}: {total} requests, {total - skipped - refused[name]} compared, {skipped} unsupported, {refused[name]} harness-refused, {bad} disagreements")
         print(f"  agreement: {agreements[name]}")
         if name.startswith("Script targeted "):
-            print(f"  reached {name.split()[2]}: {total}")
+            print(f"  reached {name.split()[2]}: {reached[name]}")
         for label, count in sorted(unsupported[name].items()):
             print(f"  unsupported {label}: {count}")
         print("  Core's outcomes: " + ", ".join(f"{k} {v}" for k, v in sorted(outcomes[name].items())))

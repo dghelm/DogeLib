@@ -7,7 +7,7 @@ public import DogeLib.Transaction.Exports.Oracle
 /-!
 # `Script.Exports.Oracle`
 
-Script adapters for `dogelib-oracle/6` (docs/oracle.md).
+Script adapters for `dogelib-oracle/1` (docs/oracle.md).
 The specification supplies instruction results, Script errors and unsupported reasons.
 Adapter resource limits precede execution and do not describe consensus rules.
 The transaction decoder and error conversion come from `Transaction.Exports.Oracle`.

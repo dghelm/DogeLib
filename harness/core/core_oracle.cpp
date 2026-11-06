@@ -1,7 +1,7 @@
-// The Dogecoin Core harness: answers dogelib-oracle/6 requests by running
+// The Dogecoin Core harness: answers dogelib-oracle/1 requests by running
 // Dogecoin Core's own code, so that scripts/compare_core.py can check the
 // oracle against Core. docs/oracle.md, section "The Core harness", describes
-// its responses, a projection of dogelib-oracle/6.
+// its responses, a projection of dogelib-oracle/1.
 //
 // scripts/build_core_harness.sh builds it against Core's libraries at the
 // commit that SOURCES.md pins.
@@ -51,7 +51,7 @@ static_assert(std::numeric_limits<unsigned int>::max() == UINT32_MAX, "unsigned 
 
 namespace {
 
-const char* const FORMAT = "dogelib-oracle/6-core-projection";
+const char* const FORMAT = "dogelib-oracle/1-core-projection";
 
 // The stream version of Core's base mode: the reader allows no witness data.
 const int BASE_VERSION = PROTOCOL_VERSION | SERIALIZE_TRANSACTION_NO_WITNESS;

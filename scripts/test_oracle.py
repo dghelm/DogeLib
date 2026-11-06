@@ -257,21 +257,21 @@ def check_process(oracle: str) -> int:
             print(f"FAIL process, {step}: {resp}")
 
     expect("one request, input open", '{"id":1,"op":"oracle.version"}\n',
-           lambda r: r == {"id": 1, "ok": {"format": "dogelib-oracle/6"}})
+           lambda r: r == {"id": 1, "ok": {"format": "dogelib-oracle/1"}})
     expect("malformed line", '{"id":2,\n', lambda r: r["id"] is None and r["error"]["kind"] == "request")
     expect("blank lines, then a request", '\n  \n{"id":"three","op":"oracle.version"}\n',
-           lambda r: r == {"id": "three", "ok": {"format": "dogelib-oracle/6"}})
+           lambda r: r == {"id": "three", "ok": {"format": "dogelib-oracle/1"}})
     proc.stdin.write('{"id":null,"op":"oracle.version"}')
     proc.stdin.close()
     resp = read_line()
-    if resp != {"id": None, "ok": {"format": "dogelib-oracle/6"}}:
+    if resp != {"id": None, "ok": {"format": "dogelib-oracle/1"}}:
         failures += 1
         print(f"FAIL process, final line without newline: {resp}")
     if proc.wait(TIMEOUT) != 0 or proc.stdout.read() != "":
         failures += 1
         print("FAIL process: exit status or output after the last response")
     version = subprocess.run([oracle, "--version"], capture_output=True, text=True, timeout=TIMEOUT)
-    if version.returncode != 0 or json.loads(version.stdout) != {"format": "dogelib-oracle/6"}:
+    if version.returncode != 0 or json.loads(version.stdout) != {"format": "dogelib-oracle/1"}:
         failures += 1
         print(f"FAIL --version: {version.stdout!r}")
     print(f"process: {failures} failures")

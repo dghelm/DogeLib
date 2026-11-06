@@ -1,13 +1,8 @@
 # The oracle and its record format
 
 `dogelib-oracle` runs DogeLib's specification on requests from another program, such as a harness that runs Dogecoin Core on the same inputs.
-This document defines its record format, `dogelib-oracle/6`.
+This document defines its record format, `dogelib-oracle/1`.
 The oracle supports only this format.
-Format `/6` exposes Script instruction reading, evaluation with a selected checker, and verification of one legacy input.
-The earlier operations keep their request fields, response shapes and behavior.
-Only the format name changes for them.
-
-A change to the format needs a maintainer's approval ([AGENTS.md](../AGENTS.md#changes-that-need-a-maintainer)) and a new format name.
 
 The oracle models Core's serialization, legacy signature hash, work arithmetic, byte-string hashes, pure block commitments and individual Script calls.
 It reads transactions in base mode or with witness data allowed.
@@ -19,12 +14,25 @@ Its [protocol context](../SOUNDNESS.md#transactions-the-witness-allowed-format) 
 Its output describes an operation under supplied flags, without a claim that an input is valid on any network.
 In particular, `script.eval` does not check a complete spend.
 
+## Format stability
+
+Before the first release (0.1.0), the oracle, Core harness, fixtures and comparator evolve together.
+Earlier development commits have no compatibility promise.
+A routine schema change within an approved feature scope is settled in its implementation pull request under ordinary independent review.
+It needs neither a separate maintainer decision nor a new format name.
+The oracle supports no aliases or migration tooling for earlier format names.
+Development formats `/2` to `/6` preceded the reset to `dogelib-oracle/1` and are not supported.
+
+The Core compatibility target, theorem weakening or domain reduction, new trust assumptions and changes to agreed protocol semantics remain maintainer-only decisions.
+At and after 0.1.0, the maintainer sets the compatibility policy for outside consumers.
+See [the maintainer-only rules](../AGENTS.md#changes-that-need-a-maintainer).
+
 ## Running it
 
 ```bash
 lake build dogelib-oracle
 .lake/build/bin/dogelib-oracle             # answer requests on standard input
-.lake/build/bin/dogelib-oracle --version   # print {"format":"dogelib-oracle/6"}
+.lake/build/bin/dogelib-oracle --version   # print {"format":"dogelib-oracle/1"}
 ```
 
 The oracle reads one request per line of standard input and writes one response per line of standard output.
@@ -107,7 +115,7 @@ The `read` and `trailing_bytes` kinds report serialization errors of the specifi
 | `script.read_op` | `bytes_hex`, `cursor` (`u32`) | Instruction or read failure with cursor, as below | `Script.readInstruction`, Core's `CScript::GetOp` |
 | `script.eval` | `bytes_hex`, `flags` (`u32`), `stack_hex`, optional `checker` | Evaluation result, as below | `Script.evalScript`, Core's `EvalScript` in `SIGVERSION_BASE` |
 | `script.verify_legacy` | `tx_hex`, `input_index` (`u32`), `prevout_script_hex`, `flags` (`u32`), `checker` | Spend result, as below | `Script.verifyScript` or `Script.verifyLegacySpend`, Core's `VerifyScript` with no witness |
-| `oracle.version` | none | `format`: `"dogelib-oracle/6"` | none |
+| `oracle.version` | none | `format`: `"dogelib-oracle/1"` | none |
 | `compactsize.encode` | `value`: `u64` | `bytes_hex` | `CompactSize.encode`, Core's `WriteCompactSize` |
 | `compactsize.read` | `bytes_hex` | `value` (`u64`), `consumed`, `rest_hex` | `CompactSize.decodeBounded`, Core's `ReadCompactSize` with its `MAX_SIZE` check |
 | `tx.read_base` | `bytes_hex` | `tx`, `consumed`, `rest_hex` | `Transaction.readBase`: a transaction at the start of the bytes, as Core reads the next transaction of a stream |
@@ -493,9 +501,9 @@ The `work missing skip traversal` comparison retargets from height 479 to ancest
 
 ### How its responses differ
 
-The harness answers a projection of `dogelib-oracle/6`, not the format itself:
+The harness answers a projection of `dogelib-oracle/1`, not the format itself:
 
-- `--version` and `oracle.version` give the format `dogelib-oracle/6-core-projection`.
+- `--version` and `oracle.version` give the format `dogelib-oracle/1-core-projection`.
 - `script.eval` and `script.verify_legacy` never return `unsupported` from the harness.
   It returns Core's verdict with the operation's checker, even when Lean reports an unsupported capability.
   An unmapped `ScriptError` stops the harness with an unmapped-Core error.

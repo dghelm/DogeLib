@@ -40,6 +40,8 @@ from oracle_hash_block import header_fields, header_records, header_fixtures, me
 
 from oracle_script import script_sets, corpus_records, evaluation, validate_eval, adapter_limit_cases, legacy_sets, harness_refused, refused_set, tx_spend_sets, locktime_sets, refusal_precedence_set
 
+from oracle_pubkey import pubkey_sets, signature_spends
+
 ORACLE_FORMAT = "dogelib-oracle/1"
 MAX_SIZE = 0x02000000
 SEED = 20261104
@@ -610,7 +612,7 @@ def set_hash_boundaries(algorithm: str) -> list[dict]:
             for n in sorted(lengths)]
 
 
-QUICK_SETS = ("fixtures", "compactsize", "sighash endpoints", "witness flags and stacks",
+QUICK_SETS = ("pubkey Core signatures", "Script signature verdict","fixtures", "compactsize", "sighash endpoints", "witness flags and stacks",
               "work compact boundaries", "regtest legacy wrap case", "work missing skip traversal", "header field boundaries", "Merkle generated",
               "RIPEMD-160 padding boundaries", "Hash160 padding boundaries", "SHA-1 padding boundaries", "Script reader truncations", "Script resource boundaries", "Script resource boundaries base",
               "Script legacy corpus base", "Script legacy corpus transaction", "Script harness refusal domain", "Script refusal precedence",
@@ -670,6 +672,8 @@ def request_sets() -> tuple[list[tuple[str, list[dict]]], list[str]]:
         ("SHA-1 fixtures", [r for r, _ in sha1_fixtures()]),
         ("SHA-1 padding boundaries", set_hash_boundaries("sha1")),
     ])
+    sets.extend(pubkey_sets())
+    sets.append(("Script signature verdict", signature_spends()))
     sets.extend(script_sets())
     sets.extend(legacy_sets())
     sets.extend(tx_spend_sets())
@@ -719,6 +723,8 @@ def first_difference(a, b, path="") -> str:
 def outcome(resp: dict) -> str:
     """A short name for the kind of a response, for the report."""
     if "ok" in resp:
+        if "valid" in resp["ok"]:
+            return "valid:" + str(resp["ok"]["valid"]).lower()
         if "result" in resp["ok"]:
             return ":".join(str(resp["ok"][k]) for k in ("result", "reason", "script_error") if k in resp["ok"])
         plan = resp["ok"].get("plan")
@@ -744,6 +750,10 @@ def compare(req: dict, ours: dict, core: dict, peer: str = "core") -> tuple[str,
     for side, resp in (("oracle", ours), (peer, core)):
         if resp.get("error", {}).get("kind") == "request":
             return "REQUEST_ERROR", f"{side} rejected the request: {resp['error'].get('message')}"
+    if req["op"] == "pubkey.verify":
+        for resp in (ours, core):
+            if "ok" in resp and (set(resp["ok"]) != {"valid"} or type(resp["ok"]["valid"]) is not bool):
+                return "PUBKEY_VALID", "pubkey.verify requires one Boolean valid field"
     if req["op"] in ("script.eval", "script.verify_legacy") and "ok" in ours and "ok" in core:
         for response, allow in ((ours, True), (core, False)):
             error = validate_eval(req, response, allow)
@@ -767,6 +777,10 @@ def compare(req: dict, ours: dict, core: dict, peer: str = "core") -> tuple[str,
             return "PREIMAGE", "oracle response has preimage_hex for plan fixed_digest"
         ours = {**ours, "ok": ok}
     if not json_equal(ours, core):
+        if req["op"] == "pubkey.verify":
+            return "PUBKEY_VALID", f"first difference at {first_difference(ours, core)}"
+        if {k: v for k, v in req.items() if k != "id"} in signature_spends():
+            return "SIGNATURE_VERDICT", f"first difference at {first_difference(ours, core)}"
         return "MISMATCH", f"first difference at {first_difference(ours, core)}"
     return None
 

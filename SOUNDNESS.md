@@ -505,16 +505,29 @@ For every input:
 
 These theorems leave one step of the agreement with Core unproved.
 
-**Stage 3 obligation (design record 0005, section 4.3).**
+**Arithmetic agreement with Core (design record 0005, section 4.3).**
+
 Take R and S in `[1, n − 1]`, a key `Q` from `parsePubKey` and the digest scalar `e`.
 Then `Point.mulAdd (e · s⁻¹) G (r · s⁻¹) Q`, with `Fn.inv`, must be the affine form of Core's `secp256k1_ecmult` result `u1 G + u2 Q` (D60, lines 220 to 227).
 This includes the case in which that result is the point at infinity.
 A proof needs the group law, correct Jacobian formulas, a correct `Fn.inv` and the primality of `n`.
 Each of these needs Mathlib (design record 0005, decision 3), so until a proof exists, this step is an A1 claim.
-Its evidence is the Core comparison of stage 3, where every request must agree with Core:
+The comparison obligation has finite evidence from 574 dedicated `pubkey.verify` inputs, all with agreeing verdicts:
 
-- `pubkey.verify` on the inputs of design record 0005, section 8.
-- The 44 corpus records and 60 transaction inputs that reach a signature check.
+- 464 Wycheproof bitcoin cases, with Core as the verdict source because Core normalizes high S.
+- Four Core-signed inputs and two reversed digest-one inputs.
+- 20 key and signature parser boundaries.
+- 36 constructed infinity cases, all rejected.
+- 24 constructed verification points with `x ∈ [n,p)`, all accepted, and 24 changed-S cases, all rejected.
+
+The [fixture notes](tests/cryptography/secp256k1/README.md) record their provenance and constructions.
+The comparison also gives agreeing verdicts on all 925 Script corpus records and 159 eligible transaction inputs.
+These include the 44 records and 60 inputs that require signature verification.
+The 2,000 legacy transaction mutations give 1,956 agreeing verdicts and 44 unsupported flags.
+
+These checks close the comparison obligation of stage 3.
+They do not prove that `mulAdd` agrees with `secp256k1_ecmult` on every scalar and point, or compare intermediate points.
+The group-arithmetic and inverse claim remains unproved.
 
 `decompress` relies on `Fp.sqrt`, which returns a root only after it checks the square.
 No theorem says that it finds a root whenever `x^3 + 7` is a square.
@@ -1389,7 +1402,7 @@ The checker is the boundary of these claims.
 A result of `evalScript` with `transactionChecker` holds for Core only under the verifier-agreement hypothesis.
 That hypothesis says that `verify sig key d` returns `some b` only when Core's `CPubKey::Verify` returns `b` on the same signature, key and digest.
 `Script.coreVerifier` is DogeLib's instance of the parameter, and for it the hypothesis becomes an A1 claim about a definition.
-[Secp256k1 public-key parser and Core's verifier](#secp256k1-public-key-parser-and-cores-verifier) states what is proved about it and the step that stage 3's Core comparison must cover.
+[Secp256k1 public-key parser and Core's verifier](#secp256k1-public-key-parser-and-cores-verifier) states what is proved about it and the finite evidence from the Core comparison.
 For any other verifier, no theorem establishes the hypothesis.
 
 The two `lake test` corpus runners use `coreVerifier`.
@@ -1464,7 +1477,7 @@ A result of `verifyLegacySpend` holds for Core only under the verifier-agreement
 
 That the definitions are Core's rests on a reading of D3, D4, D24 and D48 (A1), and on the known answers.
 `lake test` runs 38 lock-time cases, 20 `verifyScript` cases, 11 `isPushOnly` cases and 3 `verifyLegacySpend` cases, with results written by hand from those sources.
-On `script_tests.json`, `verifyScript` with `transactionChecker` and `coreVerifier` agrees with Core's expected result on 925 records, from 881 with an unavailable verifier, and disagrees on none.
+On `script_tests.json`, `verifyScript` with `transactionChecker` and `coreVerifier` agrees with Core's expected result on 925 records and disagrees on none.
 The oracle exposes `verifyScript` through `script.verify_legacy`, with base and transaction checker selections.
 By `#print axioms` with Lean `v4.35.0`:
 
@@ -2123,12 +2136,14 @@ Finite fixture and boundary comparisons cover the recorded inputs only.
 They establish no all-input Core equivalence, cryptographic security, AuxPoW validity, scrypt result or full block validity.
 
 The Script adapters call `readInstruction`, `evalScript`, `verifyScript` and `verifyLegacySpend`.
-Evaluation selects no checker or `baseChecker`. Legacy verification selects `baseChecker` or `transactionChecker` with an unavailable verifier.
+Evaluation selects no checker or `baseChecker`. Legacy verification selects `baseChecker` or `transactionChecker` with `coreVerifier`.
 They encode Script errors with the names in the [shared table](harness/core/script_error_names.inc).
 
 No theorem covers their JSON conversions.
 Adapter limits allow scripts above 10,000 bytes and caller stacks above 1,000 items, so those specification boundaries remain observable.
 The adapter bounds scripts and individual items to 1 MiB, stacks to 4,096 items, and total caller item bytes to 4 MiB.
+`pubkey.verify` bounds each key and signature to 1 MiB and requires exactly 32 storage-order digest bytes.
+It calls `coreVerify`, while the harness calls `CPubKey::Verify`.
 These bounds imply fewer than 2^31 items and at most `UINT_MAX` bytes per item, the documented Core-correspondence domains.
 
 JSON parsing and line allocation occur before these execution limits.
@@ -2145,8 +2160,8 @@ They ignore each record's witness and do not run `VerifyScript`, evaluate P2SH o
 Separate legacy streams call `VerifyScript` on inside-milestone corpus records and seeded mutations with each checker.
 The transaction selection checks the index and InputContext count bounds before execution.
 It uses the supplied previous-output script, without a UTXO lookup.
-Lean reports `signature_verifier` when execution reaches the missing ECDSA backend.
-The comparator reports Core's verdict for that request separately and excludes it from agreement.
+Lean decides each reached signature check with `coreVerifier`.
+With the transaction checker, only unsupported flags exclude a verdict from comparison agreement.
 
 Core uses `TransactionSignatureChecker`, `CPubKey::Verify` and libsecp256k1, with `ECCVerifyHandle` for the request loop (D3, D50).
 The harness signs nothing and does not need `ECC_Start`.

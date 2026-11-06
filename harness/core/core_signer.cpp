@@ -203,11 +203,34 @@ void generate() {
          transaction(), true, false, false, false, FLAGS, true);
 }
 }
-int main(int argc, char**) {
-    if (argc != 1) { std::cerr << "usage: core-signer\n"; return 2; }
+// Independent inputs for pubkey.verify, separate from the signed-spend manifest.
+void verificationVectors() {
+    const std::string message = "Very deterministic message";
+    const uint256 deterministic = Hash(message.begin(), message.end());
+    uint256 one;
+    one.begin()[0] = 1;
+    for (unsigned i = 1; i <= 2; ++i) {
+        CKey key;
+        // Private scalars decoded from strSecret1 and strSecret2 in pinned key_tests.cpp.
+        const auto secret = ParseHex(i == 1 ? "0f6055b44781882c04d6683d8e11a8282d068ef139a78f9d45e9ba290d1ce25f" : "9e0d4307370dc9ad2feaa8fbeb2b43eb472b70a928f8c927b30a510f108f3246");
+        key.Set(secret.begin(), secret.end(), true);
+        for (const auto& digest : {deterministic, one}) {
+            Bytes signature;
+            if (!key.Sign(digest, signature)) throw std::runtime_error("sign failed");
+            UniValue record(UniValue::VOBJ);
+            record.pushKV("op", "pubkey.verify");
+            record.pushKV("pubkey_hex", hex(key.GetPubKey()));
+            record.pushKV("sig_hex", hex(signature));
+            record.pushKV("digest_hex", hex(digest));
+            std::cout << record.write() << '\n';
+        }
+    }
+}
+int main(int argc, char** argv) {
+    if (argc != 1 && !(argc == 2 && std::string(argv[1]) == "--verification-vectors")) { std::cerr << "usage: core-signer\n"; return 2; }
     ECC_Start();
     int result = 0;
-    try { ECCVerifyHandle verify; generate(); }
+    try { ECCVerifyHandle verify; if (argc == 2) verificationVectors(); else generate(); }
     catch (const std::exception& e) { std::cerr << e.what() << '\n'; result = 1; }
     ECC_Stop();
     return result;

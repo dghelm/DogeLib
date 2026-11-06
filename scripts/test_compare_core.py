@@ -28,6 +28,8 @@ from oracle_script import harness_refused, refused_set, refusal_precedence_set, 
 # mode: (role of the wrapper, expected failure code). The role "core" stands
 # in for the harness, "oracle" for dogelib-oracle.
 MUTATIONS = {
+    "pubkey_valid": ("core", "PUBKEY_VALID"),
+    "signature_verdict": ("core", "SIGNATURE_VERDICT"),
     "targeted_early_error": ("both", "TARGETED_OPCODE"),
     "tx_valid_core_rejection": ("core", "TX_VALID_CORE"),
     "refused_core_verdict": ("core", "HARNESS_REFUSAL"),
@@ -38,8 +40,6 @@ MUTATIONS = {
     "legacy_core_unsupported": ("core", "SCRIPT_RESULT"),
     "legacy_base_verifier": ("oracle", "SCRIPT_RESULT"),
     "legacy_locktime_unsupported": ("oracle", "SCRIPT_RESULT"),
-    "legacy_verifier_extra": ("oracle", "SCRIPT_RESULT"),
-    "legacy_verifier_opcode": ("oracle", "SCRIPT_RESULT"),
     **{name: ("core", "MISMATCH") for name in (
         "script_cursor", "script_opcode", "script_bytes", "script_pushed", "script_part", "script_read_class",
         "script_eval_class", "script_stack", "script_rejection")},
@@ -126,7 +126,6 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
     out = subprocess.run([oracle], input=data, capture_output=True, text=True, check=True).stdout
     responses = [json.loads(line) for line in out.splitlines()]
     requests = [json.loads(line) for line in data.splitlines()]
-    unavailable_ids = {r["id"] for r in responses if r.get("ok", {}).get("reason") == "signature_verifier"}
     for request, resp in zip(requests, responses):
         ok = resp.get("ok", {})
         if "format" in ok:
@@ -158,10 +157,18 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
         if ids:
             mutate_first(responses, lambda r: r["id"] in ids,
                          lambda r: r.update(ok={"result": "rejected", "script_error": "BAD_OPCODE"}))
+    elif mode == "pubkey_valid":
+        mutate_first(responses, lambda r: "valid" in r.get("ok", {}),
+                     lambda r: r["ok"].__setitem__("valid", not r["ok"]["valid"]))
+    elif mode == "signature_verdict":
+        from oracle_pubkey import signature_spends
+        ids = {r["id"] for r in requests if {k: v for k, v in r.items() if k != "id"} in signature_spends()}
+        mutate_first(responses, lambda r: r["id"] in ids,
+                     lambda r: r.update(ok={"result": "rejected", "script_error": "EVAL_FALSE"}))
     elif mode == "tx_valid_core_rejection":
         eligible = tx_spend_sets()[2][1]
         ids = {r["id"] for r in requests if any({k: v for k, v in r.items() if k != "id"} == q for q in eligible)}
-        mutate_first(responses, lambda r: r["id"] in ids & unavailable_ids,
+        mutate_first(responses, lambda r: r["id"] in ids,
                      lambda r: r.update(ok={"result": "rejected", "script_error": "EVAL_FALSE"}))
     elif mode.startswith("refused_"):
         ids = {max((r["id"] for r in requests if harness_refused(r)), key=lambda value: int(value[1:]))}
@@ -178,8 +185,6 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
             value = r.get("ok", {})
             if mode == "legacy_base_verifier":
                 return req["checker"] == "base" and "ok" in r
-            if mode in ("legacy_verifier_extra", "legacy_verifier_opcode"):
-                return value.get("reason") == "signature_verifier"
             return value.get("result") == ("rejected" if mode == "legacy_rejection" else "accepted")
         def alter(r):
             if mode == "legacy_class":
@@ -191,9 +196,7 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
             elif mode == "legacy_locktime_unsupported":
                 r["ok"] = {"result": "unsupported", "reason": "check_lock_time_verify"}
             elif mode in ("legacy_base_verifier", "legacy_core_unsupported"):
-                r["ok"] = {"result": "unsupported", "reason": "signature_verifier", "opcode": 172}
-            elif mode == "legacy_verifier_opcode":
-                r["ok"]["opcode"] = 171
+                r["ok"] = {"result": "unsupported", "reason": "removed_verifier_reason", "opcode": 172}
             else:
                 r["ok"]["extra"] = 1
         mutate_first(responses, eligible, alter)

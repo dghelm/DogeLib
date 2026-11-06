@@ -123,6 +123,7 @@ The `read` and `trailing_bytes` kinds report serialization errors of the specifi
 | `tx.read_witness` | `bytes_hex` | Witness result, `consumed`, `rest_hex` | `Transaction.readAllowWitness`: a prefix with witness data allowed |
 | `tx.decode_witness` | `bytes_hex` | Witness result | `Transaction.decodeAllowWitnessComplete`: the whole input with witness data allowed |
 | `sighash.legacy` | `tx_hex`, `script_code_hex`, `input_index` (`u32`), `hash_type` | `plan`, `preimage_hex` (for `hash_bytes` only), `digest_hex`, `digest_display` | `tx_hex` is read as by `tx.decode_base`. Then `legacySignatureHashPlan` and `LegacyHashPlan.digest`: Core's `SignatureHash` with `SIGVERSION_BASE` |
+| `pubkey.verify` | `pubkey_hex`, `sig_hex`, `digest_hex` | `valid` (boolean) | `Script.coreVerify` |
 | `hash.ripemd160` | `bytes_hex` | `digest_hex` (twenty bytes) | `Cryptography.Hash.Ripemd160.hash` |
 | `hash.hash160` | `bytes_hex` | `digest_hex` (twenty bytes) | `Cryptography.Hash.Hash160.hash` |
 | `hash.sha1` | `bytes_hex` | `digest_hex` (twenty bytes) | `Cryptography.Hash.Sha1.hash` |
@@ -134,6 +135,20 @@ The `read` and `trailing_bytes` kinds report serialization errors of the specifi
 | `work.get_compact` | `value_hex` (target magnitude), `negative` (boolean) | `compact` (`u32`) | `Work.ArithUint256.getCompact` |
 | `work.calculate_next` | `network`, `selection_height`, `last_height`, `last_time`, `last_bits`, `first_time` | `bits` (`u32`) | `Work.calculateDogecoinNextWorkRequired` with `Work.getConsensus` |
 | `work.next` | `network`, `chain`, `candidate_time` (`u32`) | `bits` (`u32`) | `Work.nextWorkRequired` |
+
+### Public-key verification
+
+`pubkey.verify` returns `{"valid": b}` for Core's `CPubKey(pubkey).Verify(digest, sig)` on a 64-bit build.
+`sig_hex` contains the signature without a Script hash-type byte.
+The operation accepts Core's lax DER encodings and normalizes high S before verification.
+`pubkey_hex` contains a compressed, uncompressed or hybrid key, which must represent a curve point for acceptance.
+Malformed key or signature bytes give `valid: false`.
+
+The adapter bounds each key and signature to 1 MiB, with `adapter/resource_limit` above that limit.
+`digest_hex` must contain exactly 32 bytes, or the adapter returns a request error.
+Those bytes are in `uint256` storage order and pass unchanged to libsecp256k1.
+They are not a display-order hash.
+The oracle calls `Script.coreVerify`, and the harness calls Core's `CPubKey::Verify`.
 
 ### Script arguments and results
 
@@ -236,17 +251,14 @@ The previous-output hex limit precedes transaction decoding. The selected script
 Other transaction fields have no additional adapter resource limit.
 
 `base` runs `verifyScript baseChecker` on the input's exact `scriptSig` and the supplied previous-output script.
-`transaction` runs `verifyLegacySpend` with the transaction context and an unavailable signature verifier.
-It still checks signature encodings, hashes and transaction lock-time conditions when execution requires them.
-Only a call to the unavailable verifier gives `signature_verifier`.
-Malformed keys or empty signatures can give a verdict without that call.
+`transaction` runs `verifyLegacySpend` with the transaction context and `coreVerifier`.
+It checks signatures, signature encodings, hashes and transaction lock-time conditions when execution requires them.
 
 The operation returns these `ok` shapes:
 
 ```json
 {"result":"accepted","script_error":"OK"}
 {"result":"rejected","script_error":"EVAL_FALSE"}
-{"result":"unsupported","reason":"signature_verifier","opcode":172}
 {"result":"unsupported","reason":"flags","bits":64}
 ```
 
@@ -254,10 +266,8 @@ Acceptance is the `VerifyScript` verdict under the supplied context and flags, w
 It is not full transaction validity.
 No response returns an intermediate stack.
 
-The unsupported verifier opcode is one of CHECKSIG, CHECKSIGVERIFY, CHECKMULTISIG or CHECKMULTISIGVERIFY (172 through 175).
-For `base`, only `flags` can be unsupported.
-For `transaction`, only `flags` or `signature_verifier` can be unsupported.
-Neither kind of unsupported result is a Script rejection or comparison agreement.
+For either checker, only `flags` can be unsupported.
+An unsupported result is neither a Script rejection nor comparison agreement.
 
 The harness calls Core's `VerifyScript` with a null witness and the selected checker.
 `TransactionSignatureChecker` receives the immutable transaction, input index and amount zero, which legacy hashing does not use.
@@ -469,6 +479,7 @@ The harness also calls these hash and block functions:
 
 | `op` | Core's code |
 | --- | --- |
+| `pubkey.verify` | `CPubKey::Verify`, with storage-order `uint256` digest bytes |
 | `hash.ripemd160` | `CRIPEMD160::Write` and `Finalize` |
 | `hash.hash160` | `CHash160::Write` and `Finalize` |
 | `hash.sha1` | `CSHA1::Write` and `Finalize` |
@@ -527,7 +538,7 @@ The harness answers a projection of `dogelib-oracle/1`, not the format itself:
   Any other exception stops the harness with exit status 3, so it fails the comparison.
 
 The harness checks request arguments by the rules of this document.
-Eighteen adapter-limit boundary requests check both programs against the documented expectations, including `adapter/resource_limit` errors.
+Twenty-two adapter-limit boundary requests check both programs against the documented expectations, including `adapter/resource_limit` errors.
 Other argument checks have oracle fixtures but no Core comparison.
 
 ### The comparison
@@ -542,23 +553,33 @@ For `sighash.legacy` with plan `hash_bytes`, the double SHA-256 of the oracle's 
 This checks the preimage against Core's digest, not byte by byte against a preimage from Core.
 Outside the checked `harness-refused` category, a request error from either program fails the comparison.
 
-The comparison at DogeLib `c822efa7d07b6b582eb114721366f9efc744eba5` and Core `e0a1c157791544e818c901bd9341896965afbf9d` passed 372,486 stream requests.
-It reported zero failures, including 12 checked harness refusals, plus 18 adapter-limit cases and the 1,193 two-call compositions.
+The comparison with Core `e0a1c157791544e818c901bd9341896965afbf9d` passes 373,065 stream requests.
+The pull request records the tested DogeLib revision.
+It reported zero failures, including 12 checked harness refusals, plus 22 adapter-limit cases and the 1,193 two-call compositions.
 The transaction inputs and targeted timelocks have these counts:
 
 | Stream | Requests | Agreement | Unsupported | Harness-refused | Disagreements |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | Transaction inputs, accept, base | 91 | 91 | 0 | 0 | 0 |
 | Transaction inputs, unknown, base | 68 | 68 | 0 | 0 | 0 |
-| Transaction inputs, accept, transaction | 91 | 49 | 42 | 0 | 0 |
-| Transaction inputs, unknown, transaction | 68 | 50 | 18 | 0 | 0 |
+| Transaction inputs, accept, transaction | 91 | 91 | 0 | 0 | 0 |
+| Transaction inputs, unknown, transaction | 68 | 68 | 0 | 0 | 0 |
+| Legacy corpus, transaction | 925 | 925 | 0 | 0 | 0 |
+| Legacy mutations, transaction, seed `20261106` | 2,000 | 1,956 | 44 flags | 0 | 0 |
+| Public-key Wycheproof bitcoin | 464 | 464 | 0 | 0 | 0 |
+| Public-key Core signatures and reversed digest one | 6 | 6 | 0 | 0 | 0 |
+| Public-key parser boundaries | 20 | 20 | 0 | 0 | 0 |
+| Public-key infinity constructions | 36 | 36 | 0 | 0 | 0 |
+| Public-key x above order, including changed S | 48 | 48 | 0 | 0 | 0 |
+| Signed recovery spend | 1 | 1 | 0 | 0 | 0 |
 | Targeted CLTV, transaction, seed `20261107` | 932 | 932 | 0 | 0 | 0 |
 | Targeted CSV, transaction, seed `20261107` | 940 | 940 | 0 | 0 | 0 |
 | Refusal precedence | 7 | 7 | 0 | 0 | 0 |
 | Synthetic flag refusals | 8 | 0 | 0 | 8 | 0 |
 
 Agreement in the unknown streams means agreement with Core on the input, not agreement with a fixture expectation.
-All 91 independent Core acceptance requirements passed, including the 42 unavailable-verifier inputs.
+All 91 independent Core acceptance requirements passed.
+The 44 Script records and 60 transaction inputs that require signature verification each give a compared verdict.
 
 All 932 CLTV requests and 940 CSV requests reach their target opcode by construction.
 The comparator counts only Core acceptance or a `NEGATIVE_LOCKTIME` or `UNSATISFIED_LOCKTIME` rejection as evidence of the target opcode.
@@ -566,10 +587,10 @@ Any other Core outcome fails the run.
 The outcome counts are CLTV: 151 accepted, 84 negative-locktime and 697 unsatisfied-locktime rejections.
 CSV gives 414 accepted, 60 negative-locktime and 466 unsatisfied-locktime rejections.
 
-At the same DogeLib revision, `lake test` runs all 159 eligible transaction inputs with `verifyLegacySpend` and an unavailable verifier.
+`lake test` runs all 159 eligible transaction inputs with `verifyLegacySpend` and `coreVerifier`.
 All 159 decode as complete base bytes, and the runner excludes the other 108 input records.
-For the 91 required acceptances, 49 accept and 42 reach the verifier, with no rejection.
-For the 68 null expectations, 7 accept, 43 reject and 18 reach the verifier.
+All 91 required acceptances accept.
+For the 68 null expectations, 11 accept and 57 reject.
 The null expectations supply counts only.
 
 The request stream is deterministic, and the random sets use a fixed seed:
@@ -612,7 +633,7 @@ The Script comparison reports these sets separately:
   Each request uses the recorded spending transaction, input index and previous-output script.
 - All 159 inside-milestone inputs of `tx_spends.jsonl`, with each checker and separate streams for accept and unknown expectations.
   Requests retain the exact transaction bytes, input index, previous-output script and flags.
-  Core must accept all 91 accept inputs with its transaction checker, even when Lean reaches its unavailable verifier.
+  Core and Lean must accept all 91 accept inputs with the transaction checker.
   The run also fails if the number of acceptance checks differs from the size of that stream.
   The 68 null expectations supply outcome counts without fixture agreement claims.
 - Targeted transaction-checker streams for CLTV and CSV under seed `20261107`.
@@ -685,11 +706,10 @@ An informational Core result for an unsupported request can differ without a com
 One mutation runs the full composition path and corrupts a successful second-call stack.
 Another gives an unsupported result an opcode absent from the script instructions.
 Legacy mutations corrupt verdicts, add a forbidden stack, and invent unsupported results for either checker or Core.
-They also corrupt the unavailable verifier's opcode and fields.
 
 Two refusal mutations replace either the required Core refusal or Lean's unsupported-flags answer with a verdict.
 Each must fail with its own refusal error code, and the failed refusal must stay outside the compared count.
-A transaction-corpus mutation makes Core reject an accept input where Lean reaches the unavailable verifier.
+A transaction-corpus mutation makes Core reject an input with an acceptance requirement.
 That mutation must fail the independent Core acceptance requirement.
 
 Another mutation moves one required acceptance into the refusal path and must fail the acceptance-check count.
@@ -710,3 +730,13 @@ These mutations change consumption, the read error, the remainder, request accep
 Each mutation must fail with its expected code.
 
 Agreement covers the requests in the stream and nothing more.
+
+Public-key mutations flip a `valid` field and fail with `PUBKEY_VALID`.
+A mutation changes the signed recovery spend's verdict and fails with `SIGNATURE_VERDICT`.
+The public-key stream includes all 464 bitcoin Wycheproof cases, with Core as the verdict source, including high S.
+It includes key-parser boundaries and four Core-signed inputs, plus two reversed digest-one inputs.
+
+The [fixture notes](../tests/cryptography/secp256k1/README.md) give the provenance and arithmetic of the constructed edge cases.
+The 36 infinity inputs reject, and the 24 x-above-order inputs accept.
+All 24 changed-S inputs reject.
+These comparisons give finite evidence about verdicts, not a theorem that `mulAdd` equals Core's `secp256k1_ecmult`.

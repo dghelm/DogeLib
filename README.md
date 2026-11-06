@@ -27,16 +27,17 @@ Script verification takes a signature checker as a parameter.
 `transactionChecker` returns the answer of the verifier that its caller supplies.
 `Script.coreVerifier` is DogeLib's verifier: Core's `CPubKey::Verify` in Lean, with the ECDSA arithmetic adapted from EthLib ([design record 0005](docs/design/0005-signature-verifier.md)).
 `lake test` runs Core's script and transaction corpora with it.
-The oracle still supplies a verifier that is always unavailable, so an oracle signature check that reaches it gives `unsupported`, not a verdict ([signature opcodes and the checker](SOUNDNESS.md#script-signature-opcodes-and-the-checker)).
+The oracle uses `coreVerifier` for its transaction checker and exposes single-signature verification through `pubkey.verify`.
 
 The `dogelib-oracle` program runs the specification on JSON requests, and a harness runs the pinned Core code on the same requests ([docs/oracle.md](docs/oracle.md)).
-The recorded comparison at DogeLib `c822efa` processed 372,486 stream requests with zero failures ([counts](docs/oracle.md#the-comparison)).
+The recorded comparison processed 373,065 stream requests with zero failures ([counts](docs/oracle.md#the-comparison)).
 That count includes requests with an unsupported Lean result and 12 checked harness refusals.
 The comparison counts these requests separately, as neither agreement nor disagreement.
 
 For example, Core's `script_tests.json` has 925 records with no witness and only the seven supported flags ([corpus](tests/script/corpus/README.md)).
 Through `script.verify_legacy`, these records give 925 agreements with the base checker.
-With the transaction checker, they give 881 agreements and 44 results that reach the unavailable verifier.
+With the transaction checker, they also give 925 agreements.
+All 159 eligible transaction inputs and 574 public-key inputs agree with Core.
 A comparison covers its requests and no other inputs.
 
 DogeLib does not specify these parts of Dogecoin:

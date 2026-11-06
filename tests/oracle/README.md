@@ -84,9 +84,14 @@ The P2SH fixture spends a push of `OP_1` against its HASH160 template (D3, D48).
 Python hashlib supplies that digest independently.
 
 The transaction-checker fixture supplies a nonempty signature and a 33-byte compressed public-key encoding.
-It reaches the unavailable verifier and reports `signature_verifier`, without a spend verdict.
-The key encoding need not represent a curve point for this unsupported result.
+Core rejects the key because its x-coordinate has no curve point, so verification gives `EVAL_FALSE`.
 The remaining cases follow the `/6` argument, complete-decoding and index contracts in `docs/oracle.md`.
 
 Four legacy fixtures use CLEANSTACK alone or WITNESS alone, with each checker.
 The supported-flag contract requires unsupported flags even though the harness refuses these combinations.
+
+The four `pubkey-core-*` fixtures come from `core-signer --verification-vectors` at the pinned Core revision.
+The first and third signatures are the two fixed signatures of `key_tests.cpp` (D63, lines 167 to 177).
+The other two sign the storage-order digest one.
+The Core harness supplies their `valid: true` expectations.
+[The secp256k1 fixture notes](../cryptography/secp256k1/README.md) record their generation and byte order.

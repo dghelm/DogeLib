@@ -29,7 +29,7 @@ jobs:
       - name: build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends autoconf automake libtool pkg-config libssl-dev
+          sudo apt-get install -y --no-install-recommends autoconf automake libtool pkg-config libssl-dev libboost-dev
 
       - uses: leanprover/lean-action@50fcf42d2e460296f1a34b402e990d1b24f8b596 # v1.6.0
         with:

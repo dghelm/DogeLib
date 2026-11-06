@@ -2,6 +2,7 @@ import KnownAnswers.AuxPow
 import KnownAnswers.Block
 import KnownAnswers.Genesis
 import KnownAnswers.Hash
+import KnownAnswers.HeaderPow
 import KnownAnswers.Script
 import KnownAnswers.Scrypt
 import KnownAnswers.ScryptPow
@@ -20,6 +21,7 @@ def KnownAnswers.checks : List (String × IO Nat) :=
     KnownAnswers.Block.checks,
     KnownAnswers.Genesis.checks,
     KnownAnswers.Hash.checks,
+    KnownAnswers.HeaderPow.checks,
     KnownAnswers.Script.checks,
     KnownAnswers.Scrypt.checks,
     KnownAnswers.ScryptPow.checks,

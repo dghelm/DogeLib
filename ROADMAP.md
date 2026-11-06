@@ -59,7 +59,9 @@ Each item below is complete.
    HMAC-SHA256 and the full header codec of stage 2 are complete.
    The Lean side of `CAuxPow::check`, stage 3, is complete. Its Core-recorded inputs are pending stage 5, by maintainer decision on pull request #99.
    PBKDF2 and the RFC 7914 scrypt model are complete.
-   The fixed Dogecoin scrypt executable, its refinement proof and the header composition remain.
+   The fixed Dogecoin scrypt executable and its proof against the RFC 7914 model are complete.
+   Stage 4a, `CheckAuxPowProofOfWork` and `CheckBlockHeader`, is complete ([header proof of work](SOUNDNESS.md#header-proof-of-work)).
+   The oracle operations and the Core comparison of stage 5 remain.
 2. **Signature verifier, design record 0005.** Stages 1 to 4 are complete.
    The oracle uses `coreVerifier`.
    Its verdicts agree with Core on 598 dedicated public-key inputs and the Script and transaction corpora.

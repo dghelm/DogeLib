@@ -1,6 +1,6 @@
 # Block known answers
 
-`lake test` checks pure headers, full headers with the AuxPoW payload, the AuxPoW check, transaction Merkle roots and mutation flags.
+`lake test` checks pure headers, full headers with the AuxPoW payload, the AuxPoW check, header proof of work, transaction Merkle roots and mutation flags.
 The test never fetches data or overwrites expectations.
 `SHA256SUMS` pins the five fixture files.
 
@@ -169,6 +169,60 @@ Core reports only a Boolean, so that comparison is not evidence from Core.
 It passes each header's own block hash and chain ID, and `fStrictChainId` true.
 All six chain IDs are `0x62`, and all six payloads are accepted.
 These results are Lean evidence only. The Core harness check of these headers belongs to stage 5.
+
+## Header proof of work
+
+`tests/KnownAnswers/HeaderPow.lean` runs `checkBlockHeader` and `checkAuxPowProofOfWork`, the specification of Core's `CheckBlockHeader` (D33) and `CheckAuxPowProofOfWork` (D6).
+It reuses the fixtures above and adds none.
+
+Chain acceptance supplies the expected acceptances:
+
+- The six full headers of `auxpow-headers.json`, read in the witness-allowed mode. Each pure header has a checkpoint hash, and the explorer's decoded fields confirm the payload.
+- The 312 headers at heights 144719 to 145030, which connect to checkpoint 145000. All have version 2, so they are legacy, and none has a payload.
+- The headers at heights 1, 3000 and 4000 of `mainnet.json`.
+
+Core's order of checks in D6, lines 89 to 125, supplies the expected rejections.
+Each case names the line that it reaches:
+
+| Mutation | Expected line |
+| --- | --- |
+| Parent `nBits` set to `0x1e0fffff`, set to the child's `nBits`, or increased by one. Parent `nNonce` or `nTime` increased by one | 119: the recomputed parent digest fails the unchanged child target |
+| Child `nBits` set to `0x03000001`, the target 1 | 119 |
+| Child `nBits` set to `0x1e0fffff`, the easiest target | 122: the parent digest passes, but the child's hash changes, so `AuxPow.check` finds no chain root |
+| Child chain ID 0x63 on mainnet | 96 |
+| Child chain ID 0x63 on testnet, where `fStrictChainId` is false | 122, no chain root |
+| Payload removed, flag still set | 104 |
+| Flag cleared, payload kept | 116 |
+| Pre-AuxPoW header: `nNonce` increased by one, or version `0x00620002` | 108 |
+| Pre-AuxPoW header: chain ID 0x63 | 96 |
+| Pre-AuxPoW header: version `0x00620102` without a payload | 104 |
+
+`AuxPow.check` reads no parent field except the Merkle root and the version.
+So a changed parent `nBits`, `nNonce` or `nTime` can be rejected only at line 119.
+Where a rejection depends on a changed digest failing its target, a random 256-bit digest would pass with probability about target / 2^256.
+That probability is about 2^-20 for the initial target of the header at height 1, and about 2^-33 at heights 3000 and 4000.
+For every other target here it is below 2^-41.
+That argument supports these expectations only.
+
+The test also reports, as an observation, whether each parent digest meets the parent's own `nBits`.
+For the parents at heights 371337, 450000, 2000000 and 3000000 it does not.
+Core accepted those headers, so Core does not require the parent's own target.
+The specification takes the target from the child's `nBits`, as D6 line 118 does.
+
+The mainnet records at heights 0, 145000 and 371337 give the same result on 13 headers.
+They are the first four range headers, the three headers of `mainnet.json` and the six AuxPoW headers.
+The theorem `checkAuxPowProofOfWork_getAuxPowParams` covers every header.
+
+### Cost
+
+On 2026-11-06, on the maintainer's machine with `taskset -c 0-7`, the 312 pre-AuxPoW headers took 512 ms, about 1.6 ms per header.
+The six AuxPoW headers took 10 ms.
+All of `lake test` took 5.4 seconds.
+
+### Core comparison
+
+These results are Lean evidence only.
+The Core harness verdict for each header belongs to stage 5, with the `block.check_pow` oracle operation.
 
 ## Hand-written AuxPoW cases
 

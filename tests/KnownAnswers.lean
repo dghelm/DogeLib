@@ -1353,6 +1353,94 @@ def checkCorpus (path : System.FilePath) : IO Nat := do
   IO.println s!"{path}: {records.size} records, {fixed} with the fixed digest, {unparsed} with a script that does not parse, {failures} failures (production and reference)"
   return failures
 
+/-! ### Mutations of the corpus records
+
+These checks test DogeLib against itself, not against Core.
+Each takes a record of Core's `sighash.json`, changes one field of its transaction, and recomputes the production digest.
+The expected result, the same digest or a different one, comes from the theorems of `DogeLib.Transaction.Proofs.LegacySighashCommitment` and from the definition, not from Core.
+An expected difference assumes that double SHA-256 has no collision on these inputs.
+-/
+
+/-- `t` with input `i` changed by `f`. -/
+def mapInput (t : Transaction) (i : Nat) (f : TxIn → TxIn) : Transaction :=
+  { t with inputs := countedOf (t.inputs.val.modify i f) }
+
+/-- `t` with output `i` changed by `f`. -/
+def mapOutput (t : Transaction) (i : Nat) (f : TxOut → TxOut) : Transaction :=
+  { t with outputs := countedOf (t.outputs.val.modify i f) }
+
+/-- A script with one more byte, `0x51`, so a different script. -/
+def extendScript (s : Script) : Script := script (s.bytes.val ++ [0x51])
+
+/-- The kinds of mutation, each with its name and whether the digest should stay the same. -/
+def mutationKinds : List (String × Bool) := [
+  ("ALL: lock time changes the digest", false),
+  ("ALL: every scriptSig leaves it", true),
+  ("ALL|ANYONECANPAY: another input's outpoint leaves it", true),
+  ("ALL|ANYONECANPAY: input nIn's sequence changes it", false),
+  ("NONE: removing the outputs leaves it", true),
+  ("NONE: input nIn's sequence changes it", false),
+  ("NONE: another input's sequence leaves it", true),
+  ("SINGLE: another output's value leaves it", true),
+  ("SINGLE: output nIn's value changes it", false)]
+
+/-- The mutations of one record that apply to it: the index of the kind in `mutationKinds`, and the mutated transaction. -/
+def mutations (t : Transaction) (n : Nat) (h : UInt32) : List (Nat × Transaction) :=
+  let acp := HashType.anyoneCanPay h
+  let none := HashType.isNone h
+  let single := HashType.isSingle h
+  let other := if n = 0 then 1 else 0
+  let nIns := t.inputs.val.length
+  let nOuts := t.outputs.val.length
+  let allClass := !none && !single
+  let bumpSeq := fun (i : TxIn) => { i with sequence := i.sequence + 1 }
+  (if allClass && !acp then
+    [(0, { t with lockTime := t.lockTime + 1 }),
+     (1, { t with inputs := countedOf (t.inputs.val.map fun i => { i with scriptSig := extendScript i.scriptSig }) })]
+   else []) ++
+  (if allClass && acp then
+    (if other < nIns then
+      [(2, mapInput t other fun i => { i with prevout := { i.prevout with n := i.prevout.n + 1 } })] else []) ++
+    [(3, mapInput t n bumpSeq)]
+   else []) ++
+  (if none && !acp then
+    [(4, { t with outputs := countedOf [] }), (5, mapInput t n bumpSeq)] ++
+    (if other < nIns then [(6, mapInput t other bumpSeq)] else [])
+   else []) ++
+  (if single && !acp && n < nOuts then
+    (if other < nOuts then [(7, mapOutput t other fun o => { o with value := o.value + 1 })] else []) ++
+    [(8, mapOutput t n fun o => { o with value := o.value + 1 })]
+   else [])
+
+/-- Runs every mutation on every corpus record whose plan hashes. Returns the number of failures. -/
+def checkMutations (path : System.FilePath) : IO Nat := do
+  let records ← match parseCorpus (← IO.FS.readFile path) with
+    | .ok r => pure r
+    | .error e => throw (IO.userError s!"{path}: {e}")
+  let mut counts := Array.replicate mutationKinds.length 0
+  let mut failures := 0
+  for r in records do
+    match Transaction.decodeBaseComplete r.tx, CountedList.ofList? r.script with
+    | .ok t, some sc =>
+      let n := bits32 r.nIn
+      let h := bits32 r.hashType
+      if legacySignatureHashPlan ⟨sc⟩ t n h matches .hashBytes _ then
+        let d := legacySignatureHash ⟨sc⟩ t n h
+        for (k, t') in mutations t n.toNat h do
+          let (name, same) := mutationKinds[k]!
+          counts := counts.modify k (· + 1)
+          if (legacySignatureHash ⟨sc⟩ t' n h == d) != same then
+            IO.eprintln s!"FAIL {path} mutation {name}: nIn {r.nIn}, hashType {r.hashType}"
+            failures := failures + 1
+    | _, _ => pure ()
+  for ((name, _), c) in mutationKinds.zip counts.toList do
+    if c == 0 then
+      IO.eprintln s!"FAIL {path} mutation {name}: no record"
+      failures := failures + 1
+  let summary := ", ".intercalate ((mutationKinds.zip counts.toList).map fun ((name, _), c) => s!"{name} {c}")
+  IO.println s!"{path} mutations (DogeLib against itself): {summary}; {failures} failures"
+  return failures
+
 /-! ### Hand-derived preimages -/
 
 /-- The transaction of the hand-derived cases, before its outputs. -/
@@ -1505,6 +1593,14 @@ def cases : Except String (List (String × Bool)) := do
       legacyReferencePlan (script [0xab, 0x4c, 0x05, 0xaa]) both 1 1 == .hashBytes
         (version ++ [0x02] ++ prevout0 ++ emptyScript ++ seq0 ++ prevout1 ++ [0x03, 0x4c, 0x05, 0xaa] ++ seq1 ++
           allOutputs ++ lockTime ++ [0x01, 0, 0, 0])),
+    -- The signed input's position (`legacyReferencePlan_allOnly_index_eq`).
+    -- With an empty script code, every input of the copy has the empty script, so indices 0 and 1 give one preimage.
+    ("ALL, empty script code: nIn 0 and nIn 1 hash the same bytes",
+      legacySignatureHashPlan (script []) both 0 1 == legacySignatureHashPlan (script []) both 1 1 &&
+        hashes [] both 0 1 (version ++ [0x02] ++ prevout0 ++ emptyScript ++ seq0 ++ prevout1 ++ emptyScript ++
+          seq1 ++ allOutputs ++ lockTime ++ [0x01, 0, 0, 0])),
+    ("ALL, script code 76 ab ac: nIn 0 and nIn 1 hash different bytes",
+      legacySignatureHashPlan (script codeSep) both 0 1 != legacySignatureHashPlan (script codeSep) both 1 1),
     -- The fixed digest.
     ("nIn equal to the input count gives one",
       fixedBoth codeSep both 2 1),
@@ -1525,6 +1621,7 @@ def cases : Except String (List (String × Bool)) := do
 /-- Every legacy signature-hash known answer. Returns the number of failures. -/
 def check : IO Nat := do
   let corpus ← checkCorpus "tests/transaction/sighash/sighash.json"
+  let corpus := corpus + (← checkMutations "tests/transaction/sighash/sighash.json")
   match cases with
   | .error e =>
     IO.eprintln s!"FAIL legacy sighash: {e}"

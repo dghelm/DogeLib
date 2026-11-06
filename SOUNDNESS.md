@@ -650,6 +650,63 @@ By `#print axioms` with Lean `v4.35.0`:
 | `scanOps_nil` | `propext`, `Quot.sound` |
 | `readOp_append`, `readOp_bytes`, `scanOps_bytes`, `scanOps_opcode`, `scanOps_append`, `scanOps_append_snd`, `scanOps_drop`, `dropMatches_scanOps`, `findAndDeleteLoop_scanOps`, `findAndDelete_scanOps` | `propext`, `Classical.choice`, `Quot.sound` |
 
+### Legacy signature hash: what ALL commits to
+
+`DogeLib.Transaction.Proofs.LegacySighashCommitment` states what a legacy preimage commits to when the hash type is ALL without ANYONECANPAY.
+Design record 0003, section 7, leaves that restriction to the hypotheses of a bridge property, and these theorems give it.
+
+`HashType.IsAllOnly h` holds when the ANYONECANPAY bit `0x80` of `h` is clear and its low five bits are neither 2 (NONE) nor 3 (SINGLE).
+That is the test of Core's serializer (D3), so the class includes the undefined low values, such as `0x00`, `0x04` and `0x21`.
+Under `STRICTENC`, the encoding check rejects undefined hash types, and `0x01` is the only member that a signature can carry.
+`legacyAllFields tx` is the version, the lock time, each input's outpoint and sequence in order, and the outputs.
+It includes no scriptSig.
+
+For the same script code `sc`, input index `n` and hash type `h` with `IsAllOnly h`:
+
+- `legacyReferencePlan_allOnly_commits`: if `n` is an input index of `tx` and the transformation plans of `tx` and `tx'` are equal, then `legacyAllFields tx = legacyAllFields tx'`.
+  There is no other hypothesis. The reference preimage is the base encoding of the copy, then the hash type, and `encode_injective` recovers the copy.
+- `legacySignatureHashPlan_allOnly_commits`: the same for the production plans.
+  It also needs the hypotheses of `legacySignatureHashPlan_eq_reference` for both transactions: a fully parsed script code, and fewer than 2^32 inputs and outputs in each.
+- `legacySignatureHashPlan_eq_of_allFields` and `legacyReferencePlan_eq_of_allFields`: the converse, with no hypothesis beyond `IsAllOnly`.
+  It also covers the fixed digest.
+- `legacyReferencePlan_eq_iff_allFields` and `legacySignatureHashPlan_eq_iff_allFields` join the two directions.
+- `legacyReferencePlan_allOnly_index_eq`: if the copy of the script code, `referenceScriptCode sc`, is not empty, equal transformation plans at indices `n` and `n'` give `n = n'`.
+
+The index and count restrictions are needed. This proof additionally requires a fully parsed script code.
+When `n` is an input index of neither transaction, both plans are the fixed digest `one`.
+
+The production serializer writes the counts modulo 2^32, and only that many inputs or outputs.
+So a transaction with 2^32 inputs or more commits to fewer inputs.
+With an empty script code, every input of the copy has the empty script.
+Then a transaction with two inputs has the same preimage at indices 0 and 1, as a known answer shows.
+
+The production forward direction takes `hParse` from the transfer to the reference. A direct proof on the production body could drop it, and is not done.
+
+`legacySignatureHash_eq_of_allFields` gives equal digests from equal committed fields.
+No theorem goes from equal digests to equal fields: that needs collision resistance of double SHA-256, which DogeLib does not assume (A4).
+The forward theorems are about the bytes that are hashed, so they need no assumption about the hash.
+
+The weaker modes leave fields open. Each of these theorems gives equal production plans from agreement on fewer fields, with no other hypothesis:
+
+- `legacySignatureHashPlan_eq_of_anyoneCanPay`, for ALL with ANYONECANPAY: the version, the lock time, the outputs, and the outpoint and sequence of input `n`. The other inputs and the input count are open.
+- `legacySignatureHashPlan_eq_of_none`, for NONE without ANYONECANPAY: the version, the lock time, every outpoint and the sequence of input `n`. The outputs and the other sequences are open.
+- `legacySignatureHashPlan_eq_of_single`, for SINGLE without ANYONECANPAY: the same inputs fields as NONE, and output `n`. The other outputs and the other sequences are open.
+
+`legacySignatureHashPlan_anyoneCanPay_set_other`, `legacySignatureHashPlan_none_outputs` and `legacySignatureHashPlan_single_set_other_output` name one open field of each mode.
+ANYONECANPAY combined with NONE or SINGLE has no theorem here.
+
+`lake test` mutates the transactions of Core's 500 `sighash.json` records and recomputes the production digest.
+For each mode it changes one committed and one open field, and expects a different or the same digest.
+These checks test DogeLib against itself: the expected results come from these theorems, not from Core.
+An expected difference assumes no collision on those inputs.
+
+By `#print axioms` with Lean `v4.35.0`:
+
+| Theorem | Axioms |
+| --- | --- |
+| `legacyAllFields_eq_iff`, `legacyInputBytes_congr`, `legacyInputsBytes_anyoneCanPay_congr`, `legacyOutputsBytes_all_congr`, `referenceTransaction_inputs_allOnly`, `referenceTransaction_outputs_allOnly`, `legacyReferencePlan_eq_hashBytes_of_allOnly`, `lt_of_legacyReferencePlan_eq`, `referenceTransaction_eq_of_legacyReferencePlan_eq`, `HashType.isSingle_eq_false_of_isNone`, `HashType.isNone_eq_false_of_isSingle`, `legacySignatureHashPlan_eq_of_anyoneCanPay`, `legacySignatureHashPlan_anyoneCanPay_set_other` | `propext`, `Quot.sound` |
+| `mapIdx_eq_of_getElem`, `legacyInputsBytes_congr`, `legacyOutputsBytes_single_congr`, `legacySignatureHashPlan_eq_of_allFields`, `referenceSequencedInputs_false_eq`, `referenceSequencedInputs_signedFields`, `referenceTransaction_eq_of_allFields`, `legacyReferencePlan_eq_of_allFields`, `legacyAllFields_eq_of_referenceTransaction_eq`, `legacyReferencePlan_allOnly_commits`, `legacySignatureHashPlan_allOnly_commits`, `legacyReferencePlan_eq_iff_allFields`, `legacySignatureHashPlan_eq_iff_allFields`, `legacySignatureHash_eq_of_allFields`, `legacyReferencePlan_allOnly_index_eq`, `legacySignatureHashPlan_eq_of_none`, `legacySignatureHashPlan_eq_of_single`, `legacySignatureHashPlan_none_outputs`, `legacySignatureHashPlan_single_set_other_output` | `propext`, `Classical.choice`, `Quot.sound` |
+
 ### Script instruction reader and execution state
 
 `DogeLib.Script.Instruction` specifies one call of Core's `GetOp2` at a cursor (SOURCES.md, D24).
@@ -1132,6 +1189,14 @@ Duplicate keys are allowed, and a match against duplicate keys is not distinct a
 The P2SH composition uses the exact supplied redeem script. A different redeem script with the same digest needs a separate hash-commitment argument (A4).
 Every hash type that the flags admit is allowed, including NONE, SINGLE and ANYONECANPAY, so a signature need not commit to the whole transaction.
 
+`MultisigRecoverySpend.sigAccepted_ordinary_allOnly_commits` and `MultisigRecoverySpend.sigAccepted_recovery_allOnly_commits` restrict to an `IsAllOnly` hash type.
+Then an accepted signature also verifies against the reference digest of every transaction `tx'` with the same `legacyAllFields` as `ctx.tx`, at the same input index.
+They do not say that `tx'` passes the template: a different scriptSig of the input changes the execution.
+
+They state invariance of an accepted verifier result under equal fields, not that changing a field invalidates the signature.
+A verifier that accepts every digest satisfies them.
+The commitment of the preimage to the fields is `legacyReferencePlan_allOnly_commits`. A signature-binding claim also needs cryptographic and verifier assumptions.
+
 The lock-time conditions compare the operand with fields of the spending transaction.
 A claim that recovery cannot enter a chain before a height or time needs transaction-finality and chain-context results that DogeLib does not have.
 The template is a property target. A production bridge instance needs its own fixtures and custody review.
@@ -1155,6 +1220,7 @@ By `#print axioms` with Lean `v4.35.0`:
 | `multisigRecovery_sound`, `multisigRecovery_ordinary_complete`, `multisigRecovery_recovery_complete`, `multisigRecovery_accepted_iff`, `multisigRecovery_twoOfThree_accepted_iff`, `multisigRecovery_ordinary_unsupported`, `multisigRecovery_recovery_unsupported`, `multisigRecovery_lockTime_lt`, `multisigRecovery_accepted_lockTime_lt`, `multisigRecoveryScript_twoOfThree` and the evaluation lemmas | `propext`, `Classical.choice`, `Quot.sound` |
 | `multisigRecoveryScript_length_le`, `ordinaryCode_length_lt`, `recoveryCode_length_lt` | `propext`, `Quot.sound` |
 | `scanOps_cons_opcode`, `keys_scanOps`, `redeemTail_scanOps`, `multisigRecoveryScript_scanOps`, `ordinaryCode_scanOps`, `recoveryCode_scanOps`, `transactionChecker_verify_reference`, `sigAccepted_iff_reference`, `MultisigRecoverySpend.sigAccepted_ordinary_iff_reference`, `MultisigRecoverySpend.sigAccepted_recovery_iff_reference`, `MultisigRecoverySpend.checkSig_ordinary_reference`, `MultisigRecoverySpend.checkSig_recovery_reference` | `propext`, `Classical.choice`, `Quot.sound` |
+| `MultisigRecoverySpend.sigAccepted_ordinary_allOnly_commits`, `MultisigRecoverySpend.sigAccepted_recovery_allOnly_commits` | `propext`, `Classical.choice`, `Quot.sound` |
 
 ### Compact encoding and difficulty retarget
 

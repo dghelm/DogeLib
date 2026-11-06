@@ -33,7 +33,7 @@ The assessment reads these revisions:
 | --- | --- | --- | --- |
 | VG | [`pyca/verified-garbage`](https://github.com/pyca/verified-garbage/tree/28428ba6b81bfd8c438b7cdbcab1f8537f6bc13e) | `28428ba6b81bfd8c438b7cdbcab1f8537f6bc13e` | Apache-2.0 OR BSD-3-Clause |
 | EL | [EthLib](https://github.com/ethereum/EthLib/tree/bb6dfe55198243682bc2eaf94611af2dbce1be6f) | `bb6dfe55198243682bc2eaf94611af2dbce1be6f` | CC0 1.0 |
-| Core | [Dogecoin Core](https://github.com/dogecoin/dogecoin/tree/e0a1c157791544e818c901bd9341896965afbf9d) | `e0a1c157791544e818c901bd9341896965afbf9d` | MIT |
+| Core | [Dogecoin Core](https://github.com/dogecoin/dogecoin/tree/e0a1c157791544e818c901bd9341896965afbf9d) | `e0a1c157791544e818c901bd9341896965afbf9d` | MIT, except `src/crypto/scrypt.cpp`, which is BSD-2-Clause |
 
 EL `bb6dfe5` is the EthLib commit that the lane `build/ethlib-pin-update` makes the single EthLib pin.
 EthLib added the two HMAC files at `4971b5a`, after the current pin `6a93711` in [SOURCES.md](../../SOURCES.md).
@@ -59,14 +59,25 @@ It did not build EthLib's HMAC files or run any known answer.
 
 | Component | VG definition | VG theorems at the level of the definitions | EthLib | Dogecoin Core |
 | --- | --- | --- | --- | --- |
-| HMAC | [`Spec/Hmac.lean`][vg-hmac], lines 27–55: `HashFunction`, `blockKey`, `hmacBlockKey`, `hmac`, `sha256` | None. `Proof/Pbkdf2/Hmac.lean` and `Proof/Hmac/` state facts about 64-byte keys and machine memory. | [`Hash/Hmac.lean`][el-hmac], lines 33–48: executable `blockKey`, `xorPad`, `hmac`. [Proofs][el-hmac-proof], lines 27–83: tag size, key block, pads. | [`hmac_sha256.cpp`][core-hmac], lines 9–34 |
-| PBKDF2 | [`Spec/Pbkdf2.lean`][vg-pbkdf2], lines 23–55: `int`, `xorBytes`, `iterate`, `F`, `pbkdf2`, `pbkdf2HmacSha256` | None at this level | None | [`scrypt.cpp`][core-scrypt], `PBKDF2_SHA256` from line 69 |
+| HMAC | [`Spec/Hmac.lean`][vg-hmac], lines 27–55: `HashFunction`, `blockKey`, `hmacBlockKey`, `hmac`, `sha256` | [`Proof/Pbkdf2/Hmac.lean`][vg-proof-pbkdf2-hmac]: `hash96` and `hmac_step`, for a 64-byte key block and a 32-byte message, over VG's SHA-256. [`Proof/Pbkdf2/MdKeys.lean`][vg-proof-mdkeys]: `blockKey_short`, `xorPad_short`. The other files in `Proof/Hmac/` are about machine memory. | [`Hash/Hmac.lean`][el-hmac], lines 33–48: executable `blockKey`, `xorPad`, `hmac`. [Proofs][el-hmac-proof], lines 27–83: tag size, key block, pads. | [`hmac_sha256.cpp`][core-hmac], lines 9–34 |
+| PBKDF2 | [`Spec/Pbkdf2.lean`][vg-pbkdf2], lines 23–55: `int`, `xorBytes`, `iterate`, `F`, `pbkdf2`, `pbkdf2HmacSha256` | [`Proof/Pbkdf2/Whole/Common.lean`][vg-proof-pbkdf2-whole], lines 30–75: `G`, `G_succ`, `G_zero`, `lt_nb`, `ol_le`, `nb_lt`, `nb_zero`, `done_nb`, `pbkdf2_eq`. [`Proof/Pbkdf2/Memory.lean`][vg-proof-pbkdf2-memory]: `xorBytes_length`, `iterate_congr`. | None | [`scrypt.cpp`][core-scrypt], `PBKDF2_SHA256` from line 69 |
 | Salsa20/8 core | [`Spec/Scrypt.lean`][vg-scrypt], lines 35–74: `step`, `doubleRound`, `core`, `wordLE`, `serialize`, `salsa` | [`Proof/Scrypt/Spec.lean`][vg-proof-spec] relates words to memory | None | `xor_salsa8`, from line 121 |
 | scryptBlockMix | Lines 79–95: `blk`, `blockMixYs`, `blockMix` | [`Proof/Scrypt/BlockMix.lean`][vg-proof-blockmix]: `yAt`, `blockMix_eq`, `salsa_length`, `yAt_length` | None | Lines 203–204 and 210–211 for r = 1 |
 | scryptROMix | Lines 100–133: `leNat`, `integerify`, `mixLoop`, `roMixAux`, `roMix`, `roMixIndices` | [`Proof/Scrypt/RoMix.lean`][vg-proof-romix]: `vList_getD`, `mixLoop_succ_fst`, `blockMix_length`, `repeat_blockMix_length`, `leNat_append`. `integerify_mod` is stated over machine memory. | None | `scrypt_1024_1_1_256_sp_generic`, lines 187–218 |
 | scrypt | Lines 142–159: `valid`, `scrypt` | [`Proof/Scrypt/Whole.lean`][vg-proof-whole]: `valid_pow`, `valid_r`, `scrypt_eq` | None | Lines 196 and 217 |
 
 VG states each definition over `List Byte`, with `Byte := BitVec 8` ([`TCB/Mem.lean`][vg-mem], line 24) and `Word := BitVec 32`.
+These results at the level of the definitions are of two kinds:
+
+- `G`, `G_succ`, `nb_lt`, `pbkdf2_eq` and the other lemmas of `Whole/Common.lean`, lines 30–75, take the pseudorandom function (PRF) as a parameter.
+  So they hold for any PRF, including HMAC over DogeLib's SHA-256, and the PBKDF2 lane can adapt them.
+  The same file also has `rev_int` and lemmas over machine memory, which DogeLib does not need.
+- `hash96` and `hmac_step` restate one HMAC-SHA-256 step as two SHA-256 compressions.
+  They hold only for a 64-byte key block and a 32-byte message, and they unfold VG's SHA-256 (`compress`, `compressList`).
+  With DogeLib's SHA-256 as the hash instance, they do not apply directly.
+  They are a guide if a lane later writes a PBKDF2 executable that keeps the two key states, as Core does.
+  `MdStep.lean` states the same step for any Merkle–Damgård hash in VG's streaming framework, which DogeLib does not adopt.
+
 VG's own known answers run at elaboration time in `VerifiedGarbageTest/`.
 They read vendored RFC files and are not theorems.
 For scrypt they evaluate RFC 7914 sections 8 to 10 and the section 12 case with N = 16.
@@ -159,6 +170,7 @@ RFC 8018 requires a positive count, so the theorem can state its domain as `0 < 
 The executable needs no streaming SHA-256, because DogeLib's SHA-256 takes the whole message.
 The theorem covers every salt, iteration count and admitted `dkLen`.
 It needs an induction over the blocks `T_i` and an induction over `iterate`.
+VG's `G_succ` and `pbkdf2_eq` give the first, and `iterate_congr` replaces the PRF inside `iterate`.
 
 **Salsa20/8 core.**
 Core's `xor_salsa8(B, Bx)` first sets `B` to `B xor Bx`.
@@ -293,13 +305,23 @@ Its `LICENSE` file says so, and `Cargo.toml`, line 78, states `Apache-2.0 OR BSD
 Both licences are in the table of [CONTRIBUTING.md](../../CONTRIBUTING.md#material-from-other-projects), so they need no further check.
 The adoption must elect one licence and say which.
 
-This assessment recommends BSD-3-Clause, because its conditions are fewer:
+This assessment recommends BSD-3-Clause, because it adds no requirement for each file:
 
 - Apache-2.0, section 4, requires a notice of change in each modified file and the attributions of any `NOTICE` file.
-- BSD-3-Clause requires that each copy of the source keeps the copyright notice, the three conditions and the disclaimer.
-  The notice at the pin is `Copyright (c) Individual contributors`.
+- BSD-3-Clause has three conditions, in `LICENSE.BSD`, lines 7–16, and a disclaimer in lines 18–27.
 
-So under BSD-3-Clause, the licence itself adds one obligation: a copy of VG's `LICENSE.BSD` in `LICENSES/`, for example as `LICENSES/verified-garbage-BSD-3-Clause.txt`.
+The three conditions of BSD-3-Clause apply to DogeLib as follows:
+
+1. A redistribution of source code keeps the copyright notice, the conditions and the disclaimer.
+   The notice at the pin is `Copyright (c) Individual contributors`.
+   DogeLib keeps a copy of `LICENSE.BSD` in `LICENSES/`, for example as `LICENSES/verified-garbage-BSD-3-Clause.txt`.
+2. A redistribution in binary form reproduces the notice, the conditions and the disclaimer in its documentation or other materials.
+   The condition applies when DogeLib distributes a binary that contains the adapted code, such as a built oracle executable.
+   Such a distribution ships the file in `LICENSES/` with the binary.
+3. The third condition covers the name of the project and the names of its contributors.
+   Without written permission, DogeLib must not use those names to endorse or promote a derived product.
+   DogeLib states the source of the material, but it does not present verified-garbage or its contributors as endorsing DogeLib.
+
 VG has no `NOTICE` file at the pin, and the adapted files have no copyright header, so no other notice applies.
 
 The election does not remove DogeLib's own rules in [CONTRIBUTING.md](../../CONTRIBUTING.md#material-from-other-projects).
@@ -309,6 +331,15 @@ DogeLib follows these rules for all material from other projects, including CC0 
 
 EthLib's files are under CC0 1.0.
 An adapted EthLib file names its source commit and states the changes, as `DogeLib/Cryptography/Hash/Sha256.lean` does.
+
+Most of Dogecoin Core is under MIT, but [`src/crypto/scrypt.cpp`][core-scrypt-notice], lines 1–28, has its own BSD-2-Clause notice.
+The notice names Colin Percival, ArtForz and pooler.
+BSD-2-Clause is in the table of [CONTRIBUTING.md](../../CONTRIBUTING.md#material-from-other-projects).
+
+The scrypt executable follows the loops of that file, and `PBKDF2_SHA256` is in the same file.
+If a lane copies or translates code or comments from `scrypt.cpp`, the adapted file keeps that notice, its two conditions and its disclaimer.
+The lane also adds the notice to `LICENSES/`, because `LICENSES/dogecoin-core-MIT.txt` does not cover it.
+The rule applies to the PBKDF2 lane and to the scrypt lanes.
 
 ## Lane plan for stages 0 and 1
 
@@ -362,9 +393,14 @@ The lane `build/ethlib-pin-update` handles the EthLib pin, so it is not a decisi
 [vg-proof-romix]: https://github.com/pyca/verified-garbage/blob/28428ba6b81bfd8c438b7cdbcab1f8537f6bc13e/lean/VerifiedGarbage/Proof/Scrypt/RoMix.lean
 [vg-proof-whole]: https://github.com/pyca/verified-garbage/blob/28428ba6b81bfd8c438b7cdbcab1f8537f6bc13e/lean/VerifiedGarbage/Proof/Scrypt/Whole.lean
 [vg-romixct]: https://github.com/pyca/verified-garbage/blob/28428ba6b81bfd8c438b7cdbcab1f8537f6bc13e/lean/VerifiedGarbage/Proof/Scrypt/AArch64/RoMixCT.lean#L513-L514
+[vg-proof-pbkdf2-hmac]: https://github.com/pyca/verified-garbage/blob/28428ba6b81bfd8c438b7cdbcab1f8537f6bc13e/lean/VerifiedGarbage/Proof/Pbkdf2/Hmac.lean#L43-L65
+[vg-proof-mdkeys]: https://github.com/pyca/verified-garbage/blob/28428ba6b81bfd8c438b7cdbcab1f8537f6bc13e/lean/VerifiedGarbage/Proof/Pbkdf2/MdKeys.lean#L170-L180
+[vg-proof-pbkdf2-whole]: https://github.com/pyca/verified-garbage/blob/28428ba6b81bfd8c438b7cdbcab1f8537f6bc13e/lean/VerifiedGarbage/Proof/Pbkdf2/Whole/Common.lean#L30-L75
+[vg-proof-pbkdf2-memory]: https://github.com/pyca/verified-garbage/blob/28428ba6b81bfd8c438b7cdbcab1f8537f6bc13e/lean/VerifiedGarbage/Proof/Pbkdf2/Memory.lean
 [el-hmac]: https://github.com/ethereum/EthLib/blob/bb6dfe55198243682bc2eaf94611af2dbce1be6f/EthLib/Cryptography/Hash/Hmac.lean
 [el-hmac-proof]: https://github.com/ethereum/EthLib/blob/bb6dfe55198243682bc2eaf94611af2dbce1be6f/EthLib/Cryptography/Proofs/Hash/Hmac.lean
 [core-hmac]: https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/crypto/hmac_sha256.cpp#L9-L34
 [core-scrypt]: https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/crypto/scrypt.cpp
 [core-scrypt-generic]: https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/crypto/scrypt.cpp#L187-L218
+[core-scrypt-notice]: https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/crypto/scrypt.cpp#L1-L28
 [core-pureheader]: https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/primitives/pureheader.cpp#L28

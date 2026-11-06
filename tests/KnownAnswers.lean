@@ -4022,6 +4022,138 @@ def check : IO Nat := do
 
 end KnownAnswers.ScriptVerify
 
+/-!
+## The worked property: multisig with recovery
+
+Spends of the 2-of-3 template of design record 0003, section 7, through `verifyLegacySpend` and so through `verifyScript`.
+The redeem script is written byte for byte from section 7, and one case checks that `multisigRecoveryScript` builds the same bytes.
+Each expected result is read from section 7 and from `EvalScript` (D3, lines 437 to 476, 880 to 1026 and 1274 to 1308), not computed by DogeLib.
+
+The verifier is a lookup table, a test backend that says nothing about consensus validity.
+It answers `some true` for the listed pairs of stripped signature and key, and `some false` for every other request.
+It ignores the digest, which `transactionChecker_verify` in `DogeLib.Script.Proofs.Signature` characterizes.
+The keys are 33 bytes with the prefix `02`, which every encoding flag accepts.
+-/
+
+namespace KnownAnswers.MultisigRecovery
+
+open DogeLib.Script
+open KnownAnswers.ScriptEval (hex rep)
+open KnownAnswers.ScriptVerify (VExpect mkTx toScript p2shOf)
+
+def P1 : List UInt8 := 0x02 :: rep 32 0x11
+def P2 : List UInt8 := 0x02 :: rep 32 0x22
+def P3 : List UInt8 := 0x02 :: rep 32 0x33
+def R : List UInt8 := 0x02 :: rep 32 0x44
+
+/-- The 2-of-3 redeem script of section 7, written out: 149 bytes. -/
+def redeem : List UInt8 :=
+  [0x63, 0x52, 0x21] ++ P1 ++ [0x21] ++ P2 ++ [0x21] ++ P3 ++
+    [0x53, 0xae, 0x67, 0x03, 0x40, 0x42, 0x0f, 0xb1, 0x75, 0x21] ++ R ++ [0xac, 0x68]
+
+/-- A push of `b` as `CScript() << b` writes it, for at most 255 bytes. -/
+def push (b : List UInt8) : List UInt8 :=
+  if b.length < 76 then b.length.toUInt8 :: b else 0x4c :: b.length.toUInt8 :: b
+
+/-- Test signatures of arbitrary bytes, each with the hash type `01`. With no encoding flag no check reads them. -/
+def sig1 : List UInt8 := [0xa1, 0x01]
+def sig2 : List UInt8 := [0xa2, 0x01]
+def sigR : List UInt8 := [0xa4, 0x01]
+/-- A strict DER signature: R = 1, S = 1, hash type `01`. -/
+def derSigR : List UInt8 := hex "300602010102010101"
+/-- The same signature with the undefined hash type `00`. -/
+def derSigR0 : List UInt8 := hex "300602010102010100"
+/-- A strict DER signature with R = 1 and S = ⌊n/2⌋ + 1, one above the LOW_S bound, and the hash type `01`. -/
+def highSigR : List UInt8 := hex "30250201010220" ++ KnownAnswers.SignatureEncoding.halfPlusOneBytes ++ [0x01]
+/-- The LOW_S overflow case: R = 2^256 − 1 and S = 2^255 − 1, which `CheckLowS` accepts after lax parsing sets both to zero. -/
+def overflowSigR : List UInt8 := hex "3045022100" ++ rep 32 0xff ++ hex "02207f" ++ rep 31 0xff ++ [0x01]
+
+/-- The table verifier, a test backend: `some true` for a listed pair of stripped signature and key. -/
+def tableVerifier : SignatureVerifier := fun s k _ =>
+  some ([([0xa1], P1), ([0xa2], P2), ([0xa4], R), (derSigR.dropLast, R), (overflowSigR.dropLast, R),
+    ([0xa1], [0x06] ++ rep 32 0x44)].contains (s, k))
+
+/-- An input context for input 0 of `mkTx 1 lockTime sequence`, with the `scriptSig` bytes `ss`. -/
+def spendCtx (ss : List UInt8) (lockTime sequence : UInt32) : InputContext :=
+  let base := KnownAnswers.ScriptVerify.ctx 1 lockTime sequence
+  let input := { base.input with scriptSig := toScript ss }
+  ⟨{ base.tx with inputs := ⟨[input], by simp⟩ }, 0, by simp, by simp, by simp [base, KnownAnswers.ScriptVerify.ctx, mkTx]⟩
+
+def p2sh : UInt32 := ScriptFlags.p2sh
+def cltv : UInt32 := ScriptFlags.checkLockTimeVerify
+def base : UInt32 := p2sh ||| cltv
+
+/-- The ordinary unlocking script: a dummy, two signatures in push order and a selector, then the redeem script. -/
+def ordinary (dummy a b sel : List UInt8) (red : List UInt8 := redeem) : List UInt8 :=
+  push dummy ++ push a ++ push b ++ push sel ++ push red
+
+/-- The recovery unlocking script: a signature and a selector, then the redeem script. -/
+def recovery (s sel : List UInt8) (red : List UInt8 := redeem) : List UInt8 := push s ++ push sel ++ push red
+
+/-- A redeem script with the recovery key `r`, for the key-encoding case. -/
+def redeemWith (r : List UInt8) : List UInt8 :=
+  [0x63, 0x52, 0x21] ++ P1 ++ [0x21] ++ P2 ++ [0x21] ++ P3 ++
+    [0x53, 0xae, 0x67, 0x03, 0x40, 0x42, 0x0f, 0xb1, 0x75, 0x21] ++ r ++ [0xac, 0x68]
+
+/-- Cases: label, flags, scriptSig, redeem script, lock time, sequence and expected result. -/
+def cases : List (String × UInt32 × List UInt8 × List UInt8 × UInt32 × UInt32 × VExpect) := [
+  ("ordinary branch, signatures in key order", base, ordinary [] sig1 sig2 [1], redeem, 0, 0xffffffff, .accepted),
+  ("ordinary branch, signatures in the wrong order", base, ordinary [] sig2 sig1 [1], redeem, 0, 0xffffffff,
+    .rejected .evalFalse),
+  ("ordinary branch, one signature missing", base, push [] ++ push sig1 ++ push [1] ++ push redeem, redeem, 0, 0,
+    .rejected .invalidStackOperation),
+  ("recovery, lock time 1,000,000", base, recovery sigR [], redeem, 1000000, 0, .accepted),
+  ("recovery, lock time 999,999", base, recovery sigR [], redeem, 999999, 0, .rejected .unsatisfiedLocktime),
+  ("recovery, lock time 500,000,000 is a time", base, recovery sigR [], redeem, 500000000, 0,
+    .rejected .unsatisfiedLocktime),
+  ("recovery, final sequence", base, recovery sigR [], redeem, 1000000, 0xffffffff, .rejected .unsatisfiedLocktime),
+  ("recovery, wrong signature", base, recovery sig1 [], redeem, 1000000, 0, .rejected .evalFalse),
+  ("recovery, empty signature", base, recovery [] [], redeem, 1000000, 0, .rejected .evalFalse),
+  ("selector negative zero takes the recovery branch", base, recovery sigR [0x80], redeem, 1000000, 0, .accepted),
+  ("selector negative zero, ordinary signatures", base, ordinary [] sig1 sig2 [0x80], redeem, 1000000, 0,
+    .rejected .evalFalse),
+  ("nonminimal selector 01 00 takes the ordinary branch", base, ordinary [] sig1 sig2 [0x01, 0x00], redeem, 0, 0,
+    .accepted),
+  ("nonempty dummy without NULLDUMMY", base, ordinary [0x07] sig1 sig2 [1], redeem, 0, 0, .accepted),
+  ("nonempty dummy with NULLDUMMY", base ||| ScriptFlags.nullDummy, ordinary [0x07] sig1 sig2 [1], redeem, 0, 0,
+    .rejected .sigNullDummy),
+  ("empty dummy with NULLDUMMY", base ||| ScriptFlags.nullDummy, ordinary [] sig1 sig2 [1], redeem, 0, 0, .accepted),
+  ("CLTV clear, lock time 0", p2sh, recovery sigR [], redeem, 0, 0xffffffff, .accepted),
+  ("empty stack below the redeem script", base, push redeem, redeem, 0, 0, .rejected .unbalancedConditional),
+  ("DER signature, all encoding flags", base ||| ScriptFlags.derSig ||| ScriptFlags.lowS ||| ScriptFlags.strictEnc,
+    recovery derSigR [], redeem, 1000000, 0, .accepted),
+  ("undefined hash type 00 under STRICTENC", base ||| ScriptFlags.strictEnc, recovery derSigR0 [], redeem, 1000000, 0,
+    .rejected .sigHashtype),
+  ("LOW_S overflow case passes the encoding check", base ||| ScriptFlags.lowS, recovery overflowSigR [], redeem,
+    1000000, 0, .accepted),
+  ("S one above the half order under LOW_S", base ||| ScriptFlags.lowS, recovery highSigR [], redeem, 1000000, 0,
+    .rejected .sigHighS),
+  ("arbitrary signature bytes under DERSIG", base ||| ScriptFlags.derSig, recovery sigR [], redeem, 1000000, 0,
+    .rejected .sigDer),
+  ("33-byte key with prefix 06 under STRICTENC", base ||| ScriptFlags.strictEnc,
+    recovery [] [] (redeemWith ([0x06] ++ rep 32 0x44)), redeemWith ([0x06] ++ rep 32 0x44), 1000000, 0,
+    .rejected .pubkeyType),
+  ("33-byte key with prefix 06 without STRICTENC", base,
+    recovery sig1 [] (redeemWith ([0x06] ++ rep 32 0x44)), redeemWith ([0x06] ++ rep 32 0x44), 1000000, 0,
+    .rejected .evalFalse)
+]
+
+/-- Runs every case. Returns the number of failures. -/
+def check : IO Nat := do
+  let mut failures := 0
+  unless redeem.length == 149 && multisigRecoveryScript 2 [P1, P2, P3] R == redeem do
+    IO.eprintln "FAIL multisig recovery: the template bytes differ from section 7"
+    failures := failures + 1
+  for (label, flags, ss, red, lockTime, sequence, expected) in cases do
+    let got := verifyLegacySpend (spendCtx ss lockTime sequence) (toScript (p2shOf red)) flags tableVerifier
+    unless expected.matches got do
+      IO.eprintln s!"FAIL multisig recovery {label}: got {repr got}"
+      failures := failures + 1
+  IO.println s!"multisig recovery: {cases.length + 1} hand cases, {failures} failures"
+  return failures
+
+end KnownAnswers.MultisigRecovery
+
 /-- Entry point of `lake test`. -/
 def main : IO UInt32 := do
   let sha1 ← KnownAnswers.Sha1.check
@@ -4052,4 +4184,5 @@ def main : IO UInt32 := do
   let signatureEncoding ← KnownAnswers.SignatureEncoding.check
   let scriptSignature ← KnownAnswers.ScriptSignature.check
   let scriptVerify ← KnownAnswers.ScriptVerify.check
-  return if sha1 + blocks + short + long + ripemd + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts + proofOfWork + scriptReader + scriptNum + scriptEval + signatureCode + signatureEncoding + scriptSignature + scriptVerify == 0 then 0 else 1
+  let multisigRecovery ← KnownAnswers.MultisigRecovery.check
+  return if sha1 + blocks + short + long + ripemd + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts + proofOfWork + scriptReader + scriptNum + scriptEval + signatureCode + signatureEncoding + scriptSignature + scriptVerify + multisigRecovery == 0 then 0 else 1

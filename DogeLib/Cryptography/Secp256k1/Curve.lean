@@ -21,7 +21,7 @@ Scalar multiplication runs in Jacobian coordinates instead, with one inverse at 
 ## Source
 
 This whole file adapts `EthLib/Cryptography/Secp256k1/Curve.lean` from EthLib, commit `bb6dfe55198243682bc2eaf94611af2dbce1be6f`, under CC0 1.0.
-The namespace and module documentation are DogeLib's.
+The adaptation changes the namespace and documentation.
 The arithmetic definitions are unchanged.
 -/
 

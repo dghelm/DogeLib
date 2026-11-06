@@ -15,7 +15,7 @@ When `m` is prime and `a` is not zero, the gcd is `1`, so `s` is the inverse of 
 ## Source
 
 This whole file adapts `EthLib/Cryptography/Inverse.lean` from EthLib, commit `bb6dfe55198243682bc2eaf94611af2dbce1be6f`, under CC0 1.0.
-The namespace and module documentation are DogeLib's.
+The adaptation changes the namespace and documentation.
 The arithmetic definitions are unchanged.
 -/
 

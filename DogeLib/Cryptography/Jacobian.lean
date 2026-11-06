@@ -23,7 +23,7 @@ The Explicit-Formulas Database lists them as add-1998-cmo-2 and dbl-1998-cmo-2:
 ## Source
 
 This whole file adapts `EthLib/Cryptography/Jacobian.lean` from EthLib, commit `bb6dfe55198243682bc2eaf94611af2dbce1be6f`, under CC0 1.0.
-The namespace and module documentation are DogeLib's.
+The adaptation changes the namespace and documentation.
 The arithmetic definitions are unchanged.
 -/
 

@@ -164,8 +164,9 @@ No theorem or test here establishes agreement with compiled Core.
 `Cryptography.Hash.Scrypt.Spec` adapts verified-garbage's `Spec/Scrypt.lean` at the pin, under BSD-3-Clause.
 It retains lists of `BitVec 8`, 32-bit words, and the quadratic ROMix reference fill.
 The PBKDF2 model uses DogeLib's executable SHA-256 through HMAC.
-The scrypt definition has no FIPS-based equality theorem.
+The general scrypt definition has no FIPS-based equality theorem.
 `Pbkdf2.pbkdf2_eq_fips` remains a separate result with password and salt bounds.
+For Dogecoin's parameters, `powHash_eq_fips` states the digest with the FIPS 180-4 model, as the [next subsection](#dogecoins-scrypt-digest) describes.
 
 `blockMix_eq` expresses the output as the even-indexed `Y` blocks followed by the odd-indexed blocks, for every byte list and natural block parameter.
 `serialize_length`, `salsa_length` and `yAt_length` give 64-byte outputs.
@@ -189,7 +190,50 @@ The model introduces no cryptographic hypothesis and makes no side-channel or re
 The compiled known answers compare complete RFC 7914 outputs for Salsa20/8, BlockMix, ROMix and the `N = 16` scrypt case.
 The [test cost report](tests/cryptography/scrypt/README.md#test-cost) distinguishes those passes from timed-out optional cases.
 These comparisons rely on the compiler and runtime (B1), and are not kernel digest proofs (C2).
-There is no fixed Dogecoin executable, `powHash_eq_spec`, Core comparison or full header proof-of-work claim in this model.
+This model has no Core comparison or full header proof-of-work claim.
+The [next subsection](#dogecoins-scrypt-digest) relates Dogecoin's executable to it.
+
+### Dogecoin's scrypt digest
+
+`Scrypt.scrypt_1024_1_1_256` follows Core's `scrypt_1024_1_1_256_sp_generic` and `xor_salsa8` (D61, lines 121–218).
+Its input type, `Bytes 80`, admits exactly 80 bytes.
+`powHash_eq_spec` runs `Spec.scrypt` on every such input, as password and salt, with N = 1024, r = 1, p = 1 and 32 output bytes.
+It states that the model returns `some` of the executable's digest bytes.
+The theorem has no hypothesis.
+The model's HMAC uses DogeLib's executable SHA-256, as `Pbkdf2.pbkdf2_eq_spec` does.
+
+`powHash_eq_fips` restates the digest with HMAC over the FIPS 180-4 SHA-256 model.
+It writes scrypt out as its three steps for p = 1.
+They are PBKDF2 to 128 bytes, scryptROMix with r = 1 and N = 1024, and PBKDF2 to 32 bytes.
+It uses `Pbkdf2.pbkdf2_eq_fips` twice. The password has 80 bytes and the salts have 80 and 128 bytes, far below its bounds.
+It does not restate `Spec.scrypt` with a second hash instance, so it adds no model definition.
+
+The proof crosses the representation in these lemmas:
+
+- `doubleRound_toBitVec`: the executable runs the 32 statements of each double round in Core's order.
+  `step_comm` shows that two steps commute when neither writes a word that the other reads or writes.
+  `columnsCore_eq` and `rowsCore_eq` sort Core's interleaved quarter-rounds into the RFC order of `Spec.doubleRound`.
+  A reader compares the executable's statements with Core's text, but not Core's order with the RFC order.
+- `xorSalsa8_toBitVec` and `blockMix_toModel`: `xor_salsa8(&X[0], &X[16])` and `xor_salsa8(&X[16], &X[0])` equal the model's `blockMix 1` under `toModel`, which serializes `X[0..31]` as little-endian words.
+- `fill_flat`: the flat scratchpad `V` holds the words of the states that `fillLoop` stores whole, so `fillLoop_eq` gives the model's reference fill.
+- `index_eq` and `integerify_toModel`: `32 * (X[16] & 1023)` in 32-bit arithmetic is 32 times Integerify of the model state modulo 1024.
+- `flat_getElem!_lo` and `flat_getElem!_hi`: each `!` read of the scratchpad in the second loop is in bounds, so its default value is never used.
+- `decode_toModel` and `encode_toBytes`: `le32dec` and `le32enc` convert between the 128 PBKDF2 bytes and the word state.
+- `pbkdf2_some`: PBKDF2 with one iteration returns `some` for 128 and 32 output bytes, so the executable's `getD` defaults are never used.
+
+`powHash_eq_spec` and `powHash_eq_fips` depend on `propext`, `Classical.choice` and `Quot.sound`, by `#print axioms` on Lean `v4.35.0`.
+No theorem evaluates a scrypt digest in the kernel (C2).
+The theorems relate two DogeLib definitions.
+A reader must still compare the executable with D61 and the model with RFC 7914 (A1).
+They say nothing about memory layout, so the little-endian and no-padding assumption of design record 0004, section 6, still applies to any comparison with Core.
+They also cover only the generic Core variant, not the SSE2 variant.
+
+`lake test` runs the five header and digest pairs of Core's `scrypt_hashtest` (D62) through the compiled executable, with the expected digests reversed from display order.
+With `DOGELIB_SCRYPT_MODEL` set, it also runs the first pair through the compiled model.
+The [test report](tests/cryptography/scrypt/README.md#dogecoin-header-digests) records the cost.
+These runs rely on the compiler and runtime (B1).
+There is no Core comparison, and no theorem composes the digest with `checkProofOfWork` or `CheckAuxPowProofOfWork`.
+The executable makes no constant-time or resource-bound claim (A3).
 
 ### Double SHA-256
 

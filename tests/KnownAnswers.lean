@@ -4,6 +4,7 @@ import KnownAnswers.Genesis
 import KnownAnswers.Hash
 import KnownAnswers.Script
 import KnownAnswers.Scrypt
+import KnownAnswers.ScryptPow
 import KnownAnswers.Secp256k1
 import KnownAnswers.Serialization
 import KnownAnswers.Transaction
@@ -20,6 +21,7 @@ def KnownAnswers.checks : List (String × IO Nat) :=
     KnownAnswers.Hash.checks,
     KnownAnswers.Script.checks,
     KnownAnswers.Scrypt.checks,
+    KnownAnswers.ScryptPow.checks,
     KnownAnswers.Secp256k1.checks,
     KnownAnswers.Serialization.checks,
     KnownAnswers.Transaction.checks,

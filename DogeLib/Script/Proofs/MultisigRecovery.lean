@@ -6,6 +6,7 @@ public import DogeLib.Script.MultisigRecovery
 public import DogeLib.Script.Proofs.SignatureCode
 public import DogeLib.Script.Proofs.SignatureEncoding
 public import DogeLib.Script.Proofs.Verify
+public import DogeLib.Transaction.Proofs.LegacySighashCommitment
 
 /-!
 # Proofs: `Script.MultisigRecovery`
@@ -46,6 +47,7 @@ Every checker call of both branches hashes the digest of `legacyReferencePlan`, 
 - `ordinaryCode_scanOps`, `recoveryCode_scanOps`: for every signature list, every instruction of each branch's script code parses. That property is the parsed-script hypothesis of design record 0003, stage 3.
 - `transactionChecker_verify_reference`, `sigAccepted_iff_reference`: for any `InputContext` and fully parsed script code, the checker passes the reference digest to `verify`.
 - `MultisigRecoverySpend.sigAccepted_ordinary_iff_reference`, `MultisigRecoverySpend.sigAccepted_recovery_iff_reference`, `MultisigRecoverySpend.checkSig_ordinary_reference`, `MultisigRecoverySpend.checkSig_recovery_reference`: the two compose under `MultisigRecoverySpend`.
+- `MultisigRecoverySpend.sigAccepted_ordinary_allOnly_commits`, `MultisigRecoverySpend.sigAccepted_recovery_allOnly_commits`: with ALL and without ANYONECANPAY, an accepted signature also verifies against the reference digest of every transaction with the same `legacyAllFields`. They do not say that such a transaction passes the template.
 
 ## Resource bounds
 
@@ -1758,6 +1760,58 @@ theorem multisigRecovery_twoOfThree_accepted_iff {P1 P2 P3 : List UInt8}
     verifyLegacySpend ctx prevScriptPubKey flags verify = .accepted ↔
       OrdinaryBranch ctx verify flags 2 [P1, P2, P3] R S ∨ RecoveryBranch ctx verify flags 2 [P1, P2, P3] R S :=
   multisigRecovery_accepted_iff h (by simp [maxStackItems]; omega) hverify
+
+
+/-! ## What an ALL-only signature commits to -/
+
+/--
+**Commitment, ordinary branch.** Under `MultisigRecoverySpend`, take any signature list `sigs`, and a signature `s ++ [hashType]` that `sigAccepted` accepts for `key` with the script code of the ordinary branch.
+Let the hash type be `IsAllOnly`: ALL, without ANYONECANPAY.
+Take any transaction `tx'` with the same `legacyAllFields` as `ctx.tx`.
+Then `verify` returns `some true` on `s`, the key and the reference digest of `tx'` at the same input index.
+
+So the signature commits to the version, the lock time, each input's outpoint and sequence, and the outputs.
+It commits to no scriptSig.
+The theorem does not say that `tx'` passes the template. A different scriptSig of input `ctx.index` changes the execution, and `tx'` is not an `InputContext` here.
+The theorem applies to each pair that Core reaches in `multisigVisits`.
+-/
+theorem MultisigRecoverySpend.sigAccepted_ordinary_allOnly_commits
+    (h : MultisigRecoverySpend ctx prevScriptPubKey flags verify k keys R S) (sigs : List (List UInt8))
+    (s key : List UInt8) (hashType : UInt8) (hh : HashType.IsAllOnly hashType.toUInt32)
+    (hacc : sigAccepted ctx verify (ordinaryCode (multisigRecoveryScript k keys R) sigs) (s ++ [hashType]) key = true)
+    (tx' : Transaction) (hf : legacyAllFields ctx.tx = legacyAllFields tx') :
+    verify s key (legacyReferencePlan
+      ⟨⟨ordinaryCode (multisigRecoveryScript k keys R) sigs,
+        ordinaryCode_length_lt h.n_le h.keys_length h.recovery_length sigs⟩⟩
+      tx' ctx.index hashType.toUInt32).digest = some true := by
+  obtain ⟨_, s0, ht0, hsig, hv⟩ := (h.sigAccepted_ordinary_iff_reference sigs _ key).mp hacc
+  obtain ⟨rfl, hht⟩ := List.append_inj' hsig rfl
+  cases hht
+  rw [← legacyReferencePlan_eq_of_allFields _ _ _ _ _ hh hf]
+  exact hv
+
+/--
+**Commitment, recovery branch.** Under `MultisigRecoverySpend`, take any signature `sigR`, and a signature `s ++ [hashType]` that `sigAccepted` accepts for `key` with the script code of the recovery branch.
+Let the hash type be `IsAllOnly`: ALL, without ANYONECANPAY.
+Take any transaction `tx'` with the same `legacyAllFields` as `ctx.tx`.
+Then `verify` returns `some true` on `s`, the key and the reference digest of `tx'` at the same input index.
+
+The theorem does not say that `tx'` passes the template. A different scriptSig of input `ctx.index` changes the execution, and `tx'` is not an `InputContext` here.
+-/
+theorem MultisigRecoverySpend.sigAccepted_recovery_allOnly_commits
+    (h : MultisigRecoverySpend ctx prevScriptPubKey flags verify k keys R S) (sigR : List UInt8)
+    (s key : List UInt8) (hashType : UInt8) (hh : HashType.IsAllOnly hashType.toUInt32)
+    (hacc : sigAccepted ctx verify (recoveryCode (multisigRecoveryScript k keys R) sigR) (s ++ [hashType]) key = true)
+    (tx' : Transaction) (hf : legacyAllFields ctx.tx = legacyAllFields tx') :
+    verify s key (legacyReferencePlan
+      ⟨⟨recoveryCode (multisigRecoveryScript k keys R) sigR,
+        recoveryCode_length_lt h.n_le h.keys_length h.recovery_length sigR⟩⟩
+      tx' ctx.index hashType.toUInt32).digest = some true := by
+  obtain ⟨_, s0, ht0, hsig, hv⟩ := (h.sigAccepted_recovery_iff_reference sigR _ key).mp hacc
+  obtain ⟨rfl, hht⟩ := List.append_inj' hsig rfl
+  cases hht
+  rw [← legacyReferencePlan_eq_of_allFields _ _ _ _ _ hh hf]
+  exact hv
 
 end
 

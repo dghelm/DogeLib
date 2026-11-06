@@ -7,12 +7,6 @@ Update the *Status* column when the pull request merges, not when work starts.
 
 **Model project.** Where EthLib and btc-verified differ, DogeLib follows EthLib. That covers architecture, the proof-trust policy, the module system, the writing standard and the soundness documentation. The btc-verified project supplies components, mainly its codecs and packed-codec refinements, which DogeLib adapts to EthLib's structure.
 
-The signature-verifier work follows [design record 0005](docs/design/0005-signature-verifier.md).
-Stage 1 adapts the secp256k1 curve arithmetic and scalar ECDSA verifier with independent Wycheproof known answers.
-Stage 2 adds Core's public-key parser and `coreVerifier`, Core's `CPubKey::Verify`, and runs Core's script and transaction corpora with it in `lake test`.
-Stage 3 connects the oracle, and stage 4 compares all 25 signed recovery-template fixtures in Lean and with live Core.
-Mathlib-dependent curve proofs require a later package proposal.
-
 ## Work order
 
 | Step | Deliverable | Exit condition | Status |
@@ -51,6 +45,12 @@ Each item below is complete.
   The oracle and Core comparison close the three deferred items: exact construction of 26 payloads, Core checks of all 321 historical headers and version-gate comparison.
   The harness also re-mines all 12 `auxpow_pow` cases, including the in-memory flag/payload mismatches, and compares Lean on identical components.
   [The comparison evidence](docs/oracle.md#header-proof-of-work-evidence) records the streams, seeds and limits.
+- **Signature verifier, [design record 0005](docs/design/0005-signature-verifier.md).** Stages 1 to 4 are complete.
+  Stage 1 adapts the secp256k1 curve arithmetic and scalar ECDSA verifier from EthLib, with independent Wycheproof known answers ([ECDSA](SOUNDNESS.md#secp256k1-curve-and-ecdsa-scalar-verification)).
+  Stage 2 adds Core's public-key parser and `coreVerifier`, Core's `CPubKey::Verify`, and runs Core's Script and transaction corpora with it in `lake test` ([Core's verifier](SOUNDNESS.md#secp256k1-public-key-parser-and-cores-verifier)).
+  Stage 3 connects the oracle: its verdicts agree with Core on 598 dedicated public-key inputs and on the Script and transaction corpora.
+  Stage 4 checks all 25 Core-signed recovery-template fixtures in `lake test`, and the oracle comparison rechecks them with live Core.
+  Agreement of the point arithmetic with Core's `secp256k1_ecmult` is finite comparison evidence, without an all-input theorem.
 - **SHA-1, RIPEMD-160 and Hash160.** The hash prerequisites of legacy Script, with known answers ([SHA-1](SOUNDNESS.md#sha-1), [RIPEMD-160 and Hash160](SOUNDNESS.md#ripemd-160-and-hash160)).
 - **Legacy Script, stages 1 to 5 of [design record 0003](docs/design/0003-legacy-spend-validation.md).** The instruction reader, Script numbers, one `EvalScript` call, signature-code preparation, encoding checks, the signature and lock-time opcodes, `VerifyScript` with P2SH, and `verifyLegacySpend` for one input.
   Script verification takes a signature checker as a parameter, and `coreVerifier` supplies ECDSA verification ([the checker](SOUNDNESS.md#script-signature-opcodes-and-the-checker)).
@@ -60,16 +60,15 @@ Each item below is complete.
 
 ## Next work
 
-1. **Signature verifier, design record 0005.** Stages 1 to 4 are complete.
-   The oracle uses `coreVerifier`.
-   Its verdicts agree with Core on 598 dedicated public-key inputs and the Script and transaction corpora.
-   The public-key inputs include constructed infinity and x-above-order cases.
-   Arithmetic agreement remains finite comparison evidence, without an all-input theorem (SOUNDNESS.md).
-   All 25 Core-signed recovery-template fixtures agree in verdict and error through `lake test`.
-   The oracle comparison rechecks the same records with live Core.
-   The three 2-of-3 signer pairs, recovery branch and recorded mutations meet the stage 4 exit conditions.
-2. **Release 0.1.0.** A reproducible release of the completed capabilities, by the steps in [docs/release.md](docs/release.md).
-   The release does not wait for item 1.
+The next work is **release 0.1.0**: a reproducible release of the capabilities that are complete on `main`, by the steps in [docs/release.md](docs/release.md).
+
+These candidates can follow the release.
+None of them is scheduled, and each needs an approved scope before work starts:
+
+- **Contextual header validation.** The checks of `ContextualCheckBlockHeader` other than the version gates: `nBits` against `GetNextWorkRequired`, the checkpoints, the time checks and the rejection of outdated versions.
+- **A full application spend property.** A worked property that covers a complete spend of an application template, beyond one input's Script verification.
+- **Arithmetic agreement with Core's verifier.** A Lean proof that `Point.mulAdd` computes Core's `secp256k1_ecmult` result ([design record 0005](docs/design/0005-signature-verifier.md), section 4.3).
+  The proof needs Mathlib, so it requires a package proposal first.
 
 ## Milestones
 

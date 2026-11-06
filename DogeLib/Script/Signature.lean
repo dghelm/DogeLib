@@ -22,7 +22,7 @@ The signature checker that the signature opcodes call, and the matching loop of 
 `transactionChecker` takes the elliptic-curve check as a parameter `verify`, Core's `VerifySignature` (D3, lines 1248 to 1251).
 `verify sig pubKey digest` receives the signature without its hash-type byte, the public-key bytes and the digest.
 It returns `some true` or `some false` when it decides the signature, and `none` when it is unavailable.
-DogeLib does not specify ECDSA.
+`Script.coreVerifier` in `DogeLib.Script.CoreVerifier` is DogeLib's specification of `CPubKey::Verify`, and it always decides.
 A result about a spend that uses `transactionChecker` holds for Core only if `verify` agrees with Core's `CPubKey::Verify` on the requests it decides.
 SOUNDNESS.md records this hypothesis.
 

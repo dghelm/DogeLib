@@ -32,6 +32,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from oracle_hash_block import header_fixtures, merkle_fixtures, hash_fixtures, sha1_fixtures
 
 from oracle_script import adapter_limit_cases
+from oracle_header_pow import fixture_cases, header_pow_sets, CODES, key, EXPECTATIONS
 
 TIMEOUT = 10
 
@@ -278,13 +279,45 @@ def check_process(oracle: str) -> int:
     return failures
 
 
+def check_header_pow(oracle):
+    """Check independently committed digests/verdicts and strict argument boundaries."""
+    cases = fixture_cases()
+    header_pow_sets()  # Register independently stated activation-boundary expectations.
+    for name, requests in header_pow_sets():
+        if name == "header version boundaries":
+            cases += [(r, EXPECTATIONS[key(r)]) for r in requests]
+    failures = 0
+    requests = [{**r, "id": f"header-pow-{i}"} for i, (r, _) in enumerate(cases)]
+    responses = run_requests(oracle, "header PoW fixtures", requests)
+    if responses is None:
+        return 1
+    for request, (_, expected), response in zip(requests, cases, responses):
+        ok = dict(response.get("ok", {}))
+        if request["op"] in ("auxpow.check", "block.check_pow", "block.check_version"):
+            if "diagnostic" not in ok:
+                failures += 1
+            ok.pop("diagnostic", None)
+        if not matches(ok, expected):
+            print(f"FAIL header PoW fixture {request['id']}: {response}")
+            failures += 1
+    bad = [{"op": "scrypt.hash", "bytes_hex": "00" * n} for n in (0, 79, 81)]
+    base = {"op": "block.header.read", "mode": "base", "bytes_hex": ""}
+    bad += [{**base, "mode": "unknown"}, {**base, "extra": 1}]
+    bad += [{"op": "block.check_version", "bytes_hex": "00" * n, "network": "mainnet", "selection_height": 0} for n in (79, 81)]
+    for response in run_batch(oracle, [json.dumps(r) for r in bad]):
+        if response.get("error", {}).get("kind") != "request":
+            failures += 1
+    print(f"header PoW fixtures: {len(cases)} expectations, {len(bad)} request errors, {failures} failures")
+    return failures
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print(__doc__)
         return 2
     oracle = sys.argv[1]
     failures = (check_fixtures(oracle) + check_sighash_corpus(oracle) + check_tx_corpus(oracle)
-                + check_witness_corpus(oracle) + check_hash_block_fixtures(oracle) + check_process(oracle) + check_script_adapter_limits(oracle))
+                + check_header_pow(oracle) + check_witness_corpus(oracle) + check_hash_block_fixtures(oracle) + check_process(oracle) + check_script_adapter_limits(oracle))
     print("PASS" if failures == 0 else f"FAIL: {failures} failures")
     return 0 if failures == 0 else 1
 

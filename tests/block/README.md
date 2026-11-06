@@ -129,14 +129,10 @@ These details of the test matter:
 - `get(tx)` always takes the Merkle branch of position 0, so the case at line 231 pairs the second transaction with the first one's branch.
 - The case at line 248 writes the size word `1 << 31`, which overflows a signed `int`. The script writes `00 00 00 80`, GCC's result. Core rejects the case at line 91, before it reads that word.
 
-These bytes are a transcription, not bytes that Core wrote.
-A transcription mistake changes the bytes but not the expected Boolean, which comes from the `BOOST_CHECK`.
-For an accepted case, such a mistake would very likely make the test fail.
-For a rejected case, wrong bytes can still be rejected, so the Boolean alone would not detect the mistake.
-The expected error line narrows that gap, but it comes from the same reading as the transcription.
-
-The maintainer deferred these Core-recorded inputs to stage 5 on pull request #99, without waiving them.
-Stage 5 of design record 0004 does not exit until the Core harness builds these cases with Core's own classes and the bytes match.
+The Python builder transcribes the input bytes and takes expected Booleans from Core's `BOOST_CHECK` assertions.
+The harness independently reconstructs all 26 cases with Core classes, then compares their exact bytes and arguments with this file.
+Core's verdicts must also agree with each recorded expectation.
+This check closes the Core-recorded-input requirement deferred from stage 3 to stage 5 on pull request #99.
 
 ### Boundary cases
 
@@ -168,7 +164,7 @@ Core reports only a Boolean, so that comparison is not evidence from Core.
 `lake test` also runs `AuxPow.check` on the six mainnet headers of `auxpow-headers.json`.
 It passes each header's own block hash and chain ID, and `fStrictChainId` true.
 All six chain IDs are `0x62`, and all six payloads are accepted.
-These results are Lean evidence only. The Core harness check of these headers belongs to stage 5.
+The Core comparator checks all six payload verdicts with the same arguments, and both implementations accept.
 
 ## Header proof of work
 
@@ -221,8 +217,8 @@ All of `lake test` took 5.4 seconds.
 
 ### Core comparison
 
-These results are Lean evidence only.
-The Core harness verdict for each header belongs to stage 5, with the `block.check_pow` oracle operation.
+The `block.check_pow` operation compares all 321 header verdicts with pinned Core.
+The [Core report](core-header-pow.json) records their input identities, network, parameters and verdicts.
 
 ## Hand-written AuxPoW cases
 
@@ -274,3 +270,21 @@ Copyright (c) 2015-2016 The Bitcoin Core developers
 Distributed under the MIT software license, see the accompanying
 file COPYING or http://www.opensource.org/licenses/mit-license.php.
 ```
+
+## Core header proof-of-work report
+
+`core-header-pow.json` records a pinned Core `CheckAuxPowProofOfWork` run on all 321 full-header fixtures used by `HeaderPow.lean`.
+The inputs are the three headers of `mainnet.json`, the 312 range headers and the six complete headers of `auxpow-headers.json`.
+Each record identifies exact input bytes by SHA-256, height and selected parameter height.
+The report gives the mainnet parameters and the generic scrypt build variant.
+
+The recorded verdicts come directly from the built Core harness on these input bytes.
+No Lean output supplies an expected result.
+All 321 Core verdicts accept.
+The oracle fixture runner checks that every identity still agrees with the committed inputs.
+The Core comparator reruns the requests and checks the recorded verdicts.
+
+`core-oracle --check-auxpow-fixtures` separately reconstructs the 26 deterministic `check_auxpow` cases using Core classes.
+Every Core comparison checks the resulting bytes and arguments against `check-auxpow.json`, then checks Core's verdicts.
+The harness adaptation is in `harness/core/auxpow_fixtures.inc`, with its source and licence notice.
+This byte check closes the stage 3 item deferred to stage 5 on pull request #99.

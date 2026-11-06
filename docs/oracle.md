@@ -423,6 +423,65 @@ A request to build a transaction from its fields would need another format name.
 `scripts/test_oracle.sh` builds the oracle and runs `scripts/test_oracle.py`.
 `tests/oracle/README.md` gives the source of each expected value.
 
+## Header proof of work
+
+These operations extend `dogelib-oracle/1` before release 0.1.0.
+Byte strings use serialization order.
+`mode` is required and is either `base` or `allow_witness`, including when no payload is present.
+The latter uses Core's network stream version without `SERIALIZE_TRANSACTION_NO_WITNESS`.
+
+| Operation | Required arguments | Result in `ok` |
+| --- | --- | --- |
+| `scrypt.hash` | `bytes_hex`, exactly 80 bytes | `digest_hex`, exactly 32 bytes in scrypt output order |
+| `block.header.read` | `bytes_hex`, `mode` | `header`, `consumed`, `rest_hex` |
+| `auxpow.check` | `bytes_hex`, `mode`, `hash_hex`, `chain_id`, `strict_chain_id` | Boolean `valid`, and Lean-only `diagnostic` |
+| `block.check_pow` | `bytes_hex`, `mode`, `network`, `selection_height` | Boolean `valid`, and Lean-only `diagnostic` |
+| `block.check_version` | `bytes_hex`, exactly 80 bytes, `network`, `selection_height` | Boolean `valid`, and Lean-only `diagnostic` |
+
+`scrypt.hash` fixes N = 1024, r = 1, p = 1 and a 32-byte output.
+The 80 input bytes serve as both password and salt.
+Its output order is the internal order of Core's `uint256`, the reverse of its displayed digest.
+
+`block.header.read` reads a prefix and preserves its remainder.
+Its `header` contains `pure`, with the same fields as `header.read`, and `auxpow`, either null or a payload object.
+The payload object contains these decoded fields:
+
+- `transaction`: the `tx`, `witnesses`, `has_witness`, `serialized_hex`, `txid_hex`, `txid_display`, `wtxid_hex` and `wtxid_display` fields of `tx.read_witness`.
+- `hash_block_hex` and `hash_block_display`: the embedded `hashBlock` in both orders.
+- `merkle_branch_hex` and `chain_merkle_branch_hex`: arrays of hashes in internal order.
+- `index` and `chain_index`: unsigned `u32` bits of Core's signed indices.
+- `parent`: the six pure-header fields, with the same representation as `header.read`.
+
+The transaction result always serializes with witness allowed, even when the reader used base mode.
+Thus `serialized_hex` describes the decoded transaction rather than the exact consumed bytes.
+The consumed length and remainder still describe the input, including accepted noncanonical empty witness stacks.
+
+`auxpow.check` requires complete serialized payload bytes, without the child header.
+`hash_hex` is the 32-byte child block hash in internal order.
+`chain_id` is a signed integer from -2147483648 through 2147483647, and `strict_chain_id` is a Boolean.
+These parameters are explicit and need not describe a named network.
+This operation checks no proof of work.
+
+`block.check_pow` requires complete full-header bytes and calls `checkAuxPowProofOfWork` on the selected network record.
+`network` is `mainnet`, `testnet` or `regtest`, and `selection_height` ranges from 0 through 2147483647.
+Height zero gives the proof-of-work check of `CheckBlockHeader` with `fCheckPOW` true.
+The operation does not check the expected difficulty against chain history.
+
+`block.check_version` checks only the two version gates of `ContextualCheckBlockHeader`.
+It uses a pure header because neither gate reads the payload.
+Its network and height select `fAllowLegacyBlocks`.
+The Lean adapter uses the activation heights recorded in D14.
+The Core harness reads the field from Core's `Params().GetConsensus(selection_height)`.
+
+It transcribes the two branches from D33 and calls Core's own `IsLegacy` and `IsAuxpow` predicates.
+It does not call the complete contextual validator, which needs chain state and checks other rules.
+
+The predicate operations return `diagnostic: null` on acceptance and a Lean error string on rejection.
+Core returns only `valid`.
+The comparator excludes only Lean's `diagnostic`, and compares Boolean verdicts without coercion.
+Parse errors use the existing `read` categories.
+The complete-input operations report `trailing_bytes` with the remaining count.
+
 ## The Core harness
 
 `harness/core/core_oracle.cpp` answers the same requests by running Dogecoin Core's own code.
@@ -544,7 +603,7 @@ Other argument checks have oracle fixtures but no Core comparison.
 ### The comparison
 
 `scripts/compare_core.py` gives each request its own `id` and sends both programs the same text.
-For supported requests, the two responses must be equal as JSON values, subject to the signature-preimage projection below.
+For supported requests, the two responses must be equal as JSON values, subject to the signature-preimage and Lean-diagnostic projections below.
 For `script.eval` and `script.verify_legacy`, an unsupported Lean result excludes that request from verdict agreement.
 The comparator validates both result shapes and the checker-specific unsupported reasons, then reports the unsupported reason and Core outcome separately.
 An adapter error is not an unsupported result.
@@ -553,7 +612,7 @@ For `sighash.legacy` with plan `hash_bytes`, the double SHA-256 of the oracle's 
 This checks the preimage against Core's digest, not byte by byte against a preimage from Core.
 Outside the checked `harness-refused` category, a request error from either program fails the comparison.
 
-The comparison with Core `e0a1c157791544e818c901bd9341896965afbf9d` passes 373,089 stream requests.
+The comparison with Core `e0a1c157791544e818c901bd9341896965afbf9d` passes 382,647 stream requests.
 The pull request records the tested DogeLib revision.
 It reported zero failures, including 12 checked harness refusals, plus 22 adapter-limit cases and the 1,193 two-call compositions.
 The transaction inputs and targeted timelocks have these counts:
@@ -741,3 +800,47 @@ The 36 infinity inputs reject, and the 24 x-above-order inputs accept.
 All 24 changed-S inputs reject.
 Another 24 inputs retain the verification point above `n` but claim a different R scalar, and all reject.
 These comparisons give finite evidence about verdicts, not a theorem that `mulAdd` equals Core's `secp256k1_ecmult`.
+
+### Header proof-of-work evidence
+
+The harness builds with `--disable-scrypt-sse2` and calls `scrypt_1024_1_1_256_sp_generic` for `scrypt.hash`.
+Its build stamp records the Core revision, configure options, compiler versions, host architecture and flags.
+`CheckAuxPowProofOfWork` also uses generic scrypt in this build.
+Core's error logging goes to a harness `LogPrintStr` sink on standard error.
+The sink changes no returned verdict and keeps logs outside the JSONL stream.
+
+The full-header reader uses Core's `CBlockHeader` reader with the requested stream mode.
+The predicates call `CAuxPow::check` and `CheckAuxPowProofOfWork` directly.
+For proof of work, Core selects the actual record with `Params().GetConsensus(selection_height)`.
+The harness does not reproduce that parameter table.
+
+`core-oracle --check-auxpow-fixtures` reconstructs the 26 deterministic cases of Core's `check_auxpow` with Core's classes.
+The adaptation preserves their construction order and replaces assertions with serialized records and Core verdicts.
+The standalone harness omits the test's chain lock because it has no concurrent chain state.
+Every comparison run requires exact payload bytes, arguments and verdicts to match `tests/block/check-auxpow.json`.
+The comparator also checks the 16 boundary payloads and all six historical AuxPoW payloads against committed verdict expectations.
+
+[The Core fixture report](../tests/block/core-header-pow.json) records all 321 historical header verdicts.
+Each entry identifies exact bytes by SHA-256 in the existing header fixtures and gives the selected height.
+The report names the network, the three relevant parameters, the Core revision and the scrypt variant.
+All 321 headers pass Core's proof-of-work check, including six complete AuxPoW headers.
+The fixture loader checks the report's identities and parameters before the comparison.
+
+The header comparison includes these streams:
+
+| Stream | Requests | Compared result |
+| --- | ---: | --- |
+| Header PoW fixtures | 374 | Five exact scrypt digests, 321 header verdicts and 48 payload verdicts |
+| Full header readers | 7,878 | Complete decoded fields, consumption, remainder or read error in both modes |
+| Version boundaries | 207 | Two version gates at activation, record-selection and signed-version boundaries |
+| Mutations, seed `20261108` | 1,075 | Payload/script mutations, version bits, nonces and child/parent `nBits` |
+
+One hundred script mutations recompute the parent Merkle root to retain the coinbase-to-parent binding.
+These mutations exercise the merged-mining search after the binding check passes.
+Other reader cases cover malformed branch counts, optional transaction flags and empty witness stacks.
+The comparison checks fixture expectations independently of cross-implementation equality.
+
+The self-test changes each operation's compared result and requires `SCRYPT_DIGEST`, `FULL_HEADER`, `AUXPOW_VERDICT`, `HEADER_POW` or `HEADER_VERSION`.
+A reconstruction-byte mutation must fail with `AUXPOW_RECONSTRUCTION`.
+Assertions also check that a Lean diagnostic difference is ignored and that an integer cannot replace a Boolean verdict.
+These checks supply finite comparison evidence, not an all-input equivalence theorem with Core.

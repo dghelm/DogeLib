@@ -28,6 +28,12 @@ from oracle_script import harness_refused, refused_set, refusal_precedence_set, 
 # mode: (role of the wrapper, expected failure code). The role "core" stands
 # in for the harness, "oracle" for dogelib-oracle.
 MUTATIONS = {
+    "pow_reconstruction": ("core", "AUXPOW_RECONSTRUCTION"),
+    "pow_scrypt": ("core", "SCRYPT_DIGEST"),
+    "pow_reader": ("core", "FULL_HEADER"),
+    "pow_auxpow": ("core", "AUXPOW_VERDICT"),
+    "pow_verdict": ("core", "HEADER_POW"),
+    "pow_version": ("core", "HEADER_VERSION"),
     "pubkey_valid": ("core", "PUBKEY_VALID"),
     "signature_verdict": ("core", "SIGNATURE_VERDICT"),
     "targeted_early_error": ("both", "TARGETED_OPCODE"),
@@ -119,6 +125,14 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
         if args[:2] != ["--oracle-format", oracle_format]:
             return 2
         args = args[2:]
+    if args == ["--check-auxpow-fixtures"]:
+        from oracle_header_pow import payload_cases
+        rows = [{**{k: c[k] for k in ("line", "payload_hex", "hash_aux_block_hex", "chain_id", "strict_chain_id", "expected")},
+                 "valid": c["expected"]} for c in payload_cases()[:26]]
+        if mode == "pow_reconstruction":
+            rows[0]["payload_hex"] = "00"
+        print(json.dumps(rows))
+        return 0
     if args == ["--version"]:
         print(json.dumps({"format": projected_format}, separators=(",", ":")))
         return 0
@@ -132,6 +146,7 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
             ok["format"] = projected_format
         if role == "core" and mode != "core_preimage":
             ok.pop("preimage_hex", None)
+            ok.pop("diagnostic", None)
         if role == "core" and harness_refused(request):
             resp.pop("ok", None)
             resp["error"] = {"kind": "request", "message": "Core VerifyScript flag dependencies are not satisfied"}
@@ -340,6 +355,19 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
         mutate_first(responses, is_plan("hash_bytes"), flip_last)
     elif mode == "oracle_preimage_malformed":
         mutate_first(responses, is_plan("hash_bytes"), set_ok("preimage_hex", "zz"))
+    if mode.startswith("pow_") and mode != "pow_reconstruction":
+        op, field = {"pow_scrypt": ("scrypt.hash", "digest_hex"),
+                     "pow_reader": ("block.header.read", "consumed"),
+                     "pow_auxpow": ("auxpow.check", "valid"),
+                     "pow_verdict": ("block.check_pow", "valid"),
+                     "pow_version": ("block.check_version", "valid")}[mode]
+        for request, response in zip(requests, responses):
+            if request["op"] == op and "ok" in response:
+                value = response["ok"][field]
+                response["ok"][field] = (not value) if type(value) is bool else (value + 1 if type(value) is int else "00" * 32)
+                break
+        else:
+            raise SystemExit("wrapper: no header PoW response to mutate")
     lines = [json.dumps(r, separators=(",", ":")) for r in responses]
     if mode == "malformed":
         lines[len(lines) // 2] = "{"
@@ -382,6 +410,12 @@ def main() -> int:
         return 2
     oracle = str(pathlib.Path(sys.argv[1]).resolve())
     failures = 0
+    from compare_core import compare as compare_response
+    request = {"op": "auxpow.check"}
+    assert compare_response(request, {"id": 1, "ok": {"valid": True, "diagnostic": "Lean only"}},
+                            {"id": 1, "ok": {"valid": True}}) is None
+    assert compare_response(request, {"id": 1, "ok": {"valid": True, "diagnostic": None}},
+                            {"id": 1, "ok": {"valid": 1}})[0] == "AUXPOW_VERDICT"
     assert all(harness_refused(r) for r in refused_set())
     assert not any(harness_refused(r) for r in refusal_precedence_set())
     # Empty-input base transactions and script bounds precede the flag refusal.

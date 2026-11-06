@@ -44,7 +44,7 @@ Each item below is complete.
   Full headers with the AuxPoW payload, read and written in each read mode of the embedded transaction ([full headers](SOUNDNESS.md#full-headers-and-the-auxpow-payload)).
   This codec is stage 2 of [design record 0004](docs/design/0004-header-proof-of-work.md).
   `CAuxPow::check`, stage 3, with its merged-mining search and expected index ([the AuxPoW check](SOUNDNESS.md#the-auxpow-check)).
-  Its Lean side is complete. The Core-recorded inputs of its `check_auxpow` known answers are pending stage 5.
+  The Core harness reconstructs all 26 `check_auxpow` payloads with exact byte agreement and compares their verdicts.
 - **SHA-1, RIPEMD-160 and Hash160.** The hash prerequisites of legacy Script, with known answers ([SHA-1](SOUNDNESS.md#sha-1), [RIPEMD-160 and Hash160](SOUNDNESS.md#ripemd-160-and-hash160)).
 - **Legacy Script, stages 1 to 5 of [design record 0003](docs/design/0003-legacy-spend-validation.md).** The instruction reader, Script numbers, one `EvalScript` call, signature-code preparation, encoding checks, the signature and lock-time opcodes, `VerifyScript` with P2SH, and `verifyLegacySpend` for one input.
   Script verification takes a signature checker as a parameter, and `coreVerifier` supplies ECDSA verification ([the checker](SOUNDNESS.md#script-signature-opcodes-and-the-checker)).
@@ -57,11 +57,13 @@ Each item below is complete.
 1. **Header proof of work, [design record 0004](docs/design/0004-header-proof-of-work.md).** The scrypt digest of a pure header, with HMAC-SHA256 and PBKDF2.
    The AuxPoW payload, and the composition of both with the compact-target check.
    HMAC-SHA256 and the full header codec of stage 2 are complete.
-   The Lean side of `CAuxPow::check`, stage 3, is complete. Its Core-recorded inputs are pending stage 5, by maintainer decision on pull request #99.
+   The Core harness reconstructs the 26 deterministic stage 3 payloads and compares exact bytes and verdicts.
    PBKDF2 and the RFC 7914 scrypt model are complete.
    The fixed Dogecoin scrypt executable and its proof against the RFC 7914 model are complete.
    Stage 4a, `CheckAuxPowProofOfWork` and `CheckBlockHeader`, is complete ([header proof of work](SOUNDNESS.md#header-proof-of-work)).
-   The oracle operations and the Core comparison of stage 5 remain.
+   Stage 5 exposes the five oracle operations and compares fixtures, full-header readers, version boundaries and seeded mutations with Core.
+   The [comparison evidence](docs/oracle.md#header-proof-of-work-evidence) covers both deferred fixture checks.
+   Stages 1 through 5 have their implementation evidence.
 2. **Signature verifier, design record 0005.** Stages 1 to 4 are complete.
    The oracle uses `coreVerifier`.
    Its verdicts agree with Core on 598 dedicated public-key inputs and the Script and transaction corpora.

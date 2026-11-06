@@ -147,27 +147,54 @@ def checkAuxPow : Operation where
         throw (.spec (Json.mkObj [("kind", "trailing_bytes"), ("count", natJson rest.length)]))
       return verdictJson (a.check hash chainId strict)
 
+/-- A complete header, or exact pure bytes with an explicit optional payload.
+The split form can represent the flag/payload mismatches that a full-header reader excludes. -/
+def argPowHeader (fields : Args) (mode : TxReadMode) (bs : List UInt8) : Except Failure BlockHeader := do
+  match fields.get? "payload_hex" with
+  | none =>
+    match BlockHeader.decodeComplete mode bs with
+    | .error (.read e) => throw (.spec (Transaction.Exports.witnessReadErrorJson e))
+    | .error (.trailingBytes n) =>
+      throw (.spec (Json.mkObj [("kind", "trailing_bytes"), ("count", natJson n)]))
+    | .ok h => return h
+  | some payload =>
+    unless bs.length == 80 do throw (.request "split bytes_hex must contain exactly 80 bytes")
+    let some (pure, _) := Codec.decode (α := PureBlockHeader) bs
+      | throw (.request "split bytes_hex must contain exactly 80 bytes")
+    if payload == Json.null then return ⟨pure, none⟩
+    let raw ← argHex fields "payload_hex"
+    match AuxPow.read mode raw with
+    | .error e => throw (.spec (Transaction.Exports.witnessReadErrorJson e))
+    | .ok (a, rest) =>
+      unless rest.isEmpty do
+        throw (.spec (Json.mkObj [("kind", "trailing_bytes"), ("count", natJson rest.length)]))
+      return ⟨pure, some a⟩
+
 /-- Check complete full-header bytes with the selected network record. -/
 def checkPow : Operation where
   name := "block.check_pow"
-  args := ["bytes_hex", "mode", "network", "selection_height"]
+  args := ["bytes_hex", "mode", "network", "selection_height", "payload_hex"]
   run fields := do
     let mode ← argMode fields
     let bs ← argHex fields "bytes_hex"
     let network ← Work.Exports.argNetwork fields
     let height := (← argInt fields "selection_height" 0 2147483647).toNat.toUInt32
-    match BlockHeader.decodeComplete mode bs with
-    | .error (.read e) => throw (.spec (Transaction.Exports.witnessReadErrorJson e))
-    | .error (.trailingBytes n) =>
-      throw (.spec (Json.mkObj [("kind", "trailing_bytes"), ("count", natJson n)]))
-    | .ok h => return verdictJson (checkAuxPowProofOfWork (getAuxPowParams network height) h)
+    let h ← argPowHeader fields mode bs
+    return verdictJson (checkAuxPowProofOfWork (getAuxPowParams network height) h)
+
+/-- The legacy-block field of Core's parameter trees (SOURCES.md D14), with its actual search links. -/
+def legacyGateTree : Work.WorkNetwork → ParamsTree Bool
+  | .mainnet => .node 145000 true
+      (some (.node 0 true none none)) (some (.node 371337 false none none))
+  | .testnet => .node 145000 true
+      (some (.node 0 true none none))
+      (some (.node 157500 true none (some (.node 158100 false none none))))
+  | .regtest => .node 10 true
+      (some (.node 0 true none none)) (some (.node 20 false none none))
 
 /-- The activation field selected by network and height in Core's records (SOURCES.md D14). -/
 def allowLegacyAt (network : Work.WorkNetwork) (height : UInt32) : Bool :=
-  height < match network with
-    | .mainnet => 371337
-    | .testnet => 158100
-    | .regtest => 20
+  ((legacyGateTree network).getConsensus height).2
 
 /-- The two version gates on an exact pure header and a selected network record. -/
 def checkHeaderVersion : Operation where

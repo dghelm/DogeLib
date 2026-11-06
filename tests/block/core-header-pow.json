@@ -1937,5 +1937,7 @@
       "selection_height": 3000000,
       "valid": true
     }
-  ]
+  ],
+  "generator": "scripts/capture_header_pow.py",
+  "capture_date": "2026-11-06"
 }

@@ -769,7 +769,8 @@ def compare(req: dict, ours: dict, core: dict, peer: str = "core") -> tuple[str,
                 expected = HEADER_EXPECTATIONS.get(header_key(req))
                 if expected is not None and not json_equal(ok, expected):
                     return code, f"{side} disagrees with committed fixture"
-        ours = {**ours, "ok": {k: v for k, v in ours["ok"].items() if k != "diagnostic"}} if "ok" in ours else ours
+        if op in ("auxpow.check", "block.check_pow", "block.check_version") and "ok" in ours:
+            ours = {**ours, "ok": {k: v for k, v in ours["ok"].items() if k != "diagnostic"}}
         if header_key(req) in HEADER_EXPECTATIONS and ("ok" not in ours or "ok" not in core):
             return code, "fixture must return a verdict or digest"
         if not json_equal(ours, core):
@@ -910,6 +911,21 @@ def check_auxpow_reconstruction(harness, timeout):
     return []
 
 
+def check_auxpow_pow_reconstruction(harness, timeout):
+    """Repeat Core's nonce mining and require every recorded byte and assertion to agree."""
+    from oracle_header_pow import mined_fixture
+    try:
+        actual = json.loads(run_program(harness, ["--auxpow-pow-fixtures"], "", timeout))
+        expected = {k: v for k, v in mined_fixture().items() if k not in ("generator", "capture_date")}
+        if not json_equal(actual, expected):
+            raise ValueError(f"Core auxpow_pow differs at {first_difference(actual, expected)}")
+    except (RunError, ValueError, TypeError) as error:
+        print(f"FAIL AUXPOW_POW_RECONSTRUCTION {error}")
+        return ["AUXPOW_POW_RECONSTRUCTION"]
+    print("AuxPoW PoW reconstruction: 12 predicate cases, 11 mining checks and two hash checks agree")
+    return []
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--timeout", type=float, default=600.0)
@@ -955,6 +971,7 @@ def main() -> int:
 
     if not args.rust_compactsize:
         failures.extend(check_auxpow_reconstruction(args.harness, args.timeout))
+        failures.extend(check_auxpow_pow_reconstruction(args.harness, args.timeout))
 
     if args.rust_compactsize:
         fixtures, excluded = load_fixtures()

@@ -288,3 +288,23 @@ The Core comparator reruns the requests and checks the recorded verdicts.
 Every Core comparison checks the resulting bytes and arguments against `check-auxpow.json`, then checks Core's verdicts.
 The harness adaptation is in `harness/core/auxpow_fixtures.inc`, with its source and licence notice.
 This byte check closes the stage 3 item deferred to stage 5 on pull request #99.
+
+The committed generator captures both reports from Core without invoking Lean:
+
+```bash
+python3 -I scripts/capture_header_pow.py build/core-harness/core-oracle .lane/header-pow-capture --capture-date 2026-11-06
+```
+
+The command writes `core-header-pow.json` and `auxpow-pow.json` into the scratch directory.
+Tests compare the committed expectations and never replace them.
+The reports record this generator and capture date.
+
+`auxpow-pow.json` contains the 12 runtime-mined predicate cases from pinned Core's `auxpow_pow`, lines 360 to 450.
+The harness ports `mineBlock` from lines 327 to 356, and reruns the entire construction on every Core comparison.
+It checks all 11 mining assertions and both version/hash assertions.
+The report records the exact pure bytes, optional payload bytes, Core verdicts and regtest parameters.
+
+Two cases deliberately disagree between the flag and payload presence, so they cannot be serialized as full headers.
+The split form of `block.check_pow` preserves those in-memory states and compares both implementations on identical components.
+The ten serializable cases also pass through the complete full-header reader.
+These snapshots record comparison evidence, rather than fixed source-test known answers.

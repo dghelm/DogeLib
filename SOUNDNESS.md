@@ -437,6 +437,15 @@ The `block.check_pow` comparison checks all 321 headers against Core's `CheckAux
 The [fixture report](tests/block/core-header-pow.json) records the byte identities, network, parameters and Core verdicts.
 The [comparison](docs/oracle.md#header-proof-of-work-evidence) also changes parent and child targets, nonces and version bits.
 Lean diagnostics stay outside the compared verdict.
+
+The Core harness ports `mineBlock` and `auxpow_pow` and mines their nonces again on every comparison.
+It checks the 12 predicate assertions, 11 mining assertions and two version/hash assertions against the source test.
+The [comparison records](tests/block/auxpow-pow.json) preserve the exact components and Core verdicts.
+Lean and Core replay all 12 predicate cases on those bytes, including the two flag/payload mismatches.
+
+Those mismatches use the oracle's split-input form because `checkAuxPowProofOfWork_read` excludes them for a decoded full header.
+The ten serializable cases also run through the full-header reader.
+These checks close the runtime-mined comparison item of design record 0004, section 7.
 These checks add finite evidence and no theorem or trust-policy exception.
 
 By `#print axioms` with Lean `v4.35.0`:
@@ -463,7 +472,7 @@ A legacy version has a clear AuxPoW flag, so at most one of the two checks can r
 The record is an argument that carries only `fAllowLegacyBlocks`.
 Core takes the record from `GetConsensus` at the height of the new header (D14, lines 494 to 506).
 The specification does not model that selection for this field, and no theorem says which record a caller should pass.
-The oracle adapter selects the field by the D14 activation heights and compares 207 boundaries with Core's actual selected records.
+The oracle adapter projects the field from the D14 parameter trees and compares 207 boundaries with Core's actual selected records.
 A caller that passes the wrong record gets the result of the wrong era.
 The known answers state the record that Core selects on each side of each activation height, from D14.
 
@@ -2265,8 +2274,6 @@ They provide finite comparison evidence, without a theorem about all signed spen
 
 Both programs could be wrong in the same way on an input that the comparison does not send.
 
-Any later foreign boundary, such as a C or Rust binding, is listed here with its size and its error handling.
-
 The five header PoW operations are IO-adapter entry points into the existing specification definitions.
 Their JSON conversion and Lean diagnostic strings have no refinement theorem.
 The Core harness transcribes only the two contextual version branches and calls Core's own version predicates.
@@ -2276,6 +2283,7 @@ The build disables SSE2, and its stamp records the generic scrypt variant and co
 The comparison still assumes Core's little-endian header memory layout and arithmetic shift of signed versions.
 Neither the oracle nor the harness checks complete contextual header validity or block validity.
 
+Any later foreign boundary, such as a C or Rust binding, is listed here with its size and its error handling.
 
 ### B5. Compiler substitutions in this repository
 

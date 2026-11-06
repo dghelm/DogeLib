@@ -6,6 +6,8 @@ import pathlib
 import random
 import re
 
+from capture_header_pow import full_headers
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SEED = 20261108
 CODES = {"scrypt.hash": "SCRYPT_DIGEST", "block.header.read": "FULL_HEADER",
@@ -25,17 +27,6 @@ def payload_cases():
     return json.loads((ROOT / "tests/block/check-auxpow.json").read_text())["cases"]
 
 
-def full_headers():
-    """All headers used by HeaderPow.lean, including the six complete AuxPoW headers."""
-    out = [(int(h), bytes.fromhex(raw)) for h, raw in
-           (line.split() for line in (ROOT / "tests/work/mainnet-headers/headers.txt").read_text().splitlines())]
-    out += [(r["height"], bytes.fromhex(r["header"])) for r in
-            json.loads((ROOT / "tests/block/mainnet.json").read_text())]
-    out += [(r["height"], bytes.fromhex(r["block"])[:r["headerLength"]]) for r in
-            json.loads((ROOT / "tests/block/auxpow-headers.json").read_text())]
-    return out
-
-
 def pow_request(raw, height=0, network="mainnet"):
     return {"op": "block.check_pow", "bytes_hex": raw.hex(), "mode": "allow_witness",
             "network": network, "selection_height": height}
@@ -45,6 +36,23 @@ def aux_request(case):
     return {"op": "auxpow.check", "bytes_hex": case["payload_hex"], "mode": "allow_witness",
             "hash_hex": case["hash_aux_block_hex"], "chain_id": case["chain_id"],
             "strict_chain_id": case["strict_chain_id"]}
+
+
+def mined_fixture():
+    """The Core-mined components and assertion results from the pinned auxpow_pow test."""
+    document = json.loads((ROOT / "tests/block/auxpow-pow.json").read_text())
+    assert document["core_revision"] == "e0a1c157791544e818c901bd9341896965afbf9d"
+    assert document["network"] == "regtest" and document["selection_height"] == 371337
+    assert document["mode"] == "allow_witness" and document["scrypt_variant"] == "generic, --disable-scrypt-sse2"
+    assert document["params"] == {"nAuxpowChainId": 98, "fStrictChainId": True, "powLimit_hex": "7" + "f" * 63}
+    assert [c["line"] for c in document["cases"]] == [372, 378, 382, 386, 394, 398, 400, 420, 423, 439, 448, 450]
+    assert [c["expected"] for c in document["cases"]] == [True, False, True, False, False, True, False, False, True, False, True, False]
+    assert len(document["mining_checks"]) == 11
+    assert document["hash_checks"] == [{"line": 436, "valid": True}, {"line": 438, "valid": True}]
+    for case in document["cases"] + document["mining_checks"]:
+        assert type(case["valid"]) is bool and case["valid"] == case["expected"]
+        assert len(bytes.fromhex(case["bytes_hex"])) == 80
+    return document
 
 
 def fixture_cases():
@@ -70,6 +78,16 @@ def fixture_cases():
     assert len(pairs) == 5
     out += [({"op": "scrypt.hash", "bytes_hex": raw}, {"digest_hex": bytes.fromhex(digest)[::-1].hex()})
             for raw, digest in pairs]
+    mined = mined_fixture()
+    for case in mined["cases"]:
+        raw = bytes.fromhex(case["bytes_hex"])
+        request = {**pow_request(raw, mined["selection_height"], mined["network"]), "payload_hex": case["payload_hex"]}
+        out.append((request, {"valid": case["valid"]}))
+        if bool(int.from_bytes(raw[:4], "little") & 256) == (case["payload_hex"] is not None):
+            full = raw + (bytes.fromhex(case["payload_hex"]) if case["payload_hex"] is not None else b"")
+            out.append((pow_request(full, mined["selection_height"], mined["network"]), {"valid": case["valid"]}))
+    out += [({"op": "scrypt.hash", "bytes_hex": c["bytes_hex"]}, {"digest_hex": c["pow_hash_hex"]})
+            for c in mined["mining_checks"]]
     return out
 
 

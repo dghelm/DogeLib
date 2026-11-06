@@ -3,6 +3,8 @@
 // Copyright (c) 2014-2015 Daniel Kraft
 // Distributed under the MIT/X11 software license. See LICENSES/dogecoin-core-MIT.txt.
 // The test lock is omitted: this standalone harness has no concurrent chain state.
+// A local empty COINBASE_FLAGS replaces the empty test-time global in validation.cpp.
+// Explicit mainnet Params replaces the test suite's selected Params().
 // BOOST_CHECK sites emit their constructed payload and actual Core verdict.
 
 const CScript COINBASE_FLAGS;
@@ -312,4 +314,193 @@ UniValue reconstructAuxPowFixtures()
     builder2.setCoinbase(CScript() << data);
     record(322, builder2.get(), hashAux, ourChainId, params, true);
     return rows;
+}
+
+// Adapted from Dogecoin Core e0a1c157791544e818c901bd9341896965afbf9d,
+// src/test/auxpow_tests.cpp, mineBlock and auxpow_pow (lines 327-451).
+// Copyright (c) 2014-2015 Daniel Kraft
+// Distributed under the MIT/X11 software license. See LICENSES/dogecoin-core-MIT.txt.
+// BOOST_CHECK sites record the exact mined components and Core verdicts.
+// The builder and empty COINBASE_FLAGS substitutions are documented above.
+
+UniValue powMiningChecks(UniValue::VARR);
+
+void recordMining(int line, const CBlockHeader& block, uint32_t bits, bool expected)
+{
+    CDataStream ds(SER_NETWORK, PROTOCOL_VERSION);
+    ds << static_cast<const CPureBlockHeader&>(block);
+    UniValue row(UniValue::VOBJ);
+    row.pushKV("line", line);
+    row.pushKV("bytes_hex", HexStr(ds.begin(), ds.end()));
+    row.pushKV("target_bits", static_cast<uint64_t>(bits));
+    const auto digest = block.GetPoWHash();
+    row.pushKV("pow_hash_hex", hex(digest.begin(), digest.end()));
+    row.pushKV("expected", expected);
+    row.pushKV("valid", CheckProofOfWork(block.GetPoWHash(), bits, Params().GetConsensus(0)));
+    powMiningChecks.push_back(row);
+}
+
+/**
+ * Mine a block (assuming minimal difficulty) that either matches
+ * or doesn't match the difficulty target specified in the block header.
+ * @param block The block to mine (by updating nonce).
+ * @param ok Whether the block should be ok for PoW.
+ * @param nBits Use this as difficulty if specified.
+ */
+static void
+mineBlock(CBlockHeader& block, bool ok, int nBits = -1)
+{
+    if (nBits == -1)
+        nBits = block.nBits;
+
+    arith_uint256 target;
+    target.SetCompact(nBits);
+
+    block.nNonce = 0;
+    while (true) {
+        const bool nowOk = (UintToArith256(block.GetPoWHash()) <= target);
+        if ((ok && nowOk) || (!ok && !nowOk))
+            break;
+
+        ++block.nNonce;
+    }
+
+    if (ok)
+        recordMining(353, block, nBits, true);
+    else
+        recordMining(355, block, nBits, false);
+}
+
+UniValue reconstructAuxPowPowFixtures()
+{
+    UniValue rows(UniValue::VARR), hashChecks(UniValue::VARR);
+    powMiningChecks = UniValue(UniValue::VARR);
+    auto record = [&](int line, const CBlockHeader& block, bool expected) {
+        CDataStream pure(SER_NETWORK, PROTOCOL_VERSION);
+        pure << static_cast<const CPureBlockHeader&>(block);
+        UniValue row(UniValue::VOBJ), payload;
+        if (block.auxpow) {
+            CDataStream ds(SER_NETWORK, PROTOCOL_VERSION);
+            ds << *block.auxpow;
+            payload = UniValue(HexStr(ds.begin(), ds.end()));
+        }
+        row.pushKV("line", line);
+        row.pushKV("bytes_hex", HexStr(pure.begin(), pure.end()));
+        row.pushKV("payload_hex", payload);
+        row.pushKV("expected", expected);
+        row.pushKV("valid", CheckAuxPowProofOfWork(block, Params().GetConsensus(371337)));
+        rows.push_back(row);
+    };
+    auto hashCheck = [&](int line, bool valid) {
+        UniValue row(UniValue::VOBJ);
+        row.pushKV("line", line);
+        row.pushKV("valid", valid);
+        hashChecks.push_back(row);
+    };
+    /* Use regtest parameters to allow mining with easy difficulty.  */
+    SelectParams(CBaseChainParams::REGTEST);
+    const Consensus::Params& params = Params().GetConsensus(371337);
+
+    const arith_uint256 target = (~arith_uint256(0) >> 1);
+    CBlockHeader block;
+    block.nBits = target.GetCompact();
+
+    /* Verify the block version checks.  */
+
+    block.nVersion = 1;
+    mineBlock(block, true);
+    record(372, block, true);
+
+    // Dogecoin block version 2 can be both AuxPoW and regular, so test 3
+
+    block.nVersion = 3;
+    mineBlock(block, true);
+    record(378, block, false);
+
+    block.SetBaseVersion(2, params.nAuxpowChainId);
+    mineBlock(block, true);
+    record(382, block, true);
+
+    block.SetChainId(params.nAuxpowChainId + 1);
+    mineBlock(block, true);
+    record(386, block, false);
+
+    /* Check the case when the block does not have auxpow (this is true
+     right now).  */
+
+    block.SetChainId(params.nAuxpowChainId);
+    block.SetAuxpowFlag(true);
+    mineBlock(block, true);
+    record(394, block, false);
+
+    block.SetAuxpowFlag(false);
+    mineBlock(block, true);
+    record(398, block, true);
+    mineBlock(block, false);
+    record(400, block, false);
+
+    /* ****************************************** */
+    /* Check the case that the block has auxpow.  */
+
+    CAuxpowBuilder builder(5, 42);
+    CAuxPow auxpow;
+    const int32_t ourChainId = params.nAuxpowChainId;
+    const unsigned height = 3;
+    const int nonce = 7;
+    const int index = CAuxPow::getExpectedIndex(nonce, ourChainId, height);
+    std::vector<unsigned char> auxRoot, data;
+
+    /* Valid auxpow, PoW check of parent block.  */
+    block.SetAuxpowFlag(true);
+    auxRoot = builder.buildAuxpowChain(block.GetHash(), height, index);
+    data = CAuxpowBuilder::buildCoinbaseData(true, auxRoot, height, nonce);
+    builder.setCoinbase(CScript() << data);
+    mineBlock(builder.parentBlock, false, block.nBits);
+    block.SetAuxpow(new CAuxPow(builder.get()));
+    record(420, block, false);
+    mineBlock(builder.parentBlock, true, block.nBits);
+    block.SetAuxpow(new CAuxPow(builder.get()));
+    record(423, block, true);
+
+    /* Mismatch between auxpow being present and block.nVersion.  Note that
+     block.SetAuxpow sets also the version and that we want to ensure
+     that the block hash itself doesn't change due to version changes.
+     This requires some work arounds.  */
+    block.SetAuxpowFlag(false);
+    const uint256 hashAux = block.GetHash();
+    auxRoot = builder.buildAuxpowChain(hashAux, height, index);
+    data = CAuxpowBuilder::buildCoinbaseData(true, auxRoot, height, nonce);
+    builder.setCoinbase(CScript() << data);
+    mineBlock(builder.parentBlock, true, block.nBits);
+    block.SetAuxpow(new CAuxPow(builder.get()));
+    hashCheck(436, hashAux != block.GetHash());
+    block.SetAuxpowFlag(false);
+    hashCheck(438, hashAux == block.GetHash());
+    record(439, block, false);
+
+    /* Modifying the block invalidates the PoW.  */
+    block.SetAuxpowFlag(true);
+    auxRoot = builder.buildAuxpowChain(block.GetHash(), height, index);
+    data = CAuxpowBuilder::buildCoinbaseData(true, auxRoot, height, nonce);
+    builder.setCoinbase(CScript() << data);
+    mineBlock(builder.parentBlock, true, block.nBits);
+    block.SetAuxpow(new CAuxPow(builder.get()));
+    record(448, block, true);
+    tamperWith(block.hashMerkleRoot);
+    record(450, block, false);
+    UniValue result(UniValue::VOBJ), parameters(UniValue::VOBJ);
+    parameters.pushKV("nAuxpowChainId", params.nAuxpowChainId);
+    parameters.pushKV("fStrictChainId", params.fStrictChainId);
+    parameters.pushKV("powLimit_hex", params.powLimit.GetHex());
+    result.pushKV("core_revision", "e0a1c157791544e818c901bd9341896965afbf9d");
+    result.pushKV("source", "src/test/auxpow_tests.cpp, mineBlock and auxpow_pow, lines 327-451");
+    result.pushKV("network", "regtest");
+    result.pushKV("selection_height", 371337);
+    result.pushKV("mode", "allow_witness");
+    result.pushKV("params", parameters);
+    result.pushKV("scrypt_variant", "generic, --disable-scrypt-sse2");
+    result.pushKV("cases", rows);
+    result.pushKV("mining_checks", powMiningChecks);
+    result.pushKV("hash_checks", hashChecks);
+    return result;
 }

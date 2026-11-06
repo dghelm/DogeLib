@@ -462,15 +462,24 @@ The consumed length and remainder still describe the input, including accepted n
 These parameters are explicit and need not describe a named network.
 This operation checks no proof of work.
 
-`block.check_pow` requires complete full-header bytes and calls `checkAuxPowProofOfWork` on the selected network record.
+`block.check_pow` normally requires complete full-header bytes and calls `checkAuxPowProofOfWork` on the selected network record.
 `network` is `mainnet`, `testnet` or `regtest`, and `selection_height` ranges from 0 through 2147483647.
 Height zero gives the proof-of-work check of `CheckBlockHeader` with `fCheckPOW` true.
 The operation does not check the expected difficulty against chain history.
 
+An optional `payload_hex` selects the split-input form of `block.check_pow`.
+When that field is present, `bytes_hex` must contain exactly the 80 pure-header bytes.
+`payload_hex` is either null or a complete serialized payload in the requested `mode`.
+The adapter preserves the pure header's flag and the independently supplied payload presence.
+
+These requests can reach states that no serialized full header can produce.
+`checkAuxPowProofOfWork_read` proves that a header returned by `BlockHeader.read` cannot reach either flag/payload mismatch.
+The split form exposes the existing in-memory predicate for Core's `auxpow_pow` cases at source lines 394 and 439.
+
 `block.check_version` checks only the two version gates of `ContextualCheckBlockHeader`.
 It uses a pure header because neither gate reads the payload.
 Its network and height select `fAllowLegacyBlocks`.
-The Lean adapter uses the activation heights recorded in D14.
+The Lean adapter projects the field from the parameter trees recorded in D14.
 The Core harness reads the field from Core's `Params().GetConsensus(selection_height)`.
 
 It transcribes the two branches from D33 and calls Core's own `IsLegacy` and `IsAuxpow` predicates.
@@ -612,7 +621,7 @@ For `sighash.legacy` with plan `hash_bytes`, the double SHA-256 of the oracle's 
 This checks the preimage against Core's digest, not byte by byte against a preimage from Core.
 Outside the checked `harness-refused` category, a request error from either program fails the comparison.
 
-The comparison with Core `e0a1c157791544e818c901bd9341896965afbf9d` passes 382,647 stream requests.
+The comparison with Core `e0a1c157791544e818c901bd9341896965afbf9d` passes 382,680 stream requests.
 The pull request records the tested DogeLib revision.
 It reported zero failures, including 12 checked harness refusals, plus 22 adapter-limit cases and the 1,193 two-call compositions.
 The transaction inputs and targeted timelocks have these counts:
@@ -830,7 +839,7 @@ The header comparison includes these streams:
 
 | Stream | Requests | Compared result |
 | --- | ---: | --- |
-| Header PoW fixtures | 374 | Five exact scrypt digests, 321 header verdicts and 48 payload verdicts |
+| Header PoW fixtures | 407 | Sixteen exact scrypt digests, 321 historical header verdicts, 48 payload verdicts and 22 mined-case replays |
 | Full header readers | 7,878 | Complete decoded fields, consumption, remainder or read error in both modes |
 | Version boundaries | 207 | Two version gates at activation, record-selection and signed-version boundaries |
 | Mutations, seed `20261108` | 1,075 | Payload/script mutations, version bits, nonces and child/parent `nBits` |
@@ -844,3 +853,20 @@ The self-test changes each operation's compared result and requires `SCRYPT_DIGE
 A reconstruction-byte mutation must fail with `AUXPOW_RECONSTRUCTION`.
 Assertions also check that a Lean diagnostic difference is ignored and that an integer cannot replace a Boolean verdict.
 These checks supply finite comparison evidence, not an all-input equivalence theorem with Core.
+
+`core-oracle --auxpow-pow-fixtures` ports `mineBlock` and `auxpow_pow` from pinned Core lines 327 to 451.
+It mines the nonces again on every Core comparison and records all 12 predicate assertions.
+It also records the 11 mining assertions and the two version/hash assertions.
+
+All assertions must match Core's source expectations, and all captured bytes must match [the comparison records](../tests/block/auxpow-pow.json).
+Lean and Core replay the 12 cases from identical pure-header and nullable payload bytes.
+Ten cases also replay through the full-header reader.
+The two flag/payload mismatches require split inputs.
+These records are snapshots of runtime-mined comparison cases, rather than independent fixed known answers of the source test.
+
+[The capture script](../scripts/capture_header_pow.py) records both header reports without running Lean.
+The reports name their generator and capture date.
+The [fixture notes](../tests/block/README.md#core-header-proof-of-work-report) give the exact capture command.
+A mined-byte self-test mutation must fail with `AUXPOW_POW_RECONSTRUCTION`.
+A separate verdict mutation targets the `payload_hex` path and must fail with `HEADER_POW`.
+An extra diagnostic field on a full-header reader response must fail with `FULL_HEADER`.

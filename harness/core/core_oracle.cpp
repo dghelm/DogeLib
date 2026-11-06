@@ -6,10 +6,11 @@
 // scripts/build_core_harness.sh builds it against Core's libraries at the
 // commit that SOURCES.md pins.
 //
-// Every result value comes from Core's code, with two exceptions that the
+// Every result value comes from Core's code, with three exceptions that the
 // documentation names: `plan` of sighash.legacy is a label computed here from
 // Core's conditions, and sighash.legacy has no `preimage_hex`, because Core
-// hashes its preimage without exposing it.
+// hashes its preimage without exposing it. The third exception is the
+// block.check_version verdict, from two transcribed branches and Core predicates.
 //
 // An exception from Core that is not one of the four mapped read errors ends
 // the program with status 3, so it shows as a failed comparison.
@@ -625,7 +626,7 @@ UniValue run(const UniValue& req)
         ok.pushKV("digest_hex", hex(digest, digest + 32));
     } else if (op == "block.header.read" || op == "block.check_pow" || op == "auxpow.check") {
         if (op == "block.header.read") checkArgs(req, op, {"bytes_hex", "mode"});
-        else if (op == "block.check_pow") checkArgs(req, op, {"bytes_hex", "mode", "network", "selection_height"});
+        else if (op == "block.check_pow") checkArgs(req, op, {"bytes_hex", "mode", "network", "selection_height", "payload_hex"});
         else checkArgs(req, op, {"bytes_hex", "mode", "hash_hex", "chain_id", "strict_chain_id"});
         const auto version = headerStreamVersion(req);
         const auto bytes = argHex(req, "bytes_hex");
@@ -634,7 +635,16 @@ UniValue run(const UniValue& req)
         CAuxPow a;
         try {
             if (op == "auxpow.check") ds >> a;
-            else ds >> h;
+            else if (op == "block.check_pow" && req.exists("payload_hex")) {
+                if (bytes.size() != 80) throw RequestError{"split bytes_hex must contain exactly 80 bytes"};
+                ds >> static_cast<CPureBlockHeader&>(h);
+                if (!arg(req, "payload_hex").isNull()) {
+                    CDataStream payload(argHex(req, "payload_hex"), SER_NETWORK, version);
+                    h.auxpow.reset(new CAuxPow());
+                    payload >> *h.auxpow;
+                    requireEmpty(payload);
+                }
+            } else ds >> h;
         } catch (const std::ios_base::failure& e) { throw SpecError{mapCoreFailure(e)}; }
         if (op == "block.header.read") {
             UniValue full(UniValue::VOBJ);
@@ -906,6 +916,10 @@ UniValue respond(const std::string& line)
 
 int main(int argc, char** argv)
 {
+    if (argc == 2 && std::string(argv[1]) == "--auxpow-pow-fixtures") {
+        std::cout << reconstructAuxPowPowFixtures().write() << std::endl;
+        return 0;
+    }
     if (argc == 2 && std::string(argv[1]) == "--check-auxpow-fixtures") {
         std::cout << reconstructAuxPowFixtures().write() << std::endl;
         return 0;
@@ -917,7 +931,7 @@ int main(int argc, char** argv)
         return 0;
     }
     if (argc != 1) {
-        std::cerr << "usage: core-oracle [--version]\n"
+        std::cerr << "usage: core-oracle [--version | --check-auxpow-fixtures | --auxpow-pow-fixtures]\n"
                   << "Reads one JSON request per line of standard input. See docs/oracle.md." << std::endl;
         return 2;
     }

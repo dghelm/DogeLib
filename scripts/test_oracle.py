@@ -304,6 +304,11 @@ def check_header_pow(oracle):
     base = {"op": "block.header.read", "mode": "base", "bytes_hex": ""}
     bad += [{**base, "mode": "unknown"}, {**base, "extra": 1}]
     bad += [{"op": "block.check_version", "bytes_hex": "00" * n, "network": "mainnet", "selection_height": 0} for n in (79, 81)]
+    split = {"op": "block.check_pow", "bytes_hex": "00" * 80, "payload_hex": None,
+             "mode": "allow_witness", "network": "regtest", "selection_height": 0}
+    bad += [{**split, "bytes_hex": "00" * n} for n in (79, 81)]
+    bad += [{**split, "payload_hex": True}, {**split, "selection_height": -1},
+            {**split, "selection_height": 2147483648}]
     for response in run_batch(oracle, [json.dumps(r) for r in bad]):
         if response.get("error", {}).get("kind") != "request":
             failures += 1

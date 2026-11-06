@@ -5,7 +5,8 @@ This document says what the proofs of DogeLib establish, and what a user of Doge
 No formal verification is absolute.
 A proof links a Lean definition to a theorem. Both are assumed to match something outside Lean: the Dogecoin behavior, the code that runs, and what the client needs.
 Each of those links is an assumption, and this document names them one by one.
-It follows the structure of EthLib's [`SOUNDNESS.md`](https://github.com/ethereum/EthLib/blob/bb6dfe55198243682bc2eaf94611af2dbce1be6f/SOUNDNESS.md), which follows s2n-bignum's.
+It follows the structure of EthLib's [`SOUNDNESS.md`](https://github.com/ethereum/EthLib/blob/6a93711e7cc062e787fff6747e4101a141d38b7a/SOUNDNESS.md), which follows s2n-bignum's.
+The current EthLib pin `bb6dfe5` expands that document with coverage that DogeLib does not adopt.
 
 [COVERAGE.md](COVERAGE.md) lists the definitions and their theorems.
 Each section states the mitigations that exist today, and the policy for definitions that are not written yet.

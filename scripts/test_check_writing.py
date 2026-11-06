@@ -45,6 +45,7 @@ class WritingRuleTests(unittest.TestCase):
         for text in ["We utilize the lemma.", "We are utilizing the lemma.",
                      "We act in order\nto finish."]:
             self.assertIn("W1", findings(text))
+        self.assertIsNotNone(WRITING.word_pattern(["in order to"]).search("in\torder\nto"))
         pattern = WRITING.word_pattern(["see"])
         self.assertIsNone(pattern.search("seing"))
         self.assertIsNotNone(pattern.search("seeing"))

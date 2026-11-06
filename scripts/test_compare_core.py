@@ -22,10 +22,14 @@ import time
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 COMPARE = ROOT / "scripts" / "compare_core.py"
+sys.path.insert(0, str(ROOT / "scripts"))
+from oracle_script import harness_refused
 
 # mode: (role of the wrapper, expected failure code). The role "core" stands
 # in for the harness, "oracle" for dogelib-oracle.
 MUTATIONS = {
+    "refused_core_verdict": ("core", "HARNESS_REFUSAL"),
+    "refused_oracle_verdict": ("oracle", "ORACLE_REFUSAL"),
     "legacy_class": ("core", "MISMATCH"),
     "legacy_rejection": ("core", "MISMATCH"),
     "legacy_stack": ("core", "SCRIPT_RESULT"),
@@ -126,6 +130,10 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
             ok["format"] = projected_format
         if role == "core" and mode != "core_preimage":
             ok.pop("preimage_hex", None)
+        if role == "core" and harness_refused(request):
+            resp.pop("ok", None)
+            resp["error"] = {"kind": "request", "message": "Core VerifyScript flag dependencies are not satisfied"}
+            continue
         if role == "core" and ok.get("result") == "unsupported":
             # An informational Core outcome can differ from an unsupported oracle.
             resp["ok"] = {"result": "accepted", "script_error": "OK"}
@@ -140,7 +148,13 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
     def set_ok(field, value):
         return lambda r: r["ok"].__setitem__(field, value)
 
-    if mode.startswith("legacy_"):
+    if mode.startswith("refused_"):
+        ids = {r["id"] for r in requests if harness_refused(r)}
+        def alter_refused(r):
+            r.pop("error", None)
+            r["ok"] = {"result": "accepted", "script_error": "OK"}
+        mutate_first(responses, lambda r: r["id"] in ids, alter_refused)
+    elif mode.startswith("legacy_"):
         by_id = {r["id"]: r for r in requests}
         def eligible(r):
             req = by_id[r["id"]]

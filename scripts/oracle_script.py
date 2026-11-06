@@ -230,3 +230,20 @@ def legacy_sets():
             for checker in ("base", "transaction")] + [
         (f"Script legacy mutations {checker} seed {SPEND_SEED}", [{**r, "checker": checker} for r in mutations])
         for checker in ("base", "transaction")]
+
+
+
+def harness_refused(request):
+    """Core's VerifyScript asserts these flag dependencies, before it can return a verdict."""
+    if request["op"] != "script.verify_legacy":
+        return False
+    flags = request["flags"]
+    return bool((flags & 2048 and not flags & 1) or
+                (flags & 256 and (not flags & 1 or not flags & 2048)))
+
+
+def refused_set():
+    """Well-formed spends whose flags violate Core's assertion domain."""
+    return [{"op": "script.verify_legacy", "tx_hex": spend_tx(b""), "input_index": 0,
+             "prevout_script_hex": "51", "checker": checker, "flags": flags}
+            for checker in ("base", "transaction") for flags in (256, 2048, 2304, 257)]

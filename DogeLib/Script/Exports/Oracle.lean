@@ -10,7 +10,8 @@ public import DogeLib.Transaction.Exports.Oracle
 Script adapters for `dogelib-oracle/6` (docs/oracle.md).
 The specification supplies instruction results, Script errors and unsupported reasons.
 Adapter resource limits precede execution and do not describe consensus rules.
-Core sources are SOURCES.md D24 (`GetOp2`), D3 (`EvalScript`) and D25 (`BaseSignatureChecker`).
+The transaction decoder and error conversion come from `Transaction.Exports.Oracle`.
+Core sources are SOURCES.md D24 (`GetOp2`), D3 (`EvalScript` and `VerifyScript`) and D25 (`BaseSignatureChecker`).
 -/
 
 @[expose] public section

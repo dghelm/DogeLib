@@ -88,7 +88,7 @@ Design records and module documentation cite these identifiers.
 | D47 | [Dogecoin assembly parser: `ParseScript`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/core_read.cpp) |
 | D48 | [Dogecoin opcode names and script tests: `GetOpName`, `IsPayToScriptHash` and `IsPushOnly`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/script/script.cpp) |
 | D49 | [Dogecoin Script errors: `ScriptError_t`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/script/script_error.h) |
-| D50 | [Dogecoin public keys: `ecdsa_signature_parse_der_lax` and `CPubKey::CheckLowS`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/pubkey.cpp) |
+| D50 | [Dogecoin public keys: `ecdsa_signature_parse_der_lax`, `CPubKey::CheckLowS`, `CPubKey::Verify` and `ECCVerifyHandle`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/pubkey.cpp) |
 | D51 | [Dogecoin public keys: `CPubKey::Set`, `IsValid` and `GetLen`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/pubkey.h) |
 | D52 | [Dogecoin bundled secp256k1: `secp256k1_ecdsa_signature_parse_compact` and `secp256k1_ecdsa_signature_normalize`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/secp256k1/src/secp256k1.c) |
 | D53 | [Dogecoin bundled secp256k1 scalars: the group order, its half, `secp256k1_scalar_set_b32` and `secp256k1_scalar_is_high`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/secp256k1/src/scalar_4x64_impl.h) |

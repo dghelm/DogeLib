@@ -454,7 +454,6 @@ UniValue run(const UniValue& req)
         if (bytes.size() > 1048576) scriptResourceLimit();
         const auto start = argU32(req, "cursor");
         if (start > bytes.size()) throw RequestError{"cursor exceeds script length"};
-        scriptChecker(req, true);
         const CScript script(bytes.begin(), bytes.end());
         auto pc = script.begin() + start;
         opcodetype opcode;

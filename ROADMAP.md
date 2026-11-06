@@ -93,11 +93,9 @@ Without a checker, the signature opcodes and CLTV and CSV with their flags stay 
 
 Stage 5 exposes `script.verify_legacy` and checker selection in oracle format `/6`.
 The Core comparison covers all 925 inside-milestone Script corpus records with both checkers.
-Base gives 925 compared verdicts. Transaction gives 881 compared verdicts and 44 unsupported verifier results.
+Base gives 925 compared verdicts, while transaction gives 881 compared verdicts and 44 unsupported verifier results.
 Each checker also has 2,000 legacy mutations under seed `20261106`, with unsupported results separate from agreement.
-These streams have zero disagreements.
-
-The Lean adapter has no ECDSA backend.
+These streams have zero disagreements. The Lean adapter has no ECDSA backend.
 
 Steps 0 and 0b follow design record 0002: the first contributions adopt audited codec foundations and then define Dogecoin's bounded decoding contract. They replace the original plan to build fixed-width encodings and CompactSize from scratch. Design record 0002 preferred a pinned btc-verified dependency first. The decisions below choose an adaptation instead, because btc-verified's toolchain, file structure and trust policy all differ from EthLib's.
 

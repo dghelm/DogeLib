@@ -1,6 +1,6 @@
 # Oracle fixtures
 
-`requests.jsonl` holds 312 requests to `dogelib-oracle`, and `expected.jsonl` holds the expected response on the same line.
+`requests.jsonl` holds 316 requests to `dogelib-oracle`, and `expected.jsonl` holds the expected response on the same line.
 `scripts/test_oracle.py` compares them, with two exceptions.
 It compares a `request` error by kind only.
 An expected `preimage_hex` of `"*"` requires a preimage whose double SHA-256 is the digest.
@@ -87,3 +87,6 @@ The transaction-checker fixture supplies a nonempty signature and a 33-byte comp
 It reaches the unavailable verifier and reports `signature_verifier`, without a spend verdict.
 The key encoding need not represent a curve point for this unsupported result.
 The remaining cases follow the `/6` argument, complete-decoding and index contracts in `docs/oracle.md`.
+
+Four legacy fixtures use CLEANSTACK alone or WITNESS alone, with each checker.
+The supported-flag contract requires unsupported flags even though the harness refuses these combinations.

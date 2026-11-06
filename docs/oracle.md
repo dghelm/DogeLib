@@ -258,10 +258,12 @@ Pinned `src/pubkey.cpp`, `CPubKey::Verify` and `ECCVerifyHandle` (D50), use that
 The harness signs nothing and does not call `ECC_Start`.
 Core's binary and libsecp256k1 remain trusted runtime components, without a Lean refinement theorem.
 
-Core asserts that WITNESS implies P2SH, and CLEANSTACK implies both WITNESS and P2SH (D3, lines 1508 to 1520).
+Core asserts that WITNESS implies P2SH (D3, line 1519), and CLEANSTACK implies both P2SH and WITNESS (lines 1508 and 1509).
 The harness rejects flag combinations that violate these dependencies as request errors, without changing flags.
 The Lean oracle still reports those unsupported flags.
-Such combinations are outside the Core comparison domain.
+Such combinations belong to the comparator's separate `harness-refused` category.
+The comparator requires a harness request error and an exact Lean unsupported-flags result, or fails the request.
+A checked refusal counts as neither agreement nor disagreement.
 
 ### Hash and block arguments
 
@@ -444,7 +446,6 @@ These pinned sources supply the additional objects:
 | `script.read_op` | `CScript::GetOp` on the exact script bytes, with iterator `begin() + cursor` |
 | `script.eval` | `EvalScript` with the caller stack and flags, `BaseSignatureChecker` and `SIGVERSION_BASE` |
 | `script.verify_legacy` | `VerifyScript` with a null witness and the selected `BaseSignatureChecker` or `TransactionSignatureChecker`. `CPubKey::Verify` and `ECCVerifyHandle` use libsecp256k1 |
-| `script.verify_legacy` | D3, `VerifyScript`, `TransactionSignatureChecker`. D25, `BaseSignatureChecker`. D50, `CPubKey::Verify` and `ECCVerifyHandle`. |
 | `sighash.legacy` | `tx_hex` read as by `tx.decode_base`. Then `SignatureHash` with amount 0 and `SIGVERSION_BASE` |
 
 The harness also calls these hash and block functions:
@@ -522,7 +523,7 @@ An adapter error is not an unsupported result.
 
 For `sighash.legacy` with plan `hash_bytes`, the double SHA-256 of the oracle's `preimage_hex` must equal Core's `digest_hex`.
 This checks the preimage against Core's digest, not byte by byte against a preimage from Core.
-A request error from either program fails the comparison.
+Outside the checked `harness-refused` category, a request error from either program fails the comparison.
 
 The request stream is deterministic, and the random sets use a fixed seed:
 
@@ -558,6 +559,8 @@ The Script comparison reports these sets separately:
   A rejection or unsupported result ends that side's composition.
   The composition does not run `VerifyScript` or use the corpus's expected spending verdict.
   It ignores the record's witness and runs only the two base scripts.
+- Eight synthetic legacy requests violate Core's flag dependencies, with each checker and flags 256, 2048, 2304 and 257.
+  The comparator checks and excludes them as `harness-refused`.
 - Every inside-milestone record through `script.verify_legacy`, separately with `base` and `transaction`.
   Each request uses the recorded spending transaction, input index and previous-output script.
 - 2,000 legacy mutations for each checker, under seed `20261106`.
@@ -624,6 +627,8 @@ One mutation runs the full composition path and corrupts a successful second-cal
 Another gives an unsupported result an opcode absent from the script instructions.
 Legacy mutations corrupt verdicts, add a forbidden stack, and invent unsupported results for either checker or Core.
 They also corrupt the unavailable verifier's opcode and fields.
+Two refusal mutations replace either the required Core refusal or Lean's unsupported-flags answer with a verdict.
+Each must fail with its own refusal error code.
 
 ### Compiled Rust CompactSize
 

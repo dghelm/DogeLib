@@ -1578,6 +1578,8 @@ The harness signs nothing and does not need `ECC_Start`.
 These libraries, their key and signature parsing, and their compiled binary form a trusted runtime boundary, not a Lean proof.
 
 The harness rejects flag combinations that violate Core's WITNESS and CLEANSTACK assertions without altering the flags.
+The comparator counts these requests separately as `harness-refused` only after it checks both the refusal and Lean's unsupported-flags answer.
+Neither outcome is comparison agreement or a Script verdict.
 Finite comparisons establish neither full transaction validity nor equivalence to Core on all inputs.
 
 A wrong conversion could make the oracle and Core disagree, or agree, for a reason outside the specification.
@@ -1593,7 +1595,7 @@ A user of the comparison trusts these parts of it:
   Any other exception from Core stops the harness, so it cannot pass as a result.
 - The `plan` label of `sighash.legacy`. The harness computes it from Core's conditions instead of observing it. It stops if the label is `fixed_digest` and Core's digest is not the value one.
 - The comparator, `scripts/compare_core.py`.
-  Its self-test, `scripts/test_compare_core.py`, requires two passing controls and 84 mutations that each fail with the code they target.
+  Its self-test, `scripts/test_compare_core.py`, requires two passing controls and 86 mutations that each fail with the code they target.
 - For `sighash.legacy`, the oracle's preimage is checked by hashing it, not byte by byte: Core does not expose its preimage.
 
 Both programs could be wrong in the same way on an input that the comparison does not send.

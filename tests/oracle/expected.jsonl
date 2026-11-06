@@ -310,3 +310,7 @@
 {"id":"script-legacy-unknown","error":{"kind":"request"}}
 {"id":"script-legacy-bad-hex","error":{"kind":"request"}}
 {"id":"script-legacy-fractional","error":{"kind":"request"}}
+{"id":"script-legacy-unsupported-base-256","ok":{"result":"unsupported","reason":"flags","bits":256}}
+{"id":"script-legacy-unsupported-base-2048","ok":{"result":"unsupported","reason":"flags","bits":2048}}
+{"id":"script-legacy-unsupported-transaction-256","ok":{"result":"unsupported","reason":"flags","bits":256}}
+{"id":"script-legacy-unsupported-transaction-2048","ok":{"result":"unsupported","reason":"flags","bits":2048}}

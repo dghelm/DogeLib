@@ -3,6 +3,8 @@
 #
 # Adapted from EthLib's ci.yml at commit 6a93711 (CC0 1.0), with the same
 # pinned actions. Mathlib supplies cached artifacts for the Rust refinement.
+# The current EthLib pin bb6dfe5 changes its caching, actions and checks.
+# DogeLib retains this workflow adaptation instead of those upstream changes.
 
 name: ci
 

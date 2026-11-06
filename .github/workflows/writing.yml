@@ -1,4 +1,6 @@
 # Adapted from EthLib's writing.yml at commit 6a93711 (CC0 1.0).
+# The current EthLib pin bb6dfe5 changes the policy comments and checkout action.
+# DogeLib retains this workflow adaptation instead of those upstream changes.
 #
 # Check the prose of a pull request against WRITING.md.
 #

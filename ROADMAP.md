@@ -3,7 +3,7 @@
 This roadmap records completed milestones and next work.
 [COVERAGE.md](COVERAGE.md) holds detailed evidence, and [SOUNDNESS.md](SOUNDNESS.md) explains its assumptions and limits.
 The reasoning behind the work order is in [design record 0001](docs/design/0001-initial-handoff.md) and [design record 0002](docs/design/0002-btc-verified-reuse.md).
-Update the *Status* column when a lane's pull request merges, not when work starts.
+Update the *Status* column when the pull request merges, not when work starts.
 
 **Model project.** Where EthLib and btc-verified differ, DogeLib follows EthLib. That covers architecture, the proof-trust policy, the module system, the writing standard and the soundness documentation. The btc-verified project supplies components, mainly its codecs and packed-codec refinements, which DogeLib adapts to EthLib's structure.
 
@@ -14,109 +14,42 @@ Update the *Status* column when a lane's pull request merges, not when work star
 | 0 | Toolchain, build skeleton and checks | Lean `v4.35.0` is pinned. The lakefile has the libraries of ARCHITECTURE.md. EthLib's SHA-256 builds. `lake exe check-decls` runs. `BUILDING.md` lists the commands. | Done in `build/toolchain-selection` |
 | 0b | Codec adaptation from btc-verified: codec foundations | btc-verified's codec class, fixed-width integer codecs, byte-buffer lemmas and packed codecs are ported to `v4.35.0` and DogeLib's layout, with provenance recorded | Done in `feat/codec-foundations` |
 | 0b | Codec adaptation from btc-verified: CompactSize and counted lists | btc-verified's CompactSize and `CountedList` codecs and their packed forms are ported on top of the codec foundations, with `bv_decide` steps replaced and provenance recorded | CompactSize done in `feat/compactsize`. `CountedList` done in `feat/countedlist`, with Core's bounded vector reader. |
-| 1 | Source registry, shared types, contribution policy | Baseline and evidence conventions are explicit | Documents only |
+| 1 | Source registry, shared types, contribution policy | Baseline and evidence conventions are explicit | Done, as documents |
 | 2 | Bounded CompactSize reader and proofs | Accepted-prefix relation, bounded round trip, Core comparisons | Reader, relation, soundness and completeness, bounded round trip, and known answers from Core's tests done in `feat/compactsize`. A packed form of the reader is done in `feat/packed-bounded-compactsize`. The comparison with Core's `ReadCompactSize` and `WriteCompactSize` is done in `test/core-harness`. |
 | 3 | Raw transaction types and base codecs | Exact field preservation, explicit parse mode, parser obligations | Fixed-length byte strings and `Hash256` done in `feat/fixed-bytes`. Transaction types, base codecs, Core's base-mode reader, the complete reader and the transaction ID done in `feat/transaction-base`. The base-mode records of Core's transaction corpus are known answers (issue #22). The witness-allowed format, as a serialization format only, done in `feat/transaction-witness-format`. The oracle exposes both witness readers, serialization and hashes. The Core comparison covers all 198 corpus records and malformed variants (issue #36). |
-| 4 | Legacy hash-plan specification | Declared lower-level modes and special cases are covered | Done in `feat/legacy-sighash`: `legacySignatureHashPlan` for `SIGVERSION_BASE`, Core's `sighash.json` corpus and hand-derived preimages as known answers. The witness v0 digest and the `CheckSig` wrapper are not specified. |
+| 4 | Legacy hash-plan specification | Declared lower-level modes and special cases are covered | Done in `feat/legacy-sighash`: `legacySignatureHashPlan` for `SIGVERSION_BASE`, Core's `sighash.json` corpus and hand-derived preimages as known answers. `Script.transactionChecker` uses the plan for the legacy signature checks. The witness v0 digest is not specified. |
 | 5 | Field-by-field preimage construction proved equal to the transaction-transformation reference | Exact plan equality on the recorded domain | Done in `proof/legacy-sighash-reference`. `legacySignatureHashPlan_eq_reference` proves the production plan equal to the `SignatureHashOld` transformation. It needs a fully parsed script code and counts below 2^32. The two differ on a script that ends in a short push. |
 | 6 | Rust refinement experiment | One extracted implementation matches an independent contract | Done in `feat/rust-compactsize-refinement` (#51). See [milestone D](#d-the-rust-refinement-path-step-6). |
 
 The steps are units of review, not one pull request each.
 Step 6 can start after step 2.
 
-The DigiShield retarget arithmetic is a parallel lane that must not delay the transaction path (design record 0001, section 10).
-The `Work` layer specifies the arithmetic as an isolated function, with Core's `get_next_work_*` cases as known answers.
-`Work.Consensus` specifies the work-field projection of height-based parameter selection.
-`Work.NextWork` specifies `GetNextWorkRequired` on a checked finite view, including minimum-difficulty rules.
-
-`Work.ProofOfWork` specifies Core's compact-target range check and supplied-hash comparison.
-Target validity discharges the retarget old-target bound, with numerical bounds proved for every mainnet and testnet parameter selection.
-Regtest DigiShield has multiplier one and cannot wrap.
-The isolated retarget can wrap with the legacy regtest record, which the normally selected caller never uses at a retarget.
-Scrypt, AuxPoW and full header validity are not specified.
-
-The `Block` layer specifies pure 80-byte headers, their double SHA-256 hashes and transaction Merkle roots with complete-subtree mutation detection.
-Its codec and structural properties are separate from scrypt, AuxPoW and block validity.
-[Block fixture provenance](tests/block/README.md) records the finite known answers.
-
-The word-arithmetic proofs cover division and its dependencies (#47), as well as multiplication, shifts, bit length and low-64-bit extraction (#42).
-The compact, constructor and byte-conversion paths and the composed word retarget also have arithmetic equivalence proofs (#50).
-[COVERAGE.md](COVERAGE.md#operations) records the operation-level evidence.
-[SOUNDNESS.md](SOUNDNESS.md#256-bit-word-division) explains the division domain, zero-divisor exception and source-review boundaries.
-
-`Cryptography.Hash.Sha1` specifies SHA-1 as a prerequisite of legacy Script execution.
-`hash_eq_spec` relates the executable function to a separate FIPS 180-4 model for messages shorter than 2^61 bytes.
-NIST short, long and Monte Carlo vectors and Core's ten SHA-1 cases check the compiled code.
-[COVERAGE.md](COVERAGE.md#operations) records this implemented coverage, independently of the frozen scope in design record 0003.
-The SHA-1 oracle operation remains deferred in issue #64.
-
-The Script layer implements stage 1 of [design record 0003](docs/design/0003-legacy-spend-validation.md): the instruction reader and the state of one `EvalScript` call.
-`Script.readInstruction` follows `GetOp2`, including the cursor after each failure, and shares its decoder with the legacy signature serializer.
-`Script.ExecState` gives the per-call reset and the main-stack hand-off of `VerifyScript`.
-The oracle exposes `script.read_op` and `script.eval` (#74).
-
-The Script layer also has the numeric part of stage 2 of [design record 0003](docs/design/0003-legacy-spend-validation.md): `CScriptNum` and `CastToBool` over integers, in `Script.Number`.
-`isMinimal_iff_encode_value` shows that Core's minimality test accepts exactly the encodings, and the decode theorems give every result, with the size check first.
-[COVERAGE.md](COVERAGE.md#operations) records the evidence and the exclusions.
-
-`Script.evalScript` implements one `EvalScript` call, stages 2b, 2c and 3 of [design record 0003](docs/design/0003-legacy-spend-validation.md).
-It runs pushes, NOPs, control flow, stack operations, `OP_SIZE`, equality, the numeric and hash opcodes, `OP_CODESEPARATOR` and the signature opcodes.
-It follows Core's errors and check order, also in skipped branches.
-Flags outside the seven of the design record give `unsupported`, never a rejection.
-
-`Script.SignatureCode` implements push encoding and effective script-code preparation for stage 3.
-Its proofs cover the push reader round trip below 2^32 bytes and the exact traversal of `FindAndDelete`, including malformed suffixes.
-Known answers include all sixteen Core deletion cases and every push-size transition.
-
-`Script.SignatureEncoding` implements stage 3a: Core's encoding checks of signatures and public keys, with the lax DER parser that `CheckLowS` uses.
-It keeps the overflow case of [design record 0003](docs/design/0003-legacy-spend-validation.md), section 5.
-A strict-DER signature whose R or S is at least the group order passes LOW_S, whatever its S.
-The signature opcodes run these checks.
-
-`Script.Signature` and the signature opcodes of `Script.Eval` complete stage 3.
-`evalScript` takes an optional checker: Core's `BaseSignatureChecker` as `baseChecker`, or `transactionChecker` with an elliptic-curve verifier as a parameter.
-`checkMultisigStep_matching` proves that `OP_CHECKMULTISIG` succeeds exactly when the signatures pair in order with a subsequence of the keys, given total checker answers.
-The `/6` oracle keeps `none` as the default checker and accepts an explicit `base` selection for `script.eval`.
-
-The parsed-script obligation of stage 3 is discharged for the multisig-with-recovery template.
-`MultisigRecoverySpend.sigAccepted_ordinary_iff_reference` and `sigAccepted_recovery_iff_reference` prove that every checker call of both branches hashes the `SignatureHashOld` reference digest.
-For other scripts, `effectiveScriptCode_scanOps` reduces the obligation to the parse of the script suffix from the separator cursor.
-
-`Script.Verify` and the lock-time opcodes complete stage 4.
-CLTV and CSV follow Core with a checker, and `transactionChecker` gives Core's `CheckLockTime` and `CheckSequence` for the selected input.
-`verifyScript` follows `VerifyScript` with an empty witness, including the P2SH branch, and `verifyLegacySpend` checks one input of an `InputContext`.
-`verifyScript_p2sh` gives the P2SH composition, and it assumes nothing about HASH160.
-On Core's `script_tests.json`, 881 records agree with Core and none disagrees.
-312 are unsupported: 165 for flags, 103 for witness and 44 that reach the verifier.
-
-`InputContext.ofDecoded` builds the input context from a successful `decodeBaseComplete`.
-
-With a checker, all seven selected flags and all legacy opcode behaviors have defined results.
-The one exception is a checker answer of `none`, which gives `unsupported`.
-`transactionChecker` answers `none` only when its verifier does.
-Its other `none` cases, an index outside the inputs and a script code of 2^64 bytes or more, are unreachable through `verifyLegacySpend`.
-Without a checker, the signature opcodes and CLTV and CSV with their flags stay unsupported.
-
-Stage 5 exposes `script.verify_legacy` and checker selection in oracle format `/6`.
-The Core comparison covers all 925 inside-milestone Script corpus records with both checkers.
-Base gives 925 compared verdicts, while transaction gives 881 compared verdicts and 44 unsupported verifier results.
-Each checker also has 2,000 legacy mutations under seed `20261106`, with unsupported results separate from agreement.
-These streams have zero disagreements. The Lean adapter has no ECDSA backend.
-
-The transaction-spend comparison covers all 159 eligible inputs with both checkers: base has 159 agreements, and transaction has 99 agreements and 60 unavailable-verifier results.
-All 91 Core acceptance requirements pass.
-Targeted streams under seed `20261107` reach CLTV on 932 requests and CSV on 940 requests, with zero disagreements.
-`lake test` checks the 91 required acceptances and reports the 68 unknown per-input outcomes separately.
-[The comparison report](docs/oracle.md#the-comparison) records both revisions and the per-stream counts.
-
-The worked property of design record 0003, section 7, is done for `k` of `n` keys with `1 ≤ k ≤ n ≤ 16`, and for 2-of-3.
-`multisigRecovery_sound` and the two converses prove that acceptance is equivalent to the two branches.
-The branches state the encoding predicates, `NULLDUMMY`, ordered matching and the lock-time conditions explicitly.
-Under CLTV, a lock time below 1,000,000 cannot pass the recovery branch.
-[SOUNDNESS.md](SOUNDNESS.md#script-worked-property-multisig-with-recovery) records what the theorems do not establish.
-A key count from 17 to 20 is deferred (#82), because it needs a data push for the count.
-
 Steps 0 and 0b follow design record 0002: the first contributions adopt audited codec foundations and then define Dogecoin's bounded decoding contract. They replace the original plan to build fixed-width encodings and CompactSize from scratch. Design record 0002 preferred a pinned btc-verified dependency first. The decisions below choose an adaptation instead, because btc-verified's toolchain, file structure and trust policy all differ from EthLib's.
+
+## Completed after the work order
+
+Each item below is complete.
+[COVERAGE.md](COVERAGE.md#operations) records its evidence, and the linked section of [SOUNDNESS.md](SOUNDNESS.md) states its hypotheses and boundaries.
+
+- **Work arithmetic.** The DigiShield retarget, height-based parameter selection, `GetNextWorkRequired` on a checked finite view and the compact-target check of a supplied hash.
+  The 256-bit word paths of the retarget have arithmetic equivalence proofs ([target validity](SOUNDNESS.md#target-validity-and-supplied-hash-proof-of-work), [word division](SOUNDNESS.md#256-bit-word-division)).
+  This work ran in parallel with the transaction path, as design record 0001, section 10, requires.
+- **Blocks.** 80-byte pure headers, their double SHA-256 hashes, and transaction Merkle roots with mutation detection ([headers and Merkle roots](SOUNDNESS.md#pure-headers-and-transaction-merkle-roots)).
+- **SHA-1, RIPEMD-160 and Hash160.** The hash prerequisites of legacy Script, with known answers ([SHA-1](SOUNDNESS.md#sha-1), [RIPEMD-160 and Hash160](SOUNDNESS.md#ripemd-160-and-hash160)).
+- **Legacy Script, stages 1 to 5 of [design record 0003](docs/design/0003-legacy-spend-validation.md).** The instruction reader, Script numbers, one `EvalScript` call, signature-code preparation, encoding checks, the signature and lock-time opcodes, `VerifyScript` with P2SH, and `verifyLegacySpend` for one input.
+  Script verification takes a signature checker as a parameter, and DogeLib has no ECDSA backend ([the checker](SOUNDNESS.md#script-signature-opcodes-and-the-checker)).
+  The oracle exposes `script.read_op`, `script.eval` and `script.verify_legacy`, and the Core comparison covers them ([counts](docs/oracle.md#the-comparison)).
+- **Worked property of design record 0003, section 7.** `multisigRecovery_sound` and its two converses characterize acceptance of the multisig-with-recovery template for `k` of `n` keys with `1 ≤ k ≤ n ≤ 16` ([worked property](SOUNDNESS.md#script-worked-property-multisig-with-recovery)).
+  With 33-byte keys, the 520-byte push limit allows at most 13 keys for this template under P2SH.
+
+## Next work
+
+1. **Header proof of work, [design record 0004](docs/design/0004-header-proof-of-work.md).** The scrypt digest of a pure header, with HMAC-SHA256 and PBKDF2.
+   The AuxPoW payload, and the composition of both with the compact-target check.
+   Work on HMAC-SHA256 and on the AuxPoW codec is in progress.
+2. **Signature verifier, design record 0005.** A Core-compatible verifier for executable checks, proposed in pull request #90 and not yet adopted.
+3. **Release 0.1.0.** A reproducible release of the completed capabilities, by the steps in [docs/release.md](docs/release.md).
+   The release does not wait for items 1 and 2.
 
 ## Milestones
 
@@ -138,9 +71,8 @@ Raw fields preserved without validation, base/no-witness parsing with prefix and
 
 The oracle, `dogelib-oracle`, exists ([docs/oracle.md](docs/oracle.md)). The Core harness runs Dogecoin Core's code on the same requests, and CI compares the two ([docs/oracle.md](docs/oracle.md#the-core-harness)).
 
-Oracle format `/4` exposes pure headers, Merkle roots, RIPEMD-160, Hash160 and SHA-1.
+The oracle also exposes pure headers, Merkle roots, RIPEMD-160, Hash160, SHA-1, the work operations and Script.
 The Core comparison covers their committed fixtures and generated boundaries ([format and comparison](docs/oracle.md)).
-Format changes require maintainer review.
 
 ### C: one meaningful implementation equivalence (step 5)
 

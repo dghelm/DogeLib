@@ -1050,7 +1050,7 @@ That the definitions are Core's rests on a reading of D3 and D25 (A1) and on the
 The lookup table is a test backend and says nothing about which signatures are valid.
 The corpus records add 122 comparisons with Core's expected results, from 745 to 867.
 
-The `/6` oracle's `script.eval` can select `baseChecker`, and its legacy operation can select a transaction checker.
+The oracle's `script.eval` can select `baseChecker`, and its legacy operation can select a transaction checker.
 Finite Core comparisons cover signature-opcode results that do not need the unavailable Lean verifier.
 By `#print axioms` with Lean `v4.35.0`:
 
@@ -1108,7 +1108,7 @@ A result of `verifyLegacySpend` holds for Core only under the verifier-agreement
 That the definitions are Core's rests on a reading of D3, D4, D24 and D48 (A1), and on the known answers.
 `lake test` runs 38 lock-time cases, 20 `verifyScript` cases, 11 `isPushOnly` cases and 3 `verifyLegacySpend` cases, with results written by hand from those sources.
 On `script_tests.json`, `verifyScript` with `transactionChecker` agrees with Core's expected result on 881 records, from 867, and disagrees on none.
-The `/6` oracle exposes `verifyScript` through `script.verify_legacy`, with base and transaction checker selections.
+The oracle exposes `verifyScript` through `script.verify_legacy`, with base and transaction checker selections.
 By `#print axioms` with Lean `v4.35.0`:
 
 | Theorem | Axioms |

@@ -2,7 +2,7 @@
 
 This file sets the rules for contributing to DogeLib.
 They apply to every contributor, human or AI.
-[AGENTS.md](AGENTS.md) says how to work in this repository: lanes, checks and what to update.
+[AGENTS.md](AGENTS.md) says how to work in this repository: branches, checks and what to update.
 [WRITING.md](WRITING.md) sets the standard for prose.
 
 DogeLib is an executable formal specification of Dogecoin, written in Lean, with proofs about it.
@@ -300,14 +300,16 @@ Do not infer a pass from a successful compilation, an earlier run or another con
 
 A reviewer should know in fifteen seconds what the change does and where to look.
 
-### Lanes and branches
+### Branches
 
-Parallel work happens in separate git worktrees called lanes, one branch each.
-[AGENTS.md](AGENTS.md#lanes) describes the lane workflow and the `scripts/lane` tool.
-
+Each change uses its own branch.
 A branch name is `<type>/<slug>`, with a type from the list below, such as `feat/compactsize-bounded-reader`.
 `main` stays linear.
-A lane rebases onto `main`, and never merges `main` into itself.
+A branch rebases onto `main`, and never merges `main` into itself.
+
+Parallel work on one machine can use separate git worktrees called lanes, one branch each.
+Lanes are optional.
+[AGENTS.md](AGENTS.md#lanes) and [docs/agents.md](docs/agents.md) describe the lane workflow and the `scripts/lane` tool.
 Pull requests are squash-merged, so the pull request title becomes the commit on `main`.
 
 ### Titles

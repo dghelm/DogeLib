@@ -10,7 +10,7 @@ EthLib is the model project. Where EthLib and btc-verified differ in structure, 
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) and [WRITING.md](WRITING.md) before changing files.
 Use [COVERAGE.md](COVERAGE.md) for implemented evidence and [ROADMAP.md](ROADMAP.md) for work order.
-Work in one [lane worktree](#lanes), and keep its `STATUS.md` current.
+Work on one branch with one purpose under the [branch rules](#branches-and-shared-files), or in an optional [lane worktree](docs/agents.md) when several agents run at once.
 Run the affected [checks](#checks), report commands, revisions and results, and mark every other gate as not run.
 Every pull request needs an [independent review](#pull-requests) before merge, with the verdict and findings recorded.
 Implementation approval does not authorize a merge.
@@ -30,12 +30,9 @@ Read the [maintainer-only list](#changes-that-need-a-maintainer) before settling
 | [SOUNDNESS.md](SOUNDNESS.md) | What the proofs establish and what a user trusts, gap by gap |
 | [docs/design/](docs/design/) | Frozen design records. Background, not current status. |
 
-Local reference clones, when present on the machine:
-
-- EthLib: `/home/dgh/dev/ethereum/EthLib`
-- btc-verified: `/home/dgh/dev/ProofOfKeags/btc-verified`
-
-Use the commit pinned in [SOURCES.md](SOURCES.md) before you cite or copy from a clone. A clone's working tree can be at a different commit.
+Before you cite or copy from a clone of EthLib or btc-verified, check out the commit that [SOURCES.md](SOURCES.md) pins.
+A clone's working tree can be at a different commit.
+[docs/agents.md](docs/agents.md#local-reference-clones) gives the local clone paths on the maintainer's machine.
 
 ## Document roles
 
@@ -48,52 +45,29 @@ Use the commit pinned in [SOURCES.md](SOURCES.md) before you cite or copy from a
 
 Take the role of the specialist the task needs, and hold the work to that specialist's standard. Every specialist here also knows Lean 4. For example, a codec needs a serialization engineer who knows Dogecoin Core's stream classes. Signature hashing needs a consensus engineer for Bitcoin-family protocols. A refinement proof needs a verification engineer, and Rust extraction needs an engineer who knows the subset of Rust that Aeneas supports.
 
+## Branches and shared files
+
+These rules apply to every branch, with or without a lane:
+
+1. Keep one purpose per branch.
+   If you find a second problem, track it as [deferred work](CONTRIBUTING.md#deferred-work) and leave it.
+2. Rebase onto `main` before review.
+   Do not merge `main` into a branch.
+3. Edit shared registries additively.
+   [COVERAGE.md](COVERAGE.md), [SOURCES.md](SOURCES.md), and the library root import file are conflict points.
+   Add rows in sorted position.
+   Do not reorder, reflow, or reformat rows that another branch owns.
+4. Only one branch at a time changes a pin in [SOURCES.md](SOURCES.md), the toolchain, or the trust policy in [SOUNDNESS.md](SOUNDNESS.md).
+   That branch says so in its pull request.
+5. Do not leave a build or another long-running process running after your session ends.
+   On a shared machine, limit the CPUs of each heavy build ([BUILDING.md](BUILDING.md#shared-machines)).
+
 ## Lanes
 
-A *lane* is one unit of parallel work: one purpose, one branch, one git worktree, one `STATUS.md`. Lanes keep concurrent agents from sharing a working tree, a build directory, or a scratch file.
-
-### Layout
-
-```text
-DogeLib/                      main checkout; stays on `main` and stays clean
-DogeLib-worktrees/
-  feat-compactsize-bounded-reader/
-    STATUS.md                 lane state (gitignored)
-    .lane/                    lane scratch: handoffs, logs, review output (gitignored)
-    ...                       an ordinary checkout of the lane branch
-  .archive/                   STATUS.md and .lane/ of removed lanes
-```
-
-The main checkout is for coordination and integration. Do not edit files or run builds in it while lanes are active.
-
-### Commands
-
-```bash
-scripts/lane new feat/compactsize-bounded-reader   # branch from main, create worktree and STATUS.md
-scripts/lane new proof/compactsize-bounds --base feat/compactsize-bounded-reader   # stacked lane
-scripts/lane list                                  # every lane: state, dirty files, ahead/behind main
-scripts/lane rm feat-compactsize-bounded-reader    # archive lane files, remove the clean worktree
-```
-
-The branch name is `<type>/<slug>`, using a commit type from [CONTRIBUTING.md](CONTRIBUTING.md#titles). The worktree directory replaces the `/` with `-`. Set `DOGELIB_LANES_DIR` to use a different parent directory.
-
-`scripts/lane rm` refuses a worktree with uncommitted changes. It deletes the branch only when git considers it merged into `main`. A squash-merged branch is not an ancestor of `main`, so the script keeps it and prints the command to delete it.
-
-### Rules
-
-1. Work only inside your lane's worktree. Do not touch another lane's files, branch, or build.
-2. Keep one purpose per lane. If you find a second problem, record it under *Deferred* in `STATUS.md` and leave it.
-3. Put every lane artifact in `.lane/`: handoff documents, review transcripts, build and test logs, scratch notes. Do not write them next to the repository, in the main checkout, or in a committed path.
-4. Keep `STATUS.md` current. Update it when the state changes, before you stop, and before a handoff. Another agent must be able to continue from it alone.
-5. Register every long-running process in `STATUS.md` under *Running jobs*: PID, command, log path under `.lane/`, start time. Remove the entry when the process ends. Never detach a build with `nohup`, `setsid`, or `&` so that it outlives the session.
-6. Run one heavy build per lane at a time, and limit its CPUs on a shared machine ([BUILDING.md](BUILDING.md#shared-machines)). Each worktree has its own `.lake/` directory. Before building the optional refinement package, run `lake -d Refinement exe cache get` in a new worktree.
-7. Rebase onto `main` before review. Do not merge `main` into a lane.
-8. Edit shared registries additively. [COVERAGE.md](COVERAGE.md), [SOURCES.md](SOURCES.md), and the library root import file are conflict points. Add rows in sorted position. Do not reorder, reflow, or reformat rows another lane owns.
-9. Only one lane at a time changes a pin in [SOURCES.md](SOURCES.md), the toolchain, or the trust policy in [SOUNDNESS.md](SOUNDNESS.md). That lane says so in its `STATUS.md` and pull request.
-
-### `STATUS.md`
-
-`scripts/lane new` writes the template. Its *State* line is one of: `active`, `blocked`, `review`, `ready`, `merged`, `abandoned`. `scripts/lane list` reads that line.
+A *lane* is one branch in its own git worktree, with a `STATUS.md` file and a `.lane/` scratch directory.
+Lanes let several agents work on one machine at once.
+Lanes are optional. An outside contributor can use an ordinary branch and pull request.
+[docs/agents.md](docs/agents.md) describes the lane layout, the `scripts/lane` tool and the additional rules for lanes.
 
 ## Checks
 
@@ -172,11 +146,11 @@ The steps apply to a one-line comment as well as to a long guide.
 ```bash
 uv run --no-project --python 3.12 python scripts/check_writing.py WRITING.md
 uv run --no-project --python 3.12 python scripts/check_writing.py --base main
-uv run --no-project --python 3.12 python scripts/check_writing.py --stdin description < .lane/description.md
+uv run --no-project --python 3.12 python scripts/check_writing.py --stdin description < pr-body.md
 git log --format=%B main..HEAD | uv run --no-project --python 3.12 python scripts/check_writing.py --stdin commits
 ```
 
-For a stacked lane, replace `main` with the base of the lane.
+For a stacked branch, replace `main` with its base branch.
 The checker counts words and matches patterns, so some of its findings are wrong.
 Fix the real problems, and keep an accurate technical expression.
 Do not rewrite a correct claim only to make the checker quiet.
@@ -194,30 +168,29 @@ The maintainer reviews the finished pull request.
 The [maintainer-only list](#changes-that-need-a-maintainer) still applies.
 
 Every pull request needs an independent review before merge.
-Use a Codex review or a separate review agent that did not write the change.
-Record the reviewer's verdict and findings in the pull request or lane.
+Use a Codex review, a separate review agent or a human reviewer that did not write the change.
+Record the reviewer's verdict and findings in the pull request.
 
-Each lane ends in one pull request against `main` on GitHub.
+Each branch ends in one pull request against `main` on GitHub.
 Follow [CONTRIBUTING.md](CONTRIBUTING.md#branches-commits-and-pull-requests) for the title and the body.
 
-1. Commit in the lane, and push its branch: `git push -u origin <branch>`.
-2. Write the description in `.lane/pr-body.md`, and check it with the writing checker.
-3. Open the pull request: `gh pr create --base main --title "<title>" --body-file .lane/pr-body.md`.
-   For a stacked lane, use its base branch as `--base`.
+1. Commit on the branch, and push it: `git push -u origin <branch>`.
+2. Write the description in an uncommitted file, such as `pr-body.md`, and check it with the writing checker.
+3. Open the pull request: `gh pr create --base main --title "<title>" --body-file pr-body.md`.
+   For a stacked branch, use its base branch as `--base`.
 4. Wait for CI: `gh pr checks <number> --watch`.
-   A failed check is fixed in the lane, never ignored.
+   Fix a failed check on the branch. Never ignore it.
 5. Get an independent review of the change, and record the verdict and findings.
 6. Merge with `gh pr merge <number> --squash`, so that the title becomes the commit on `main`.
    A stacked pull request never merges into its parent branch.
-   Wait until the parent merges, then rebase the lane onto `main`, push it, and change the base with `gh pr edit <number> --base main`.
+   Wait until the parent merges, then rebase the branch onto `main`, push it, and change the base with `gh pr edit <number> --base main`.
    Repeat steps 4 and 5 for the new head before you merge.
-7. Update the main checkout with `git pull --ff-only`, and remove the lane with `scripts/lane rm`.
+7. Update your local `main` with `git pull --ff-only`, and delete the branch.
+   A lane also follows the [lane steps](docs/agents.md#pull-requests-from-a-lane).
 
 Approval to implement does not authorize a merge.
 Merge authorization is a separate maintainer decision and may cover a single pull request in conversation.
 An agent merges only with maintainer authorization, after CI passes and an independent review approves.
-
-Record the pull request number and its state in `STATUS.md`.
 
 ### Changes that need a maintainer
 
@@ -237,7 +210,7 @@ General merge authority never covers these changes:
   The exemption does not cover the Core compatibility target, theorem weakening or domain reduction, new trust assumptions or agreed protocol semantics.
 - A rewrite of the history of `main`, or a force push to it.
 
-A decision of this kind that blocks a lane becomes an issue with the `needs-maintainer` label.
+A decision of this kind that blocks a branch becomes an issue with the `needs-maintainer` label.
 
 ## Do not commit
 

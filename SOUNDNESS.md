@@ -844,7 +844,7 @@ Each one calls itself in tail position and keeps the values read so far in an ar
 So every theorem about `decodeElems`, `readElems` and `readElemsBounded` holds for the readers.
 
 These theorems are about results, not about stack use. Stack use is an observation of the compiled code (B1).
-In `lake test`, the recursive forms overflowed the stack at 16,000,000 elements, and the loop forms read 16,000,000.
+In one manual run of the `lake test` driver, the recursive forms overflowed the stack at 16,000,000 elements, and the loop forms read 16,000,000.
 In `lake env lean --run`, the recursive forms overflowed at 5,000,000.
 An element reader that itself recurses deeply can still use more stack, and `MAX_SIZE` itself (33,554,432 elements) was not run.
 CI reads lists of 3,000,000 elements through the three readers, which checks results, not stack use.
@@ -1178,7 +1178,7 @@ Both `atEnd` and `truncated` correspond to Core's `false`.
 The hand-off theorems cover the two `EvalScript` calls of `VerifyScript`, not the P2SH copy and restore of the stack.
 
 That the definitions are Core's rests on a reading of D24 and D3 (A1) and on the known answers.
-`lake test` runs 50 single reads and 8 loops with hand-derived results, 14 of them from Core's `script_tests.json`.
+`lake test` runs 50 single reads and 8 loops with hand-derived results, 15 of them from 14 records of Core's `script_tests.json`.
 It also runs `init` and `handOff` on one state with nonempty locals and raw stack entries.
 Core itself does not run.
 
@@ -1216,7 +1216,10 @@ The traversal theorem does not assert that the final bytes contain no matches.
 The signature list follows `stacktop(-isig-k)` for increasing `k`, nearest the stack top first, and includes each signature's hash-type byte.
 The caller establishes the separator cursor and supplies the signatures.
 The existing signature serializer removes remaining separator instructions.
-No interpreter opcode calls this preparation yet, and no theorem establishes commutation of signature deletion passes.
+
+`checkSigStep` calls it with the one signature of `OP_CHECKSIG`, and `checkMultisigStep` with all signatures of `OP_CHECKMULTISIG`, from the separator cursor of the execution state.
+[Script signature opcodes and the checker](#script-signature-opcodes-and-the-checker) states their theorems.
+No theorem establishes commutation of signature deletion passes.
 
 `lake test` runs all sixteen cases of Core's `script_FindAndDelete` (D46), eight additional malformed suffix cases and eight push-size boundaries.
 It also checks exact intermediate and final bytes for two signature deletions, including retained separator and payload bytes.
@@ -1274,7 +1277,10 @@ That the definitions are Core's rests on a reading of D24 and D3 (A1) and on the
 `lake test` runs 21 hand-derived encodings, 24 decodes, 9 `getint` cases and 13 `castToBool` cases.
 It also runs the 247 integers of the `creation` test of `scriptnum_tests.cpp` (D44).
 That test compares Core with its own 0.10.0 copy, so it gives the integers but no expected bytes.
-Core itself does not run, and no comparison with Core's compiled code exists.
+Core itself does not run in these tests.
+
+The Core comparison of `script.eval` and `script.verify_legacy` reaches these definitions only through the numeric opcodes and conditionals of the scripts that it sends ([docs/oracle.md](docs/oracle.md#the-comparison)).
+No request compares them directly, and the comparison covers only the requests that it sends.
 
 `OP_PICK`, `OP_ROLL` and the numeric opcodes in `Script.execOpcode` map a decode failure to `SCRIPT_ERR_UNKNOWN_ERROR`, as the `catch` of `EvalScript` does (D3, lines 1037 to 1040).
 [Script evaluation](#script-evaluation-one-evalscript-call) states how the numeric opcodes stay within the defined domain of Core's `int64_t` operators.
@@ -1317,7 +1323,7 @@ For the loop and each instruction:
 - `evalInstruction_pushSize`, `evalInstruction_opCount` and `evalInstruction_disabled`: the push size, the opcode count and the disabled opcodes are checked in Core's order, whether or not the branch executes. `evalInstruction_verif`: `OP_VERIF` and `OP_VERNOTIF` give `BAD_OPCODE` in a skipped branch too.
 - `evalInstruction_skipped`: in a skipped branch, an opcode outside `OP_IF` to `OP_ENDIF` that passes those checks only counts. The two stacks, `vfExec` and the separator cursor stay unchanged.
 - `evalInstruction_wellFormed`: from a state that satisfies `ExecState.WellFormed`, a successful step and the cursor move give a state that satisfies it, within the combined stack limit. `OP_CHECKMULTISIG` raises the opcode count by its key count, and the invariant still bounds it by 201.
-- `execOpcode_checker_congr`: every opcode outside `0xac` to `0xaf` gives the same result for any checker and any script. So those opcodes keep their stage-2 results.
+- `execOpcode_checker_congr`: every opcode outside `0xac` to `0xaf`, `0xb1` and `0xb2` gives the same result for any checker and any script. So those opcodes keep their stage-2 results. `OP_CHECKLOCKTIMEVERIFY` (`0xb1`) and `OP_CHECKSEQUENCEVERIFY` (`0xb2`) can depend on the checker, as [Script lock times and `VerifyScript`](#script-lock-times-and-verifyscript) states.
 - The `execOpcode_*` theorems give the stack effect of each implemented opcode, its underflow error, and each unsupported case.
 
 For the numeric and hash opcodes:
@@ -1416,7 +1422,10 @@ Design record 0003 runs only `SIGVERSION_BASE`, and that flag is unsupported.
 That the definitions are Core's rests on a reading of D3, D50 to D53 (A1), and on the known answers.
 `lake test` checks the 60 P2PK and P2PK NOT records of `script_tests.json` (D45) inside the milestone, and 86 hand-derived cases.
 The test takes each record's signature from the top of the stack after the specified `evalScript` runs `scriptSig`.
-Core itself does not run, and no comparison with Core's compiled code exists.
+Core itself does not run in these tests.
+
+The Core comparison of `script.eval` and `script.verify_legacy` reaches these checks only through the signature opcodes of the scripts that it sends ([docs/oracle.md](docs/oracle.md#the-comparison)).
+No request compares an encoding check directly, and the comparison covers only the requests that it sends.
 The definitions add no hypothesis, axiom or execution boundary.
 By `#print axioms` with Lean `v4.35.0`:
 
@@ -1491,7 +1500,8 @@ The evaluator never passes such a script code, because its script has at most 10
 That the definitions are Core's rests on a reading of D3 and D25 (A1) and on the known answers.
 `lake test` runs 48 signature-opcode cases with a lookup-table test checker, 5 `transactionChecker` cases and one `baseChecker` case, with results written by hand from D3.
 The lookup table is a test backend and says nothing about which signatures are valid.
-The corpus records add 122 comparisons with Core's expected results, from 745 to 867.
+The corpus runners above add the 925 inside-milestone records of `script_tests.json`.
+[Script evaluation](#script-evaluation-one-evalscript-call) gives the 268 unsupported records and their reasons.
 
 The oracle's `script.eval` can select `baseChecker`, and its legacy operation can select a transaction checker.
 The transaction checker uses `coreVerifier`, so finite Core comparisons also cover signature-opcode results that verify a signature.
@@ -1657,7 +1667,11 @@ Each encoding error has a case: DER, high S, hash type and key type.
 `lake test` also compares, for three script codes of the template and six hash types, `legacySignatureHash` with the digest of `legacyReferencePlan`.
 Both are DogeLib definitions, so these 18 comparisons are a consistency check, not independent evidence.
 The independent evidence for `legacySignatureHash` is Core's `sighash.json`.
-No comparison with Core's compiled code covers the template.
+
+Core's compiled code supplies the verdicts of 25 signed spends of one 2-of-3 instance of the template, with fixed keys.
+`lake test` and the live Core comparison check DogeLib against them, as [B4](#b4-the-oracle-and-foreign-boundaries) states.
+They cover the three signer pairs, the recovery branch and the recorded mutations.
+They are finite evidence for that instance, not a theorem about other keys, lock times, transactions or flags.
 By `#print axioms` with Lean `v4.35.0`:
 
 | Theorem | Axioms |
@@ -2081,7 +2095,15 @@ The witness-allowed round trip also assumes a transaction shape.
 [Full headers and the AuxPoW payload](#full-headers-and-the-auxpow-payload) states them.
 
 The chain-level application also requires that the supplied hash is the correct scrypt digest.
-No theorem here establishes that digest computation, AuxPoW validity or full header validity.
+
+`powHash_eq_spec` and `powHash_eq_fips` prove, for every 80-byte input, that the executable digest equals the RFC 7914 model with Dogecoin's parameters.
+`PureBlockHeader.powHash_eq_spec` gives the same equality for the encoded bytes of every pure header.
+These theorems relate DogeLib definitions, as [Dogecoin's scrypt digest](#dogecoins-scrypt-digest) states.
+Source review, not a theorem, connects the executable to Core's `scrypt_1024_1_1_256_sp_generic` and the model to RFC 7914 (A1).
+The comparison of digests with Core's compiled scrypt covers only the requests that it sends (B4).
+
+`checkAuxPowProofOfWork_iff` characterizes DogeLib's definition of `CheckAuxPowProofOfWork`, and no theorem connects that definition to Core's code.
+DogeLib does not specify full header validity: [Header proof of work](#header-proof-of-work) lists the checks that it omits.
 
 ### A3. Side channels
 
@@ -2260,7 +2282,9 @@ A user of the comparison trusts these parts of it:
   Any other exception from Core stops the harness, so it cannot pass as a result.
 - The `plan` label of `sighash.legacy`. The harness computes it from Core's conditions instead of observing it. It stops if the label is `fixed_digest` and Core's digest is not the value one.
 - The comparator, `scripts/compare_core.py`.
-  Its self-test, `scripts/test_compare_core.py`, requires two passing controls and 86 mutations that each fail with the code they target.
+  Its self-test, `scripts/test_compare_core.py`, counts 99 cases: two passing controls and 97 negative checks that each fail with the code they target.
+  The negative checks are 88 stream mutations, eight Rust-side mutations and one acceptance-count gap.
+  Assertions about its refusal and timelock constructions run outside that count.
 - For `sighash.legacy`, the oracle's preimage is checked by hashing it, not byte by byte: Core does not expose its preimage.
 
 The separate `core-signer` tool generates [signed recovery-template fixtures](tests/script/signed-spends/README.md) with Core's `SignatureHash` and `CKey::Sign`.
@@ -2268,6 +2292,12 @@ Each expected verdict comes from Core's `VerifyScript`, with the digest and tran
 Fixture users trust the generator's template construction, high-S conversion, serialization and Core build.
 The generator records its source blob and uses Core's randomness code with a stderr logging adapter.
 Byte-for-byte regeneration checks reproducibility, but does not establish agreement with DogeLib.
+
+`scripts/convert_script_tests.py` transcribes Core's `BuildCreditingTransaction` and `BuildSpendingTransaction` (D46) into its `context` function.
+The [Script corpus](tests/script/corpus/README.md) commits the transaction bytes that this function generates for each record.
+`lake test`, the oracle and the Core harness all receive those generated bytes, and the transaction checker hashes them.
+So agreement between the oracle and Core on them does not check that they are the transactions of Core's test runner.
+Fixture users trust that transcription, which a reader checks against D46 (A1).
 
 `lake test` runs all 25 signed fixtures through `verifyLegacySpend` with `coreVerifier` and each record's flags.
 It compares both the Boolean verdict and the ScriptError name against Core's recorded values.
@@ -2402,3 +2432,5 @@ The separate package under `Refinement/` requires DogeLib and the pinned Aeneas 
 
 A fixture with a wrong expected value makes a wrong implementation pass.
 Each fixture records its provenance, and a test runner compares results with the committed expectations rather than overwriting them.
+A fixture can also carry generated inputs.
+The Script corpus's transaction bytes come from a transcription of Core's test builders, which [B4](#b4-the-oracle-and-foreign-boundaries) states.

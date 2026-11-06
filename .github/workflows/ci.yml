@@ -130,6 +130,7 @@ jobs:
       - name: pinned vectors
         if: ${{ !cancelled() }}
         run: |
+          (cd tests/cryptography/secp256k1 && sha256sum -c SHA256SUMS)
           (cd tests/cryptography/ripemd160 && sha256sum -c SHA256SUMS)
           (cd tests/cryptography/sha1/cavp && sha256sum -c SHA256SUMS)
           (cd tests/cryptography/sha256/cavp && sha256sum -c SHA256SUMS)

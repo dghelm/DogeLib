@@ -1,0 +1,106 @@
+module
+
+public import DogeLib.Cryptography.Inverse
+
+/-!
+# `Secp256k1.Field`
+
+The two prime fields of secp256k1, from SEC 2 v2 §2.4.1.
+
+- `Fp` is the base field, integers mod `p = 2^256 - 2^32 - 977`, for the coordinates.
+- `Fn` is the scalar field, integers mod the order `n` of the generator.
+
+The private key and the integers `r` and `s` of a signature live in `Fn`.
+
+Each field is `Fin` of its modulus, so every element is below the modulus by construction.
+
+Core gives `Fin` its `+`, `-`, `*` and negation, all reduced mod the modulus.
+
+An inverse comes from the extended Euclidean algorithm.
+
+A square root is a power too, because `p = 3 mod 4`.
+
+No division is defined.
+
+Core's `/` on `Fin` divides the integers, so the specification never writes it.
+
+## Source
+
+This whole file adapts `EthLib/Cryptography/Secp256k1/Field.lean` from EthLib, commit `bb6dfe55198243682bc2eaf94611af2dbce1be6f`, under CC0 1.0.
+The adaptation changes the namespace and documentation.
+The arithmetic definitions are unchanged.
+-/
+
+@[expose] public section
+
+namespace DogeLib.Cryptography.Secp256k1
+
+/-- `p`, the modulus of the base field, from SEC 2 v2 §2.4.1.
+
+It is `2^256 - 2^32 - 2^9 - 2^8 - 2^7 - 2^6 - 2^4 - 1`, which SEC 2 also writes. -/
+def Fp.modulus : Nat := 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F
+
+/-- `n`, the order of the generator, from SEC 2 v2 §2.4.1. -/
+def Fn.modulus : Nat := 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
+
+-- Named explicitly, since both anonymous instances would get the same name.
+/-- The base-field modulus is nonzero. -/
+instance Fp.instNeZeroModulus : NeZero Fp.modulus := ⟨by decide⟩
+
+/-- The scalar-field modulus is nonzero. -/
+instance Fn.instNeZeroModulus : NeZero Fn.modulus := ⟨by decide⟩
+
+/-- An element of the base field. -/
+abbrev Fp := Fin Fp.modulus
+
+/-- An element of the scalar field. -/
+abbrev Fn := Fin Fn.modulus
+
+/-- `a^e` in `Fin m`, for `e < 2^fuel`, by square and multiply.
+
+Each step reads the low bit of `e`, then squares the base for the next bit.
+
+It recurses on `fuel`, so the kernel can run it. -/
+def Fin.powBits {m : Nat} [NeZero m] : Nat → Fin m → Nat → Fin m
+  | 0, _, _ => 1
+  | fuel + 1, a, e =>
+    -- `a^e = a^(e mod 2) * (a^2)^(e / 2)`.
+    let half := Fin.powBits fuel (a * a) (e / 2)
+    if e % 2 = 1 then a * half else half
+
+namespace Fp
+
+/-- `a^e`, for an exponent below `2^256`. -/
+def pow (a : Fp) (e : Nat) : Fp := Fin.powBits 256 a e
+
+/-- The inverse of `a`, by the extended Euclidean algorithm.
+
+It sends `0` to `0`. -/
+def inv (a : Fp) : Fp := Fin.inverse a
+
+/-- A square root of `a`, or `none` when `a` is not a square.
+
+Since `p = 3 mod 4`, a square `a` has the root `c = a^((p + 1) / 4)`.
+
+By Euler's criterion, `c^2 = a^((p + 1) / 2) = a * a^((p - 1) / 2) = a`.
+
+When `a` is not a square, `c^2 != a`, so the check rejects it. -/
+def sqrt (a : Fp) : Option Fp :=
+  let c := a.pow ((modulus + 1) / 4)
+  if c * c = a then some c else none
+
+end Fp
+
+namespace Fn
+
+/-- `a^e`, for an exponent below `2^256`. -/
+def pow (a : Fn) (e : Nat) : Fn := Fin.powBits 256 a e
+
+/-- The inverse of `a`, by the extended Euclidean algorithm.
+
+It sends `0` to `0`. -/
+def inv (a : Fn) : Fn := Fin.inverse a
+
+end Fn
+
+end DogeLib.Cryptography.Secp256k1

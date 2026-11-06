@@ -48,7 +48,7 @@ Gap D asks whether the use of DogeLib holds together.
 | C3 | A declaration reached the environment unchecked | No kernel replay. The declaration check requires every production module to be reachable from its default roots. | P I |
 | D1 | A client misuses an operation, such as a prefix decoder where complete consumption is required | Policy: each public operation documents its input domain and consumption contract | R I |
 | D2 | A dependency changes | Source and toolchain pins constrain dependency changes. The root package has no Lake dependencies, while the separate refinement package owns Aeneas and Mathlib. See [D2](#d2-dependency-changes). | P R I |
-| D3 | The fixtures are wrong | Each fixture records its provenance. The NIST CAVP files and Core's `sighash.json` are pinned by digest, and CI checks the pins. Core's test cases are copied into `tests/KnownAnswers.lean` with their file and line. | F |
+| D3 | The fixtures are wrong | Each fixture records its provenance. The NIST CAVP files, Wycheproof P1363 records and Core's `sighash.json` are pinned by digest, and CI checks the pins. Core's test cases are copied into `tests/KnownAnswers.lean` with their file and line. | F |
 
 ## What the proofs say
 
@@ -250,6 +250,36 @@ Some author and Core records share an input and digest.
 The fixture README records provenance, versions, encodings and checksums.
 These comparisons cover the recorded inputs, and do not prove equality to Core on every message.
 The compiler and runtime boundaries remain those of Gap B.
+
+### Secp256k1 curve and ECDSA scalar verification
+
+`Cryptography.Secp256k1.Ecdsa.verify` checks a point, a `Hash256` digest and natural R and S.
+It rejects infinity, off-curve points and scalars outside `1 ≤ r, s < n`.
+It reads the digest bytes big-endian in storage order and reduces the result modulo `n`.
+It computes `u1 G + u2 Q` in Jacobian coordinates, converts to affine coordinates, and compares `x mod n` with R.
+It rejects a result at infinity.
+The scalar predicate `isLowS` is separate and does not restrict `verify`.
+
+The arithmetic adapts EthLib at `bb6dfe55198243682bc2eaf94611af2dbce1be6f` without changes to its formulas (SOURCES.md E7 to E11).
+The source argument for Core's verification equation is design record 0005, section 4.3.
+That argument requires parsed points and scalars, and is not an equivalence theorem about the arithmetic implementation or Core's compiled code.
+No general theorem here proves primality, the group law, inverses, square roots, scalar multiplication or the Jacobian formulas.
+EthLib's Mathlib-dependent proofs are outside this adaptation.
+No theorem states that SEC 1 signing produces a signature that this verifier accepts.
+
+There is no unforgeability or constant-time claim.
+
+`Ecdsa.wycheproof_p1363_1` kernel-checks one accepted verification on the stated coordinates, digest, R and S.
+`lake test` checks 234 scalar pairs against independent Wycheproof expectations (W1).
+Eighteen other P1363 records have signatures of a different length and check only the fixture boundary.
+The fixture README records their provenance and the distinction.
+These finite checks establish no all-input correctness claim.
+`#print axioms` reports `propext`, `Classical.choice` and `Quot.sound` for `Ecdsa.wycheproof_p1363_1`.
+
+The public-key parser, `CPubKey::Verify` wrapper and Script connection are outside this stage.
+`transactionChecker` still takes its verifier as a parameter, and the oracle's verifier is still unavailable.
+No foreign code decides a scalar verification in the Lean specification.
+Compiled evaluation still depends on the compiler and runtime (B1 and B2).
 
 ### Codecs
 
@@ -1099,10 +1129,12 @@ Then the step pushes `[1]` exactly when `OrderedMatch R sigs keys` holds, and `[
 `checkMultisigStep_matching_pushOrder` states the property for the lists in script push order.
 
 The checker is the boundary of these claims.
-DogeLib does not specify ECDSA, `CPubKey::Verify` or libsecp256k1.
+The scalar ECDSA definition does not instantiate this checker.
+DogeLib does not specify `CPubKey::Verify` or libsecp256k1.
 A result of `evalScript` with `transactionChecker` holds for Core only under the verifier-agreement hypothesis.
 That hypothesis says that `verify sig key d` returns `some b` only when Core's `CPubKey::Verify` returns `b` on the same signature, key and digest.
 No theorem establishes that hypothesis, and no test checks it.
+
 The corpus test uses a verifier that is always unavailable, so it compares only records whose result does not need a verification.
 A repeated key in a multisig script does not show that different people signed.
 

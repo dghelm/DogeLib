@@ -7,6 +7,11 @@ Update the *Status* column when the pull request merges, not when work starts.
 
 **Model project.** Where EthLib and btc-verified differ, DogeLib follows EthLib. That covers architecture, the proof-trust policy, the module system, the writing standard and the soundness documentation. The btc-verified project supplies components, mainly its codecs and packed-codec refinements, which DogeLib adapts to EthLib's structure.
 
+The signature-verifier work follows [design record 0005](docs/design/0005-signature-verifier.md).
+Stage 1 adapts the secp256k1 curve arithmetic and scalar ECDSA verifier with independent Wycheproof known answers.
+The next stages add Core's public-key parser and verifier wrapper, connect the oracle, and compare signed spends.
+Mathlib-dependent curve proofs require a later package proposal.
+
 ## Work order
 
 | Step | Deliverable | Exit condition | Status |

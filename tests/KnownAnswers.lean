@@ -2780,6 +2780,121 @@ def check : IO Nat := do
 end KnownAnswers.AuxPowCheck
 
 /-!
+## Version gating
+
+The version checks of `ContextualCheckBlockHeader` (D33, lines 3072 to 3086), with records at the activation height of each network.
+
+`fAllowLegacyBlocks` of each record comes from `src/chainparams.cpp` (D14).
+Each network's first record sets it true, and each later record copies it until the AuxPoW record sets it false:
+
+| Network | True | False | AuxPoW `nHeightEffective` |
+| --- | --- | --- | --- |
+| Mainnet | line 122, copied at 126 and 134 | line 136 | 371337, line 135 |
+| Testnet | line 279, copied at 282, 291 and 297 | line 300 | 158100, line 298 |
+| Regtest | line 419, copied at 425 and 430 | line 431 | 20, line 432 |
+
+`GetConsensus` (D14, lines 494 to 506) returns the AuxPoW record from its `nHeightEffective` on, and the previous record at the height before.
+DogeLib does not model that selection for this field, so each case states the record that Core selects.
+The expected results are worked out by hand from `IsLegacy` and `IsAuxpow` (D10, lines 129 to 132 and 150 to 155).
+
+Real headers add two checks.
+The 312 mainnet headers at heights 144719 to 145030 have version 2 and pass with `fAllowLegacyBlocks` true.
+The six AuxPoW headers of `tests/block/auxpow-headers.json` start at height 371337 and pass with it false.
+Each set is rejected with the other value.
+-/
+
+namespace KnownAnswers.VersionGate
+open DogeLib DogeLib.Block
+open KnownAnswers.Sha256Cavp (parseHex)
+open KnownAnswers.Block (require jsonFile)
+
+/-- A pure header with the given version bits and zero in every other field. -/
+def header (v : UInt32) : PureBlockHeader := ⟨v, Hash256.zero, Hash256.zero, 0, 0, 0⟩
+
+/-- The result as Core's reject reason, or `ok`. -/
+def outcome (r : Except VersionGateError Unit) : String :=
+  match r with
+  | .ok () => "ok"
+  | .error e => e.rejectReason
+
+/--
+Version bits with the expected outcome under each value of `fAllowLegacyBlocks`, as (bits, outcome if true, outcome if false).
+Versions 1 and 2 are legacy. Bit 8 is the AuxPoW flag.
+-/
+def versions : List (UInt32 × String × String) :=
+  [ (0x00000001, "ok", "late-legacy-block"),
+    (0x00000002, "ok", "late-legacy-block"),
+    (0x00000000, "ok", "ok"),
+    (0x00000003, "ok", "ok"),
+    -- Chain ID 98 without the flag is not legacy.
+    (0x00620002, "ok", "ok"),
+    (0x00620102, "early-auxpow-block", "ok"),
+    (0x00000102, "early-auxpow-block", "ok"),
+    (0x00000101, "early-auxpow-block", "ok"),
+    -- −1 as a signed version: bit 8 is set and the version is not legacy.
+    (0xffffffff, "early-auxpow-block", "ok") ]
+
+/-- The record that Core selects at each height, as (label, height, `fAllowLegacyBlocks`), from the table above. -/
+def records : List (String × Nat × Bool) :=
+  [ ("mainnet", 371336, true), ("mainnet", 371337, false),
+    ("testnet", 158099, true), ("testnet", 158100, false),
+    ("regtest", 19, true), ("regtest", 20, false) ]
+
+/-- Check each version against the record at each side of each activation height. -/
+def checkActivation : IO Nat := do
+  let mut failures := 0
+  for (net, height, allow) in records do
+    for (v, ifTrue, ifFalse) in versions do
+      let got := outcome (checkVersion ⟨allow⟩ (header v))
+      let want := if allow then ifTrue else ifFalse
+      failures := failures + (← require s!"{net} height {height}, version {v}: {got}, expected {want}" (got == want))
+  return failures
+
+/-- Check the recorded mainnet headers under both values of `fAllowLegacyBlocks`. -/
+def checkMainnet : IO Nat := do
+  let mut failures := 0
+  let text ← IO.FS.readFile "tests/work/mainnet-headers/headers.txt"
+  let lines := (text.splitOn "\n").filter (!·.isEmpty)
+  failures := failures + (← require "version gating: 312 legacy-era headers" (lines.length == 312))
+  for line in lines do
+    let [height, hex] := line.splitOn " " | throw (IO.userError "bad header line")
+    let raw ← match parseHex hex with
+      | .ok b => pure b.toList
+      | .error e => throw (IO.userError e)
+    match Serialization.Codec.decode (α := PureBlockHeader) raw with
+    | some (h, []) =>
+      failures := failures + (← require s!"mainnet {height}: allowed" (outcome (checkVersion ⟨true⟩ h) == "ok"))
+      failures := failures + (← require s!"mainnet {height}: late legacy"
+        (outcome (checkVersion ⟨false⟩ h) == "late-legacy-block"))
+    | _ => failures := failures + (← require s!"mainnet {height}: reads" false)
+  let rows ← match (← jsonFile "tests/block/auxpow-headers.json").getArr? with
+    | .ok rows => pure rows
+    | .error e => throw (IO.userError e)
+  failures := failures + (← require "version gating: six AuxPoW headers" (rows.size == 6))
+  for row in rows do
+    let parsed : Except String (Nat × List UInt8) := do
+      return (← (← row.getObjVal? "height").getNat?, (← parseHex (← row.getObjValAs? String "block")).toList)
+    let (height, block) ← match parsed with
+      | .ok r => pure r
+      | .error e => throw (IO.userError e)
+    failures := failures + (← require s!"mainnet {height}: at or after activation" (height ≥ 371337))
+    match Serialization.Codec.decode (α := PureBlockHeader) block with
+    | some (h, _) =>
+      failures := failures + (← require s!"mainnet {height}: allowed" (outcome (checkVersion ⟨false⟩ h) == "ok"))
+      failures := failures + (← require s!"mainnet {height}: early AuxPoW"
+        (outcome (checkVersion ⟨true⟩ h) == "early-auxpow-block"))
+    | none => failures := failures + (← require s!"mainnet {height}: reads" false)
+  return failures
+
+/-- Run every version-gating known answer. -/
+def check : IO Nat := do
+  let mut failures ← checkActivation
+  failures := failures + (← checkMainnet)
+  IO.println s!"version gating: {records.length * versions.length} activation cases, 318 mainnet headers; {failures} failures"
+  return failures
+end KnownAnswers.VersionGate
+
+/-!
 ## RIPEMD-160 and Hash160
 
 The checks read immutable expectations from `tests/cryptography/ripemd160/vectors.json`.
@@ -5253,6 +5368,7 @@ def main (args : List String) : IO UInt32 := do
   let retarget ← KnownAnswers.Work.checkRetarget
   let blocks ← KnownAnswers.Block.check
   let auxpowCheck ← KnownAnswers.AuxPowCheck.check
+  let versionGate ← KnownAnswers.VersionGate.check
   let mainnetHeaders ← KnownAnswers.Work.MainnetHeaders.check
   let proofOfWork ← KnownAnswers.Work.checkProofOfWorkCases
   let scriptReader ← KnownAnswers.Script.check
@@ -5267,5 +5383,5 @@ def main (args : List String) : IO UInt32 := do
   let scriptVerify ← KnownAnswers.ScriptVerify.check
   let multisigRecovery ← KnownAnswers.MultisigRecovery.check
   let txSpends ← KnownAnswers.TxSpends.check
-  return if scrypt + pbkdf2 + hmac + secp256k1 + coreVerifier + sha1 + blocks + auxpowCheck + short + long + ripemd + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts + proofOfWork + scriptReader + scriptNum + scriptEval + signatureCode + signatureEncoding + scriptSignature + scriptVerify + multisigRecovery + txSpends == 0 then 0 else 1
+  return if scrypt + pbkdf2 + hmac + secp256k1 + coreVerifier + sha1 + blocks + auxpowCheck + versionGate + short + long + ripemd + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts + proofOfWork + scriptReader + scriptNum + scriptEval + signatureCode + signatureEncoding + scriptSignature + scriptVerify + multisigRecovery + txSpends == 0 then 0 else 1
 

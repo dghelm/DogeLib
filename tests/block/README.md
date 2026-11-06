@@ -134,7 +134,9 @@ A transcription mistake changes the bytes but not the expected Boolean, which co
 For an accepted case, such a mistake would very likely make the test fail.
 For a rejected case, wrong bytes can still be rejected, so the Boolean alone would not detect the mistake.
 The expected error line narrows that gap, but it comes from the same reading as the transcription.
-Stage 5 of design record 0004 has the Core harness build these cases with Core's own classes and compare the bytes.
+
+The maintainer deferred these Core-recorded inputs to stage 5 on pull request #99, without waiving them.
+Stage 5 of design record 0004 does not exit until the Core harness builds these cases with Core's own classes and the bytes match.
 
 ### Boundary cases
 

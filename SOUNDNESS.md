@@ -301,6 +301,9 @@ For an accepted case, such a mistake would very likely make the test fail.
 For a rejected case, wrong bytes can still be rejected, so the Boolean alone would not detect the mistake.
 The expected error line narrows that gap, but it comes from the same reading of the source as the transcription.
 
+The maintainer deferred the Core-recorded inputs of stage 3 to stage 5 on pull request #99, without waiving them.
+Stage 5 does not exit until the Core harness builds these 26 cases with Core's own classes and their bytes match the fixture.
+
 The 16 boundary cases take both their bytes and their expectations from the author's reading of D55, so a misreading can be shared by both.
 The six mainnet headers are accepted with mainnet's `fStrictChainId`.
 Core's result for them belongs to the stage 5 harness.

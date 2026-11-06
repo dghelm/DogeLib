@@ -23,7 +23,8 @@ Its module docstring records the source files, adaptation and notice.
 
 The transaction files also occur in `tests/transaction/corpus/` for serialization tests.
 This directory preserves them for spend-validation work.
-No converter here derives per-input Script outcomes from transaction acceptance or rejection.
+The transaction converter records the runner's requirement that every `tx_valid` input passes Script verification.
+It assigns no per-input rejection outcome to `tx_invalid`.
 Core's `tx_invalid` runner can reject a transaction before Script execution, or after an earlier input fails.
 The pinned [transaction runner](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/test/transaction_tests.cpp) establishes that boundary.
 
@@ -74,6 +75,91 @@ The converter rejects that value. No pinned record uses it.
 The converter preserves malformed instruction bytes from raw tokens.
 It never repairs a truncated push or normalizes its encoding.
 
+## Transaction spend records
+
+`tx_spends.jsonl` has one record per serialized input of `tx_valid.json` and `tx_invalid.json`, in file and input order.
+It joins inputs to the supplied previous outputs by outpoint, rather than by fixture-array position.
+The converter does not execute Script, call DogeLib or obtain expected values from DogeLib.
+
+| Field | Meaning |
+| --- | --- |
+| `source_file`, `source_index`, `source_line` | Upstream filename, zero-based array index including comments, and one-based opening line. |
+| `input_index` | Zero-based input index in the serialized transaction. |
+| `tx_hex` | Transaction hex exactly as pinned, including its letter case and any trailing bytes. |
+| `prevout_txid`, `prevout_n` | Input outpoint with the txid in display order and the output index as uint32. A source index of -1 becomes 4294967295. |
+| `prevout_scriptPubKey_hex` | Previous output script converted with the same `ParseScript` adaptation as `script_tests.jsonl`. |
+| `prevout_amount` | Optional signed int64 amount in satoshis, copied from the supplied previous output. The runner uses zero when absent. |
+| `scriptSig_hex`, `witness` | Input script bytes and ordered witness stack, including empty items. |
+| `flags`, `flags_mask` | Sorted flag names and their mask. `NONE` becomes an empty set and mask zero. |
+| `test_expectation` | Transaction-level `valid` or `invalid`, according to the source file. |
+| `per_input_expectation` | `accept` for `tx_valid`, and null for `tx_invalid`. |
+| `per_input_expectation_source`, `per_input_expectation_reason` | Runner lines and the reason for that expectation or its absence. |
+| `comment` | Array of strings in the nearest preceding comment block, or an empty array. Adjacent tests share that block until another occurs. The first test's block includes the file-header comments. |
+| `classification` | The same milestone and stage fields as Script records, plus `check_transaction`. |
+| `classification.check_transaction` | An `estimated` marker, `rejects_before_script`, the first rejection `reason` or null, and source lines. |
+
+The [transaction runner's flag table and parser](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/test/transaction_tests.cpp#L41-L76) define the accepted names, including `NONE`.
+The transaction runner passes the parsed flags unchanged.
+It does not add P2SH and WITNESS when CLEANSTACK appears.
+
+The [valid-input loop](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/test/transaction_tests.cpp#L155-L176) requires `CheckTransaction` acceptance and `VerifyScript` acceptance for every input.
+The [invalid-input loop](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/test/transaction_tests.cpp#L239-L261) stops after `CheckTransaction` rejects or an input fails.
+Thus null means an unknown individual outcome, including for later inputs that the runner never checks.
+No record derives an individual Script rejection or error from transaction rejection.
+
+The runner ignores comment entries and prints the transaction test itself in failure messages.
+The comment array preserves source context rather than runner output.
+The [prevout maps](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/test/transaction_tests.cpp#L120-L142) overwrite scripts for repeated outpoints.
+An amount entry changes only when the source supplies an amount for that outpoint.
+The converter follows both rules and rejects missing mappings.
+
+The Python prefix reader adapts [Core's witness-allowed reader](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/primitives/transaction.h#L210-L243) independently of DogeLib.
+It checks canonical, bounded CompactSize values, reads signed output amounts and preserves nonempty witness stacks.
+Like the transaction runner, it permits trailing bytes after the transaction prefix.
+The converter accepts only exact byte-pair hex and 64-digit previous txids, which all pinned records supply.
+It does not implement all the permissive text parsing of Core's `ParseHex` and `uint256S`.
+
+### Estimated rejection before Script
+
+The estimate follows [CheckTransaction](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.cpp#L527-L574) in source order:
+
+| Check | Pinned source lines |
+| --- | --- |
+| Empty inputs, then empty outputs | `src/validation.cpp:530–533` |
+| Base serialization size above 1,000,000 bytes | `src/validation.cpp:534–536` and `src/consensus/consensus.h:16–17` |
+| Negative output, output above MAX_MONEY, then total above MAX_MONEY | `src/validation.cpp:538–548` and `src/amount.h:18,32–33` |
+| Duplicate input outpoints | `src/validation.cpp:551–558` |
+| Coinbase script length outside 2 through 100 bytes | `src/validation.cpp:561–564` |
+| A null prevout in a transaction that is not coinbase | `src/validation.cpp:566–570` |
+
+Dogecoin's `MAX_MONEY` is 10,000,000,000 times 100,000,000 satoshis, which differs from Bitcoin's value.
+The `tx_invalid.json` comments name “MAX_MONEY + 1 output” at line 41 and “MAX_MONEY output + 1 output” at line 45.
+Both entries have output values and totals below Dogecoin's limit, so the estimate finds no `CheckTransaction` rejection.
+
+The size check uses base bytes directly, without a weight multiplier.
+Base size excludes witness data and trailing bytes.
+Every estimate has `estimated: true`.
+A null reason means the Python checks found no rejection, not that Core ran or that Script passes.
+
+Milestone eligibility depends only on flags and witness, so an eligible input can belong to a transaction estimated to fail before Script.
+Stage estimates describe its scripts and do not assign an expectation to such an input.
+
+| Source | Transactions | Input records | Per-input expectation |
+| --- | ---: | ---: | --- |
+| `tx_valid.json` | 118 | 171 | `accept` |
+| `tx_invalid.json` | 80 | 96 | Unknown |
+| Total | 198 | 267 | 171 accept, 96 unknown |
+
+The milestone includes 159 input records and excludes 108.
+Among included inputs, the estimated earliest stages contain 11 at stage 2, 55 at stage 3 and 93 at stage 4.
+The estimate identifies nine invalid transactions that fail before Script and no such valid transaction.
+These counts come from Python classification, not a Core comparison.
+
+`tx_spends.summary.json` records source and converter digests, transaction and input counts, exclusions, stage estimates and estimated transaction rejections.
+Zero-input transactions would produce no spend records and have a separate count in the summary.
+Neither pinned file contains one.
+`SHA256SUMS` also pins both transaction spend outputs.
+
 ## Classification and conservative estimates
 
 The milestone permits P2SH, STRICTENC, DERSIG, LOW_S, NULLDUMMY, CHECKLOCKTIMEVERIFY and CHECKSEQUENCEVERIFY, including the empty set.
@@ -123,8 +209,9 @@ python3 -I scripts/test_convert_script_tests.py
 (cd tests/script/corpus && sha256sum -c SHA256SUMS)
 ```
 
-To regenerate the two derived files, run `python3 -I scripts/convert_script_tests.py`.
+To regenerate the four derived files, run `python3 -I scripts/convert_script_tests.py`.
 Review any change against the pinned source before updating checksums.
 The `--check` mode fails on stale or missing output and writes no file.
 The converter tests cover hand-derived assembly bytes, push boundaries, source locations, flags, context fields and classification.
+Transaction tests also cover input order, outpoint lookup, comments, witness exclusions, rejection estimates and freshness without writes.
 CI checks freshness, converter tests and digests.

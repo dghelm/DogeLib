@@ -76,7 +76,7 @@ Bottom-up. Each layer imports only the layers above it in this list.
 | --- | --- |
 | `Base` | Bytes, fixed-width field meanings, endianness, hash representations |
 | `Serialization` | Codecs, prefix decoders, CompactSize, counted lists, packed representations |
-| `Cryptography` | SHA-1, SHA-256, double SHA-256, HMAC-SHA-256, RIPEMD-160 and Hash160, and secp256k1 curve arithmetic and ECDSA verification on scalars |
+| `Cryptography` | SHA-1, SHA-256, double SHA-256, HMAC-SHA-256, PBKDF2-HMAC-SHA-256, RIPEMD-160 and Hash160, and secp256k1 curve arithmetic and ECDSA verification on scalars |
 | `Work` | Proof-of-work arithmetic: 256-bit targets, their compact encoding, and the difficulty retarget |
 | `Transaction` | Raw transaction types, base serialization, transaction IDs, legacy signature hashing |
 | `Block` | Pure block headers, full headers with the AuxPoW payload and their codec, block hashes and transaction Merkle roots |

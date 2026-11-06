@@ -127,6 +127,38 @@ The Lean compiler, C compiler and runtime remain trusted (B1), including Lean co
 Case 5 fixes only the first 16 bytes, and cases 6 and 7 exercise 131-byte keys.
 No theorem or test here establishes agreement with compiled Core or constant-time behaviour (A3).
 
+### PBKDF2-HMAC-SHA-256
+
+`Pbkdf2.pbkdf2_eq_spec` equates the executable with the separate list model for every password, salt, natural iteration count and output length.
+The equality includes `none` above `(2^32 - 1) * 32` output bytes.
+Zero iterations uses `U₁`, and zero output bytes returns an empty result.
+Those cases extend RFC 8018 §5.2, which requires positive iterations and output length.
+For an admitted output length, `nb_lt` bounds the number of blocks below 2^32.
+Thus the four-byte block indices do not wrap during derivation.
+
+The model adapts verified-garbage's `Spec/Pbkdf2.lean` at the pin, under BSD-3-Clause, with its list and bit-vector representation unchanged.
+The generic block lemmas adapt `Proof/Pbkdf2/Whole/Common.lean` at the same pin.
+`Spec.iterate_congr` adapts `Proof/Pbkdf2/Memory.lean` at that pin.
+The HMAC instance uses executable SHA-256, as `Hmac.hmac_eq_spec` does.
+
+`pbkdf2_eq_fips` replaces that hash with the FIPS 180-4 model under `password.size < 2^61` and `64 + salt.size + 4 < 2^61`.
+Those bounds admit the long-key hash and the first inner hash with salt and four counter bytes.
+Every later HMAC message has 32 bytes, and each outer hash input has 96 bytes.
+The corollary covers all natural counts and lengths, including rejection and both zero extensions.
+It assumes no cryptographic property and proves no security claim.
+
+`pbkdf2_eq_spec`, `pbkdf2_eq_fips` and `block_eq_fips` depend on `propext`, `Classical.choice` and `Quot.sound`.
+`iterate_eq_spec`, `blocks_eq_spec`, `Spec.iterate_congr` and `nb_lt` depend on `propext` and `Quot.sound`, by `#print axioms` on Lean `v4.35.0`.
+A reader must compare the list model with RFC 8018 §5.2 (A1).
+The Lean compiler, C compiler, runtime and Lean core byte-array operations remain trusted (B1, B2).
+The executable uses whole-message HMAC and makes no constant-time or resource-bound claim (A3).
+No runtime substitution or trust-policy exception is added.
+
+`lake test` compares both complete 64-byte RFC 7914 §11 outputs through compiled code, including the 80,000-iteration case.
+It also checks prefixes of the first vector and the zero-count, empty-output and oversized-output branches.
+The RFC errata search, read on 2026-11-06, has no correction to those vectors.
+No theorem or test here establishes agreement with compiled Core.
+
 ### Double SHA-256
 
 `Sha256d.hash` is `CHash256` of Dogecoin Core (SOURCES.md, D8): SHA-256 applied to the SHA-256 digest of the message.

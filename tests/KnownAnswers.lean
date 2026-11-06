@@ -1,6 +1,7 @@
 import DogeLib.Cryptography.Secp256k1.Ecdsa
 import DogeLib.Cryptography.Hash.Hash160
 import DogeLib.Cryptography.Hash.Hmac
+import DogeLib.Cryptography.Hash.Pbkdf2
 import DogeLib.Cryptography.Hash.Sha1
 import DogeLib.Cryptography.Hash.Sha256
 import DogeLib.Cryptography.Hash.Sha256d
@@ -4723,8 +4724,64 @@ def check : IO Nat := do
 end KnownAnswers.Secp256k1
 
 
+namespace KnownAnswers.Pbkdf2
+
+/-- Both RFC 7914 §11 cases: ASCII password, salt, count and complete 64-byte derived key.
+The RFC Editor errata search was read on 2026-11-06.
+Verified errata 5871 and 6972 concern ASN.1 and parameter advice.
+Reported errata 5971, 5972, 5973 and 6452 concern scrypt parameters and Integerify.
+None changes section 11. -/
+def vectors : Array (String × String × Nat × String) := #[
+  ("passwd", "salt", 1,
+    "55ac046e56e3089fec1691c22544b605f94185216dde0465e68b9d57c20dacbc" ++
+    "49ca9cccf179b645991664b39d77ef317c71b845b1e30bd509112041d3a19783"),
+  ("Password", "NaCl", 80000,
+    "4ddcd8f60b98be21830cee5ef22701f9641a4418d04c0414aeff08876b34ab56" ++
+    "a1d425a1225833549adb841b51c9b3176a272bdebba1d078478f62b397f33c8d")
+]
+
+/-- Check both complete RFC outputs through compiled PBKDF2 and print each elapsed time.
+The first vector also checks output prefixes and the model's zero-count extension.
+Zero output and oversized output check the declared API boundaries. -/
+def check : IO Nat := do
+  let mut failures := 0
+  for i in [:vectors.size] do
+    let (password, salt, c, hex) := vectors[i]!
+    let expected ← match Sha256Cavp.parseHex hex with
+      | .ok b => pure b
+      | .error e => throw (IO.userError e)
+    let start ← IO.monoMsNow
+    let got := DogeLib.Cryptography.Hash.Pbkdf2.pbkdf2 password.toUTF8 salt.toUTF8 c 64
+    unless got == some expected && expected.size == 64 do
+      IO.eprintln s!"FAIL RFC 7914 section 11 case {i + 1}"
+      failures := failures + 1
+    let stop ← IO.monoMsNow
+    IO.println s!"PBKDF2-HMAC-SHA-256: RFC case {i + 1}, c={c}, {stop - start} ms"
+    if i == 0 then
+      for n in [0, 1, 31, 32, 33, 63, 64] do
+        unless DogeLib.Cryptography.Hash.Pbkdf2.pbkdf2 password.toUTF8 salt.toUTF8 c n ==
+            some (expected.extract 0 n) do
+          IO.eprintln s!"FAIL PBKDF2 RFC prefix of {n} bytes"
+          failures := failures + 1
+      unless DogeLib.Cryptography.Hash.Pbkdf2.pbkdf2 password.toUTF8 salt.toUTF8 0 64 == some expected do
+        IO.eprintln "FAIL PBKDF2 zero iterations"
+        failures := failures + 1
+  let empty := ByteArray.empty
+  unless DogeLib.Cryptography.Hash.Pbkdf2.pbkdf2 empty empty 0 0 == some empty &&
+      DogeLib.Cryptography.Hash.Pbkdf2.pbkdf2 empty empty 1 ((2 ^ 32 - 1) * 32 + 1) == none do
+    IO.eprintln "FAIL PBKDF2 output length boundaries"
+    failures := failures + 1
+  unless vectors.size == 2 do
+    IO.eprintln "FAIL RFC 7914 section 11 case count"
+    failures := failures + 1
+  IO.println s!"PBKDF2-HMAC-SHA-256: {vectors.size} RFC 7914 cases, {failures} failures"
+  return failures
+
+end KnownAnswers.Pbkdf2
+
 /-- Entry point of `lake test`. -/
 def main : IO UInt32 := do
+  let pbkdf2 ← KnownAnswers.Pbkdf2.check
   let hmac ← KnownAnswers.Hmac.check
   let secp256k1 ← KnownAnswers.Secp256k1.check
   let sha1 ← KnownAnswers.Sha1.check
@@ -4757,5 +4814,5 @@ def main : IO UInt32 := do
   let scriptVerify ← KnownAnswers.ScriptVerify.check
   let multisigRecovery ← KnownAnswers.MultisigRecovery.check
   let txSpends ← KnownAnswers.TxSpends.check
-  return if hmac + secp256k1 + sha1 + blocks + short + long + ripemd + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts + proofOfWork + scriptReader + scriptNum + scriptEval + signatureCode + signatureEncoding + scriptSignature + scriptVerify + multisigRecovery + txSpends == 0 then 0 else 1
+  return if pbkdf2 + hmac + secp256k1 + sha1 + blocks + short + long + ripemd + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts + proofOfWork + scriptReader + scriptNum + scriptEval + signatureCode + signatureEncoding + scriptSignature + scriptVerify + multisigRecovery + txSpends == 0 then 0 else 1
 

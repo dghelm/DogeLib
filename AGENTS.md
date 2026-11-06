@@ -167,6 +167,7 @@ Within an approved scope, an additive operation needs ordinary independent revie
 
 A change to the behavior or record shape of an existing operation also needs only ordinary independent review.
 Its pull request title has `!`, its commit body ends with a `BREAKING CHANGE:` footer, and the next release notes name it.
+Neither kind of change renames the format: it stays `dogelib-oracle/1` through 0.x, because consumers pin a release.
 A stability promise for 1.0 is a separate future decision.
 See [format stability](docs/oracle.md#format-stability).
 

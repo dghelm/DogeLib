@@ -23,6 +23,7 @@ Other releases and development commits have no compatibility promise.
 Within an approved scope, an additive operation needs ordinary independent review, without a separate maintainer decision or a new format name.
 A change to the behavior or record shape of an existing operation also needs only ordinary independent review.
 Its pull request title has `!`, its commit body ends with a `BREAKING CHANGE:` footer, and the next release notes name it.
+Neither kind of change renames the format: it stays `dogelib-oracle/1` through 0.x, because consumers pin a release.
 
 Each release supports one format implementation.
 The oracle has no aliases or migration tooling for older interfaces or format names.

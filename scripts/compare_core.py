@@ -612,7 +612,7 @@ def set_hash_boundaries(algorithm: str) -> list[dict]:
             for n in sorted(lengths)]
 
 
-QUICK_SETS = ("pubkey Core signatures", "Script signature verdict","fixtures", "compactsize", "sighash endpoints", "witness flags and stacks",
+QUICK_SETS = ("pubkey Core signatures", "Script signature verdict", "fixtures", "compactsize", "sighash endpoints", "witness flags and stacks",
               "work compact boundaries", "regtest legacy wrap case", "work missing skip traversal", "header field boundaries", "Merkle generated",
               "RIPEMD-160 padding boundaries", "Hash160 padding boundaries", "SHA-1 padding boundaries", "Script reader truncations", "Script resource boundaries", "Script resource boundaries base",
               "Script legacy corpus base", "Script legacy corpus transaction", "Script harness refusal domain", "Script refusal precedence",

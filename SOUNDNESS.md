@@ -512,13 +512,13 @@ Then `Point.mulAdd (e · s⁻¹) G (r · s⁻¹) Q`, with `Fn.inv`, must be the 
 This includes the case in which that result is the point at infinity.
 A proof needs the group law, correct Jacobian formulas, a correct `Fn.inv` and the primality of `n`.
 Each of these needs Mathlib (design record 0005, decision 3), so until a proof exists, this step is an A1 claim.
-The comparison obligation has finite evidence from 574 dedicated `pubkey.verify` inputs, all with agreeing verdicts:
+The comparison obligation has finite evidence from 598 dedicated `pubkey.verify` inputs, all with agreeing verdicts:
 
 - 464 Wycheproof bitcoin cases, with Core as the verdict source because Core normalizes high S.
 - Four Core-signed inputs and two reversed digest-one inputs.
 - 20 key and signature parser boundaries.
 - 36 constructed infinity cases, all rejected.
-- 24 constructed verification points with `x ∈ [n,p)`, all accepted, and 24 changed-S cases, all rejected.
+- 24 constructed verification points with `x ∈ [n,p)`, all accepted, and 24 changed-S cases, all rejected. Another 24 mismatched-R cases retain x above `n` and reject.
 
 The [fixture notes](tests/cryptography/secp256k1/README.md) record their provenance and constructions.
 The comparison also gives agreeing verdicts on all 925 Script corpus records and 159 eligible transaction inputs.

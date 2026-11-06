@@ -56,5 +56,9 @@ For 24 further inputs, the generator selects the first eight curve x-coordinates
 For each, it selects `e ∈ {0, 1, 2^248}` and constructs `Q = r⁻¹(sR-eG)` by affine integer arithmetic.
 The verification point is then `R`, with `x ∈ [n,p)`.
 Another 24 inputs retain Q and e but change S to 3.
+
+A further 24 inputs retain R and e and use `r2 = r+1`.
+They set `Q = r2⁻¹(sR-eG)` and use `r2` in the signature.
+Their verification point remains R, with x above `n`, but `x-n ≠ r2`.
 The Core harness alone supplies all comparison verdicts.
 These constructions test the infinity and `r+n` branches of D60 without a Lean-generated expectation.

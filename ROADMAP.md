@@ -62,7 +62,7 @@ Each item below is complete.
    The fixed Dogecoin scrypt executable, its refinement proof and the header composition remain.
 2. **Signature verifier, design record 0005.** Stages 1 to 3 are complete.
    The oracle uses `coreVerifier`.
-   Its verdicts agree with Core on 574 dedicated public-key inputs and the Script and transaction corpora.
+   Its verdicts agree with Core on 598 dedicated public-key inputs and the Script and transaction corpora.
    The public-key inputs include constructed infinity and x-above-order cases.
    Arithmetic agreement remains finite comparison evidence, without an all-input theorem (SOUNDNESS.md).
    Stage 4 verifies signed spends of the multisig-with-recovery template. The harness signer and the recovery fixtures of pull request #97 exist.

@@ -553,7 +553,7 @@ For `sighash.legacy` with plan `hash_bytes`, the double SHA-256 of the oracle's 
 This checks the preimage against Core's digest, not byte by byte against a preimage from Core.
 Outside the checked `harness-refused` category, a request error from either program fails the comparison.
 
-The comparison with Core `e0a1c157791544e818c901bd9341896965afbf9d` passes 373,065 stream requests.
+The comparison with Core `e0a1c157791544e818c901bd9341896965afbf9d` passes 373,089 stream requests.
 The pull request records the tested DogeLib revision.
 It reported zero failures, including 12 checked harness refusals, plus 22 adapter-limit cases and the 1,193 two-call compositions.
 The transaction inputs and targeted timelocks have these counts:
@@ -570,7 +570,7 @@ The transaction inputs and targeted timelocks have these counts:
 | Public-key Core signatures and reversed digest one | 6 | 6 | 0 | 0 | 0 |
 | Public-key parser boundaries | 20 | 20 | 0 | 0 | 0 |
 | Public-key infinity constructions | 36 | 36 | 0 | 0 | 0 |
-| Public-key x above order, including changed S | 48 | 48 | 0 | 0 | 0 |
+| Public-key x above order, including changed S and R | 72 | 72 | 0 | 0 | 0 |
 | Signed recovery spend | 1 | 1 | 0 | 0 | 0 |
 | Targeted CLTV, transaction, seed `20261107` | 932 | 932 | 0 | 0 | 0 |
 | Targeted CSV, transaction, seed `20261107` | 940 | 940 | 0 | 0 | 0 |
@@ -739,4 +739,5 @@ It includes key-parser boundaries and four Core-signed inputs, plus two reversed
 The [fixture notes](../tests/cryptography/secp256k1/README.md) give the provenance and arithmetic of the constructed edge cases.
 The 36 infinity inputs reject, and the 24 x-above-order inputs accept.
 All 24 changed-S inputs reject.
+Another 24 inputs retain the verification point above `n` but claim a different R scalar, and all reject.
 These comparisons give finite evidence about verdicts, not a theorem that `mulAdd` equals Core's `secp256k1_ecmult`.

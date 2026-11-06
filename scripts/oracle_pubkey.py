@@ -95,6 +95,7 @@ def pubkey_sets():
             for s in (1, 2, N-1):
                 infinity.append(request(key(q), der(r, s), ((-r*d) % N).to_bytes(32, 'big')))
     high_x = []
+    mismatched_r = []
     # Choose R with n <= x < p. Q=r^-1(sR-eG) makes the verification point R.
     x = N
     while len(high_x) < 24:
@@ -107,9 +108,14 @@ def pubkey_sets():
                     s = 2
                     q = mul(pow(r, -1, N), add(mul(s, (x, y)), mul((-e) % N, G)))
                     high_x.append(request(key(q), der(r, s), e.to_bytes(32, 'big')))
+                    # Keep R above n, but claim a different R scalar in the signature.
+                    r2 = r+1
+                    q2 = mul(pow(r2, -1, N), add(mul(s, (x, y)), mul((-e) % N, G)))
+                    mismatched_r.append(request(key(q2), der(r2, s), e.to_bytes(32, 'big')))
         x += 1
     # The generated R integers fit a one-byte DER length. Preserve R and replace S.
     high_x += [{**r, 'sig_hex': (bytes.fromhex(r['sig_hex'])[:-1] + b'\x03').hex()} for r in high_x]
+    high_x += mismatched_r
     return [('pubkey Wycheproof bitcoin', wycheproof), ('pubkey Core signatures', signed),
             ('pubkey parser boundaries', parsing), ('pubkey infinity', infinity), ('pubkey x above order', high_x)]
 

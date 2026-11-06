@@ -30,14 +30,14 @@ Script verification takes a signature checker as a parameter.
 The oracle uses `coreVerifier` for its transaction checker and exposes single-signature verification through `pubkey.verify`.
 
 The `dogelib-oracle` program runs the specification on JSON requests, and a harness runs the pinned Core code on the same requests ([docs/oracle.md](docs/oracle.md)).
-The recorded comparison processed 373,065 stream requests with zero failures ([counts](docs/oracle.md#the-comparison)).
+The recorded comparison processed 373,089 stream requests with zero failures ([counts](docs/oracle.md#the-comparison)).
 That count includes requests with an unsupported Lean result and 12 checked harness refusals.
 The comparison counts these requests separately, as neither agreement nor disagreement.
 
 For example, Core's `script_tests.json` has 925 records with no witness and only the seven supported flags ([corpus](tests/script/corpus/README.md)).
 Through `script.verify_legacy`, these records give 925 agreements with the base checker.
 With the transaction checker, they also give 925 agreements.
-All 159 eligible transaction inputs and 574 public-key inputs agree with Core.
+All 159 eligible transaction inputs and 598 public-key inputs agree with Core.
 A comparison covers its requests and no other inputs.
 
 DogeLib does not specify these parts of Dogecoin:

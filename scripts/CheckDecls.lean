@@ -5,7 +5,7 @@ import Lean
 
 Checks the compiled declarations of DogeLib.
 
-Adapted from EthLib, `scripts/CheckDecls.lean` at commit `6a93711`, dedicated to the public domain under CC0 1.0.
+Adapted from EthLib, `scripts/CheckDecls.lean` at commit `bb6dfe5`, dedicated to the public domain under CC0 1.0.
 The changes are the default scope, the default modules and this paragraph.
 
 It reads what the kernel accepted, not the source, so no formatting of the source can hide a finding.
@@ -175,9 +175,18 @@ partial def opaquesOf (env : Environment) (n : Name) : StateM (NameMap NameSet) 
 def isFormattingType (c : ConstantInfo) : Bool :=
   c.type.getForallBody.getAppFn.constName? |>.any fun h => h == ``Repr || h == ``ToString
 
-/-- Whether `n` is a `Repr` or `ToString` instance, or a function generated for one, such as `instReprFoo.repr`. -/
+/-- Whether `n` is a `Repr` or `ToString` instance, or a function generated for one.
+A generated function can have several name components below its instance.
+For example, recursion can produce `instReprFoo.repr._f`.
+-/
 def isFormatting (env : Environment) (n : Name) (c : ConstantInfo) : Bool :=
-  isFormattingType c || (env.find? n.getPrefix).any isFormattingType
+  isFormattingType c || go n.getPrefix
+where
+  /-- Whether `p` or one of its prefixes is a `Repr` or `ToString` instance. -/
+  go : Name → Bool
+    | .anonymous => false
+    | p@(.str q _) => (env.find? p).any isFormattingType || go q
+    | p@(.num q _) => (env.find? p).any isFormattingType || go q
 
 /-! ## The check -/
 

@@ -10,7 +10,8 @@ It never rewrites the fixture file.
 The nine `authors` records are the published RIPEMD-160 vectors of Dobbertin, Bosselaers and Preneel.
 They appear in [Bosselaers' table](https://homes.esat.kuleuven.be/~bosselae/ripemd160.html), retrieved on 2026-11-05.
 The table gives ASCII messages and hexadecimal digests.
-The first eight also appear in the pinned EthLib proof file (SOURCES.md).
+The first eight also appear in EthLib's proof file at the adaptation origin `6a93711` (SOURCES.md).
+The current pin `bb6dfe5` removes those kernel known answers in `914ea4ec`.
 The ninth hashes one million `a` bytes.
 These numerical input/output pairs are transcribed test data, not copied implementation code or prose.
 

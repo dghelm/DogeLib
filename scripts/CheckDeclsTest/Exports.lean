@@ -5,7 +5,7 @@ module
 
 An export module: it may reach `IO`, which the specification may not.
 
-Adapted from EthLib, `scripts/CheckDeclsTest/Exports.lean` at commit `6a93711`, dedicated to the public domain under CC0 1.0.
+Adapted from EthLib, `scripts/CheckDeclsTest/Exports.lean` at commit `bb6dfe5`, dedicated to the public domain under CC0 1.0.
 -/
 
 @[expose] public section

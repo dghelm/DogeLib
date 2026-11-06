@@ -6,6 +6,7 @@ No formal verification is absolute.
 A proof links a Lean definition to a theorem. Both are assumed to match something outside Lean: the Dogecoin behavior, the code that runs, and what the client needs.
 Each of those links is an assumption, and this document names them one by one.
 It follows the structure of EthLib's [`SOUNDNESS.md`](https://github.com/ethereum/EthLib/blob/6a93711e7cc062e787fff6747e4101a141d38b7a/SOUNDNESS.md), which follows s2n-bignum's.
+The current EthLib pin `bb6dfe5` expands that document with coverage that DogeLib does not adopt.
 
 [COVERAGE.md](COVERAGE.md) lists the definitions and their theorems.
 Each section states the mitigations that exist today, and the policy for definitions that are not written yet.
@@ -88,7 +89,8 @@ No cryptographic assumption enters the theorem.
 ### SHA-256
 
 `hash_eq_spec` says that `hash` equals `Spec.hash` on every message shorter than 2^61 bytes.
-`Spec.hash` restates FIPS 180-4 over 32-bit bit vectors, independently of the executable code.
+`Spec.hash` restates FIPS 180-4 over 32-bit bit vectors, with separate padding, schedule, round and block definitions.
+The model shares the round constants `K` with the executable code.
 The theorem depends on `propext`, `Classical.choice` and `Quot.sound`, by `#print axioms` with Lean `v4.35.0`.
 
 The theorem does not show that `Spec.hash` matches FIPS 180-4.
@@ -96,7 +98,9 @@ A reader checks that by comparing the model with the standard (A1).
 `lake test` runs the 129 byte-oriented NIST CAVP vectors through the compiled `hash` (B1).
 The vectors come from NIST, not from the code under test, and `tests/cryptography/sha256/cavp/README.md` records their provenance.
 They test the compiled code only on those inputs.
-Both files are adapted from EthLib at commit `6a93711`.
+
+The SHA-256 definition and proof adapt EthLib at commit `6a93711`.
+The current pin `bb6dfe5` restructures them in `d59f0e3a`, which DogeLib has not ported.
 
 ### Double SHA-256
 
@@ -149,7 +153,8 @@ The declaration check inspects all declarations under the unchanged standard-axi
 
 ### RIPEMD-160 and Hash160
 
-`Ripemd160.hash` adapts EthLib's executable definition at the existing pin in SOURCES.md.
+`Ripemd160.hash` adapts EthLib's executable definition at `6a93711`, as SOURCES.md records.
+The current pin `bb6dfe5` adds bounds hypotheses in `4f798a14`, which DogeLib has not ported.
 Its UInt32 arithmetic wraps, and its eight-byte length suffix reduces the bit length modulo 2^64.
 Source inspection compares the tables, round functions, constants, padding and digest order with Core's `CRIPEMD160` at the compatibility pin.
 This inspection is not a Lean equivalence proof.

@@ -201,3 +201,9 @@ None. A maintainer decision that blocks a lane becomes an issue with the `needs-
 
 Deferred work is tracked as GitHub issues with the `deferred` label.
 Decisions that only a maintainer can make carry the `needs-maintainer` label.
+
+The EthLib pin audit leaves these follow-up tasks:
+
+- Port EthLib `d59f0e3a` (SHA-256 kernel evaluation) while preserving DogeLib's public APIs, theorem statements and SHA-1 reuse of padding and word reads.
+- Port EthLib `4f798a14` (RIPEMD-160 bounds proofs) while preserving the public `little32` and `compress` contracts and every existing theorem statement.
+- Review EthLib `ad1185d6` (writing guide and checker) separately, with an explicit decision about DogeLib's writing rules and vocabulary.

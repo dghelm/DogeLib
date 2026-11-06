@@ -1,7 +1,7 @@
 # Architecture
 
 This document describes the intended structure of DogeLib.
-It follows EthLib's [`ARCHITECTURE.md`](https://github.com/ethereum/EthLib/blob/6a93711e7cc062e787fff6747e4101a141d38b7a/ARCHITECTURE.md).
+It follows EthLib's [`ARCHITECTURE.md`](https://github.com/ethereum/EthLib/blob/bb6dfe55198243682bc2eaf94611af2dbce1be6f/ARCHITECTURE.md).
 Where EthLib and btc-verified differ, DogeLib follows EthLib.
 [BUILDING.md](BUILDING.md) says how to build it.
 

@@ -11,6 +11,7 @@ The model uses bit vectors and a named state, with its own round functions and c
 Only the identical padding and input-word model reuse SHA-256's model.
 
 The proof structure adapts EthLib's SHA-256 proof at commit `6a93711e7cc062e787fff6747e4101a141d38b7a`, under CC0 1.0.
+The current EthLib pin `bb6dfe5` restructures SHA-256 in `d59f0e3a`, which DogeLib has not ported.
 The adaptation replaces SHA-256's recurrence, rounds, constants, state and digest with SHA-1's.
 -/
 

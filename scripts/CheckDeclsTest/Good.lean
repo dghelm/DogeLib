@@ -5,7 +5,7 @@ module
 
 Declarations the declaration check must pass.
 
-Adapted from EthLib, `scripts/CheckDeclsTest/Good.lean` at commit `6a93711`, dedicated to the public domain under CC0 1.0.
+Adapted from EthLib, `scripts/CheckDeclsTest/Good.lean` at commit `bb6dfe5`, dedicated to the public domain under CC0 1.0.
 -/
 
 @[expose] public section
@@ -36,5 +36,13 @@ def total (xs : Array Nat) : Nat := xs.foldl (· + ·) 0
 Its message is built from `String` operations the kernel cannot unfold, but the message is not part of the value. -/
 def checked (n : Nat) : Nat :=
   if n < 10 then n else panic! s!"too large: {n}"
+
+/-- A recursive type with a derived `Repr`.
+Its generated formatting functions must not produce declaration-check findings.
+-/
+inductive Nested where
+  | leaf (n : Nat)
+  | inside (index : Nat) (inner : Nested)
+  deriving Repr
 
 end CheckDeclsTest.Good

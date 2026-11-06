@@ -7,7 +7,8 @@ Lake build for `DogeLib`.
 The root package uses Lean core and has no Lake dependencies.
 The optional package under Refinement owns Aeneas and Mathlib.
 ARCHITECTURE.md describes the libraries and what each may import.
-The layout follows EthLib's `lakefile.lean` at commit `6a93711`.
+The layout adapts EthLib's `lakefile.lean` at commit `6a93711`.
+The current pin `bb6dfe5` adds targets and release metadata that DogeLib does not adopt.
 -/
 
 package «DogeLib» where

@@ -7,11 +7,14 @@ public import DogeLib.Cryptography.Hash.Sha256
 
 SHA-256 agrees with FIPS 180-4 on every message shorter than 2^61 bytes.
 
-The standard is restated below as a model over 32-bit bit vectors, independent of the executable code.
+The standard is restated below as a model over 32-bit bit vectors, with separate padding, schedule, round and block definitions.
+The model shares the round constants `K` with the executable code.
 
 Adapted from EthLib, [`EthLib/Cryptography/Proofs/Hash/Sha256.lean`](https://github.com/ethereum/EthLib/blob/6a93711e7cc062e787fff6747e4101a141d38b7a/EthLib/Cryptography/Proofs/Hash/Sha256.lean),
 commit `6a93711`, dedicated to the public domain under CC0 1.0.
-The changes are the namespace and this paragraph.
+The current EthLib pin `bb6dfe5` restructures this file in `d59f0e3a`.
+DogeLib retains the earlier definitions and theorem contracts, so that restructuring is not ported.
+The adaptation changes the namespace and documentation.
 -/
 
 @[expose] public section

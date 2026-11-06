@@ -12,6 +12,7 @@ The digest contains twenty bytes in SHA-1 output order.
 
 SHA-1 reuses SHA-256's padding, big-endian reader, Ch and Maj.
 The schedule and round structure adapt DogeLib's SHA-256 from EthLib at commit `6a93711e7cc062e787fff6747e4101a141d38b7a` (CC0 1.0).
+The current EthLib pin `bb6dfe5` restructures SHA-256 in `d59f0e3a`, which DogeLib has not ported.
 The adaptation changes the recurrence, constants, working variables and digest length to SHA-1.
 SOURCES.md maps these definitions to FIPS 180-4 and pinned Core's `CSHA1`.
 -/

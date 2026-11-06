@@ -37,7 +37,7 @@ Thus the expected Merkle roots come from serialized headers, not explorer JSON f
 The source is untrusted, and these isolated blocks have no authenticated chain connection or proof-of-work check.
 The checks establish consistency with the recorded commitments, subject to the hash commitment assumption.
 
-The genesis transaction and header are the literals in `tests/KnownAnswers.lean`.
+`tests/KnownAnswers/Serialization.lean` records the genesis transaction and header literals in `KnownAnswers.Codec`.
 Their expected commitments come from Core's `src/chainparams.cpp` at the SOURCES.md pin (D9).
 
 ## The existing header range
@@ -172,7 +172,7 @@ These results are Lean evidence only. The Core harness check of these headers be
 
 ## Hand-written AuxPoW cases
 
-`tests/KnownAnswers.lean` writes byte strings from Core's format: a pure header with only the AuxPoW flag set, a one-input transaction and zero payload fields.
+`tests/KnownAnswers/Block.lean` writes byte strings from Core's format: a pure header with only the AuxPoW flag set, a one-input transaction and zero payload fields.
 They check these behaviours:
 
 - The base form and the extended form with one empty witness stack read as one header in the witness-allowed mode (D4, lines 210 to 243). The writer emits the base form (D4, lines 245 to 263).

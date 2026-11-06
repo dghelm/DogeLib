@@ -24,7 +24,7 @@ To check the pin, run this from the directory:
 sha256sum -c SHA256SUMS
 ```
 
-`lake test` reads and writes every base-mode transaction, from `tests/KnownAnswers.lean`, through the compiled base-mode reader and codecs.
+`lake test` reads and writes every base-mode transaction, from `tests/KnownAnswers/Transaction.lean`, through the compiled base-mode reader and codecs.
 It also reads every record of both kinds with the reader of the witness-allowed format, `Transaction.readAllowWitness`, and writes each one again.
 
 The format models serialization only.

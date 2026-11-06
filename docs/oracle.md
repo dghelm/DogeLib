@@ -589,7 +589,7 @@ The request stream is deterministic, and the random sets use a fixed seed:
 - All 198 transaction corpus records through both witness operations, with the 39 extended records also reported as a separate set.
 - Every proper prefix of those 39 records through both witness operations, and each record with 1, 3 and 40 suffix bytes.
 - Count, length and fixed-field changes in all 198 records through the witness operations, plus empty stacks, empty items and replacement stack contents.
-- Hand-built cases from the known answers in `tests/KnownAnswers.lean` (`Witness.cases`).
+- Hand-built cases from the known answers in `tests/KnownAnswers/Transaction.lean` (`Witness.cases`).
   They cover flags `02`, `03`, `ff`, zero flags, flags `01` with zero inputs, and errors before the flag check.
 - 5,000 seeded byte mutations of the 198 records, each through both witness operations.
 - The `large structured base` set, through both base operations and the transaction argument of `sighash.legacy`.

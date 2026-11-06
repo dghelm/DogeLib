@@ -73,9 +73,14 @@ lean_lib «CheckDeclsTest» where
   -- The classic root checks findings behind ordinary module boundaries.
   allowNonModules := true
 
-/-- Known answers from independent sources, run through the compiled
-specification. `lake test` runs it. Lake allows one test driver, so every
-known-answer test belongs to `tests/KnownAnswers.lean`. -/
+/-- Topic modules for the compiled known answers. -/
+lean_lib «KnownAnswersTests» where
+  srcDir := "tests"
+  globs := #[.submodules `KnownAnswers]
+  allowNonModules := true
+
+/-- Known answers from independent sources, run through the compiled specification.
+`lake test` runs the driver in `tests/KnownAnswers.lean`. -/
 @[test_driver]
 lean_exe «known-answers» where
   srcDir := "tests"

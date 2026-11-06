@@ -1463,7 +1463,7 @@ Then a transaction with lock time below 1,000,000 gives `UNSATISFIED_LOCKTIME`, 
 So it cannot pass the recovery branch.
 
 Without the `CHECKLOCKTIMEVERIFY` flag, this exclusion does not hold: `OP_CHECKLOCKTIMEVERIFY` is then `OP_NOP2`.
-The known answer `CLTV clear, lock time 0` in `tests/KnownAnswers.lean` accepts such a spend.
+The known answer `CLTV clear, lock time 0` in `tests/KnownAnswers/Script.lean` accepts such a spend.
 A claim that recovery cannot enter a chain before a height or time also needs transaction-finality and chain-context results.
 They are outside this module.
 

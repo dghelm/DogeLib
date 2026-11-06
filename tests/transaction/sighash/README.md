@@ -22,4 +22,4 @@ To check the pin, run this from the directory:
 sha256sum -c SHA256SUMS
 ```
 
-`lake test` runs every record, from `tests/KnownAnswers.lean`, through the compiled `DogeLib.Transaction.legacySignatureHash`.
+`lake test` runs every record, from `tests/KnownAnswers/Transaction.lean`, through the compiled `DogeLib.Transaction.legacySignatureHash`.

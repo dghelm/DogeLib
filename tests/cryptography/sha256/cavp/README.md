@@ -21,4 +21,4 @@ sha256sum -c SHA256SUMS
 The pin shows only that the files are unchanged since they were copied.
 To check them against NIST, download the archive and compare the files byte for byte.
 
-`lake test` runs every vector, from `tests/KnownAnswers.lean`, through the compiled `DogeLib.Cryptography.Hash.Sha256.hash`.
+`lake test` runs every vector, from `tests/KnownAnswers/Hash.lean`, through the compiled `DogeLib.Cryptography.Hash.Sha256.hash`.

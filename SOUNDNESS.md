@@ -48,7 +48,7 @@ Gap D asks whether the use of DogeLib holds together.
 | C3 | A declaration reached the environment unchecked | No kernel replay. The declaration check requires every production module to be reachable from its default roots. | P I |
 | D1 | A client misuses an operation, such as a prefix decoder where complete consumption is required | Policy: each public operation documents its input domain and consumption contract | R I |
 | D2 | A dependency changes | Source and toolchain pins constrain dependency changes. The root package has no Lake dependencies, while the separate refinement package owns Aeneas and Mathlib. See [D2](#d2-dependency-changes). | P R I |
-| D3 | The fixtures are wrong | Each fixture records its provenance. The NIST CAVP files, Wycheproof P1363 records and Core's `sighash.json` are pinned by digest, and CI checks the pins. Core's test cases are copied into `tests/KnownAnswers.lean` with their file and line. | F |
+| D3 | The fixtures are wrong | Each fixture records its provenance. The NIST CAVP files, Wycheproof P1363 records and Core's `sighash.json` are pinned by digest, and CI checks the pins. Core's test cases are copied into `tests/KnownAnswers/` topic modules with their file and line. | F |
 
 ## What the proofs say
 
@@ -201,7 +201,7 @@ The inner digest has 32 bytes, so the outer application needs no hypothesis of i
 
 `lake test` checks the compiled `Sha256d.hash` against four values that Dogecoin Core asserts.
 They are the genesis merkle root and the genesis block hashes of the main, test and regression-test networks.
-The bytes to hash are derived by hand from `src/chainparams.cpp`, and the derivation is in `tests/KnownAnswers.lean`.
+The bytes to hash are derived by hand from `src/chainparams.cpp`, and the derivation is in `tests/KnownAnswers/Genesis.lean`.
 
 Neither theorem says how Dogecoin orders the bytes of a hash for display, or which bytes it hashes.
 Those belong to the definitions of the objects that are hashed.
@@ -661,7 +661,7 @@ Both theorems hold on 32- and 64-bit platforms.
 Their proofs do not select a platform word size.
 B6 records the slice representation and extraction boundaries.
 
-The Rust integration tests run the 20 bounded cases from `tests/KnownAnswers.lean` and Core's 52-value power-of-two sweep.
+The Rust integration tests run the 20 bounded cases from `tests/KnownAnswers/Serialization.lean` and Core's 52-value power-of-two sweep.
 The expected values and errors come from Core's assertions and a reading of D1 and D21.
 These tests run the compiled Rust reader, without running Core or the generated Lean model.
 

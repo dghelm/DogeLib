@@ -29,7 +29,7 @@ decode [0x78, 0x56, 0x34]        = none
 
 Dogecoin Core `v1.14.9` uses the same little-endian byte order for these integers, in `ser_writedata16` to `ser_writedata64` and `ser_readdata16` to `ser_readdata64` of `src/serialize.h` (SOURCES.md, D1).
 That agreement comes from a reading of the source code.
-`lake test` also checks the compiled codecs on fields of Dogecoin's genesis block, and `tests/KnownAnswers.lean` records their provenance.
+`lake test` also checks the compiled codecs on fields of Dogecoin's genesis block, and `tests/KnownAnswers/Serialization.lean` records their provenance.
 
 ## Specification and properties
 

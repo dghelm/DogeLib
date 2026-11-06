@@ -60,7 +60,7 @@ On a shared machine, prefix each command with `taskset -c 0-3 nice -n 10` for a 
 cargo +nightly-2026-09-17 test --locked --manifest-path Refinement/Rust/Cargo.toml --jobs 4
 ```
 
-The integration tests run the compiled Rust reader on the 20 bounded cases recorded in `tests/KnownAnswers.lean`.
+The integration tests run the compiled Rust reader on the 20 bounded cases recorded in `tests/KnownAnswers/Serialization.lean`.
 Those cases come from Core's serialization assertions and a reading of D1 and D21.
 They include all three errors, size boundaries and unread trailing bytes.
 The second test repeats Core's 52-value power-of-two sweep through `MAX_SIZE`.

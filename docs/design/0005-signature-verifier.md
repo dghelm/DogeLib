@@ -268,7 +268,7 @@ The `transaction` checker of `script.verify_legacy` uses `coreVerifier`.
 The `signature_verifier` reason then never occurs, and the oracle and the comparator drop it (decision 4).
 Add an operation `pubkey.verify` with fields `pubkey_hex`, `sig_hex` and `digest_hex` that returns `{"valid": b}`.
 The Core harness answers it with `CPubKey(pubkey).Verify(uint256(digest), sig)`, with `digest_hex` as the 32 bytes of the `uint256` in storage order.
-Under the policy of 2026-11-06, these changes settle in the stage 3 pull request and need no new format name.
+The format is `dogelib-oracle/1`. Under its [development policy](../oracle.md#format-stability), these changes settle in the stage 3 pull request and need no new format name.
 
 Exit conditions:
 
@@ -363,7 +363,7 @@ Each proposal awaits the maintainer's decision:
 | 1 | Verifier backend | Option A: a pure Lean verifier adapted from EthLib, with the curve arithmetic unchanged. It replaces the choice of "a trusted backend for comparison" in design record 0003, section 8. Options B and C stay out of scope. | Proposed |
 | 2 | Speed | Keep EthLib's affine arithmetic, at about 65 milliseconds per verification. A faster executable path waits until a stream needs it, and then needs an equality theorem with the affine definition. | Proposed |
 | 3 | Proofs that need Mathlib | No adopted proof in the first lanes. The theorems of section 9 that need no Mathlib come first. A later lane proposes a package for the others. | Proposed |
-| 4 | Oracle surface | The `transaction` checker uses `coreVerifier`, and the reason `signature_verifier` is removed. Add `pubkey.verify`. Both settle in the stage 3 pull request under the policy of 2026-11-06. | Proposed |
+| 4 | Oracle surface | The `transaction` checker uses `coreVerifier`, and the reason `signature_verifier` is removed. Add `pubkey.verify`. Both settle in the stage 3 pull request under the [development policy](../oracle.md#format-stability) of `dogelib-oracle/1`. | Proposed |
 | 5 | Signer for fixtures | A program built with the pinned Core harness, which calls `CKey::Sign` with fixed test keys. DogeLib does not sign. | Proposed |
 | 6 | Rust work | Implementation refinement and Rust extraction stay outside this scope. | Proposed |
 

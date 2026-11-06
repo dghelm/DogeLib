@@ -2644,6 +2644,141 @@ def check : IO Nat := do
 end KnownAnswers.Block
 
 /-!
+## `CAuxPow::check`
+
+`tests/block/check-auxpow.json` holds the 26 deterministic cases of Core's `check_auxpow` and the boundary cases of design record 0004, stage 3.
+`tests/block/import_check_auxpow.py` built their bytes with Python, independently of DogeLib.
+The expected Boolean of a Core case is its `BOOST_CHECK`.
+The expected Boolean of a boundary case is argued from the source.
+
+`error_line` names the `return error` of `src/auxpow.cpp` that the case reaches, worked out by reading the source.
+The test compares it with the Lean diagnostic. That comparison checks the Lean error order. It is not evidence from Core.
+
+The six mainnet headers of `tests/block/auxpow-headers.json` are checked with their own hash and chain ID and the mainnet value of `fStrictChainId`.
+-/
+
+namespace KnownAnswers.AuxPowCheck
+open DogeLib DogeLib.Block DogeLib.Serialization
+open KnownAnswers.Sha256Cavp (parseHex)
+open KnownAnswers.Block (require jsonFile)
+
+/-- The line of `src/auxpow.cpp` whose `return error` each error stands for (D55). -/
+def errorLine : AuxPowCheckError → Nat
+  | .notCoinbase => 85
+  | .parentHasChainId => 88
+  | .chainBranchTooLong => 91
+  | .merkleRootIncorrect => 102
+  | .noInputs => 106
+  | .missingChainRoot => 120
+  | .multipleMarkers => 127
+  | .markerNotBeforeRoot => 129
+  | .rootTooLate => 137
+  | .missingSizeAndNonce => 145
+  | .sizeMismatch => 152
+  | .wrongIndex => 158
+
+/-- One record: a label, the payload bytes, the arguments of `check`, the expected result and the expected error line. -/
+structure Case where
+  label : String
+  payload : List UInt8
+  hashAux : Hash256
+  chainId : Int32
+  strict : Bool
+  expected : Bool
+  errorLine : Option Nat
+
+/-- Parse one record of `check-auxpow.json`. -/
+def parseCase (j : Lean.Json) : Except String Case := do
+  let kind ← j.getObjValAs? String "kind"
+  let label ← if kind == "check_auxpow" then do
+      pure s!"check_auxpow line {(← (← j.getObjVal? "line").getNat?)}"
+    else do pure s!"boundary {(← j.getObjValAs? String "name")}"
+  let payload := (← parseHex (← j.getObjValAs? String "payload_hex")).toList
+  let some hashAux := Hash256.ofBytes? (← parseHex (← j.getObjValAs? String "hash_aux_block_hex")).toList
+    | throw s!"{label}: hash_aux_block_hex is not 32 bytes"
+  let chainId ← (← j.getObjVal? "chain_id").getInt?
+  let errorLine ← match (← j.getObjVal? "error_line") with
+    | .null => pure none
+    | v => some <$> v.getNat?
+  let strict ← j.getObjValAs? Bool "strict_chain_id"
+  let expected ← j.getObjValAs? Bool "expected"
+  return { label, payload, hashAux, chainId := Int32.ofInt chainId, strict, expected, errorLine }
+
+/-- Check every record of `tests/block/check-auxpow.json`. -/
+def checkCases : IO Nat := do
+  let doc ← jsonFile "tests/block/check-auxpow.json"
+  let rows ← match doc.getObjValAs? (Array Lean.Json) "cases" with
+    | .ok rows => pure rows
+    | .error e => throw (IO.userError e)
+  let mut failures ← require "check-auxpow: 42 records" (rows.size == 42)
+  let mut core := 0
+  for row in rows do
+    let c ← match parseCase row with
+      | .ok c => pure c
+      | .error e => throw (IO.userError e)
+    if c.label.startsWith "check_auxpow" then core := core + 1
+    match AuxPow.read .allowWitness c.payload with
+    | .ok (a, []) =>
+      let result := a.check c.hashAux c.chainId c.strict
+      let accepted := match result with | .ok () => true | .error _ => false
+      failures := failures + (← require s!"{c.label}: result" (accepted == c.expected))
+      let line := match result with | .ok () => none | .error e => some (errorLine e)
+      failures := failures + (← require s!"{c.label}: Lean diagnostic line {line}, expected {c.errorLine}"
+        (line == c.errorLine))
+    | _ => failures := failures + (← require s!"{c.label}: payload reads completely" false)
+  failures := failures + (← require "check-auxpow: 26 Core cases" (core == 26))
+  IO.println s!"AuxPoW check: {rows.size} records, {core} from check_auxpow"
+  return failures
+
+/-- Check the six mainnet AuxPoW headers with their own hash, their own chain ID and `fStrictChainId` true (D14 lines 120 to 121). -/
+def checkMainnet : IO Nat := do
+  let rows ← match (← jsonFile "tests/block/auxpow-headers.json").getArr? with
+    | .ok rows => pure rows
+    | .error e => throw (IO.userError e)
+  let mut failures ← require "AuxPoW check: six mainnet headers" (rows.size == 6)
+  for row in rows do
+    let parsed : Except String (Nat × List UInt8) := do
+      return (← (← row.getObjVal? "height").getNat?, (← parseHex (← row.getObjValAs? String "block")).toList)
+    let (height, block) ← match parsed with
+      | .ok r => pure r
+      | .error e => throw (IO.userError e)
+    match BlockHeader.read .allowWitness block with
+    | .ok (⟨pure, some a⟩, _) =>
+      failures := failures + (← require s!"AuxPoW check: mainnet {height} chain ID 98" (pure.chainId == 98))
+      failures := failures + (← require s!"AuxPoW check: mainnet {height}"
+        (match a.check pure.getHash pure.chainId true with | .ok () => true | .error _ => false))
+    | _ => failures := failures + (← require s!"AuxPoW check: mainnet {height} reads with a payload" false)
+  IO.println s!"AuxPoW check: {rows.size} mainnet headers"
+  return failures
+
+/-- Small known answers of the helpers, from Core's definitions (D55). -/
+def checkHelpers : IO Nat := do
+  let mut failures := 0
+  -- `GetChainId` of version 0x00620104, and the arithmetic shift of a negative version.
+  failures := failures + (← require "chain ID of 0x00620104"
+    ((⟨0x00620104, Hash256.zero, Hash256.zero, 0, 0, 0⟩ : PureBlockHeader).chainId == 98))
+  failures := failures + (← require "chain ID of 0xffff0104"
+    ((⟨0xffff0104, Hash256.zero, Hash256.zero, 0, 0, 0⟩ : PureBlockHeader).chainId == -1))
+  failures := failures + (← require "chain ID of 0x80000000"
+    ((⟨0x80000000, Hash256.zero, Hash256.zero, 0, 0, 0⟩ : PureBlockHeader).chainId == -32768))
+  -- The marker and the first-occurrence search.
+  failures := failures + (← require "marker bytes" (mergedMiningMarker == [0xfa, 0xbe, 0x6d, 0x6d]))
+  failures := failures + (← require "first occurrence" (findSubseq? [1, 2] [0, 1, 2, 1, 2] == some 1))
+  failures := failures + (← require "no occurrence" (findSubseq? [1, 2] [0, 1, 3, 2] == none))
+  failures := failures + (← require "occurrence at the end" (findSubseq? [1, 2] [0, 1, 2] == some 1))
+  failures := failures + (← require "needle longer than input" (findSubseq? [1, 2, 3] [1, 2] == none))
+  return failures
+
+/-- Run every `CAuxPow::check` known answer. -/
+def check : IO Nat := do
+  let mut failures ← checkHelpers
+  failures := failures + (← checkCases)
+  failures := failures + (← checkMainnet)
+  IO.println s!"AuxPoW check known answers: {failures} failures"
+  return failures
+end KnownAnswers.AuxPowCheck
+
+/-!
 ## RIPEMD-160 and Hash160
 
 The checks read immutable expectations from `tests/cryptography/ripemd160/vectors.json`.
@@ -4800,6 +4935,7 @@ def main : IO UInt32 := do
   let compact ← KnownAnswers.Work.checkCompact
   let retarget ← KnownAnswers.Work.checkRetarget
   let blocks ← KnownAnswers.Block.check
+  let auxpowCheck ← KnownAnswers.AuxPowCheck.check
   let mainnetHeaders ← KnownAnswers.Work.MainnetHeaders.check
   let proofOfWork ← KnownAnswers.Work.checkProofOfWorkCases
   let scriptReader ← KnownAnswers.Script.check
@@ -4814,5 +4950,5 @@ def main : IO UInt32 := do
   let scriptVerify ← KnownAnswers.ScriptVerify.check
   let multisigRecovery ← KnownAnswers.MultisigRecovery.check
   let txSpends ← KnownAnswers.TxSpends.check
-  return if pbkdf2 + hmac + secp256k1 + sha1 + blocks + short + long + ripemd + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts + proofOfWork + scriptReader + scriptNum + scriptEval + signatureCode + signatureEncoding + scriptSignature + scriptVerify + multisigRecovery + txSpends == 0 then 0 else 1
+  return if pbkdf2 + hmac + secp256k1 + sha1 + blocks + auxpowCheck + short + long + ripemd + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts + proofOfWork + scriptReader + scriptNum + scriptEval + signatureCode + signatureEncoding + scriptSignature + scriptVerify + multisigRecovery + txSpends == 0 then 0 else 1
 

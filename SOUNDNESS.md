@@ -181,7 +181,9 @@ Those belong to the definitions of the objects that are hashed.
 `encode_length` establishes exactly 80 bytes, and `getHash_val` identifies their double SHA-256 digest.
 These claims cover the pure header even when its version sets the AuxPoW bit.
 Core's full `CBlockHeader` then carries an AuxPoW payload, which the full header codec of the next subsection reads (D41).
-No theorem establishes scrypt proof of work, AuxPoW validity or contextual header validity.
+No theorem establishes scrypt proof of work, `CheckAuxPowProofOfWork` or contextual header validity.
+
+[The AuxPoW check](#the-auxpow-check) covers `CAuxPow::check` alone.
 
 `computeMerkleRoot_nil` and `computeMerkleRoot_singleton` cover empty and one-leaf lists.
 `merkleLevel_duplicate_last` equates the next levels before and after explicit duplication of an odd level's final leaf.
@@ -248,6 +250,65 @@ The pinned Core harness has not yet read these full headers. That check belongs 
 
 By `#print axioms`, the round trips and truncation theorems depend on `propext`, `Classical.choice` and `Quot.sound`, and the other codec theorems on `propext` and `Quot.sound`.
 The two concrete examples are checked by kernel reduction with `rfl`.
+
+### The AuxPoW check
+
+`AuxPow.check` follows `CAuxPow::check` (D55, lines 80 to 161) statement by statement.
+Its helpers follow `CheckMerkleBranch` (lines 189 to 206), `getExpectedIndex` (lines 163 to 187), `GetChainId` (D10) and `std::search`.
+Each `return error` of the source has one constructor of `AuxPowCheckError`, which names its line, and `check` returns the first failing test.
+The source review, not a theorem, connects these definitions to Core.
+
+`check` takes `fStrictChainId` as a Boolean, because it reads no other field of the parameter record.
+Which record a caller selects, and so which value it passes, is outside this operation.
+The block hash and the chain ID are arguments: `CheckAuxPowProofOfWork` passes the merge-mined header's own hash and its own chain ID (C7 of design record 0004).
+
+`AuxPow.check_eq_ok_iff` characterizes acceptance for every payload and every argument.
+`AuxPow.check_ok_binding` restates it as equalities of hashes and script bytes.
+
+The parent's `hashMerkleRoot` is the left fold of the transaction ID along the coinbase branch.
+The first input's script contains the chain root with its bytes reversed, first at an offset that `MarkerCondition` allows.
+The eight bytes after it encode `2^h` and a nonce, and `nChainIndex` is `getExpectedIndex` of that nonce, the chain ID and `h`.
+The chain root is `checkMerkleBranch` of the block hash along the chain branch at `nChainIndex`.
+
+These equalities concern computed hashes only.
+No theorem says that another header, transaction or branch cannot reach the same hashes.
+That claim needs collision resistance of double SHA-256, which DogeLib does not model.
+No theorem says that work cannot be reused across chains, or that two chains cannot share a slot.
+
+`findSubseq?_eq_some_iff` and `searchChainRoot_eq_ok_iff` state the search over first occurrences, as `std::search` returns them.
+`checkMerkleBranch_eq_fold` takes the side of step `k` from bit `min k 31` of the index.
+`getExpectedIndex_eq` gives the closed form modulo 2^32 for `h < 32`, and `getExpectedIndex_mod64` proves the source comment's claim that 64-bit arithmetic gives the same result, for `h ≤ 32`.
+
+C++11 leaves the right shift of a negative `int` implementation-defined (S1, 5.8 paragraph 3).
+`GetChainId` shifts the signed version, and `CheckMerkleBranch` shifts a negative `nChainIndex`.
+DogeLib uses the arithmetic shift in both places, as GCC and Clang do.
+
+For `nChainIndex`, the choice cannot change acceptance: `AuxPow.check_ok_chainIndex_lt` shows that `check` rejects every negative `nChainIndex`.
+It can change which error a rejected payload reports.
+For the chain ID, the choice decides the chain ID of a header whose version is negative, and so it can change the result.
+A Core comparison of such headers assumes a compiler with the arithmetic shift.
+
+`getExpectedIndex` takes its shift modulo 32 when `h ≥ 32`, where Core's `1 << h` is undefined.
+`check` calls it only with `h ≤ 30`, so the difference never reaches `check`.
+
+The known answers in `tests/block/check-auxpow.json` have two kinds of input.
+The 26 `check_auxpow` cases transcribe the construction of Core's test (D56, lines 186 to 323) into an independent Python builder.
+Their expected Booleans come from the `BOOST_CHECK` assertions.
+
+The transcription has not yet been checked against bytes that Core itself writes.
+A transcription mistake changes the bytes but not the expected Boolean.
+For an accepted case, such a mistake would very likely make the test fail.
+For a rejected case, wrong bytes can still be rejected, so the Boolean alone would not detect the mistake.
+The expected error line narrows that gap, but it comes from the same reading of the source as the transcription.
+
+The maintainer deferred the Core-recorded inputs of stage 3 to stage 5 on pull request #99, without waiving them.
+Stage 5 does not exit until the Core harness builds these 26 cases with Core's own classes and their bytes match the fixture.
+
+The 16 boundary cases take both their bytes and their expectations from the author's reading of D55, so a misreading can be shared by both.
+The six mainnet headers are accepted with mainnet's `fStrictChainId`.
+Core's result for them belongs to the stage 5 harness.
+
+By `#print axioms`, the search and `getExpectedIndex_mod64` theorems depend on `propext` and `Quot.sound`, and the others on `propext`, `Classical.choice` and `Quot.sound`.
 
 ### RIPEMD-160 and Hash160
 
@@ -1402,7 +1463,8 @@ Some concrete examples use `decide +kernel`, which the kernel checks without com
 
 These parts are not proved and not specified:
 
-- Scrypt, full header validity and AuxPoW.
+- Scrypt, full header validity and `CheckAuxPowProofOfWork`.
+  `CAuxPow::check` alone is specified in [the AuxPoW check](#the-auxpow-check).
   The supplied-hash check is specified separately below.
 
 The word-model refinements below cover multiplication, division, both shifts, bit length and low-64-bit extraction.

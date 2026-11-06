@@ -76,7 +76,7 @@ The signature opcodes run these checks.
 `Script.Signature` and the signature opcodes of `Script.Eval` complete stage 3.
 `evalScript` takes an optional checker: Core's `BaseSignatureChecker` as `baseChecker`, or `transactionChecker` with an elliptic-curve verifier as a parameter.
 `checkMultisigStep_matching` proves that `OP_CHECKMULTISIG` succeeds exactly when the signatures pair in order with a subsequence of the keys, given total checker answers.
-The oracle's `script.eval` still runs without a checker. Running it with `baseChecker` changes the oracle results and needs a maintainer decision.
+The `/6` oracle keeps `none` as the default checker and accepts an explicit `base` selection for `script.eval`.
 
 `Script.Verify` and the lock-time opcodes complete stage 4.
 CLTV and CSV follow Core with a checker, and `transactionChecker` gives Core's `CheckLockTime` and `CheckSequence` for the selected input.
@@ -91,7 +91,11 @@ The one exception is a checker answer of `none`, which gives `unsupported`.
 Its other `none` cases, an index outside the inputs and a script code of 2^64 bytes or more, are unreachable through `verifyLegacySpend`.
 Without a checker, the signature opcodes and CLTV and CSV with their flags stay unsupported.
 
-Stage 5 is next: `script.verify_legacy` in the oracle and `script.eval` with `baseChecker`, in a new oracle format.
+Stage 5 exposes `script.verify_legacy` and checker selection in oracle format `/6`.
+The Core comparison covers all 925 inside-milestone Script corpus records with both checkers.
+Base gives 925 compared verdicts, while transaction gives 881 compared verdicts and 44 unsupported verifier results.
+Each checker also has 2,000 legacy mutations under seed `20261106`, with unsupported results separate from agreement.
+These streams have zero disagreements. The Lean adapter has no ECDSA backend.
 
 Steps 0 and 0b follow design record 0002: the first contributions adopt audited codec foundations and then define Dogecoin's bounded decoding contract. They replace the original plan to build fixed-width encodings and CompactSize from scratch. Design record 0002 preferred a pinned btc-verified dependency first. The decisions below choose an adaptation instead, because btc-verified's toolchain, file structure and trust policy all differ from EthLib's.
 
@@ -151,6 +155,9 @@ From design record 0001, section 9. A first release has:
 
 ## Decisions
 
+The maintainer authorized oracle format `dogelib-oracle/6` on 2026-11-05, under an overnight authorization that covers new oracle format versions.
+It adds the `checker` field to `script.eval` and the `script.verify_legacy` operation.
+
 | Decision | Choice | Reason | Confirmed by |
 | --- | --- | --- | --- |
 | Model project | EthLib | Stronger separation of specification, property and model, and explicit soundness documentation | Maintainer, 2026-11-03 |
@@ -159,7 +166,7 @@ From design record 0001, section 9. A first release has:
 | Proof-trust policy | EthLib's: standard axioms only, no tactic that trusts compiled code | See SOUNDNESS.md, C2 | Adopted |
 | btc-verified reuse form | Adaptation into DogeLib's layout, with provenance, not a dependency | Different toolchain, colocated proofs, and `bv_decide` steps | Step 0b, codec foundations, with Lean core and `Std` only |
 | Writing standard | EthLib's `WRITING.md` and checker, with DogeLib vocabulary | Follows the model project | Adopted |
-| Oracle record format | JSON Lines, `dogelib-oracle/5`, in [docs/oracle.md](docs/oracle.md) | One request and one response per line, so a harness can keep the oracle open. Hashes in both byte orders, preimages and individual Script calls. | Format `/4`: maintainer, PR #67. Format `/5`: maintainer, PR #74. |
+| Oracle record format | JSON Lines, `dogelib-oracle/6`, in [docs/oracle.md](docs/oracle.md) | One request and one response per line, so a harness can keep the oracle open. Hashes in both byte orders, preimages, checker selection and legacy Script verification. | Format `/4`: maintainer, PR #67. Format `/5`: maintainer, PR #74. Format `/6`: maintainer, 2026-11-05, overnight authorization. |
 | Core compatibility pin | Dogecoin Core `v1.14.9`, commit `e0a1c15` | The latest Core release on 2026-11-03 | Maintainer, 2026-11-03, issue #5 |
 | First signature-proof domain | Script code with no instruction that fails to parse, in a transaction with fewer than 2^32 inputs and 2^32 outputs | `legacySignatureHashPlan_eq_reference` holds on it. On a script that ends in a short push the two forms differ. | Step 5, `proof/legacy-sighash-reference` (#27) |
 | Rust refinement tools | Aeneas `d1e177b` and Charon `a58d159` (Adopted in SOURCES.md). Mathlib only in the separate `Refinement` Lake package. No trust-policy exception for Aeneas's axioms | Both tools target Lean `v4.35.0`. EthLib requires Mathlib. EthLib's trust policy allows only the three standard axioms | Maintainer, 2026-11-04, PR #33 |

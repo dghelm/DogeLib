@@ -956,7 +956,9 @@ That the definitions are Core's rests on a reading of D3 and D25 (A1) and on the
 `lake test` runs 48 signature-opcode cases with a lookup-table test checker, 5 `transactionChecker` cases and one `baseChecker` case, with results written by hand from D3.
 The lookup table is a test backend and says nothing about which signatures are valid.
 The corpus records add 122 comparisons with Core's expected results, from 745 to 867.
-The oracle's `script.eval` runs without a checker, so no comparison with Core's compiled code covers the signature opcodes yet.
+
+The `/6` oracle's `script.eval` can select `baseChecker`, and its legacy operation can select a transaction checker.
+Finite Core comparisons cover signature-opcode results that do not need the unavailable Lean verifier.
 By `#print axioms` with Lean `v4.35.0`:
 
 | Theorem | Axioms |
@@ -1013,7 +1015,7 @@ A result of `verifyLegacySpend` holds for Core only under the verifier-agreement
 That the definitions are Core's rests on a reading of D3, D4, D24 and D48 (A1), and on the known answers.
 `lake test` runs 38 lock-time cases, 20 `verifyScript` cases, 11 `isPushOnly` cases and 3 `verifyLegacySpend` cases, with results written by hand from those sources.
 On `script_tests.json`, `verifyScript` with `transactionChecker` agrees with Core's expected result on 881 records, from 867, and disagrees on none.
-The oracle has no `VerifyScript` operation yet, so no comparison with Core's compiled code covers `verifyScript` or the lock-time opcodes with a checker.
+The `/6` oracle exposes `verifyScript` through `script.verify_legacy`, with base and transaction checker selections.
 By `#print axioms` with Lean `v4.35.0`:
 
 | Theorem | Axioms |
@@ -1545,8 +1547,10 @@ The Core harness calls the pinned hash classes, pure header methods and `Compute
 Finite fixture and boundary comparisons cover the recorded inputs only.
 They establish no all-input Core equivalence, cryptographic security, AuxPoW validity, scrypt result or full block validity.
 
-The Script adapters call `readInstruction` and `evalScript` directly, and `evalScript` runs without a signature checker.
+The Script adapters call `readInstruction`, `evalScript`, `verifyScript` and `verifyLegacySpend`.
+Evaluation selects no checker or `baseChecker`. Legacy verification selects `baseChecker` or `transactionChecker` with an unavailable verifier.
 They encode Script errors with the names in the [shared table](harness/core/script_error_names.inc).
+
 No theorem covers their JSON conversions.
 Adapter limits allow scripts above 10,000 bytes and caller stacks above 1,000 items, so those specification boundaries remain observable.
 The adapter bounds scripts and individual items to 1 MiB, stacks to 4,096 items, and total caller item bytes to 4 MiB.
@@ -1562,7 +1566,21 @@ The comparator reports their reasons and Core outcomes separately, and compares 
 
 Two-call corpus compositions pass only the successful main stack between calls.
 They ignore each record's witness and do not run `VerifyScript`, evaluate P2SH or reproduce a transaction signature checker.
-Finite comparisons establish neither complete-spend validity nor equivalence to Core on all inputs.
+
+Separate legacy streams call `VerifyScript` on inside-milestone corpus records and seeded mutations with each checker.
+The transaction selection checks the index and InputContext count bounds before execution.
+It uses the supplied previous-output script, without a UTXO lookup.
+Lean reports `signature_verifier` when execution reaches the missing ECDSA backend.
+The comparator reports Core's verdict for that request separately and excludes it from agreement.
+
+Core uses `TransactionSignatureChecker`, `CPubKey::Verify` and libsecp256k1, with `ECCVerifyHandle` for the request loop (D3, D50).
+The harness signs nothing and does not need `ECC_Start`.
+These libraries, their key and signature parsing, and their compiled binary form a trusted runtime boundary, not a Lean proof.
+
+The harness rejects flag combinations that violate Core's WITNESS and CLEANSTACK assertions without altering the flags.
+The comparator counts these requests separately as `harness-refused` only after it checks both the refusal and Lean's unsupported-flags answer.
+Neither outcome is comparison agreement or a Script verdict.
+Finite comparisons establish neither full transaction validity nor equivalence to Core on all inputs.
 
 A wrong conversion could make the oracle and Core disagree, or agree, for a reason outside the specification.
 
@@ -1577,7 +1595,7 @@ A user of the comparison trusts these parts of it:
   Any other exception from Core stops the harness, so it cannot pass as a result.
 - The `plan` label of `sighash.legacy`. The harness computes it from Core's conditions instead of observing it. It stops if the label is `fixed_digest` and Core's digest is not the value one.
 - The comparator, `scripts/compare_core.py`.
-  Its self-test, `scripts/test_compare_core.py`, requires two passing controls and 76 mutations that each fail with the code they target.
+  Its self-test, `scripts/test_compare_core.py`, requires two passing controls and 86 mutations that each fail with the code they target.
 - For `sighash.legacy`, the oracle's preimage is checked by hashing it, not byte by byte: Core does not expose its preimage.
 
 Both programs could be wrong in the same way on an input that the comparison does not send.

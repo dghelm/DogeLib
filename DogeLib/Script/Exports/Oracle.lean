@@ -1,15 +1,17 @@
 module
 
 public import DogeLib.Exports.Json
-public import DogeLib.Script.Eval
+public import DogeLib.Script.Verify
+public import DogeLib.Transaction.Exports.Oracle
 
 /-!
 # `Script.Exports.Oracle`
 
-Script adapters for `dogelib-oracle/5` (docs/oracle.md).
+Script adapters for `dogelib-oracle/6` (docs/oracle.md).
 The specification supplies instruction results, Script errors and unsupported reasons.
 Adapter resource limits precede execution and do not describe consensus rules.
-Core sources are SOURCES.md D24 (`GetOp2`), D3 (`EvalScript`) and D25 (`BaseSignatureChecker`).
+The transaction decoder and error conversion come from `Transaction.Exports.Oracle`.
+Core sources are SOURCES.md D24 (`GetOp2`), D3 (`EvalScript` and `VerifyScript`) and D25 (`BaseSignatureChecker`).
 -/
 
 @[expose] public section
@@ -23,11 +25,11 @@ open DogeLib.Exports
 def resourceLimit : Failure := .spec (Json.mkObj [("kind", "adapter"), ("reason", "resource_limit")])
 
 /-- Script bytes, at most 1 MiB, before the specification checks its 10,000-byte limit. -/
-def argScript (args : Args) : Except Failure (List UInt8) := do
-  let value ← arg args "bytes_hex"
+def argScript (args : Args) (key : String := "bytes_hex") : Except Failure (List UInt8) := do
+  let value ← arg args key
   if let .str text := value then
     if text.utf8ByteSize > 2097152 then throw resourceLimit
-  let bytes ← argHex args "bytes_hex"
+  let bytes ← argHex args key
   return bytes
 
 /-- Caller stack, bottom first, bounded by 4,096 items, 1 MiB per item and 4 MiB in total. -/
@@ -70,6 +72,56 @@ def readJson (pc : Nat) : ReadResult → Json
       ("part", .str (match part with | .lengthField => "length_field" | .payload => "payload")),
       ("cursor", natJson cursor)]
 
+/-- A named adapter failure before Script execution. -/
+def adapterFailure (reason : String) : Failure :=
+  .spec (Json.mkObj [("kind", "adapter"), ("reason", .str reason)])
+
+/-- The selected checker, with `none` as the default only for evaluation requests. -/
+def argChecker (args : Args) (evaluation : Bool) : Except Failure String := do
+  let value ← match args.get? "checker" with
+    | some v => pure v
+    | none => if evaluation then pure (.str "none") else arg args "checker"
+  let .str name := value | throw (.request "checker must be a string")
+  unless name == "base" || (if evaluation then name == "none" else name == "transaction") do
+    throw (.request "unknown checker")
+  return name
+
+/-- One spend verdict, without an intermediate stack or a claim about an unavailable verifier. -/
+def verifyJson (transaction : Bool) : VerifyResult → Json
+  | .accepted => Json.mkObj [("result", .str "accepted"), ("script_error", .str "OK")]
+  | .rejected e => Json.mkObj [("result", .str "rejected"), ("script_error", .str e.name)]
+  | .unsupported u =>
+    let fields := match transaction, u with
+      | true, .signatureOpcode op => [("reason", .str "signature_verifier"), ("opcode", natJson op.toNat)]
+      | _, _ => unsupportedFields u
+    Json.mkObj (("result", .str "unsupported") :: fields)
+
+/-- One legacy input, after complete base decoding and explicit context and script bounds. -/
+def verifyLegacy : Operation where
+  name := "script.verify_legacy"
+  args := ["tx_hex", "input_index", "prevout_script_hex", "flags", "checker"]
+  run args := do
+    let txBytes := ByteSlice.ofByteArray (ByteArray.mk (← argHex args "tx_hex").toArray)
+    let index ← argU32 args "input_index"
+    let script ← argScript args "prevout_script_hex"
+    let flags ← argU32 args "flags"
+    let checker ← argChecker args false
+    let tx ← match Transaction.Transaction.decodeBaseCompleteSlice txBytes with
+      | .ok tx => pure tx
+      | .error e => throw (.spec ((Transaction.Exports.completeReadErrorJson e).setObjVal! "argument" "tx_hex"))
+    if hi : index.toNat < tx.inputs.val.length then
+      if hn : tx.inputs.val.length < 2 ^ 32 then
+        if ho : tx.outputs.val.length < 2 ^ 32 then
+          let ctx : InputContext := ⟨tx, index, hi, hn, ho⟩
+          if ctx.input.scriptSig.bytes.val.length > 1048576 then throw resourceLimit
+          let some counted := Serialization.CountedList.ofList? script | throw resourceLimit
+          return if checker == "base" then
+            verifyJson false (verifyScript baseChecker flags ctx.input.scriptSig.bytes.val script)
+          else verifyJson true (verifyLegacySpend ctx ⟨counted⟩ flags (fun _ _ _ => none))
+        else throw (adapterFailure "context_bounds")
+      else throw (adapterFailure "context_bounds")
+    else throw (adapterFailure "input_index_out_of_range")
+
 /-- Script operations in the oracle format. -/
 def operations : List Operation := [
   { name := "script.read_op", args := ["bytes_hex", "cursor"], run := fun args => do
@@ -77,10 +129,12 @@ def operations : List Operation := [
       let cursor ← argU32 args "cursor"
       unless cursor.toNat ≤ bytes.length do throw (.request "cursor exceeds script length")
       return readJson cursor.toNat (readInstruction bytes cursor.toNat) },
-  { name := "script.eval", args := ["bytes_hex", "flags", "stack_hex"], run := fun args => do
+  { name := "script.eval", args := ["bytes_hex", "flags", "stack_hex", "checker"], run := fun args => do
       let bytes ← argScript args
       let flags ← argU32 args "flags"
       let stack ← argStack args
-      return evalJson (evalScript none flags bytes stack) }]
+      let checker ← argChecker args true
+      return evalJson (evalScript (if checker == "base" then some baseChecker else none) flags bytes stack) },
+  verifyLegacy]
 
 end DogeLib.Script.Exports

@@ -10,7 +10,7 @@ public import DogeLib.Script.Exports.Oracle
 /-!
 # `Exports.Oracle`
 
-The oracle's response to one line of input, in the record format `dogelib-oracle/5` of `docs/oracle.md`.
+The oracle's response to one line of input, in the record format `dogelib-oracle/6` of `docs/oracle.md`.
 
 A line is one JSON object, the request: `{"id": ..., "op": "...", ...arguments}`.
 The response is `{"id": ..., "ok": {...}}` or `{"id": ..., "error": {...}}`.
@@ -26,7 +26,7 @@ namespace DogeLib.Exports
 open Lean (Json)
 
 /-- The name of the record format. -/
-def formatName : String := "dogelib-oracle/5"
+def formatName : String := "dogelib-oracle/6"
 
 /-- The `ok` object of `oracle.version`. -/
 def versionJson : Json := Json.mkObj [("format", .str formatName)]

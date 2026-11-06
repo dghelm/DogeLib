@@ -1,6 +1,6 @@
 # Oracle fixtures
 
-`requests.jsonl` holds 192 requests to `dogelib-oracle`, and `expected.jsonl` holds the expected response on the same line.
+`requests.jsonl` holds 316 requests to `dogelib-oracle`, and `expected.jsonl` holds the expected response on the same line.
 `scripts/test_oracle.py` compares them, with two exceptions.
 It compares a `request` error by kind only.
 An expected `preimage_hex` of `"*"` requires a preimage whose double SHA-256 is the digest.
@@ -72,5 +72,21 @@ This fixture comparison does not chain the oracle's intermediate digests.
 The `script-read-*` fixtures follow `GetOp2` (SOURCES.md D24), with exact push bytes and failure cursors read from its branches.
 The `script-eval-*` fixtures follow `EvalScript` (D3): stack effects, false-top acceptance, `OP_RETURN`, skipped signature opcodes and unsupported capabilities.
 Request errors follow the argument rules in [the oracle format](../../docs/oracle.md#script-arguments-and-results).
-`scripts/test_oracle.py` also checks ten generated adapter resource boundaries, with expectations from the documented limits.
+`scripts/test_oracle.py` also checks eighteen generated adapter resource boundaries, with expectations from the documented limits.
 These fixtures do not treat Core's spending corpus expectations as individual `EvalScript` results.
+
+## Legacy Script verification
+
+The `/6` fixtures select `base` for CHECKSIG, zero-of-zero multisig with a nonempty dummy, and CLTV.
+D25's `BaseSignatureChecker` returns false for signatures and lock times.
+D3's multisig branch accepts a nonempty dummy without NULLDUMMY and rejects it with `SIG_NULLDUMMY` under NULLDUMMY.
+The P2SH fixture spends a push of `OP_1` against its HASH160 template (D3, D48).
+Python hashlib supplies that digest independently.
+
+The transaction-checker fixture supplies a nonempty signature and a 33-byte compressed public-key encoding.
+It reaches the unavailable verifier and reports `signature_verifier`, without a spend verdict.
+The key encoding need not represent a curve point for this unsupported result.
+The remaining cases follow the `/6` argument, complete-decoding and index contracts in `docs/oracle.md`.
+
+Four legacy fixtures use CLEANSTACK alone or WITNESS alone, with each checker.
+The supported-flag contract requires unsupported flags even though the harness refuses these combinations.

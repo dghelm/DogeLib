@@ -159,6 +159,38 @@ It also checks prefixes of the first vector and the zero-count, empty-output and
 The RFC errata search, read on 2026-11-06, has no correction to those vectors.
 No theorem or test here establishes agreement with compiled Core.
 
+### Scrypt RFC 7914 model
+
+`Cryptography.Hash.Scrypt.Spec` adapts verified-garbage's `Spec/Scrypt.lean` at the pin, under BSD-3-Clause.
+It retains lists of `BitVec 8`, 32-bit words, and the quadratic ROMix reference fill.
+The PBKDF2 model uses DogeLib's executable SHA-256 through HMAC.
+The scrypt definition has no FIPS-based equality theorem.
+`Pbkdf2.pbkdf2_eq_fips` remains a separate result with password and salt bounds.
+
+`blockMix_eq` expresses the output as the even-indexed `Y` blocks followed by the odd-indexed blocks, for every byte list and natural block parameter.
+`serialize_length`, `salsa_length` and `yAt_length` give 64-byte outputs.
+`blockMix_length` and `repeat_blockMix_length` preserve `128 * r` bytes under that input-length hypothesis.
+These structural lemmas adapt VG's `Proof/Scrypt/BlockMix.lean` and the length lemmas of `Proof/Scrypt/RoMix.lean`.
+They do not prove agreement with the RFC or Core (A1).
+
+`fillLoop_eq` relates sequential array fill to the reference list of iterates, for every step function, count, initial state and initial array.
+It equates both the stored states and the final state.
+`fill_eq_spec` specializes it to BlockMix and an empty array.
+The generic theorem applies to an implementation that stores whole states as array elements.
+It provides no flattening theorem for a flat word array or commutation theorem for a conversion between state types.
+Each of these two theorems, `blockMix_eq`, and the five length lemmas above depends on `propext` and `Quot.sound`, by `#print axioms`.
+
+The component operations are total outside their RFC length domains.
+Word reads supply zero for missing bytes, XOR truncates, and natural subtraction saturates at zero.
+The top-level `scrypt` checks the published parameter bounds and delegates the output upper bound to PBKDF2.
+The [errata review](tests/cryptography/scrypt/README.md#errata) records the retained parameter bound and Integerify interpretation (A1).
+The model introduces no cryptographic hypothesis and makes no side-channel or resource-bound claim (A3).
+
+The compiled known answers compare complete RFC 7914 outputs for Salsa20/8, BlockMix, ROMix and the `N = 16` scrypt case.
+The [test cost report](tests/cryptography/scrypt/README.md#test-cost) distinguishes those passes from timed-out optional cases.
+These comparisons rely on the compiler and runtime (B1), and are not kernel digest proofs (C2).
+There is no fixed Dogecoin executable, `powHash_eq_spec`, Core comparison or full header proof-of-work claim in this model.
+
 ### Double SHA-256
 
 `Sha256d.hash` is `CHash256` of Dogecoin Core (SOURCES.md, D8): SHA-256 applied to the SHA-256 digest of the message.

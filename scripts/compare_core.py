@@ -3,7 +3,7 @@
 Usage: python3 -I scripts/compare_core.py [--timeout SECONDS] [--quick] <dogelib-oracle> <core-oracle>
 
 The harness, harness/core/core_oracle.cpp, runs Dogecoin Core's own code and
-answers a projection of dogelib-oracle/6 (docs/oracle.md, "The Core harness").
+answers a projection of dogelib-oracle/1 (docs/oracle.md, "The Core harness").
 This script builds a deterministic stream of well-formed requests, runs each
 program once on the whole stream, and requires the two responses to every
 supported request to be equal as JSON values, except for the preimage projection: Core does not expose
@@ -40,7 +40,7 @@ from oracle_hash_block import header_fields, header_records, header_fixtures, me
 
 from oracle_script import script_sets, corpus_records, evaluation, validate_eval, adapter_limit_cases, legacy_sets, harness_refused, refused_set, tx_spend_sets, locktime_sets, refusal_precedence_set
 
-ORACLE_FORMAT = "dogelib-oracle/6"
+ORACLE_FORMAT = "dogelib-oracle/1"
 MAX_SIZE = 0x02000000
 SEED = 20261104
 MAX_REPORTS = 10

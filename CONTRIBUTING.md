@@ -346,6 +346,13 @@ fix(tx)!: keep output amounts as raw signed values
 build: pin Lean v4.35.0
 ```
 
+Before 0.1.0, the oracle and its Core harness are development interfaces that evolve with their fixtures and comparator.
+Routine schema changes within an approved scope follow ordinary independent review, without a separate maintainer decision or a new format name.
+These routine changes do not count as public-contract or fixture-format changes under this rule.
+The Core compatibility target, theorem weakening or domain reduction, new trust assumptions and agreed protocol semantics remain maintainer-only decisions.
+At and after 0.1.0, the maintainer sets the compatibility policy for outside consumers.
+See [format stability](docs/oracle.md#format-stability).
+
 ### Bodies
 
 The commit body says why, when the subject cannot.

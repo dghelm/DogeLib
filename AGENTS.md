@@ -185,6 +185,11 @@ Do not rewrite a correct claim only to make the checker quiet.
 
 After the maintainer approves a feature scope, the implementer may settle routine additive details in the pull request.
 These details can include response field shapes.
+
+Before 0.1.0, the oracle and its Core harness are development interfaces that evolve with their fixtures and comparator.
+Within an approved scope, a routine schema change needs ordinary independent review, without a separate maintainer decision or a new format name.
+At and after 0.1.0, the maintainer sets the compatibility policy for outside consumers.
+
 The maintainer reviews the finished pull request.
 The [maintainer-only list](#changes-that-need-a-maintainer) still applies.
 
@@ -228,6 +233,8 @@ General merge authority never covers these changes:
 - A change to a pin in [SOURCES.md](SOURCES.md), including the Dogecoin Core compatibility target.
 - An exception to the trust policy in [SOUNDNESS.md](SOUNDNESS.md).
 - A change to an agreed theorem statement, public contract or fixture format.
+  Before 0.1.0, routine oracle and Core harness schema changes within an approved scope are exempt, under the [development policy](docs/oracle.md#format-stability).
+  The exemption does not cover the Core compatibility target, theorem weakening or domain reduction, new trust assumptions or agreed protocol semantics.
 - A rewrite of the history of `main`, or a force push to it.
 
 A decision of this kind that blocks a lane becomes an issue with the `needs-maintainer` label.

@@ -174,8 +174,10 @@ From design record 0001, section 9. A first release has:
 
 ## Decisions
 
-The maintainer authorized oracle format `dogelib-oracle/6` on 2026-11-05, under an overnight authorization that covers new oracle format versions.
-It adds the `checker` field to `script.eval` and the `script.verify_legacy` operation.
+The maintainer decided the pre-release oracle policy on 2026-11-06.
+Before 0.1.0, the oracle, Core harness, fixtures and comparator evolve together without compatibility promises to earlier development commits.
+Routine schema changes within an approved scope receive ordinary independent review in their implementation pull request.
+See [format stability](docs/oracle.md#format-stability).
 
 | Decision | Choice | Reason | Confirmed by |
 | --- | --- | --- | --- |
@@ -185,7 +187,7 @@ It adds the `checker` field to `script.eval` and the `script.verify_legacy` oper
 | Proof-trust policy | EthLib's: standard axioms only, no tactic that trusts compiled code | See SOUNDNESS.md, C2 | Adopted |
 | btc-verified reuse form | Adaptation into DogeLib's layout, with provenance, not a dependency | Different toolchain, colocated proofs, and `bv_decide` steps | Step 0b, codec foundations, with Lean core and `Std` only |
 | Writing standard | EthLib's `WRITING.md` and checker, with DogeLib vocabulary | Follows the model project | Adopted |
-| Oracle record format | JSON Lines, `dogelib-oracle/6`, in [docs/oracle.md](docs/oracle.md) | One request and one response per line, so a harness can keep the oracle open. Hashes in both byte orders, preimages, checker selection and legacy Script verification. | Format `/4`: maintainer, PR #67. Format `/5`: maintainer, PR #74. Format `/6`: maintainer, 2026-11-05, overnight authorization. |
+| Oracle record format | JSON Lines, `dogelib-oracle/1`, in [docs/oracle.md](docs/oracle.md) | One request and one response per line, so a harness can keep the oracle open. Hashes in both byte orders, preimages, checker selection and legacy Script verification. | Maintainer, 2026-11-06: reset to `/1` and pre-release development policy. |
 | Core compatibility pin | Dogecoin Core `v1.14.9`, commit `e0a1c15` | The latest Core release on 2026-11-03 | Maintainer, 2026-11-03, issue #5 |
 | First signature-proof domain | Script code with no instruction that fails to parse, in a transaction with fewer than 2^32 inputs and 2^32 outputs | `legacySignatureHashPlan_eq_reference` holds on it. On a script that ends in a short push the two forms differ. | Step 5, `proof/legacy-sighash-reference` (#27) |
 | Rust refinement tools | Aeneas `d1e177b` and Charon `a58d159` (Adopted in SOURCES.md). Mathlib only in the separate `Refinement` Lake package. No trust-policy exception for Aeneas's axioms | Both tools target Lean `v4.35.0`. EthLib requires Mathlib. EthLib's trust policy allows only the three standard axioms | Maintainer, 2026-11-04, PR #33 |

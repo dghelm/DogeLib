@@ -1,9 +1,9 @@
 # The oracle and its record format
 
 `dogelib-oracle` runs DogeLib's specification on requests from another program, such as a harness that runs Dogecoin Core on the same inputs.
-This document defines its record format, `dogelib-oracle/5`.
+This document defines its record format, `dogelib-oracle/6`.
 The oracle supports only this format.
-Format `/5` exposes Script instruction reading and one `EvalScript` call.
+Format `/6` exposes Script instruction reading, evaluation with a selected checker, and verification of one legacy input.
 The earlier operations keep their request fields, response shapes and behavior.
 Only the format name changes for them.
 
@@ -24,7 +24,7 @@ In particular, `script.eval` does not check a complete spend.
 ```bash
 lake build dogelib-oracle
 .lake/build/bin/dogelib-oracle             # answer requests on standard input
-.lake/build/bin/dogelib-oracle --version   # print {"format":"dogelib-oracle/5"}
+.lake/build/bin/dogelib-oracle --version   # print {"format":"dogelib-oracle/6"}
 ```
 
 The oracle reads one request per line of standard input and writes one response per line of standard output.
@@ -90,7 +90,7 @@ Results use these types:
 
 | Kind | Meaning | Other fields |
 | --- | --- | --- |
-| `adapter` | A Script request exceeds an adapter resource limit, before execution. | `reason`: `resource_limit`. An adapter error is not a Script rejection. |
+| `adapter` | A Script request fails an adapter bound before execution. | `reason`: `resource_limit`, `input_index_out_of_range` or `context_bounds`. An adapter error is not a Script rejection. |
 | `request` | The oracle could not interpret the request. Examples: invalid JSON, an unknown `op`, a missing or unknown argument, or a value out of range. | `message`, free text for a person. It is not part of the format. |
 | `read` | The reader of the specification rejects the bytes, as Core's stream would. | `reason`: `truncated` (the input ends early), `non_canonical` (a CompactSize value in a longer form than needed), `too_large` (a CompactSize value above `MAX_SIZE`, `0x02000000`), or `unknown_optional_data` (a transaction flag bit other than bit 0 remains after the input and output lists and any stacks). For `sighash.legacy`, `argument` names the argument that failed. |
 | `work_view` | The finite work view cannot supply a result. The view errors describe the adapter, not consensus rejection codes. | `reason`: `height_out_of_range`, `inconsistent_heights`, `missing_ancestor`, `first_height_underflow` or `zero_interval`. The last two are unreachable with these network parameters and checked views. |
@@ -105,8 +105,9 @@ The `read` and `trailing_bytes` kinds report serialization errors of the specifi
 | `op` | Arguments | `ok` fields | Specification |
 | --- | --- | --- | --- |
 | `script.read_op` | `bytes_hex`, `cursor` (`u32`) | Instruction or read failure with cursor, as below | `Script.readInstruction`, Core's `CScript::GetOp` |
-| `script.eval` | `bytes_hex`, `flags` (`u32`), `stack_hex` | Evaluation result, as below | `Script.evalScript`, Core's `EvalScript` in `SIGVERSION_BASE` |
-| `oracle.version` | none | `format`: `"dogelib-oracle/5"` | none |
+| `script.eval` | `bytes_hex`, `flags` (`u32`), `stack_hex`, optional `checker` | Evaluation result, as below | `Script.evalScript`, Core's `EvalScript` in `SIGVERSION_BASE` |
+| `script.verify_legacy` | `tx_hex`, `input_index` (`u32`), `prevout_script_hex`, `flags` (`u32`), `checker` | Spend result, as below | `Script.verifyScript` or `Script.verifyLegacySpend`, Core's `VerifyScript` with no witness |
+| `oracle.version` | none | `format`: `"dogelib-oracle/6"` | none |
 | `compactsize.encode` | `value`: `u64` | `bytes_hex` | `CompactSize.encode`, Core's `WriteCompactSize` |
 | `compactsize.read` | `bytes_hex` | `value` (`u64`), `consumed`, `rest_hex` | `CompactSize.decodeBounded`, Core's `ReadCompactSize` with its `MAX_SIZE` check |
 | `tx.read_base` | `bytes_hex` | `tx`, `consumed`, `rest_hex` | `Transaction.readBase`: a transaction at the start of the bytes, as Core reads the next transaction of a stream |
@@ -149,6 +150,9 @@ An end cursor stays unchanged.
 The harness obtains the cursor from Core's iterator and derives these diagnostic fields from the original opcode.
 
 `script.eval` takes explicit flags and an initial main stack in `stack_hex`, an array of hexadecimal strings, bottom first.
+Its optional `checker` is `none` (the default) or `base`.
+`none` supplies no checker. `base` supplies `baseChecker`, which returns false for signature, locktime and sequence checks.
+A checker value of another type or name is a request error.
 It returns one of these `ok` objects:
 
 ```json
@@ -178,7 +182,8 @@ Unsupported capabilities have these fields:
 | `check_lock_time_verify`, `check_sequence_verify` | None |
 
 The evaluator determines whether a capability is needed.
-`script.eval` runs `evalScript` without a signature checker, so every executed signature opcode is unsupported.
+With `checker: "none"`, every executed signature opcode is unsupported before its stack checks.
+With `checker: "base"`, only unsupported flag bits can produce an unsupported result.
 A skipped signature opcode, for example, does not itself cause an unsupported result.
 The adapter does not replace caller flags or classify unsupported results as Script rejection.
 
@@ -195,8 +200,68 @@ They bound execution inputs, not transport memory.
 
 The harness calls Core's own `EvalScript` with `SIGVERSION_BASE` and `BaseSignatureChecker`.
 That checker returns false for signature, locktime and sequence checks.
-The Lean adapter has no signature or transaction checker in this format.
-Its unsupported result makes no claim about Core's verdict on those requests.
+The harness uses this checker for either evaluation selection.
+An unsupported Lean result makes no claim about Core's verdict on that request.
+
+### Legacy Script verification
+
+`script.verify_legacy` checks the selected input against a caller-supplied previous-output script.
+It does not find that output in a UTXO set or derive flags from a network or activation state.
+The request fields are:
+
+| Field | Meaning |
+| --- | --- |
+| `tx_hex` | The complete base-mode spending transaction, read as by `tx.decode_base` |
+| `input_index` | A u32 index below the transaction's input count |
+| `prevout_script_hex` | The previous output's exact `scriptPubKey` bytes |
+| `flags` | Explicit u32 Script flags |
+| `checker` | Required: `base` or `transaction` |
+
+After argument decoding, transaction decoding failures keep `read` or `trailing_bytes`, with `argument: "tx_hex"`.
+An index outside the input list gives `adapter/input_index_out_of_range`.
+The adapter then requires fewer than 2^32 inputs and outputs, or returns `adapter/context_bounds`.
+Core's bounded reader already implies those count bounds, but the adapter checks them explicitly to construct `InputContext`.
+Both checkers use these same bounds.
+
+The previous-output script and selected input's `scriptSig` each have the 1 MiB adapter limit.
+The previous-output hex limit precedes transaction decoding. The selected scriptSig limit follows the context checks.
+Other transaction fields have no additional adapter resource limit.
+
+`base` runs `verifyScript baseChecker` on the input's exact `scriptSig` and the supplied previous-output script.
+`transaction` runs `verifyLegacySpend` with the transaction context and an unavailable signature verifier.
+It still checks signature encodings, hashes and transaction lock-time conditions when execution requires them.
+Only a call to the unavailable verifier gives `signature_verifier`.
+Malformed keys or empty signatures can give a verdict without that call.
+
+The operation returns these `ok` shapes:
+
+```json
+{"result":"accepted","script_error":"OK"}
+{"result":"rejected","script_error":"EVAL_FALSE"}
+{"result":"unsupported","reason":"signature_verifier","opcode":172}
+{"result":"unsupported","reason":"flags","bits":64}
+```
+
+Acceptance is the `VerifyScript` verdict under the supplied context and flags, with P2SH when requested.
+It is not full transaction validity.
+No response returns an intermediate stack.
+
+The unsupported verifier opcode is one of CHECKSIG, CHECKSIGVERIFY, CHECKMULTISIG or CHECKMULTISIGVERIFY (172 through 175).
+For `base`, only `flags` can be unsupported.
+For `transaction`, only `flags` or `signature_verifier` can be unsupported.
+Neither kind of unsupported result is a Script rejection or comparison agreement.
+
+The harness calls Core's `VerifyScript` with a null witness and the selected checker.
+`TransactionSignatureChecker` receives the immutable transaction, input index and amount zero, which legacy hashing does not use.
+An `ECCVerifyHandle` lives for the request loop and initializes Core's verification context.
+Pinned `src/pubkey.cpp`, `CPubKey::Verify` and `ECCVerifyHandle` (D50), use that context for key parsing and libsecp256k1 verification.
+The harness signs nothing and does not call `ECC_Start`.
+Core's binary and libsecp256k1 remain trusted runtime components, without a Lean refinement theorem.
+
+Core asserts that WITNESS implies P2SH, and CLEANSTACK implies both WITNESS and P2SH (D3, lines 1508 to 1520).
+The harness rejects flag combinations that violate these dependencies as request errors, without changing flags.
+The Lean oracle still reports those unsupported flags.
+Such combinations are outside the Core comparison domain.
 
 ### Hash and block arguments
 
@@ -378,6 +443,8 @@ These pinned sources supply the additional objects:
 | `tx.read_witness`, `tx.decode_witness` | `CMutableTransaction` read from a `CDataStream` without `SERIALIZE_TRANSACTION_NO_WITNESS`. The complete operation requires an empty stream. Both write with witness data allowed and call `CTransaction::HasWitness`, `GetHash` and `GetWitnessHash`. |
 | `script.read_op` | `CScript::GetOp` on the exact script bytes, with iterator `begin() + cursor` |
 | `script.eval` | `EvalScript` with the caller stack and flags, `BaseSignatureChecker` and `SIGVERSION_BASE` |
+| `script.verify_legacy` | `VerifyScript` with a null witness and the selected `BaseSignatureChecker` or `TransactionSignatureChecker`. `CPubKey::Verify` and `ECCVerifyHandle` use libsecp256k1 |
+| `script.verify_legacy` | D3, `VerifyScript`, `TransactionSignatureChecker`. D25, `BaseSignatureChecker`. D50, `CPubKey::Verify` and `ECCVerifyHandle`. |
 | `sighash.legacy` | `tx_hex` read as by `tx.decode_base`. Then `SignatureHash` with amount 0 and `SIGVERSION_BASE` |
 
 The harness also calls these hash and block functions:
@@ -421,11 +488,11 @@ The `work missing skip traversal` comparison retargets from height 479 to ancest
 
 ### How its responses differ
 
-The harness answers a projection of `dogelib-oracle/5`, not the format itself:
+The harness answers a projection of `dogelib-oracle/6`, not the format itself:
 
-- `--version` and `oracle.version` give the format `dogelib-oracle/5-core-projection`.
-- `script.eval` never returns `unsupported` from the harness.
-  It returns Core's verdict with `BaseSignatureChecker`, even when Lean reports an unsupported capability.
+- `--version` and `oracle.version` give the format `dogelib-oracle/6-core-projection`.
+- `script.eval` and `script.verify_legacy` never return `unsupported` from the harness.
+  It returns Core's verdict with the operation's checker, even when Lean reports an unsupported capability.
   An unmapped `ScriptError` stops the harness with an unmapped-Core error.
 - For a truncated `script.read_op`, the harness derives `opcode` and `part` from the input and cursor.
   Core does not return these diagnostics.
@@ -442,15 +509,15 @@ The harness answers a projection of `dogelib-oracle/5`, not the format itself:
   Any other exception stops the harness with exit status 3, so it fails the comparison.
 
 The harness checks request arguments by the rules of this document.
-Ten adapter-limit boundary requests check both programs against the documented expectations, including `adapter/resource_limit` errors.
+Eighteen adapter-limit boundary requests check both programs against the documented expectations, including `adapter/resource_limit` errors.
 Other argument checks have oracle fixtures but no Core comparison.
 
 ### The comparison
 
 `scripts/compare_core.py` gives each request its own `id` and sends both programs the same text.
 For supported requests, the two responses must be equal as JSON values, subject to the signature-preimage projection below.
-For `script.eval`, an unsupported Lean result excludes that request from verdict agreement.
-The comparator validates the result shape, then reports the unsupported reason and Core outcome separately.
+For `script.eval` and `script.verify_legacy`, an unsupported Lean result excludes that request from verdict agreement.
+The comparator validates both result shapes and the checker-specific unsupported reasons, then reports the unsupported reason and Core outcome separately.
 An adapter error is not an unsupported result.
 
 For `sighash.legacy` with plan `hash_bytes`, the double SHA-256 of the oracle's `preimage_hex` must equal Core's `digest_hex`.
@@ -491,12 +558,18 @@ The Script comparison reports these sets separately:
   A rejection or unsupported result ends that side's composition.
   The composition does not run `VerifyScript` or use the corpus's expected spending verdict.
   It ignores the record's witness and runs only the two base scripts.
+- Every inside-milestone record through `script.verify_legacy`, separately with `base` and `transaction`.
+  Each request uses the recorded spending transaction, input index and previous-output script.
+- 2,000 legacy mutations for each checker, under seed `20261106`.
+  Mutations change scriptSig, scriptPubKey, version, sequence, locktime or flags.
+  A scriptSig mutation serializes a fresh length in a synthetic one-input transaction.
+- Base-checker copies of the individual corpus evaluations, resource boundaries and 2,000 generated evaluations.
 - Every opcode and every prefix of representative direct and extended pushes, including all short length-field and payload forms.
   Extra cases read at arbitrary offsets within push encodings and at the end.
 - Below, at and above the 201-operation, 520-byte push, 1,000-item stack and 10,000-byte script limits.
   Cases include skipped branches, altstack moves and caller stacks above 1,000 items.
   Bounded pushes form accepted scripts of 9,999 and 10,000 bytes, followed by a 10,001-byte `SCRIPT_SIZE` case.
-- Ten adapter-limit requests sent to both programs, with results checked against the documented limits.
+- Eighteen adapter-limit requests sent to both programs, with results checked against the documented limits.
 - 2,000 generated scripts under seed `20261105`, with nested conditionals, stack operations and numeric and hash candidates.
   Comparison depends on each returned capability result, rather than a fixed list of supported opcodes.
 
@@ -537,7 +610,7 @@ The Merkle caller bound is explicit, but the comparison uses only small lists.
 
 `scripts/test_compare_core.py` checks that the comparison can fail.
 A wrapper around the oracle stands in for the harness.
-Unchanged, it must pass on the full stream. Each of 68 mutations must fail with the failure code that it targets.
+Unchanged, it must pass on the full stream. Each response mutation must fail with the failure code that it targets.
 The witness mutations change `wtxid_hex`, a stack and `has_witness`.
 The work mutations change the magnitude, both flags, the encoded compact and each work operation's result bits.
 
@@ -549,6 +622,8 @@ An informational Core result for an unsupported request can differ without a com
 
 One mutation runs the full composition path and corrupts a successful second-call stack.
 Another gives an unsupported result an opcode absent from the script instructions.
+Legacy mutations corrupt verdicts, add a forbidden stack, and invent unsupported results for either checker or Core.
+They also corrupt the unavailable verifier's opcode and fields.
 
 ### Compiled Rust CompactSize
 

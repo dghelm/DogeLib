@@ -3,7 +3,7 @@
 Usage: python3 -I scripts/compare_core.py [--timeout SECONDS] [--quick] <dogelib-oracle> <core-oracle>
 
 The harness, harness/core/core_oracle.cpp, runs Dogecoin Core's own code and
-answers a projection of dogelib-oracle/5 (docs/oracle.md, "The Core harness").
+answers a projection of dogelib-oracle/6 (docs/oracle.md, "The Core harness").
 This script builds a deterministic stream of well-formed requests, runs each
 program once on the whole stream, and requires the two responses to every
 supported request to be equal as JSON values, except for the preimage projection: Core does not expose
@@ -38,9 +38,9 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 from oracle_hash_block import header_fields, header_records, header_fixtures, merkle_fixtures, hash_fixtures, sha1_fixtures
 
-from oracle_script import script_sets, corpus_records, evaluation, validate_eval, adapter_limit_cases
+from oracle_script import script_sets, corpus_records, evaluation, validate_eval, adapter_limit_cases, legacy_sets
 
-ORACLE_FORMAT = "dogelib-oracle/5"
+ORACLE_FORMAT = "dogelib-oracle/6"
 MAX_SIZE = 0x02000000
 SEED = 20261104
 MAX_REPORTS = 10
@@ -612,7 +612,8 @@ def set_hash_boundaries(algorithm: str) -> list[dict]:
 
 QUICK_SETS = ("fixtures", "compactsize", "sighash endpoints", "witness flags and stacks",
               "work compact boundaries", "regtest legacy wrap case", "work missing skip traversal", "header field boundaries", "Merkle generated",
-              "RIPEMD-160 padding boundaries", "Hash160 padding boundaries", "SHA-1 padding boundaries", "Script reader truncations", "Script resource boundaries")
+              "RIPEMD-160 padding boundaries", "Hash160 padding boundaries", "SHA-1 padding boundaries", "Script reader truncations", "Script resource boundaries", "Script resource boundaries base",
+              "Script legacy corpus base", "Script legacy corpus transaction")
 
 
 def request_sets() -> tuple[list[tuple[str, list[dict]]], list[str]]:
@@ -668,6 +669,7 @@ def request_sets() -> tuple[list[tuple[str, list[dict]]], list[str]]:
         ("SHA-1 padding boundaries", set_hash_boundaries("sha1")),
     ])
     sets.extend(script_sets())
+    sets.extend(legacy_sets())
     return sets, excluded
 
 
@@ -724,7 +726,7 @@ def compare(req: dict, ours: dict, core: dict, peer: str = "core") -> tuple[str,
     for side, resp in (("oracle", ours), (peer, core)):
         if resp.get("error", {}).get("kind") == "request":
             return "REQUEST_ERROR", f"{side} rejected the request: {resp['error'].get('message')}"
-    if req["op"] == "script.eval":
+    if req["op"] in ("script.eval", "script.verify_legacy") and "ok" in ours and "ok" in core:
         for response, allow in ((ours, True), (core, False)):
             error = validate_eval(req, response, allow)
             if error:
@@ -841,6 +843,12 @@ def main() -> int:
     parser.add_argument("harness")
     args = parser.parse_args()
 
+    revision = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True)
+    dirty = subprocess.run(["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True)
+    print(f"DogeLib revision: {revision.stdout.strip()}" + (" (dirty tree)" if dirty.stdout else ""))
+    print("Core source revision: e0a1c157791544e818c901bd9341896965afbf9d (build stamp must match)")
+    print("Seeds: transaction mutations 20261104, Script evaluation 20261105, legacy spends 20261106")
+
     rust_args = []
     if args.rust_compactsize:
         try:
@@ -900,7 +908,7 @@ def main() -> int:
     reported = 0
     for i, (req, name, a, b) in enumerate(zip(requests, owner, ours, core)):
         kind = outcome(b)
-        if req["op"] == "script.eval" and a.get("ok", {}).get("result") == "unsupported":
+        if req["op"] in ("script.eval", "script.verify_legacy") and a.get("ok", {}).get("result") == "unsupported":
             label = a["ok"].get("reason", "malformed") + " -> Core " + kind
             unsupported[name][label] = unsupported[name].get(label, 0) + 1
         outcomes[name][kind] = outcomes[name].get(kind, 0) + 1

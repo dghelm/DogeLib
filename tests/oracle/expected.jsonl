@@ -1,4 +1,4 @@
-{"id": "version", "ok": {"format": "dogelib-oracle/5"}}
+{"id": "version", "ok": {"format": "dogelib-oracle/6"}}
 {"id": "cs-encode-252", "ok": {"bytes_hex": "fc"}}
 {"id": "cs-encode-253", "ok": {"bytes_hex": "fdfd00"}}
 {"id": "cs-encode-65536", "ok": {"bytes_hex": "fe00000100"}}
@@ -44,8 +44,8 @@
 {"id": "hash-type-2^32", "error": {"kind": "request"}}
 {"id": "index-5e-1", "error": {"kind": "request"}}
 {"id": "dup-a", "ok": {"value": "252", "consumed": 1, "rest_hex": ""}}
-{"id": {"k": [1, "x"]}, "ok": {"format": "dogelib-oracle/5"}}
-{"id": null, "ok": {"format": "dogelib-oracle/5"}}
+{"id": {"k": [1, "x"]}, "ok": {"format": "dogelib-oracle/6"}}
+{"id": null, "ok": {"format": "dogelib-oracle/6"}}
 {"id": null, "error": {"kind": "request"}}
 {"id": null, "error": {"kind": "request"}}
 {"id": "witness-item-read_witness", "ok": {"tx": {"version": 1, "inputs": [{"prevout": {"hash_hex": "0000000000000000000000000000000000000000000000000000000000000000", "hash_display": "0000000000000000000000000000000000000000000000000000000000000000", "n": 0}, "script_sig_hex": "", "sequence": 4294967295}], "outputs": [{"value": "0", "script_pubkey_hex": ""}], "lock_time": 0}, "witnesses": [["ab"]], "has_witness": true, "serialized_hex": "0100000000010100000000000000000000000000000000000000000000000000000000000000000000000000ffffffff010000000000000000000101ab00000000", "txid_hex": "89d3fe04e0abfd5038d4c26d8935e3feff1122b429c5f8fb4efb74d12f4de73d", "txid_display": "3de74d2fd174fb4efbf8c529b42211fffee335896dc2d43850fdabe004fed389", "wtxid_hex": "fdd2a381f3fa14a5d4d3a6751ca562c1c7582dad617c8ce9614b837d9b1a991f", "wtxid_display": "1f991a9b7d834b61e98c7c61ad2d58c7c162a51c75a6d3d4a514faf381a3d2fd", "consumed": 65, "rest_hex": ""}}
@@ -292,3 +292,21 @@
 {"id":"script-eval-item-hex","error":{"kind":"request"}}
 {"id":"script-eval-item-odd","error":{"kind":"request"}}
 {"id":"script-eval-unknown","error":{"kind":"request"}}
+{"id":"script-base-checksig","ok":{"result":"accepted","script_error":"OK","stack_hex":[""]}}
+{"id":"script-base-multisig-dummy-0","ok":{"result":"accepted","script_error":"OK","stack_hex":["01"]}}
+{"id":"script-base-multisig-dummy-16","ok":{"result":"rejected","script_error":"SIG_NULLDUMMY"}}
+{"id":"script-base-cltv","ok":{"result":"rejected","script_error":"UNSATISFIED_LOCKTIME"}}
+{"id":"script-legacy-p2sh","ok":{"result":"accepted","script_error":"OK"}}
+{"id":"script-legacy-verifier","ok":{"result":"unsupported","reason":"signature_verifier","opcode":172}}
+{"id":"script-legacy-base-false","ok":{"result":"rejected","script_error":"EVAL_FALSE"}}
+{"id":"script-legacy-decode","error":{"kind":"read","reason":"truncated","argument":"tx_hex"}}
+{"id":"script-legacy-trailing","error":{"kind":"trailing_bytes","count":1,"argument":"tx_hex"}}
+{"id":"script-legacy-index","error":{"kind":"adapter","reason":"input_index_out_of_range"}}
+{"id":"script-legacy-empty-inputs","error":{"kind":"adapter","reason":"input_index_out_of_range"}}
+{"id":"script-legacy-bad-checker","error":{"kind":"request"}}
+{"id":"script-legacy-missing-checker","error":{"kind":"request"}}
+{"id":"script-legacy-eval-bad-checker","error":{"kind":"request"}}
+{"id":"script-legacy-eval-null-checker","error":{"kind":"request"}}
+{"id":"script-legacy-unknown","error":{"kind":"request"}}
+{"id":"script-legacy-bad-hex","error":{"kind":"request"}}
+{"id":"script-legacy-fractional","error":{"kind":"request"}}

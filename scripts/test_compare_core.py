@@ -26,6 +26,14 @@ COMPARE = ROOT / "scripts" / "compare_core.py"
 # mode: (role of the wrapper, expected failure code). The role "core" stands
 # in for the harness, "oracle" for dogelib-oracle.
 MUTATIONS = {
+    "legacy_class": ("core", "MISMATCH"),
+    "legacy_rejection": ("core", "MISMATCH"),
+    "legacy_stack": ("core", "SCRIPT_RESULT"),
+    "legacy_core_unsupported": ("core", "SCRIPT_RESULT"),
+    "legacy_base_verifier": ("oracle", "SCRIPT_RESULT"),
+    "legacy_locktime_unsupported": ("oracle", "SCRIPT_RESULT"),
+    "legacy_verifier_extra": ("oracle", "SCRIPT_RESULT"),
+    "legacy_verifier_opcode": ("oracle", "SCRIPT_RESULT"),
     **{name: ("core", "MISMATCH") for name in (
         "script_cursor", "script_opcode", "script_bytes", "script_pushed", "script_part", "script_read_class",
         "script_eval_class", "script_stack", "script_rejection")},
@@ -111,7 +119,8 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
     data = sys.stdin.read()
     out = subprocess.run([oracle], input=data, capture_output=True, text=True, check=True).stdout
     responses = [json.loads(line) for line in out.splitlines()]
-    for resp in responses:
+    requests = [json.loads(line) for line in data.splitlines()]
+    for request, resp in zip(requests, responses):
         ok = resp.get("ok", {})
         if "format" in ok:
             ok["format"] = projected_format
@@ -119,7 +128,9 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
             ok.pop("preimage_hex", None)
         if role == "core" and ok.get("result") == "unsupported":
             # An informational Core outcome can differ from an unsupported oracle.
-            resp["ok"] = {"result": "accepted", "script_error": "OK", "stack_hex": []}
+            resp["ok"] = {"result": "accepted", "script_error": "OK"}
+            if request["op"] == "script.eval":
+                resp["ok"]["stack_hex"] = []
 
     # Data mutations preserve the version handshake so they reach the comparison.
     if responses and all("format" in r.get("ok", {}) for r in responses):
@@ -129,7 +140,35 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
     def set_ok(field, value):
         return lambda r: r["ok"].__setitem__(field, value)
 
-    if mode == "composition_stack":
+    if mode.startswith("legacy_"):
+        by_id = {r["id"]: r for r in requests}
+        def eligible(r):
+            req = by_id[r["id"]]
+            if req["op"] != "script.verify_legacy":
+                return False
+            value = r.get("ok", {})
+            if mode == "legacy_base_verifier":
+                return req["checker"] == "base" and "ok" in r
+            if mode in ("legacy_verifier_extra", "legacy_verifier_opcode"):
+                return value.get("reason") == "signature_verifier"
+            return value.get("result") == ("rejected" if mode == "legacy_rejection" else "accepted")
+        def alter(r):
+            if mode == "legacy_class":
+                r["ok"] = {"result": "rejected", "script_error": "OP_RETURN"}
+            elif mode == "legacy_rejection":
+                r["ok"]["script_error"] = "VERIFY" if r["ok"]["script_error"] != "VERIFY" else "OP_RETURN"
+            elif mode == "legacy_stack":
+                r["ok"]["stack_hex"] = []
+            elif mode == "legacy_locktime_unsupported":
+                r["ok"] = {"result": "unsupported", "reason": "check_lock_time_verify"}
+            elif mode in ("legacy_base_verifier", "legacy_core_unsupported"):
+                r["ok"] = {"result": "unsupported", "reason": "signature_verifier", "opcode": 172}
+            elif mode == "legacy_verifier_opcode":
+                r["ok"]["opcode"] = 171
+            else:
+                r["ok"]["extra"] = 1
+        mutate_first(responses, eligible, alter)
+    elif mode == "composition_stack":
         requests = [json.loads(line) for line in data.splitlines()]
         ids = {r["id"] for r in requests if str(r["id"]).startswith("composition-") and r.get("stack_hex")}
         if any(r["id"] in ids and r.get("ok", {}).get("result") == "accepted" for r in responses):

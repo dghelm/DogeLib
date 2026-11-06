@@ -78,7 +78,10 @@ def script_sets():
     randoms = [evaluation(block(4), rng.choice([0, 1, 3, 31, 512, 1024, 1567]),
                           [rng.choice(["", "01", "80", "0100"]) for _ in range(rng.randrange(5))])
                for _ in range(2000)]
-    return [("Script corpus individual", individual), ("Script reader truncations", reader),
+    return [("Script corpus individual base", [{**r, "checker": "base"} for r in individual]),
+            (f"Script random base seed {SCRIPT_SEED}", [{**r, "checker": "base"} for r in randoms]),
+            ("Script resource boundaries base", [{**r, "checker": "base"} for r in limits]),
+            ("Script corpus individual", individual), ("Script reader truncations", reader),
             ("Script resource boundaries", limits), (f"Script random seed {SCRIPT_SEED}", randoms)]
 
 
@@ -106,9 +109,9 @@ def validate_eval(request, response, allow_unsupported):
     value = response["ok"]
     result = value.get("result")
     if result == "accepted":
-        if set(value) != {"result", "script_error", "stack_hex"} or value["script_error"] != "OK":
+        if set(value) != ({"result", "script_error", "stack_hex"} if request["op"] == "script.eval" else {"result", "script_error"}) or value["script_error"] != "OK":
             return "invalid accepted result"
-        stack = value["stack_hex"]
+        stack = value.get("stack_hex", [])
         if not isinstance(stack, list) or any(not isinstance(x, str) or len(x) % 2 or
                 any(c not in "0123456789abcdef" for c in x) for x in stack):
             return "invalid final stack"
@@ -119,14 +122,23 @@ def validate_eval(request, response, allow_unsupported):
         reason = value.get("reason")
         if not isinstance(reason, str):
             return "invalid unsupported reason type"
-        extra = {"flags": "bits", "signature_opcode": "opcode"}.get(reason)
-        if reason not in ("flags", "signature_opcode", "check_lock_time_verify", "check_sequence_verify"):
+        spend = request["op"] == "script.verify_legacy"
+        checker = request.get("checker", "none")
+        allowed = {"flags"}
+        if spend and checker == "transaction":
+            allowed.add("signature_verifier")
+        elif not spend and checker == "none":
+            allowed.update(("signature_opcode", "check_lock_time_verify", "check_sequence_verify"))
+        extra = {"flags": "bits", "signature_opcode": "opcode", "signature_verifier": "opcode"}.get(reason)
+        if reason not in allowed:
             return "invalid unsupported reason"
         if set(value) != {"result", "reason"} | ({extra} if extra else set()):
             return "invalid unsupported fields"
         if extra and (type(value[extra]) is not int or not 0 <= value[extra] <= (0xffffffff if extra == "bits" else 255)):
             return "invalid unsupported argument"
-        if extra == "opcode" and value["opcode"] not in instruction_opcodes(request["bytes_hex"]):
+        if extra == "opcode" and value["opcode"] not in (172, 173, 174, 175):
+            return "invalid signature opcode"
+        if reason == "signature_opcode" and value["opcode"] not in instruction_opcodes(request["bytes_hex"]):
             return "unsupported opcode is absent from the script instructions"
         if reason == "flags" and value["bits"] != request["flags"] & (0xffffffff ^ 1567):
             return "invalid unsupported flag bits"
@@ -156,4 +168,65 @@ def adapter_limit_cases():
                       if n == 1048576 else {"error": limit}))
         cases.append(({"op": "script.read_op", "bytes_hex": "00" * n, "cursor": n},
                       {"ok": {"result": "at_end", "cursor": n}} if n == 1048576 else {"error": limit}))
+    for checker in ("base", "transaction"):
+        for n in (1048576, 1048577):
+            for field in ("scriptSig", "scriptPubKey"):
+                req = {"op": "script.verify_legacy", "tx_hex": spend_tx(bytes(n) if field == "scriptSig" else b""),
+                       "input_index": 0, "prevout_script_hex": bytes(n).hex() if field == "scriptPubKey" else "51",
+                       "flags": 0, "checker": checker}
+                cases.append((req, {"ok": {"result": "rejected", "script_error": "SCRIPT_SIZE"}}
+                              if n == 1048576 else {"error": limit}))
     return cases
+
+
+SPEND_SEED = 20261106
+
+
+def legacy_request(record, checker):
+    """Use the exact spending transaction and previous-output script of a corpus record."""
+    return {"op": "script.verify_legacy", "tx_hex": record["context"]["spending_tx_base_hex"],
+            "input_index": record["context"]["input_index"], "prevout_script_hex": record["scriptPubKey_hex"],
+            "flags": record["effective_flags_mask"], "checker": checker}
+
+
+def spend_tx(script_sig, version=1, sequence=0xffffffff, lock_time=0):
+    """Serialize a synthetic one-input base transaction, with a fresh script length."""
+    n = len(script_sig)
+    count = bytes([n]) if n < 253 else b"\xfd" + n.to_bytes(2, "little") if n < 65536 else b"\xfe" + n.to_bytes(4, "little")
+    return (version.to_bytes(4, "little") + b"\x01" + bytes(32) + bytes(4) + count + script_sig +
+            sequence.to_bytes(4, "little") + b"\x01" + bytes(8) + b"\x00" + lock_time.to_bytes(4, "little")).hex()
+
+
+def legacy_sets():
+    """Whole-spend corpus and seeded mutations, separately for each checker."""
+    records = [r for r in corpus_records() if r["classification"]["milestone"] == "inside"]
+    rng = random.Random(SPEND_SEED)
+    mutations = []
+    for _ in range(2000):
+        record = rng.choice(records)
+        sig, spk = bytes.fromhex(record["scriptSig_hex"]), bytes.fromhex(record["scriptPubKey_hex"])
+        target = rng.randrange(6)
+        version, sequence, lock_time = 1, 0xffffffff, 0
+        if target in (0, 1):
+            data = bytearray(sig if target == 0 else spk)
+            if data and rng.randrange(2):
+                data[rng.randrange(len(data))] ^= 1 << rng.randrange(8)
+            else:
+                data.extend(rng.choice([b"\xac", b"\xae", b"\x51\xb1", b"\x51\xb2", b"\x00", b"\x6a"]))
+            if target == 0:
+                sig = bytes(data)
+            else:
+                spk = bytes(data)
+        elif target == 2:
+            version = rng.choice([0, 1, 2, 0x80000000, 0xffffffff])
+        elif target == 3:
+            sequence = rng.choice([0, 1, 0xffff, 0x400000, 0x80000000, 0xffffffff])
+        elif target == 4:
+            lock_time = rng.choice([0, 1, 499999999, 500000000, 0xffffffff])
+        flags = rng.choice([0, 1, 3, 31, 512, 1024, 1567, 64]) if target == 5 else record["effective_flags_mask"]
+        mutations.append({"op": "script.verify_legacy", "tx_hex": spend_tx(sig, version, sequence, lock_time),
+                          "input_index": 0, "prevout_script_hex": spk.hex(), "flags": flags})
+    return [(f"Script legacy corpus {checker}", [legacy_request(r, checker) for r in records])
+            for checker in ("base", "transaction")] + [
+        (f"Script legacy mutations {checker} seed {SPEND_SEED}", [{**r, "checker": checker} for r in mutations])
+        for checker in ("base", "transaction")]

@@ -1,7 +1,7 @@
-// The Dogecoin Core harness: answers dogelib-oracle/5 requests by running
+// The Dogecoin Core harness: answers dogelib-oracle/6 requests by running
 // Dogecoin Core's own code, so that scripts/compare_core.py can check the
 // oracle against Core. docs/oracle.md, section "The Core harness", describes
-// its responses, a projection of dogelib-oracle/5.
+// its responses, a projection of dogelib-oracle/6.
 //
 // scripts/build_core_harness.sh builds it against Core's libraries at the
 // commit that SOURCES.md pins.
@@ -22,6 +22,7 @@
 #include "dogecoin.h"
 #include "hash.h"
 #include "pow.h"
+#include "pubkey.h"
 #include "primitives/pureheader.h"
 #include "primitives/transaction.h"
 #include "script/interpreter.h"
@@ -50,7 +51,7 @@ static_assert(std::numeric_limits<unsigned int>::max() == UINT32_MAX, "unsigned 
 
 namespace {
 
-const char* const FORMAT = "dogelib-oracle/5-core-projection";
+const char* const FORMAT = "dogelib-oracle/6-core-projection";
 
 // The stream version of Core's base mode: the reader allows no witness data.
 const int BASE_VERSION = PROTOCOL_VERSION | SERIALIZE_TRANSACTION_NO_WITNESS;
@@ -417,6 +418,26 @@ std::vector<unsigned char> scriptBytes(const UniValue& req, const std::string& k
     return argHex(req, key);
 }
 
+std::string scriptChecker(const UniValue& req, bool evaluation)
+{
+    const auto& value = find_value(req, "checker");
+    bool present = false;
+    for (const auto& key : req.getKeys()) if (key == "checker") present = true;
+    if (!present && evaluation) return "none";
+    if (!value.isStr()) throw RequestError{"checker must be a string"};
+    const auto name = value.get_str();
+    if (name != "base" && name != (evaluation ? "none" : "transaction")) throw RequestError{"unknown checker"};
+    return name;
+}
+
+void scriptAdapterFailure(const std::string& reason)
+{
+    UniValue error(UniValue::VOBJ);
+    error.pushKV("kind", "adapter");
+    error.pushKV("reason", reason);
+    throw SpecError{error};
+}
+
 UniValue run(const UniValue& req)
 {
     const UniValue& opv = arg(req, "op");
@@ -433,6 +454,7 @@ UniValue run(const UniValue& req)
         if (bytes.size() > 1048576) scriptResourceLimit();
         const auto start = argU32(req, "cursor");
         if (start > bytes.size()) throw RequestError{"cursor exceeds script length"};
+        scriptChecker(req, true);
         const CScript script(bytes.begin(), bytes.end());
         auto pc = script.begin() + start;
         opcodetype opcode;
@@ -455,7 +477,7 @@ UniValue run(const UniValue& req)
             ok.pushKV("part", width && cursor == start + 1 ? "length_field" : "payload");
         }
     } else if (op == "script.eval") {
-        checkArgs(req, op, {"bytes_hex", "flags", "stack_hex"});
+        checkArgs(req, op, {"bytes_hex", "flags", "stack_hex", "checker"});
         const auto bytes = scriptBytes(req, "bytes_hex");
         if (bytes.size() > 1048576) scriptResourceLimit();
         const auto flags = argU32(req, "flags");
@@ -475,6 +497,7 @@ UniValue run(const UniValue& req)
             if (data.size() > 1048576) scriptResourceLimit();
             stack.push_back(std::move(data));
         }
+        scriptChecker(req, true);
         const CScript script(bytes.begin(), bytes.end());
         ScriptError error = SCRIPT_ERR_UNKNOWN_ERROR;
         const bool accepted = EvalScript(stack, script, flags, BaseSignatureChecker(), SIGVERSION_BASE, &error);
@@ -485,6 +508,38 @@ UniValue run(const UniValue& req)
             for (const auto& item : stack) result.push_back(UniValue(hexOf(item)));
             ok.pushKV("stack_hex", result);
         }
+    } else if (op == "script.verify_legacy") {
+        checkArgs(req, op, {"tx_hex", "input_index", "prevout_script_hex", "flags", "checker"});
+        const auto bytes = argHex(req, "tx_hex");
+        const auto index = argU32(req, "input_index");
+        const auto script = scriptBytes(req, "prevout_script_hex");
+        const auto flags = argU32(req, "flags");
+        const auto checker = scriptChecker(req, false);
+        CMutableTransaction mtx;
+        try {
+            mtx = decodeBaseComplete(bytes);
+        } catch (SpecError& e) {
+            e.json.pushKV("argument", "tx_hex");
+            throw;
+        }
+        if (index >= mtx.vin.size()) scriptAdapterFailure("input_index_out_of_range");
+        if (mtx.vin.size() >= (uint64_t{1} << 32) || mtx.vout.size() >= (uint64_t{1} << 32))
+            scriptAdapterFailure("context_bounds");
+        if (mtx.vin[index].scriptSig.size() > 1048576) scriptResourceLimit();
+        const CTransaction tx(mtx);
+        const CScript spk(script.begin(), script.end());
+        ScriptError error = SCRIPT_ERR_UNKNOWN_ERROR;
+        // Core asserts these flag dependencies even for diagnostic requests.
+        // Reject the unsafe combinations instead of changing the caller's flags.
+        if (((flags & SCRIPT_VERIFY_WITNESS) && !(flags & SCRIPT_VERIFY_P2SH)) ||
+            ((flags & SCRIPT_VERIFY_CLEANSTACK) &&
+             (!(flags & SCRIPT_VERIFY_P2SH) || !(flags & SCRIPT_VERIFY_WITNESS))))
+            throw RequestError{"Core VerifyScript flag dependencies are not satisfied"};
+        const bool accepted = checker == "base"
+            ? VerifyScript(tx.vin[index].scriptSig, spk, nullptr, flags, BaseSignatureChecker(), &error)
+            : VerifyScript(tx.vin[index].scriptSig, spk, nullptr, flags, TransactionSignatureChecker(&tx, index, 0), &error);
+        ok.pushKV("result", accepted ? "accepted" : "rejected");
+        ok.pushKV("script_error", scriptErrorName(error));
     } else if (op == "hash.ripemd160" || op == "hash.hash160" || op == "hash.sha1") {
         checkArgs(req, op, {"bytes_hex"});
         const auto bytes = argHex(req, "bytes_hex");
@@ -739,6 +794,7 @@ int main(int argc, char** argv)
                   << "Reads one JSON request per line of standard input. See docs/oracle.md." << std::endl;
         return 2;
     }
+    ECCVerifyHandle ecc;
     std::string line;
     while (std::getline(std::cin, line)) {
         std::string trimmed = trimAscii(line);

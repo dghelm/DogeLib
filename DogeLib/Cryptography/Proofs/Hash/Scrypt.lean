@@ -121,15 +121,15 @@ theorem repeat_succ' {α : Type} (f : α → α) :
     show f (Nat.repeat f (i + 1) x) = f (Nat.repeat f i (f x))
     rw [repeat_succ' f i x]
 
-/-- Store the state, then apply `f`, for `n` steps, extending an existing array.
-This sequential fill supports the implementation bridge for `powHash_eq_spec`. -/
+/-- Store each whole state as one array element, then apply `f`, for `n` steps.
+The fill extends an existing array and is generic in the state type. -/
 def fillLoop {α : Type} (f : α → α) : Nat → α → Array α → Array α × α
   | 0, x, v => (v, x)
   | n + 1, x, v => fillLoop f n (f x) (v.push x)
 
-/-- For any step function, initial state, array and count, sequential fill appends all iterates
-and returns the final iterate.
-This theorem is the representation-independent fill bridge for `powHash_eq_spec`. -/
+/-- For any state type, step function, initial state, array and count, sequential fill appends all iterates and returns the final iterate.
+Each whole state occupies one array element.
+Other storage layouts and conversions between state types need separate proofs. -/
 theorem fillLoop_eq {α : Type} (f : α → α) : ∀ (n : Nat) (x : α) (v : Array α),
     fillLoop f n x v =
       ((v.toList ++ (List.range n).map fun i => Nat.repeat f i x).toArray, Nat.repeat f n x)

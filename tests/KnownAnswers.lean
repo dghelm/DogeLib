@@ -5194,7 +5194,8 @@ def checkCase (i : Nat) : IO Nat := do
   return if ok then 0 else 1
 
 /-- Check RFC 7914 §§8–10 and the small section 12 case through the compiled model.
-Reject invalid parameter tuples before any expensive computation. -/
+Check that invalid parameter tuples give `none`.
+`valid` rejects every tuple except the excessive output length, which PBKDF2 rejects. -/
 def check : IO Nat := do
   let mut failures := 0
   for (name, inputHex, outputHex, size, f) in [

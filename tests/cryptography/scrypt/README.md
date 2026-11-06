@@ -34,6 +34,10 @@ It lists six entries:
 
 None changes the known answers in sections 8–12.
 Integerify reads the final 64-byte block, rather than one byte or the entire input.
+For `r = 1` and a power-of-two `N ≤ 2^32`, `leNat (blk x 1) % N` depends only on that block's first four bytes.
+Each later byte contributes a multiple of `2^32`, which is divisible by `N`.
+This arithmetic observation is not a theorem in this lane.
+
 The model retains the published bound `N < 2^(128 * r / 8)`.
 The reported proposals do not change this contract.
 
@@ -52,8 +56,9 @@ They are individual observations on a shared machine, rather than performance gu
 | 3 | 16384, 8, 1 | Timed out at 10 seconds, with exit status 124 and no comparison result | Excluded |
 | 4 | 1048576, 8, 1 | Not run | Excluded |
 
-The complete default `lake test` run passed all four known answers and the parameter rejection checks.
+The default `lake test` run before the first commit passed all four known answers and the parameter rejection checks.
 Salsa20/8 and BlockMix each took less than 1 ms, ROMix took 9 ms, and the small scrypt case took 10 ms.
+At commit `3d9af82`, the corresponding times were less than 1 ms, less than 1 ms, 7 ms and 10 ms.
 
 The reference fill computes each stored iterate separately.
 One complete ROMix therefore applies BlockMix `N * (N + 3) / 2` times.

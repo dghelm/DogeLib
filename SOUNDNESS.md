@@ -176,7 +176,8 @@ They do not prove agreement with the RFC or Core (A1).
 `fillLoop_eq` relates sequential array fill to the reference list of iterates, for every step function, count, initial state and initial array.
 It equates both the stored states and the final state.
 `fill_eq_spec` specializes it to BlockMix and an empty array.
-The generic theorem supports a later representation proof for the word-array implementation.
+The generic theorem applies to an implementation that stores whole states as array elements.
+It provides no flattening theorem for a flat word array or commutation theorem for a conversion between state types.
 Each of these two theorems, `blockMix_eq`, and the five length lemmas above depends on `propext` and `Quot.sound`, by `#print axioms`.
 
 The component operations are total outside their RFC length domains.

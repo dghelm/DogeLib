@@ -17,6 +17,11 @@ def main():
         print('signed-spend fixtures differ from Core regeneration', file=sys.stderr)
         return 1
     print(f'signed-spend regeneration: {len(result.stdout.splitlines())} records match byte for byte')
+    vectors = subprocess.run([sys.argv[1], '--verification-vectors'], stdout=subprocess.PIPE, check=True, timeout=60)
+    if vectors.stdout != (ROOT / 'tests/cryptography/secp256k1/core/requests.jsonl').read_bytes():
+        print('public-key requests differ from Core regeneration', file=sys.stderr)
+        return 1
+    print('public-key regeneration: 4 records match byte for byte')
     return 0
 
 

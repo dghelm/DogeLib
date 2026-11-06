@@ -448,6 +448,12 @@ UniValue run(const UniValue& req)
     if (op == "oracle.version") {
         checkArgs(req, op, {});
         ok.pushKV("format", FORMAT);
+    } else if (op == "pubkey.verify") {
+        checkArgs(req, op, {"pubkey_hex", "sig_hex", "digest_hex"});
+        const auto key = scriptBytes(req, "pubkey_hex");
+        const auto sig = scriptBytes(req, "sig_hex");
+        const auto digest = argHash(req, "digest_hex");
+        ok.pushKV("valid", CPubKey(key.begin(), key.end()).Verify(digest, sig));
     } else if (op == "script.read_op") {
         checkArgs(req, op, {"bytes_hex", "cursor"});
         const auto bytes = scriptBytes(req, "bytes_hex");

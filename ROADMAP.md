@@ -47,7 +47,7 @@ Each item below is complete.
   Its Lean side is complete. The Core-recorded inputs of its `check_auxpow` known answers are pending stage 5.
 - **SHA-1, RIPEMD-160 and Hash160.** The hash prerequisites of legacy Script, with known answers ([SHA-1](SOUNDNESS.md#sha-1), [RIPEMD-160 and Hash160](SOUNDNESS.md#ripemd-160-and-hash160)).
 - **Legacy Script, stages 1 to 5 of [design record 0003](docs/design/0003-legacy-spend-validation.md).** The instruction reader, Script numbers, one `EvalScript` call, signature-code preparation, encoding checks, the signature and lock-time opcodes, `VerifyScript` with P2SH, and `verifyLegacySpend` for one input.
-  Script verification takes a signature checker as a parameter, and DogeLib has no ECDSA backend ([the checker](SOUNDNESS.md#script-signature-opcodes-and-the-checker)).
+  Script verification takes a signature checker as a parameter, and `coreVerifier` supplies ECDSA verification ([the checker](SOUNDNESS.md#script-signature-opcodes-and-the-checker)).
   The oracle exposes `script.read_op`, `script.eval` and `script.verify_legacy`, and the Core comparison covers them ([counts](docs/oracle.md#the-comparison)).
 - **Worked property of design record 0003, section 7.** `multisigRecovery_sound` and its two converses characterize acceptance of the multisig-with-recovery template for `k` of `n` keys with `1 ≤ k ≤ n ≤ 16` ([worked property](SOUNDNESS.md#script-worked-property-multisig-with-recovery)).
   With 33-byte keys, the 520-byte push limit allows at most 13 keys for this template under P2SH.
@@ -60,9 +60,11 @@ Each item below is complete.
    The Lean side of `CAuxPow::check`, stage 3, is complete. Its Core-recorded inputs are pending stage 5, by maintainer decision on pull request #99.
    PBKDF2 and the RFC 7914 scrypt model are complete.
    The fixed Dogecoin scrypt executable, its refinement proof and the header composition remain.
-2. **Signature verifier, design record 0005.** Stages 1 and 2 are complete.
-   Stage 3 connects `coreVerifier` to the oracle and the Core harness.
-   Its comparison must cover the step that no proof covers: `Point.mulAdd` against Core's `secp256k1_ecmult` (SOUNDNESS.md).
+2. **Signature verifier, design record 0005.** Stages 1 to 3 are complete.
+   The oracle uses `coreVerifier`.
+   Its verdicts agree with Core on 598 dedicated public-key inputs and the Script and transaction corpora.
+   The public-key inputs include constructed infinity and x-above-order cases.
+   Arithmetic agreement remains finite comparison evidence, without an all-input theorem (SOUNDNESS.md).
    Stage 4 verifies signed spends of the multisig-with-recovery template. The harness signer and the recovery fixtures of pull request #97 exist.
 3. **Release 0.1.0.** A reproducible release of the completed capabilities, by the steps in [docs/release.md](docs/release.md).
    The release does not wait for items 1 and 2.

@@ -297,7 +297,7 @@
 {"id":"script-base-multisig-dummy-16","ok":{"result":"rejected","script_error":"SIG_NULLDUMMY"}}
 {"id":"script-base-cltv","ok":{"result":"rejected","script_error":"UNSATISFIED_LOCKTIME"}}
 {"id":"script-legacy-p2sh","ok":{"result":"accepted","script_error":"OK"}}
-{"id":"script-legacy-verifier","ok":{"result":"unsupported","reason":"signature_verifier","opcode":172}}
+{"id":"script-legacy-verifier","ok":{"result":"rejected","script_error":"EVAL_FALSE"}}
 {"id":"script-legacy-base-false","ok":{"result":"rejected","script_error":"EVAL_FALSE"}}
 {"id":"script-legacy-decode","error":{"kind":"read","reason":"truncated","argument":"tx_hex"}}
 {"id":"script-legacy-trailing","error":{"kind":"trailing_bytes","count":1,"argument":"tx_hex"}}
@@ -314,3 +314,7 @@
 {"id":"script-legacy-unsupported-base-2048","ok":{"result":"unsupported","reason":"flags","bits":2048}}
 {"id":"script-legacy-unsupported-transaction-256","ok":{"result":"unsupported","reason":"flags","bits":256}}
 {"id":"script-legacy-unsupported-transaction-2048","ok":{"result":"unsupported","reason":"flags","bits":2048}}
+{"id":"pubkey-core-0","ok":{"valid":true}}
+{"id":"pubkey-core-1","ok":{"valid":true}}
+{"id":"pubkey-core-2","ok":{"valid":true}}
+{"id":"pubkey-core-3","ok":{"valid":true}}

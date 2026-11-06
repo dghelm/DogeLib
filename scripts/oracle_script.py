@@ -125,11 +125,9 @@ def validate_eval(request, response, allow_unsupported):
         spend = request["op"] == "script.verify_legacy"
         checker = request.get("checker", "none")
         allowed = {"flags"}
-        if spend and checker == "transaction":
-            allowed.add("signature_verifier")
-        elif not spend and checker == "none":
+        if not spend and checker == "none":
             allowed.update(("signature_opcode", "check_lock_time_verify", "check_sequence_verify"))
-        extra = {"flags": "bits", "signature_opcode": "opcode", "signature_verifier": "opcode"}.get(reason)
+        extra = {"flags": "bits", "signature_opcode": "opcode"}.get(reason)
         if reason not in allowed:
             return "invalid unsupported reason"
         if set(value) != {"result", "reason"} | ({extra} if extra else set()):
@@ -176,6 +174,11 @@ def adapter_limit_cases():
                        "flags": 0, "checker": checker}
                 cases.append((req, {"ok": {"result": "rejected", "script_error": "SCRIPT_SIZE"}}
                               if n == 1048576 else {"error": limit}))
+    for field in ("pubkey_hex", "sig_hex"):
+        for n in (1048576, 1048577):
+            req = {"op": "pubkey.verify", "pubkey_hex": "", "sig_hex": "", "digest_hex": "00" * 32}
+            req[field] = "00" * n
+            cases.append((req, {"ok": {"valid": False}} if n == 1048576 else {"error": limit}))
     return cases
 
 

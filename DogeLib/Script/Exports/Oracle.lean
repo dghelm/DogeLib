@@ -2,16 +2,18 @@ module
 
 public import DogeLib.Exports.Json
 public import DogeLib.Script.Verify
+public import DogeLib.Script.CoreVerifier
+public import DogeLib.Block.Exports.Oracle
 public import DogeLib.Transaction.Exports.Oracle
 
 /-!
 # `Script.Exports.Oracle`
 
-Script adapters for `dogelib-oracle/1` (docs/oracle.md).
+Script and signature adapters for `dogelib-oracle/1` (docs/oracle.md).
 The specification supplies instruction results, Script errors and unsupported reasons.
 Adapter resource limits precede execution and do not describe consensus rules.
 The transaction decoder and error conversion come from `Transaction.Exports.Oracle`.
-Core sources are SOURCES.md D24 (`GetOp2`), D3 (`EvalScript` and `VerifyScript`) and D25 (`BaseSignatureChecker`).
+Core sources are SOURCES.md D24 (`GetOp2`), D3 (`EvalScript` and `VerifyScript`), D25 (`BaseSignatureChecker`) and D50 (`CPubKey::Verify`).
 -/
 
 @[expose] public section
@@ -86,15 +88,11 @@ def argChecker (args : Args) (evaluation : Bool) : Except Failure String := do
     throw (.request "unknown checker")
   return name
 
-/-- One spend verdict, without an intermediate stack or a claim about an unavailable verifier. -/
-def verifyJson (transaction : Bool) : VerifyResult → Json
+/-- One spend verdict, without an intermediate stack. -/
+def verifyJson : VerifyResult → Json
   | .accepted => Json.mkObj [("result", .str "accepted"), ("script_error", .str "OK")]
   | .rejected e => Json.mkObj [("result", .str "rejected"), ("script_error", .str e.name)]
-  | .unsupported u =>
-    let fields := match transaction, u with
-      | true, .signatureOpcode op => [("reason", .str "signature_verifier"), ("opcode", natJson op.toNat)]
-      | _, _ => unsupportedFields u
-    Json.mkObj (("result", .str "unsupported") :: fields)
+  | .unsupported u => Json.mkObj (("result", .str "unsupported") :: unsupportedFields u)
 
 /-- One legacy input, after complete base decoding and explicit context and script bounds. -/
 def verifyLegacy : Operation where
@@ -116,13 +114,13 @@ def verifyLegacy : Operation where
           if ctx.input.scriptSig.bytes.val.length > 1048576 then throw resourceLimit
           let some counted := Serialization.CountedList.ofList? script | throw resourceLimit
           return if checker == "base" then
-            verifyJson false (verifyScript baseChecker flags ctx.input.scriptSig.bytes.val script)
-          else verifyJson true (verifyLegacySpend ctx ⟨counted⟩ flags (fun _ _ _ => none))
+            verifyJson (verifyScript baseChecker flags ctx.input.scriptSig.bytes.val script)
+          else verifyJson (verifyLegacySpend ctx ⟨counted⟩ flags coreVerifier)
         else throw (adapterFailure "context_bounds")
       else throw (adapterFailure "context_bounds")
     else throw (adapterFailure "input_index_out_of_range")
 
-/-- Script operations in the oracle format. -/
+/-- Script and single-signature operations in the oracle format. -/
 def operations : List Operation := [
   { name := "script.read_op", args := ["bytes_hex", "cursor"], run := fun args => do
       let bytes ← argScript args
@@ -135,6 +133,11 @@ def operations : List Operation := [
       let stack ← argStack args
       let checker ← argChecker args true
       return evalJson (evalScript (if checker == "base" then some baseChecker else none) flags bytes stack) },
+  { name := "pubkey.verify", args := ["pubkey_hex", "sig_hex", "digest_hex"], run := fun args => do
+      let key ← argScript args "pubkey_hex"
+      let sig ← argScript args "sig_hex"
+      let digest ← Block.Exports.argHash args "digest_hex"
+      return Json.mkObj [("valid", .bool (coreVerify sig key digest))] },
   verifyLegacy]
 
 end DogeLib.Script.Exports

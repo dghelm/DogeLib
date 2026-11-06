@@ -1,5 +1,6 @@
 module
 
+public import DogeLib.Cryptography.Hash.Hmac
 public import DogeLib.Cryptography.Hash.Hash160
 public import DogeLib.Cryptography.Hash.Ripemd160
 public import DogeLib.Cryptography.Hash.Sha1

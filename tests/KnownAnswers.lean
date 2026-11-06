@@ -1,3 +1,4 @@
+import DogeLib.Cryptography.Hash.Hmac
 import DogeLib.Cryptography.Hash.Hash160
 import DogeLib.Cryptography.Hash.Sha1
 import DogeLib.Cryptography.Hash.Sha256
@@ -4410,8 +4411,65 @@ def check : IO Nat := do
 end KnownAnswers.TxSpends
 
 
+namespace KnownAnswers.Hmac
+
+/-- RFC 4231 §§4.2–4.8: key, message and HMAC-SHA-256 tag in hexadecimal.
+Case 5 supplies only the first 16 bytes.
+Cases 6 and 7 use 131-byte keys.
+The RFC Editor errata search was read on 2026-11-06.
+Erratum 3853 adds an equals sign to case 3's key label and changes no bytes. -/
+def vectors : Array (String × String × String) := #[
+  ("0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+    "4869205468657265",
+    "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7"),
+  ("4a656665",
+    "7768617420646f2079612077616e7420666f72206e6f7468696e673f",
+    "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843"),
+  ("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "773ea91e36800e46854db8ebd09181a72959098b3ef8c122d9635514ced565fe"),
+  ("0102030405060708090a0b0c0d0e0f10111213141516171819",
+    "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+    "82558a389a443c0ea4cc819899f2083a85f0faa3e578f8077a2e3ff46729665b"),
+  ("0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c",
+    "546573742057697468205472756e636174696f6e",
+    "a3b6167473100ee06e0c796c2955552b"),
+  ("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "54657374205573696e67204c6172676572205468616e20426c6f636b2d53697a65204b6579202d2048617368204b6579204669727374",
+    "60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54"),
+  ("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "5468697320697320612074657374207573696e672061206c6172676572207468616e20626c6f636b2d73697a65206b657920616e642061206c6172676572207468616e20626c6f636b2d73697a6520646174612e20546865206b6579206e6565647320746f20626520686173686564206265666f7265206265696e6720757365642062792074686520484d414320616c676f726974686d2e",
+    "9b09ffa71b942fcb27635fbcd5b0e944bfdc63644f0713938a7f51535c3a35e2")
+]
+
+/-- Checks all seven RFC tags through compiled HMAC, including the case 5 prefix. -/
+def check : IO Nat := do
+  let mut failures := 0
+  for i in [:vectors.size] do
+    let (keyHex, messageHex, tagHex) := vectors[i]!
+    let parse (s : String) : IO ByteArray :=
+      match Sha256Cavp.parseHex s with
+      | .ok b => pure b
+      | .error e => throw (IO.userError e)
+    let key ← parse keyHex
+    let message ← parse messageHex
+    let expected ← parse tagHex
+    let got := DogeLib.Cryptography.Hash.Hmac.hmac key message
+    let tagSize := if i == 4 then 16 else 32
+    unless got.size == 32 && expected.size == tagSize && got.extract 0 tagSize == expected do
+      IO.eprintln s!"FAIL RFC 4231 case {i + 1}: {Sha256Cavp.toHex got}"
+      failures := failures + 1
+  unless vectors.size == 7 do
+    IO.eprintln "FAIL RFC 4231 case count"
+    failures := failures + 1
+  IO.println s!"HMAC-SHA-256: {vectors.size} RFC 4231 cases, {failures} failures"
+  return failures
+
+end KnownAnswers.Hmac
+
 /-- Entry point of `lake test`. -/
 def main : IO UInt32 := do
+  let hmac ← KnownAnswers.Hmac.check
   let sha1 ← KnownAnswers.Sha1.check
   let dir : System.FilePath := "tests/cryptography/sha256/cavp"
   let short ← KnownAnswers.Sha256Cavp.checkFile (dir / "SHA256ShortMsg.rsp") 65
@@ -4442,5 +4500,5 @@ def main : IO UInt32 := do
   let scriptVerify ← KnownAnswers.ScriptVerify.check
   let multisigRecovery ← KnownAnswers.MultisigRecovery.check
   let txSpends ← KnownAnswers.TxSpends.check
-  return if sha1 + blocks + short + long + ripemd + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts + proofOfWork + scriptReader + scriptNum + scriptEval + signatureCode + signatureEncoding + scriptSignature + scriptVerify + multisigRecovery + txSpends == 0 then 0 else 1
+  return if hmac + sha1 + blocks + short + long + ripemd + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts + proofOfWork + scriptReader + scriptNum + scriptEval + signatureCode + signatureEncoding + scriptSignature + scriptVerify + multisigRecovery + txSpends == 0 then 0 else 1
 

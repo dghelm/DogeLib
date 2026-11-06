@@ -409,7 +409,7 @@ Material under one of these licences can ship without a further check:
 | Public domain | NIST CAVP test vectors |
 | CC0 1.0 | EthLib |
 | MIT | Values from Dogecoin Core's tests and chain parameters |
-| BSD 2-clause or 3-clause | None yet |
+| BSD 2-clause or 3-clause | verified-garbage HMAC model |
 | Apache 2.0 | btc-verified |
 
 Each can accompany MIT-licensed material, provided DogeLib meets every condition of its licence.

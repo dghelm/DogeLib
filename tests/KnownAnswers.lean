@@ -4298,6 +4298,118 @@ def check : IO Nat := do
 
 end KnownAnswers.MultisigRecovery
 
+/-!
+## Transaction spend corpus
+
+Run the inside-milestone inputs of `tx_spends.jsonl` through `verifyLegacySpend` with an unavailable verifier.
+D28 and D29 supply the transactions, and D30 supplies the per-input acceptance requirement for `tx_valid`.
+An invalid transaction supplies no individual Script expectation.
+The witness-allowed prefix reader follows D30, while a separate complete base decode checks the oracle input domain.
+-/
+
+namespace KnownAnswers.TxSpends
+
+open DogeLib.Script DogeLib.Transaction
+
+/-- The fields needed to check one transaction input against the corpus requirement. -/
+structure Record where
+  source : String
+  line : Nat
+  inputIndex : UInt32
+  bytes : List UInt8
+  prevScript : DogeLib.Transaction.Script
+  flags : UInt32
+  accept : Bool
+  inside : Bool
+
+/-- Read a spend record without deriving an expectation from transaction rejection. -/
+def parseRecord (text : String) : Except String Record := do
+  let j ← Lean.Json.parse text
+  let bytes ← KnownAnswers.Sha256Cavp.parseHex (← (← j.getObjVal? "tx_hex").getStr?)
+  let prev ← KnownAnswers.Sha256Cavp.parseHex (← (← j.getObjVal? "prevout_scriptPubKey_hex").getStr?)
+  let some prevScript := DogeLib.Serialization.CountedList.ofList? prev.toList
+    | throw "previous-output script exceeds the counted-list bound"
+  let index ← (← j.getObjVal? "input_index").getNat?
+  if index ≥ 2 ^ 32 then throw "input index exceeds uint32"
+  let expectation ← j.getObjVal? "per_input_expectation"
+  let accept ← match expectation with
+    | .null => pure false
+    | .str "accept" => pure true
+    | _ => throw "unknown per-input expectation"
+  return {
+    source := ← (← j.getObjVal? "source_file").getStr?
+    line := ← (← j.getObjVal? "source_line").getNat?
+    inputIndex := index.toUInt32
+    bytes := bytes.toList
+    prevScript := ⟨prevScript⟩
+    flags := (← (← j.getObjVal? "flags_mask").getNat?).toUInt32
+    accept
+    inside := (← (← (← j.getObjVal? "classification").getObjVal? "milestone").getStr?) == "inside" }
+
+/-- Check every eligible input. Unknown expectations contribute outcome counts only. -/
+def check : IO Nat := do
+  let path : System.FilePath := "tests/script/corpus/tx_spends.jsonl"
+  let lines := ((← IO.FS.readFile path).splitOn "\n").filter (!·.isEmpty)
+  let mut failures := 0
+  let mut excluded := 0
+  let mut baseDecoded := 0
+  let mut accepted := 0
+  let mut verifier := 0
+  let mut required := 0
+  let mut unknownAccepted := 0
+  let mut unknownRejected := 0
+  let mut unknownVerifier := 0
+  for text in lines do
+    let r ← match parseRecord text with
+      | .ok r => pure r
+      | .error e => throw (IO.userError s!"{path}: {e}")
+    if !r.inside then
+      excluded := excluded + 1
+      continue
+    if r.accept then required := required + 1
+    match Transaction.decodeBaseComplete r.bytes with
+    | .ok _ => baseDecoded := baseDecoded + 1
+    | .error _ =>
+      IO.eprintln s!"FAIL {r.source}:{r.line}: eligible input does not decode as complete base bytes"
+      failures := failures + 1
+    let w ← match Transaction.readAllowWitness r.bytes with
+      | .ok (w, _) => pure w
+      | .error _ => throw (IO.userError s!"{r.source}:{r.line}: transaction prefix does not decode")
+    if w.hasWitness then throw (IO.userError "eligible spend has a witness")
+    let tx := w.tx
+    if hi : r.inputIndex.toNat < tx.inputs.val.length then
+      if hn : tx.inputs.val.length < 2 ^ 32 then
+        if ho : tx.outputs.val.length < 2 ^ 32 then
+          let ctx : InputContext := ⟨tx, r.inputIndex, hi, hn, ho⟩
+          let got := verifyLegacySpend ctx r.prevScript r.flags fun _ _ _ => none
+          match got with
+          | .accepted =>
+            if r.accept then accepted := accepted + 1 else unknownAccepted := unknownAccepted + 1
+          | .unsupported (.signatureOpcode _) =>
+            if r.accept then verifier := verifier + 1 else unknownVerifier := unknownVerifier + 1
+          | .rejected _ =>
+            if r.accept then
+              IO.eprintln s!"FAIL {r.source}:{r.line} input {r.inputIndex}: required accept, got {repr got}"
+              failures := failures + 1
+            else unknownRejected := unknownRejected + 1
+          | .unsupported _ =>
+            IO.eprintln s!"FAIL {r.source}:{r.line}: unexpected unsupported result {repr got}"
+            failures := failures + 1
+        else throw (IO.userError "output count exceeds context bound")
+      else throw (IO.userError "input count exceeds context bound")
+    else throw (IO.userError "spend index outside transaction")
+  let unknown := unknownAccepted + unknownRejected + unknownVerifier
+  unless lines.length == 267 && excluded == 108 && baseDecoded == 159 && required == 91 && unknown == 68 do
+    IO.eprintln "FAIL transaction spend corpus counts"
+    failures := failures + 1
+  IO.println s!"transaction spends: {lines.length} records, {excluded} excluded, {baseDecoded} complete base decodes, {failures} failures"
+  IO.println s!"transaction spends required accept: {required} inputs, {accepted} accepted, {verifier} reach unavailable verifier"
+  IO.println s!"transaction spends unknown expectation: {unknown} inputs, {unknownAccepted} accepted, {unknownRejected} rejected, {unknownVerifier} reach unavailable verifier (no agreement claim)"
+  return failures
+
+end KnownAnswers.TxSpends
+
+
 /-- Entry point of `lake test`. -/
 def main : IO UInt32 := do
   let sha1 ← KnownAnswers.Sha1.check
@@ -4329,4 +4441,6 @@ def main : IO UInt32 := do
   let scriptSignature ← KnownAnswers.ScriptSignature.check
   let scriptVerify ← KnownAnswers.ScriptVerify.check
   let multisigRecovery ← KnownAnswers.MultisigRecovery.check
-  return if sha1 + blocks + short + long + ripemd + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts + proofOfWork + scriptReader + scriptNum + scriptEval + signatureCode + signatureEncoding + scriptSignature + scriptVerify + multisigRecovery == 0 then 0 else 1
+  let txSpends ← KnownAnswers.TxSpends.check
+  return if sha1 + blocks + short + long + ripemd + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts + proofOfWork + scriptReader + scriptNum + scriptEval + signatureCode + signatureEncoding + scriptSignature + scriptVerify + multisigRecovery + txSpends == 0 then 0 else 1
+

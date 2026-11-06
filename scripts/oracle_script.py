@@ -233,13 +233,115 @@ def legacy_sets():
 
 
 
+def tx_spend_records():
+    """Transaction inputs with runner-derived expectations, including unknown outcomes."""
+    return [json.loads(line) for line in (ROOT / "tests/script/corpus/tx_spends.jsonl").read_text().splitlines()]
+
+
+def tx_spend_sets():
+    """Keep accept requirements separate from inputs with unknown expectations."""
+    records = [r for r in tx_spend_records() if r["classification"]["milestone"] == "inside"]
+    assert len(records) == 159
+    return [(f"Script tx spends {expectation} {checker}", [
+        {"op": "script.verify_legacy", "tx_hex": r["tx_hex"], "input_index": r["input_index"],
+         "prevout_script_hex": r["prevout_scriptPubKey_hex"], "flags": r["flags_mask"], "checker": checker}
+        for r in records if (r["per_input_expectation"] == "accept") == (expectation == "accept")])
+        for checker in ("base", "transaction") for expectation in ("accept", "unknown")]
+
+
+LOCK_SEED = 20261107
+
+
+def locktime_sets():
+    """Each request reaches its named opcode after one operand push (D3, lines 350–427)."""
+    rng = random.Random(LOCK_SEED)
+    sets = []
+    for opcode, flag, label, operands, values in (
+        (177, 512, "CLTV", [-1, 0, 1, 499999998, 499999999, 500000000, 500000001, 0xffffffff, 0x100000000],
+         [0, 1, 499999999, 500000000, 500000001, 0xffffffff]),
+        (178, 1024, "CSV", [-1, 0, 1, 65535, 65536, 0x400000, 0x400001, 0x40ffff, 0x80000000, 0x80400001, 0xffffffff],
+         [0, 1, 65535, 65536, 0x400000, 0x400001, 0x40ffff, 0x80000000, 0x80400001, 0xffffffff])):
+        # Cartesian boundaries guarantee equal operands, type mismatches and final sequences.
+        cases = [(v, t, q, n) for v in (1, 2, 0x80000000, 0xffffffff) for t in values
+                 for q in ((0, 0xffffffff) if opcode == 177 else (t,)) for n in operands]
+        cases += [(rng.getrandbits(32), rng.getrandbits(32), rng.getrandbits(32),
+                   rng.choice(operands) if rng.randrange(2) else rng.getrandbits(33)) for _ in range(500)]
+        requests = []
+        for version, value, sequence, operand in cases:
+            magnitude = abs(operand)
+            data = magnitude.to_bytes((magnitude.bit_length() + 7) // 8, "little")
+            if data and data[-1] & 128:
+                data += b"\x00"
+            if operand < 0:
+                data = data[:-1] + bytes([data[-1] | 128])
+            # DROP TRUE avoids an unrelated false-top rejection when the operand is zero.
+            script = push(data) + bytes([opcode, 117, 81])
+            requests.append({"op": "script.verify_legacy", "tx_hex": spend_tx(b"", version, sequence, value if opcode == 177 else 0),
+                             "input_index": 0, "prevout_script_hex": script.hex(), "flags": flag, "checker": "transaction"})
+        sets.append((f"Script targeted {label} transaction seed {LOCK_SEED}", requests))
+    return sets
+
+
+def base_spend_domain(tx_hex, index):
+    """Check complete base decoding and bounds before the harness flag guard (D4)."""
+    if not isinstance(tx_hex, str) or not re.fullmatch(r"(?:[0-9a-fA-F]{2})*", tx_hex):
+        return False
+    data, pos = bytes.fromhex(tx_hex), 0
+
+    def take(n):
+        nonlocal pos
+        if pos + n > len(data):
+            raise ValueError("truncated")
+        result = data[pos:pos + n]
+        pos += n
+        return result
+
+    def size():
+        tag = take(1)[0]
+        if tag < 253:
+            return tag
+        n = int.from_bytes(take({253: 2, 254: 4, 255: 8}[tag]), "little")
+        if n < {253: 253, 254: 65536, 255: 4294967296}[tag] or n > 0x02000000:
+            raise ValueError("CompactSize")
+        return n
+
+    try:
+        take(4)
+        inputs = size()
+        script_sizes = []
+        for _ in range(inputs):
+            take(36)
+            n = size()
+            script_sizes.append(n)
+            take(n)
+            take(4)
+        outputs = size()
+        for _ in range(outputs):
+            take(8)
+            take(size())
+        take(4)
+        return (pos == len(data) and 0 <= index < inputs < 2**32 and outputs < 2**32
+                and script_sizes[index] <= 1048576)
+    except (ValueError, TypeError):
+        return False
+
+
 def harness_refused(request):
     """Core's VerifyScript asserts these flag dependencies, before it can return a verdict."""
-    if request["op"] != "script.verify_legacy":
+    required = {"op", "tx_hex", "input_index", "prevout_script_hex", "flags", "checker"}
+    if (set(request) - {"id"} != required or request.get("op") != "script.verify_legacy" or
+            type(request["input_index"]) is not int):
         return False
     flags = request["flags"]
-    return bool((flags & 2048 and not flags & 1) or
-                (flags & 256 and (not flags & 1 or not flags & 2048)))
+    unsafe = bool((flags & 2048 and not flags & 1) or
+                  (flags & 256 and (not flags & 1 or not flags & 2048)))
+    if not unsafe:
+        return False
+    script = request.get("prevout_script_hex")
+    return (request.get("checker") in ("base", "transaction") and
+            isinstance(script, str) and len(script) <= 2097152 and
+            re.fullmatch(r"(?:[0-9a-fA-F]{2})*", script) is not None and
+            base_spend_domain(request.get("tx_hex"), request.get("input_index")))
 
 
 def refused_set():
@@ -247,3 +349,14 @@ def refused_set():
     return [{"op": "script.verify_legacy", "tx_hex": spend_tx(b""), "input_index": 0,
              "prevout_script_hex": "51", "checker": checker, "flags": flags}
             for checker in ("base", "transaction") for flags in (256, 2048, 2304, 257)]
+
+
+def refusal_precedence_set():
+    """Earlier decoding and index errors retain their ordinary comparison path."""
+    valid = refused_set()[0]
+    return [{**valid, **change} for change in (
+        {"tx_hex": ""}, {"tx_hex": "0100000001"},
+        {"tx_hex": valid["tx_hex"] + "00"}, {"input_index": 1},
+        {"tx_hex": "01000000000000000000"},
+        {"tx_hex": valid["tx_hex"][:8] + "fd0100" + valid["tx_hex"][10:]},
+        {"tx_hex": valid["tx_hex"][:8] + "fe01000002" + valid["tx_hex"][10:]})]

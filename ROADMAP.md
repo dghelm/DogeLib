@@ -103,6 +103,12 @@ Base gives 925 compared verdicts, while transaction gives 881 compared verdicts 
 Each checker also has 2,000 legacy mutations under seed `20261106`, with unsupported results separate from agreement.
 These streams have zero disagreements. The Lean adapter has no ECDSA backend.
 
+The transaction-spend comparison covers all 159 eligible inputs with both checkers: base has 159 agreements, and transaction has 99 agreements and 60 unavailable-verifier results.
+All 91 Core acceptance requirements pass.
+Targeted streams under seed `20261107` reach CLTV on 932 requests and CSV on 940 requests, with zero disagreements.
+`lake test` checks the 91 required acceptances and reports the 68 unknown per-input outcomes separately.
+[The comparison report](docs/oracle.md#the-comparison) records both revisions and the per-stream counts.
+
 The worked property of design record 0003, section 7, is done for `k` of `n` keys with `1 ≤ k ≤ n ≤ 16`, and for 2-of-3.
 `multisigRecovery_sound` and the two converses prove that acceptance is equivalent to the two branches.
 The branches state the encoding predicates, `NULLDUMMY`, ordered matching and the lock-time conditions explicitly.

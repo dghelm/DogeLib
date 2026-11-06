@@ -38,7 +38,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 from oracle_hash_block import header_fields, header_records, header_fixtures, merkle_fixtures, hash_fixtures, sha1_fixtures
 
-from oracle_script import script_sets, corpus_records, evaluation, validate_eval, adapter_limit_cases, legacy_sets, harness_refused, refused_set
+from oracle_script import script_sets, corpus_records, evaluation, validate_eval, adapter_limit_cases, legacy_sets, harness_refused, refused_set, tx_spend_sets, locktime_sets, refusal_precedence_set
 
 ORACLE_FORMAT = "dogelib-oracle/6"
 MAX_SIZE = 0x02000000
@@ -613,7 +613,9 @@ def set_hash_boundaries(algorithm: str) -> list[dict]:
 QUICK_SETS = ("fixtures", "compactsize", "sighash endpoints", "witness flags and stacks",
               "work compact boundaries", "regtest legacy wrap case", "work missing skip traversal", "header field boundaries", "Merkle generated",
               "RIPEMD-160 padding boundaries", "Hash160 padding boundaries", "SHA-1 padding boundaries", "Script reader truncations", "Script resource boundaries", "Script resource boundaries base",
-              "Script legacy corpus base", "Script legacy corpus transaction", "Script harness refusal domain")
+              "Script legacy corpus base", "Script legacy corpus transaction", "Script harness refusal domain", "Script refusal precedence",
+              "Script tx spends accept base", "Script tx spends unknown base",
+              "Script tx spends accept transaction", "Script tx spends unknown transaction")
 
 
 def request_sets() -> tuple[list[tuple[str, list[dict]]], list[str]]:
@@ -670,6 +672,9 @@ def request_sets() -> tuple[list[tuple[str, list[dict]]], list[str]]:
     ])
     sets.extend(script_sets())
     sets.extend(legacy_sets())
+    sets.extend(tx_spend_sets())
+    sets.extend(locktime_sets())
+    sets.append(("Script refusal precedence", refusal_precedence_set()))
     sets.append(("Script harness refusal domain", refused_set()))
     return sets, excluded
 
@@ -860,7 +865,7 @@ def main() -> int:
     dirty = subprocess.run(["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True)
     print(f"DogeLib revision: {revision.stdout.strip()}" + (" (dirty tree)" if dirty.stdout else ""))
     print("Expected Core source revision: e0a1c157791544e818c901bd9341896965afbf9d")
-    print("Seeds: transaction mutations 20261104, Script evaluation 20261105, legacy spends 20261106")
+    print("Seeds: transaction mutations 20261104, Script evaluation 20261105, legacy spends 20261106, targeted timelocks 20261107")
 
     rust_args = []
     if args.rust_compactsize:
@@ -919,12 +924,16 @@ def main() -> int:
     outcomes = {name: {} for name, _ in sets}
     unsupported = {name: {} for name, _ in sets}
     refused = {name: 0 for name, _ in sets}
+    agreements = {name: 0 for name, _ in sets}
+    reached = {name: 0 for name, _ in sets}
+    sanity_expected = next((len(reqs) for name, reqs in sets if name == "Script tx spends accept transaction"), None)
+    sanity_checks = 0
+    sanity_failures = 0
     reported = 0
     for i, (req, name, a, b) in enumerate(zip(requests, owner, ours, core)):
         if harness_refused(req):
             result = compare_refused(req, a, b)
-            if result is None:
-                refused[name] += 1
+            refused[name] += 1
         else:
             kind = outcome(b)
             if req["op"] in ("script.eval", "script.verify_legacy") and a.get("ok", {}).get("result") == "unsupported":
@@ -932,9 +941,21 @@ def main() -> int:
                 unsupported[name][label] = unsupported[name].get(label, 0) + 1
             outcomes[name][kind] = outcomes[name].get(kind, 0) + 1
             result = compare(req, a, b)
+            if name == "Script tx spends accept transaction":
+                sanity_checks += 1
+                if b.get("ok") != {"result": "accepted", "script_error": "OK"}:
+                    sanity_failures += 1
+                    result = ("TX_VALID_CORE", "Core transaction checker must accept every tx_valid input")
+        if name.startswith("Script targeted "):
+            if outcome(b) in {"accepted:OK", "rejected:NEGATIVE_LOCKTIME", "rejected:UNSATISFIED_LOCKTIME"}:
+                reached[name] += 1
+            else:
+                result = ("TARGETED_OPCODE", "Core outcome does not establish that the target opcode was reached")
         if result is None and rust is not None:
             result = compare(req, a, rust[i], "rust")
         if result is None:
+            if not harness_refused(req) and a.get("ok", {}).get("result") != "unsupported":
+                agreements[name] += 1
             continue
         per_set[name][1] += 1
         failures.append(result[0])
@@ -947,12 +968,20 @@ def main() -> int:
             print(f"  core:    {json.dumps(b)[:400]}")
             if rust is not None:
                 print(f"  rust:    {json.dumps(rust[i])[:400]}")
+    if sanity_expected is not None and sanity_checks != sanity_expected:
+        failures.append("TX_VALID_CORE_COUNT")
+        print(f"FAIL TX_VALID_CORE_COUNT {sanity_checks} acceptance checks, expected {sanity_expected}")
     for name, (total, bad) in per_set.items():
         skipped = sum(unsupported[name].values())
         print(f"{name}: {total} requests, {total - skipped - refused[name]} compared, {skipped} unsupported, {refused[name]} harness-refused, {bad} disagreements")
+        print(f"  agreement: {agreements[name]}")
+        if name.startswith("Script targeted "):
+            print(f"  reached {name.split()[2]}: {reached[name]}")
         for label, count in sorted(unsupported[name].items()):
             print(f"  unsupported {label}: {count}")
         print("  Core's outcomes: " + ", ".join(f"{k} {v}" for k, v in sorted(outcomes[name].items())))
+    if not args.rust_compactsize:
+        print(f"tx_valid Core acceptance requirements: {sanity_checks} checked, {sanity_failures} failed")
     if not args.quick and not args.rust_compactsize:
         failures.extend(compare_adapter_limits(args.oracle, args.harness, args.timeout))
         failures.extend(compare_compositions(args.oracle, args.harness, args.timeout))

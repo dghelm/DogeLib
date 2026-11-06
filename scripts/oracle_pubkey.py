@@ -121,7 +121,8 @@ def pubkey_sets():
 
 
 def signature_spends():
+    """All signed recovery-template fixtures, rechecked by Lean and live Core."""
     records = [json.loads(line) for line in (ROOT / 'tests/script/signed-spends/recovery.jsonl').read_text().splitlines()]
     return [dict(op='script.verify_legacy', tx_hex=r['tx_hex'], input_index=r['input_index'],
                  prevout_script_hex=r['script_pubkey_hex'], flags=r['flags'], checker='transaction')
-            for r in records if r['id'] == 'recovery']
+            for r in records]

@@ -2193,7 +2193,12 @@ Each expected verdict comes from Core's `VerifyScript`, with the digest and tran
 Fixture users trust the generator's template construction, high-S conversion, serialization and Core build.
 The generator records its source blob and uses Core's randomness code with a stderr logging adapter.
 Byte-for-byte regeneration checks reproducibility, but does not establish agreement with DogeLib.
-Lean does not consume these signed fixtures.
+
+`lake test` runs all 25 signed fixtures through `verifyLegacySpend` with `coreVerifier` and each record's flags.
+It compares both the Boolean verdict and the ScriptError name against Core's recorded values.
+The oracle and live Core also compare all 25 records through `script.verify_legacy` with the transaction checker.
+These checks cover the three 2-of-3 signer pairs, the recovery branch and every recorded mutation.
+They provide finite comparison evidence, without a theorem about all signed spends.
 
 Both programs could be wrong in the same way on an input that the comparison does not send.
 

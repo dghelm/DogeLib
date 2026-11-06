@@ -10,7 +10,7 @@ Update the *Status* column when the pull request merges, not when work starts.
 The signature-verifier work follows [design record 0005](docs/design/0005-signature-verifier.md).
 Stage 1 adapts the secp256k1 curve arithmetic and scalar ECDSA verifier with independent Wycheproof known answers.
 Stage 2 adds Core's public-key parser and `coreVerifier`, Core's `CPubKey::Verify`, and runs Core's script and transaction corpora with it in `lake test`.
-The next stages connect the oracle and compare signed spends.
+Stage 3 connects the oracle, and stage 4 compares all 25 signed recovery-template fixtures in Lean and with live Core.
 Mathlib-dependent curve proofs require a later package proposal.
 
 ## Work order
@@ -60,12 +60,14 @@ Each item below is complete.
    The Lean side of `CAuxPow::check`, stage 3, is complete. Its Core-recorded inputs are pending stage 5, by maintainer decision on pull request #99.
    PBKDF2 and the RFC 7914 scrypt model are complete.
    The fixed Dogecoin scrypt executable, its refinement proof and the header composition remain.
-2. **Signature verifier, design record 0005.** Stages 1 to 3 are complete.
+2. **Signature verifier, design record 0005.** Stages 1 to 4 are complete.
    The oracle uses `coreVerifier`.
    Its verdicts agree with Core on 598 dedicated public-key inputs and the Script and transaction corpora.
    The public-key inputs include constructed infinity and x-above-order cases.
    Arithmetic agreement remains finite comparison evidence, without an all-input theorem (SOUNDNESS.md).
-   Stage 4 verifies signed spends of the multisig-with-recovery template. The harness signer and the recovery fixtures of pull request #97 exist.
+   All 25 Core-signed recovery-template fixtures agree in verdict and error through `lake test`.
+   The oracle comparison rechecks the same records with live Core.
+   The three 2-of-3 signer pairs, recovery branch and recorded mutations meet the stage 4 exit conditions.
 3. **Release 0.1.0.** A reproducible release of the completed capabilities, by the steps in [docs/release.md](docs/release.md).
    The release does not wait for items 1 and 2.
 

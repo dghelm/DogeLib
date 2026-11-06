@@ -35,6 +35,8 @@ Each item below is complete.
   The 256-bit word paths of the retarget have arithmetic equivalence proofs ([target validity](SOUNDNESS.md#target-validity-and-supplied-hash-proof-of-work), [word division](SOUNDNESS.md#256-bit-word-division)).
   This work ran in parallel with the transaction path, as design record 0001, section 10, requires.
 - **Blocks.** 80-byte pure headers, their double SHA-256 hashes, and transaction Merkle roots with mutation detection ([headers and Merkle roots](SOUNDNESS.md#pure-headers-and-transaction-merkle-roots)).
+  Full headers with the AuxPoW payload, read and written in each read mode of the embedded transaction ([full headers](SOUNDNESS.md#full-headers-and-the-auxpow-payload)).
+  This codec is stage 2 of [design record 0004](docs/design/0004-header-proof-of-work.md).
 - **SHA-1, RIPEMD-160 and Hash160.** The hash prerequisites of legacy Script, with known answers ([SHA-1](SOUNDNESS.md#sha-1), [RIPEMD-160 and Hash160](SOUNDNESS.md#ripemd-160-and-hash160)).
 - **Legacy Script, stages 1 to 5 of [design record 0003](docs/design/0003-legacy-spend-validation.md).** The instruction reader, Script numbers, one `EvalScript` call, signature-code preparation, encoding checks, the signature and lock-time opcodes, `VerifyScript` with P2SH, and `verifyLegacySpend` for one input.
   Script verification takes a signature checker as a parameter, and DogeLib has no ECDSA backend ([the checker](SOUNDNESS.md#script-signature-opcodes-and-the-checker)).
@@ -46,7 +48,8 @@ Each item below is complete.
 
 1. **Header proof of work, [design record 0004](docs/design/0004-header-proof-of-work.md).** The scrypt digest of a pure header, with HMAC-SHA256 and PBKDF2.
    The AuxPoW payload, and the composition of both with the compact-target check.
-   Work on HMAC-SHA256 and on the AuxPoW codec is in progress.
+   HMAC-SHA256 and the full header codec of stage 2 are complete.
+   PBKDF2, scrypt, `CAuxPow::check` and the composition remain.
 2. **Signature verifier, design record 0005.** A Core-compatible verifier for executable checks, proposed in pull request #90 and not yet adopted.
 3. **Release 0.1.0.** A reproducible release of the completed capabilities, by the steps in [docs/release.md](docs/release.md).
    The release does not wait for items 1 and 2.

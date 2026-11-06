@@ -18,6 +18,7 @@ A longer key is hashed first, and its 32-byte hash is padded the same way.
 So zero bytes appended to a short key do not change the tag.
 
 The pads act byte by byte, as steps (2) and (5) of the RFC XOR the key block with `ipad` and `opad`.
+
 Adapted from EthLib `EthLib/Cryptography/Proofs/Hash/Hmac.lean` at
 `bb6dfe55198243682bc2eaf94611af2dbce1be6f`, under CC0 1.0.
 The adaptation changes the namespace and documentation.
@@ -138,7 +139,6 @@ theorem blockKey_eq_spec (key : ByteArray) :
     simp only [Spec.blockKey, bs, toBytes_length, ite_eq_right h,
       toBytes_append, toBytes_zeros, BLOCK_SIZE]
 
-
 /-- For every key and message, the executable equals the list model using executable SHA-256. -/
 theorem hmac_eq_spec (key message : ByteArray) :
     Spec.toBytes (hmac key message) =
@@ -159,7 +159,7 @@ theorem hmac_eq_spec (key message : ByteArray) :
     rfl
   rw [outer, sha256_toBytes]
 
-/-- The list model instantiated with the FIPS 180-4 SHA-256 model. -/
+/-- The FIPS 180-4 SHA-256 model as an HMAC hash function: block size 64, with byte conversions. -/
 def Spec.fipsSha256 : Spec.HashFunction :=
   ⟨64, fun b => Spec.toBytes (Sha256.Spec.hash (Spec.fromBytes b))⟩
 

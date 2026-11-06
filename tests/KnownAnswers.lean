@@ -1,5 +1,5 @@
-import DogeLib.Cryptography.Hash.Hmac
 import DogeLib.Cryptography.Hash.Hash160
+import DogeLib.Cryptography.Hash.Hmac
 import DogeLib.Cryptography.Hash.Sha1
 import DogeLib.Cryptography.Hash.Sha256
 import DogeLib.Cryptography.Hash.Sha256d

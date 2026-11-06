@@ -760,29 +760,32 @@ The supporting byte and little-endian lemmas of the module use the same three ax
 ### Script evaluation, one `EvalScript` call
 
 `DogeLib.Script.Eval` specifies one call of Core's `EvalScript` in `SIGVERSION_BASE` (SOURCES.md, D3).
-It covers the opcodes of stage 2 of design record 0003: control flow, stack operations, numbers and hashes.
+It covers the opcodes of stages 2 and 3 of design record 0003: control flow, stack operations, numbers, hashes and signatures.
+[Script signature opcodes and the checker](#script-signature-opcodes-and-the-checker) states the claims about the signature opcodes.
 `DogeLib.Script.Error` gives Core's `ScriptError_t` (D49), and `DogeLib.Script.Flags` gives the flag bits of D25.
 The theorems are in `DogeLib.Script.Proofs.Eval`.
 
-`evalScript flags script stack` returns one of three results.
+`evalScript checker flags script stack` returns one of three results.
 `ok` is Core's `true` with `SCRIPT_ERR_OK`, and `rejected e` is Core's `false` with error `e`.
 `unsupported r` means that this stage lacks a capability that the call needs, and says nothing about Core's verdict.
 A flag outside the seven of design record 0003 is unsupported before any other check.
-An executed signature opcode is unsupported, and so is an executed `OP_CHECKLOCKTIMEVERIFY` or `OP_CHECKSEQUENCEVERIFY` with its flag set.
+An executed `OP_CHECKLOCKTIMEVERIFY` or `OP_CHECKSEQUENCEVERIFY` with its flag set is unsupported.
+Without a checker, an executed signature opcode is unsupported, and so is a signature check that the checker cannot decide.
 
 For every flag set, script and caller stack:
 
 - `evalScript_unsupportedFlags`: a flag bit outside `supportedFlags` gives `unsupported`, with exactly those bits.
 - `evalScript_scriptSize`: with supported flags, a script of more than 10,000 bytes gives `SCRIPT_SIZE`.
 - `evalScript_ok`: a successful call ends at the end of the script, with an empty `vfExec`, in a state that satisfies `ExecState.WellFormed`. If the script is not empty, the two stacks hold at most 1,000 items together.
-- `evalScript_flags_congr`: two supported flag sets that agree on the CLTV and CSV bits give the same result. So `P2SH`, `STRICTENC`, `DERSIG`, `LOW_S` and `NULLDUMMY` do not change one call. This holds for the capabilities of this stage only. The signature opcodes of stage 3 read four of those flags.
+- `evalScript_flags_congr`: two supported flag sets that agree on every supported flag except `P2SH` give the same result. So `P2SH` does not change one call.
 
 For the loop and each instruction:
 
 - `evalLoop_atEnd`: at the end of the script, the call succeeds exactly when `vfExec` is empty, and gives `UNBALANCED_CONDITIONAL` otherwise. `evalLoop_truncated`: a short push gives `BAD_OPCODE`.
 - `evalInstruction_pushSize`, `evalInstruction_opCount` and `evalInstruction_disabled`: the push size, the opcode count and the disabled opcodes are checked in Core's order, whether or not the branch executes. `evalInstruction_verif`: `OP_VERIF` and `OP_VERNOTIF` give `BAD_OPCODE` in a skipped branch too.
 - `evalInstruction_skipped`: in a skipped branch, an opcode outside `OP_IF` to `OP_ENDIF` that passes those checks only counts. The two stacks, `vfExec` and the separator cursor stay unchanged.
-- `evalInstruction_wellFormed`: from a state that satisfies `ExecState.WellFormed`, a successful step and the cursor move give a state that satisfies it, within the combined stack limit.
+- `evalInstruction_wellFormed`: from a state that satisfies `ExecState.WellFormed`, a successful step and the cursor move give a state that satisfies it, within the combined stack limit. `OP_CHECKMULTISIG` raises the opcode count by its key count, and the invariant still bounds it by 201.
+- `execOpcode_checker_congr`: every opcode outside `0xac` to `0xaf` gives the same result for any checker and any script. So those opcodes keep their stage-2 results.
 - The `execOpcode_*` theorems give the stack effect of each implemented opcode, its underflow error, and each unsupported case.
 
 For the numeric and hash opcodes:
@@ -814,16 +817,17 @@ Three boundaries limit the claim:
 - Core compares the operand of `OP_PICK` and `OP_ROLL` with `(int)stack.size()` (D3, line 657). Here sizes are `Nat` values. The two agree when the main stack has fewer than 2^31 items. After the first instruction the two stacks hold at most 1,000 items. So only a caller's stack of 2^31 items or more lies outside the correspondence.
 - `OP_IF`, `OP_NOTIF`, `OP_VERIFY` and `OP_IFDUP` use `castToBool`, which inherits the boundary of [Script numbers and truth values](#script-numbers-and-truth-values). Core's `CastToBool` counts with an `unsigned int` (D3, line 40), so on an item of more than `UINT_MAX` bytes its loop can repeat without end. `castToBool` returns a result. A push holds at most 520 bytes, so such an item can come only from the caller's stack. Neither Core nor `evalScript` checks the size of a caller's item. For example, `OP_VERIFY` on one caller's item of 2^32 zero bytes gives `VERIFY` here, and Core's loop does not end.
 - `MINIMALDATA`, `DISCOURAGE_UPGRADABLE_NOPS` and `MINIMALIF` are unsupported flags, so the evaluator has no `CheckMinimalPush`, no NOP discouragement and no minimal `OP_IF` check. `MINIMALIF` applies only to `SIGVERSION_WITNESS_V0` at the pin.
-- An unsupported result can hide a Core rejection. For example, `OP_CHECKSIG` on an empty stack is unsupported here, and Core gives `INVALID_STACK_OPERATION`.
+- An unsupported result can hide a Core rejection. For example, without a checker, `OP_CHECKSIG` on an empty stack is unsupported here, and Core gives `INVALID_STACK_OPERATION`.
 
 That the definitions are Core's rests on a reading of D3 and D24 (A1) and on the known answers.
 `lake test` runs 140 hand cases and 46 underflow cases, with results written by hand from D3 and D24.
 The expected digests of the hash cases come from Core's `script_tests.json` (D45).
 It also runs all 1,193 records of Core's `script_tests.json` (D45) through a test-only composition of two calls, which follows `VerifyScript` without its P2SH branch (D3, lines 1409 to 1435).
-745 records agree with Core's expected result, 455 acceptances and 290 rejections, and none disagrees.
+Both calls use `transactionChecker` over the record's spending transaction, with a verifier that is always unavailable.
+867 records agree with Core's expected result, 528 acceptances and 339 rejections, and none disagrees.
 
-448 records are unsupported.
-Of those, 165 have an unsupported flag, 162 need a signature opcode and 103 have a witness.
+326 records are unsupported.
+Of those, 165 have an unsupported flag, 103 have a witness, and 40 reach the verifier.
 13 reach the P2SH branch, and 5 need `OP_CHECKSEQUENCEVERIFY`.
 Core itself does not run.
 
@@ -834,7 +838,7 @@ By `#print axioms` with Lean `v4.35.0`:
 
 | Theorem | Axioms |
 | --- | --- |
-| `readInstruction_progress`, `evalScript_unsupportedFlags`, `evalScript_scriptSize`, `evalScript_flags_congr`, `evalLoop_atEnd`, `evalLoop_truncated`, `evalLoop_instruction`, the `evalInstruction_*` theorems except `evalInstruction_wellFormed`, `execOpcode_frame`, `execOpcode_flags_congr`, `encode_ofBool`, the `execOpcode_*` effect, underflow and decode theorems, `numericOperand_ne_int64Min`, `numericOperand_add_one_le`, `numericOperand_sub_one_ge` | `propext`, `Quot.sound` |
+| `readInstruction_progress`, `evalScript_unsupportedFlags`, `evalScript_scriptSize`, `evalScript_flags_congr`, `evalLoop_atEnd`, `evalLoop_truncated`, `evalLoop_instruction`, the `evalInstruction_*` theorems except `evalInstruction_wellFormed`, `execOpcode_frame`, `execOpcode_flags_congr`, `execOpcode_checker_congr`, `checkSignatureEncoding_flags_congr`, `checkPubKeyEncoding_flags_congr`, `encode_ofBool`, the `execOpcode_*` effect, underflow and decode theorems, `numericOperand_ne_int64Min`, `numericOperand_add_one_le`, `numericOperand_sub_one_ge` | `propext`, `Quot.sound` |
 | `evalInstruction_wellFormed`, `evalLoop_ok`, `evalScript_ok`, `execOpcode_addSub_length`, `execOpcode_numeric_length_le_four`, `numericOperand_addSub_mem` | `propext`, `Classical.choice`, `Quot.sound` |
 
 ### Script signature and public-key encoding
@@ -893,6 +897,74 @@ By `#print axioms` with Lean `v4.35.0`:
 | `isValidSignatureEncoding_iff`, `laxStore_eq`, `parseDerLax_derBody`, `parseDerLax_dropLast_of_isValidSignatureEncoding`, `parseDerLaxWith_eq`, `checkLowS_derBody_iff`, `checkLowS_derBody_of_overflow`, `checkSignatureEncoding_overflowExample`, `isCompressedOrUncompressedPubKey_iff`, `isValidPubKey_of_isCompressedOrUncompressedPubKey` | `propext`, `Classical.choice`, `Quot.sound` |
 
 The supporting byte and big-endian lemmas of the module use the same three axioms or fewer.
+
+### Script signature opcodes and the checker
+
+`DogeLib.Script.Signature` specifies the signature checker that `evalScript` takes as a parameter (SOURCES.md, D3 and D25).
+`DogeLib.Script.Eval` specifies `OP_CHECKSIG`, `OP_CHECKSIGVERIFY`, `OP_CHECKMULTISIG` and `OP_CHECKMULTISIGVERIFY` with that checker (D3, lines 880 to 1026).
+The theorems are in `DogeLib.Script.Proofs.Signature` and `DogeLib.Script.Proofs.Eval`.
+
+The checker is a structure with one function, `checkSig sig key scriptCode : Option Bool`.
+`none` means that the check is unavailable, and the evaluator then reports `unsupported`, never a rejection.
+`baseChecker` is Core's `BaseSignatureChecker`, which fails every check.
+`transactionChecker tx nIn verify` is Core's `TransactionSignatureChecker::CheckSig` with `SIGVERSION_BASE`.
+For every transaction, input index and verifier:
+
+- `transactionChecker_invalidKey` and `transactionChecker_emptySig`: a key that fails `isValidPubKey` gives `some false`, and with a valid key so does an empty signature. Neither case depends on `verify`.
+- `transactionChecker_verify`: for a valid key, a signature `sig ++ [h]` and a script code shorter than 2^64 bytes, the result is `verify sig key d`. Here `d` is `legacySignatureHash` of the script code with the hash type `h` zero-extended to 32 bits.
+- `transactionChecker_verify_congr`: two verifiers that agree on that one request give the same result.
+
+For the opcodes, with any checker `c`:
+
+- `checkSigStep_underflow`, `checkSigStep_sigEncoding` and `checkSigStep_keyEncoding`: fewer than two items, then the signature encoding, then the key encoding, each before any checker request.
+- `checkSigStep_checked`: after both checks, the step asks `c` once, with the signature, the key and `effectiveScriptCode script s.beginCodeHash [sig]`. It pops both items and pushes the answer, or for `OP_CHECKSIGVERIFY` pops on `true` and gives `CHECKSIGVERIFY` on `false`. `checkSigStep_checker_congr`: no other request.
+- `checkMultisigStep_empty`, `checkMultisigStep_keyCountDecode`, `checkMultisigStep_pubkeyCount`, `checkMultisigStep_opCount`, `checkMultisigStep_keyDepth` and `checkMultisigStep_sigCount`: the checks before the loop, in Core's order. The last depth check already requires the dummy, so Core's later `stack.size() < 1` (line 1010) is unreachable.
+- `checkMultisigStep_counted`: after those checks, the step runs `multisigLoop` on the script code with every signature push removed. It then checks the dummy and pushes the result, with the opcode count raised by the key count.
+- `checkMultisigStep_loopError`, `checkMultisigStep_dummy` and `checkMultisigStep_nullDummy`: an error in the loop comes first. Without `NULLDUMMY` any dummy is consumed. With it, a nonempty dummy gives `SIG_NULLDUMMY`.
+- `evalInstruction_signature_skipped`: in a skipped branch, a signature opcode only counts as one opcode. The checker is not asked, and `OP_CHECKMULTISIG` adds no key count.
+
+The ordered-matching property is stated over a relation `R` first.
+`OrderedMatch R sigs keys` says that the signatures pair in order with a subsequence of the keys.
+For every relation and all lists:
+
+- `greedyMatch_iff`: Core's greedy loop succeeds exactly when `OrderedMatch R sigs keys` holds.
+- `greedyMatch_eq_noExit`: the early exit of lines 987 to 991 does not change the result.
+- `multisigLoop_ok`: when the check returns `R` on every pair of the two lists, `multisigLoop` returns the greedy result. The hypothesis covers every pair, which is stronger than the pairs that Core visits.
+
+`checkMultisigStep_matching` instantiates this for `OP_CHECKMULTISIG`.
+It assumes that the counts decode to the lengths of the lists and pass Core's checks.
+It assumes that every signature and key passes its encoding check, and that `c` answers `some (R sig key)` on every pair.
+It also assumes that `NULLDUMMY` is clear or the dummy is empty.
+Then the step pushes `[1]` exactly when `OrderedMatch R sigs keys` holds, and `[]` otherwise.
+`checkMultisigStep_matching_verify` gives the same for `OP_CHECKMULTISIGVERIFY`.
+`checkMultisigStep_matching_pushOrder` states the property for the lists in script push order.
+
+The checker is the boundary of these claims.
+DogeLib does not specify ECDSA, `CPubKey::Verify` or libsecp256k1.
+A result of `evalScript` with `transactionChecker` holds for Core only under the verifier-agreement hypothesis.
+That hypothesis says that `verify sig key d` returns `some b` only when Core's `CPubKey::Verify` returns `b` on the same signature, key and digest.
+No theorem establishes that hypothesis, and no test checks it.
+The corpus test uses a verifier that is always unavailable, so it compares only records whose result does not need a verification.
+A repeated key in a multisig script does not show that different people signed.
+
+`NULLFAIL` is unsupported, so `evalScript` reports any flag set with it before it runs.
+Its branches at lines 904, 905 and 996 to 998 are absent from the definitions.
+`transactionChecker` gives `none` for a script code of 2^64 bytes or more, which lies outside `Transaction.Script`.
+The evaluator never passes such a script code, because its script has at most 10,000 bytes.
+
+That the definitions are Core's rests on a reading of D3 and D25 (A1) and on the known answers.
+`lake test` runs 48 signature-opcode cases with a lookup-table test checker, 5 `transactionChecker` cases and one `baseChecker` case, with results written by hand from D3.
+The lookup table is a test backend and says nothing about which signatures are valid.
+The corpus records add 122 comparisons with Core's expected results, from 745 to 867.
+The oracle's `script.eval` runs without a checker, so no comparison with Core's compiled code covers the signature opcodes yet.
+By `#print axioms` with Lean `v4.35.0`:
+
+| Theorem | Axioms |
+| --- | --- |
+| `baseChecker_checkSig`, `tail_sublist_of_cons` | None |
+| `PairsMatch.length_eq`, `orderedMatch_length`, `multisigLoop_ok`, `multisigLoop_error` | `propext` |
+| `transactionChecker_invalidKey`, `transactionChecker_emptySig`, `transactionChecker_verify`, `transactionChecker_verify_congr`, `greedyMatchNoExit_iff`, `greedyMatchNoExit_short`, `greedyMatch_eq_noExit`, `greedyMatch_iff`, `execOpcode_signature_none`, `execOpcode_checkSig`, `execOpcode_checkMultisig`, the `checkSigStep_*` and `checkMultisigStep_*` theorems except `checkMultisigStep_matching_pushOrder`, `multisigCheck_ok`, `multisigLoop_multisigCheck_error`, `evalInstruction_signature_skipped` | `propext`, `Quot.sound` |
+| `pairsMatch_append`, `pairsMatch_reverse`, `orderedMatch_reverse`, `checkMultisigStep_matching_pushOrder` | `propext`, `Classical.choice`, `Quot.sound` |
 
 ### Compact encoding and difficulty retarget
 
@@ -1272,6 +1344,10 @@ It requires fully parsed script code, fewer than 2^32 inputs and fewer than 2^32
 The transformation-reference subsection states these hypotheses and explains the short-push difference.
 Whatever those hypotheses leave unproved is part of what a reader trusts.
 
+`transactionChecker` takes the elliptic-curve check as a parameter `verify`.
+A Script result that uses it holds for Core only under the verifier-agreement hypothesis of [Script signature opcodes and the checker](#script-signature-opcodes-and-the-checker).
+The ordered-matching theorems of that subsection also assume a checker answer and passing encoding checks on every pair of signatures and keys.
+
 `no_wrap_of_validProofOfWorkTarget` discharges the old-target bound of `no_wrap_of_le_powLimit` from Core's target-validity predicate.
 Its numerical bound holds for every selected mainnet and testnet record.
 Regtest DigiShield uses a separate exact-multiplier argument, and legacy regtest permits wrap in the isolated retarget.
@@ -1409,7 +1485,7 @@ The Core harness calls the pinned hash classes, pure header methods and `Compute
 Finite fixture and boundary comparisons cover the recorded inputs only.
 They establish no all-input Core equivalence, cryptographic security, AuxPoW validity, scrypt result or full block validity.
 
-The Script adapters call `readInstruction` and `evalScript` directly.
+The Script adapters call `readInstruction` and `evalScript` directly, and `evalScript` runs without a signature checker.
 They encode Script errors with the names in the [shared table](harness/core/script_error_names.inc).
 No theorem covers their JSON conversions.
 Adapter limits allow scripts above 10,000 bytes and caller stacks above 1,000 items, so those specification boundaries remain observable.

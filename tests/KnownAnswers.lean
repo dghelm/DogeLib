@@ -2803,13 +2803,15 @@ Runs `evalScript`, one `EvalScript` call, through the compiled code.
 Each record of `tests/script/corpus/script_tests.jsonl` is a `VerifyScript` call (SOURCES.md, D45 and D46), not one `EvalScript` call.
 This test composes two calls of `evalScript` as `VerifyScript` does without its P2SH branch (D3, lines 1409 to 1435).
 It runs `scriptSig` on an empty stack, and then `scriptPubKey` on the resulting main stack.
+Both calls use `transactionChecker` over the record's spending transaction and input index, with a verifier that is always unavailable.
+So a record whose verdict needs an elliptic-curve check is unsupported, and every record that fails before such a check is compared.
 An empty final stack or a false top item gives `EVAL_FALSE`.
 The composition is test code. DogeLib does not specify `VerifyScript` yet.
 
 Three cases give an unsupported result instead of a comparison:
 
 - A nonempty witness stack, which design record 0003 reports as unsupported.
-- An unsupported result of either call.
+- An unsupported result of either call. A signature check that reaches the verifier counts as `signature verifier`.
 - Both calls succeed with a true top item, the P2SH flag is set and `scriptPubKey` is the exact P2SH template (D48, `CScript::IsPayToScriptHash`, lines 204 to 211). Core's verdict then depends on the P2SH branch.
 
 The flags are the record's `effective_flags_mask`.
@@ -2824,6 +2826,8 @@ The expected digests of the hash cases come from Core's `script_tests.json` (D45
 The cases cover the limit boundaries, short pushes, unbalanced conditionals, and disabled and reserved opcodes in skipped branches.
 They also cover stack underflow, negative zero, the operands of `OP_PICK` and `OP_ROLL`, and unsupported capabilities.
 For the numeric opcodes they cover operand order, five-byte results, negative zero and non-minimal operands, `OP_NUMEQUALVERIFY` failure and the bounds of `OP_WITHIN`.
+Each hand case runs without a checker, as in stage 2, and again with `baseChecker`.
+The two runs expect the same result, except for a case that expects an unsupported signature opcode, which runs only without a checker.
 -/
 
 namespace KnownAnswers.ScriptEval
@@ -2840,10 +2844,10 @@ inductive Outcome where
   | unsupported (reason : String)
   deriving BEq, Repr
 
-/-- The label of an unsupported reason, for the counts. -/
+/-- The label of an unsupported reason, for the counts. With `transactionChecker`, a signature opcode is unsupported only when it reaches the verifier. -/
 def reasonLabel : Unsupported → String
   | .flags _ => "flags"
-  | .signatureOpcode _ => "signature opcode"
+  | .signatureOpcode _ => "signature verifier"
   | .checkLockTimeVerify => "CHECKLOCKTIMEVERIFY"
   | .checkSequenceVerify => "CHECKSEQUENCEVERIFY"
 
@@ -2852,12 +2856,12 @@ def isP2SHTemplate (script : List UInt8) : Bool :=
   script.length == 23 && script[0]? == some 0xa9 && script[1]? == some 0x14 && script[22]? == some 0x87
 
 /-- `VerifyScript` (D3, lines 1409 to 1435) without its P2SH branch, for a record with an empty witness. Test code only. -/
-def verifyWithoutP2SH (flags : UInt32) (scriptSig scriptPubKey : List UInt8) : Outcome :=
-  match evalScript flags scriptSig [] with
+def verifyWithoutP2SH (checker : SignatureChecker) (flags : UInt32) (scriptSig scriptPubKey : List UInt8) : Outcome :=
+  match evalScript (some checker) flags scriptSig [] with
   | .unsupported u => .unsupported (reasonLabel u)
   | .rejected e => .rejected e
   | .ok s =>
-    match evalScript flags scriptPubKey s.stack with
+    match evalScript (some checker) flags scriptPubKey s.stack with
     | .unsupported u => .unsupported (reasonLabel u)
     | .rejected e => .rejected e
     | .ok t =>
@@ -2877,6 +2881,9 @@ structure Record where
   expected : String
   witness : Bool
   inside : Bool
+  /-- The spending transaction of the record's context, decoded in base mode. -/
+  spendTx : DogeLib.Transaction.Transaction
+  inputIndex : Nat
 
 /-- Reads one line of `script_tests.jsonl`. -/
 def parseRecord (text : String) : Except String Record := do
@@ -2884,6 +2891,11 @@ def parseRecord (text : String) : Except String Record := do
   let hex (k : String) : Except String (List UInt8) := do
     return (← KnownAnswers.Sha256Cavp.parseHex (← (← j.getObjVal? k).getStr?)).toList
   let classification ← j.getObjVal? "classification"
+  let context ← j.getObjVal? "context"
+  let spendBytes ← KnownAnswers.Sha256Cavp.parseHex (← (← context.getObjVal? "spending_tx_base_hex").getStr?)
+  let spendTx ← match DogeLib.Transaction.Transaction.decodeBaseComplete spendBytes.toList with
+    | .ok tx => pure tx
+    | .error _ => throw "spending_tx_base_hex does not decode"
   return {
     line := ← (← j.getObjVal? "source_line").getNat?
     scriptSig := ← hex "scriptSig_hex"
@@ -2891,7 +2903,9 @@ def parseRecord (text : String) : Except String Record := do
     flags := (← (← j.getObjVal? "effective_flags_mask").getNat?).toUInt32
     expected := ← (← j.getObjVal? "expected_error").getStr?
     witness := (← (← j.getObjVal? "witness").getArr?).size != 0
-    inside := (← (← classification.getObjVal? "milestone").getStr?) == "inside" }
+    inside := (← (← classification.getObjVal? "milestone").getStr?) == "inside"
+    spendTx
+    inputIndex := ← (← context.getObjVal? "input_index").getNat? }
 
 /-- The name of an outcome in the corpus's terms. -/
 def outcomeName : Outcome → String
@@ -2906,7 +2920,7 @@ def checkCorpus : IO Nat := do
   let mut failures := 0
   let mut agree := 0
   let mut agreeAccepted := 0
-  let mut unsupported : List (String × Nat) := [("P2SH", 0)]
+  let mut unsupported : List (String × Nat) := [("P2SH", 0), ("signature verifier", 0)]
   if lines.length != 1193 then
     IO.eprintln s!"FAIL {path}: {lines.length} records, expected 1193"
     failures := failures + 1
@@ -2916,7 +2930,9 @@ def checkCorpus : IO Nat := do
       | .error e => throw (IO.userError s!"{path}: {e}")
     let got :=
       if r.witness then Outcome.unsupported "witness"
-      else verifyWithoutP2SH r.flags r.scriptSig r.scriptPubKey
+      else
+        let checker := transactionChecker r.spendTx r.inputIndex.toUInt32 fun _ _ _ => none
+        verifyWithoutP2SH checker r.flags r.scriptSig r.scriptPubKey
     match got with
     | .unsupported reason =>
       unsupported :=
@@ -3174,15 +3190,24 @@ def cases : List Case := [
 def checkCases : IO Nat := do
   let mut failures := 0
   for c in cases do
-    let got := evalScript c.flags c.script c.stack
+    let got := evalScript none c.flags c.script c.stack
     unless c.expected.matches got do
       IO.eprintln s!"FAIL script eval {c.label}: got {repr got}"
       failures := failures + 1
+    let signatureUnsupported := match c.expected with
+      | .unsupported (.signatureOpcode _) => true
+      | _ => false
+    unless signatureUnsupported do
+      let got := evalScript (some baseChecker) c.flags c.script c.stack
+      unless c.expected.matches got do
+        IO.eprintln s!"FAIL script eval {c.label} with baseChecker: got {repr got}"
+        failures := failures + 1
   for op in underflowOps do
-    let got := evalScript 0 [op] []
-    unless got == .rejected .invalidStackOperation do
-      IO.eprintln s!"FAIL script eval underflow of {op}: got {repr got}"
-      failures := failures + 1
+    for checker in [none, some baseChecker] do
+      let got := evalScript checker 0 [op] []
+      unless got == .rejected .invalidStackOperation do
+        IO.eprintln s!"FAIL script eval underflow of {op}: got {repr got}"
+        failures := failures + 1
   unless script10000.length == 10000 do
     IO.eprintln s!"FAIL script eval: the 10,000-byte script has {script10000.length} bytes"
     failures := failures + 1
@@ -3318,7 +3343,7 @@ So each selected record expects one of these outcomes:
 The test skips and counts a selected record with any other expected error, and one whose `scriptSig` does not give a nonempty stack.
 The expected outcome is the record's, never a DogeLib result.
 The test fails on any disagreement, and when no record of one of the four errors is compared.
-Multisig records are not selected: their signature order needs the opcode of stage 3c.
+Multisig records are not selected here. The script corpus test compares them through the evaluator.
 
 ### Hand cases
 
@@ -3378,7 +3403,7 @@ def checkCorpus : IO Nat := do
     if !r.inside || r.witness then continue
     let some key := p2pkKey r.scriptPubKey | continue
     selected := selected + 1
-    let sig? := match evalScript r.flags r.scriptSig [] with
+    let sig? := match evalScript none r.flags r.scriptSig [] with
       | .ok s => s.stack.getLast?
       | _ => none
     let some sig := sig? | skipped := skipped + 1; continue
@@ -3574,6 +3599,213 @@ def check : IO Nat := do
 
 end KnownAnswers.SignatureEncoding
 
+/-!
+## Signature opcodes
+
+Runs `OP_CHECKSIG`, `OP_CHECKSIGVERIFY`, `OP_CHECKMULTISIG` and `OP_CHECKMULTISIGVERIFY` through `evalScript` with a test checker.
+
+The test checker is a lookup table, a test backend that says nothing about consensus validity.
+It answers `some true` for the listed signature and key pairs and `some false` for every other pair.
+It answers only for the script code that the case expects, and `none` for any other script code.
+So a wrong script code gives an unsupported result, and the case fails.
+
+Every expected result is written by hand from `EvalScript` (D3, lines 880 to 1026) and `CScript::FindAndDelete` (D24, lines 570 to 596).
+The expected script codes are written out byte for byte.
+The cases cover each error of the two opcodes in Core's order.
+They cover 0-of-0, 1-of-1, 2-of-3 with signatures in and out of order, and early exit.
+They cover the dummy with and without `NULLDUMMY`, a key count of 21 and an opcode count raised past 201 by keys.
+They also cover a code separator before the opcode, a signature push inside the script code, and the order-dependent encoding check of D3 line 969.
+
+The `transactionChecker` cases fix a transaction and use a verifier that answers only for the expected request.
+The verifier ignores the digest, which `transactionChecker_verify` in `DogeLib.Script.Proofs.Signature` characterizes.
+-/
+
+namespace KnownAnswers.ScriptSignature
+
+open DogeLib.Script
+open KnownAnswers.ScriptEval (Expect hex rep)
+
+/-- The test checker: `some true` for a listed pair, `some false` for another pair, and `none` unless the script code is `code`. -/
+def tableChecker (code : List UInt8) (valid : List (List UInt8 × List UInt8)) : SignatureChecker where
+  checkSig sig key c := if c == code then some (valid.contains (sig, key)) else none
+
+/-- Three test signatures and three test keys, of arbitrary bytes. With flags 0 no encoding check reads them. -/
+def s1 : List UInt8 := [0xa1, 0x01]
+def s2 : List UInt8 := [0xa2, 0x01]
+def s3 : List UInt8 := [0xa3, 0x01]
+def k1 : List UInt8 := [0xb1]
+def k2 : List UInt8 := [0xb2]
+def k3 : List UInt8 := [0xb3]
+
+/-- The valid pairs of the table. -/
+def table : List (List UInt8 × List UInt8) := [(s1, k1), (s2, k2), (s3, k3)]
+
+/-- A strict-DER signature with R = 1, S = 1 and hash type `0x01`, which passes `STRICTENC`. -/
+def derSig : List UInt8 := hex "300602010102010101"
+/-- A compressed public key: `0x02` and 32 bytes. -/
+def goodKey : List UInt8 := 0x02 :: rep 32 0x11
+/-- A key that fails `STRICTENC`: `0x02` and 31 bytes. -/
+def badKey : List UInt8 := 0x02 :: rep 31 0x11
+
+/-- `OP_PUSHBYTES_n` of a short item. -/
+def push (b : List UInt8) : List UInt8 := b.length.toUInt8 :: b
+
+/-- One case: a label, flags, a checker, a script, a caller stack and the expected result. -/
+structure Case where
+  label : String
+  flags : UInt32
+  checker : SignatureChecker
+  script : List UInt8
+  stack : List (List UInt8)
+  expected : Expect
+
+/-- `OP_2 <k1> <k2> <k3> OP_3 OP_CHECKMULTISIG`. -/
+def twoOfThree : List UInt8 := [0x52, 0x01, 0xb1, 0x01, 0xb2, 0x01, 0xb3, 0x53, 0xae]
+
+/-- 180 or 181 counted NOPs, 20 empty keys, a key count of 20 and `OP_CHECKMULTISIG`, after a signature count of 0. -/
+def twentyKeys (nops : Nat) : List UInt8 := rep nops 0x61 ++ [0x00] ++ rep 20 0x00 ++ [0x01, 0x14, 0xae]
+
+/-- `OP_1 <badKey> <goodKey> OP_2 OP_CHECKMULTISIG`: the loop visits `goodKey` first. -/
+def badKeyBelow : List UInt8 := [0x51, 0x20] ++ badKey ++ [0x21] ++ goodKey ++ [0x52, 0xae]
+
+/-- The hand cases. -/
+def cases : List Case := [
+  -- OP_CHECKSIG and OP_CHECKSIGVERIFY (D3, lines 880 to 918).
+  ⟨"CHECKSIG on one item", 0, tableChecker [0xac] table, [0xac], [s1], .rejected .invalidStackOperation⟩,
+  ⟨"CHECKSIG valid pair", 0, tableChecker [0xac] table, [0xac], [s1, k1], .ok [[1]]⟩,
+  ⟨"CHECKSIG invalid pair", 0, tableChecker [0xac] table, [0xac], [s1, k2], .ok [[]]⟩,
+  ⟨"CHECKSIGVERIFY valid pair", 0, tableChecker [0xad] table, [0xad], [[7], s1, k1], .ok [[7]]⟩,
+  ⟨"CHECKSIGVERIFY invalid pair", 0, tableChecker [0xad] table, [0xad], [s1, k2], .rejected .checkSigVerify⟩,
+  ⟨"CHECKSIG empty signature reaches the checker", 0, tableChecker [0xac] table, [0xac], [[], k1], .ok [[]]⟩,
+  ⟨"CHECKSIG signature encoding before key encoding", 0x02, tableChecker [0xac] table, [0xac], [s1, badKey],
+    .rejected .sigDer⟩,
+  ⟨"CHECKSIG key encoding", 0x02, tableChecker [0xac] [], [0xac], [derSig, badKey], .rejected .pubkeyType⟩,
+  ⟨"CHECKSIG encoding passes", 0x02, tableChecker [0xac] [(derSig, goodKey)], [0xac], [derSig, goodKey], .ok [[1]]⟩,
+  ⟨"CHECKSIG unavailable checker", 0, ⟨fun _ _ _ => none⟩, [0xac], [s1, k1],
+    .unsupported (.signatureOpcode 0xac)⟩,
+  ⟨"CHECKSIG script code from the start", 0, tableChecker [0x61, 0xac] table, [0x61, 0xac], [s1, k1], .ok [[1]]⟩,
+  ⟨"CHECKSIG after a code separator", 0, tableChecker [0xac] table, [0x61, 0xab, 0xac], [s1, k1], .ok [[1]]⟩,
+  ⟨"CHECKSIG deletes its signature push", 0, tableChecker [0x01, 0xb1, 0xac] table,
+    [0x02, 0xa1, 0x01, 0x01, 0xb1, 0xac], [], .ok [[1]]⟩,
+  ⟨"CHECKSIG keeps a push of other bytes", 0, tableChecker [0x02, 0xa2, 0x01, 0x75, 0xac] table,
+    [0x02, 0xa2, 0x01, 0x75, 0xac], [s1, k1], .ok [[1]]⟩,
+  -- OP_CHECKMULTISIG and OP_CHECKMULTISIGVERIFY (D3, lines 920 to 1026), errors in Core's order.
+  ⟨"CHECKMULTISIG on an empty stack", 0, tableChecker [0xae] table, [0xae], [], .rejected .invalidStackOperation⟩,
+  ⟨"CHECKMULTISIG key count of five bytes", 0, tableChecker [] table, [0x05, 0x01, 0x00, 0x00, 0x00, 0x00, 0xae],
+    [], .rejected .unknownError⟩,
+  ⟨"CHECKMULTISIG key count -1", 0, tableChecker [] table, [0x4f, 0xae], [], .rejected .pubkeyCount⟩,
+  ⟨"CHECKMULTISIG key count 21", 0, tableChecker [] table, [0x01, 0x15, 0xae], [], .rejected .pubkeyCount⟩,
+  ⟨"CHECKMULTISIG 201 counted opcodes with 20 keys", 0, tableChecker [] table, twentyKeys 180, [[]], .ok [[1]]⟩,
+  ⟨"CHECKMULTISIG 202 counted opcodes with 20 keys", 0, tableChecker [] table, twentyKeys 181, [[]],
+    .rejected .opCount⟩,
+  ⟨"CHECKMULTISIG key count before keys", 0, tableChecker [] table, [0x52, 0xae], [], .rejected .invalidStackOperation⟩,
+  ⟨"CHECKMULTISIG missing signature count", 0, tableChecker [] table, [0x01, 0xb1, 0x51, 0xae], [],
+    .rejected .invalidStackOperation⟩,
+  ⟨"CHECKMULTISIG signature count of five bytes", 0, tableChecker [] table,
+    [0x05, 0x01, 0x00, 0x00, 0x00, 0x00, 0x01, 0xb1, 0x51, 0xae], [], .rejected .unknownError⟩,
+  ⟨"CHECKMULTISIG signature count above key count", 0, tableChecker [] table, [0x52, 0x01, 0xb1, 0x51, 0xae], [],
+    .rejected .sigCount⟩,
+  ⟨"CHECKMULTISIG signature count -1", 0, tableChecker [] table, [0x4f, 0x01, 0xb1, 0x51, 0xae], [],
+    .rejected .sigCount⟩,
+  ⟨"CHECKMULTISIG missing signature", 0, tableChecker [] table, [0x51, 0x01, 0xb1, 0x51, 0xae], [[]],
+    .rejected .invalidStackOperation⟩,
+  ⟨"CHECKMULTISIG missing dummy", 0, tableChecker [] table, [0x51, 0x01, 0xb1, 0x51, 0xae], [s1],
+    .rejected .invalidStackOperation⟩,
+  -- Matching.
+  ⟨"CHECKMULTISIG 0-of-0", 0, tableChecker [] table, [0x00, 0x00, 0xae], [[]], .ok [[1]]⟩,
+  ⟨"CHECKMULTISIG 0-of-0 keeps the item below the dummy", 0, tableChecker [] table, [0x00, 0x00, 0xae], [[9], []],
+    .ok [[9], [1]]⟩,
+  ⟨"CHECKMULTISIG 1-of-1", 0, tableChecker [0x51, 0x01, 0xb1, 0x51, 0xae] table, [0x51, 0x01, 0xb1, 0x51, 0xae],
+    [[], s1], .ok [[1]]⟩,
+  ⟨"CHECKMULTISIG 1-of-1 wrong key", 0, tableChecker [0x51, 0x01, 0xb2, 0x51, 0xae] table,
+    [0x51, 0x01, 0xb2, 0x51, 0xae], [[], s1], .ok [[]]⟩,
+  ⟨"CHECKMULTISIG 2-of-3 in order", 0, tableChecker twoOfThree table, twoOfThree, [[], s1, s2], .ok [[1]]⟩,
+  ⟨"CHECKMULTISIG 2-of-3 skipping a key", 0, tableChecker twoOfThree table, twoOfThree, [[], s1, s3], .ok [[1]]⟩,
+  ⟨"CHECKMULTISIG 2-of-3 out of order", 0, tableChecker twoOfThree table, twoOfThree, [[], s2, s1], .ok [[]]⟩,
+  ⟨"CHECKMULTISIGVERIFY 2-of-3 in order", 0, tableChecker (twoOfThree.dropLast ++ [0xaf]) table,
+    twoOfThree.dropLast ++ [0xaf], [[], s2, s3], .ok []⟩,
+  ⟨"CHECKMULTISIGVERIFY 2-of-3 out of order", 0, tableChecker (twoOfThree.dropLast ++ [0xaf]) table,
+    twoOfThree.dropLast ++ [0xaf], [[], s3, s2], .rejected .checkMultisigVerify⟩,
+  -- Early exit (D3, lines 987 to 991): after s1 fails against k3 and k2, two signatures remain for one key.
+  -- The pair (s1, k1) would be unavailable, so a visit would give an unsupported result.
+  ⟨"CHECKMULTISIG early exit", 0,
+    ⟨fun sig key code =>
+      if code != twoOfThree then none
+      else if sig == s1 && key == k1 then none
+      else some (table.contains (sig, key))⟩,
+    twoOfThree, [[], s2, s1], .ok [[]]⟩,
+  -- The order-dependent encoding check (D3, line 969), with STRICTENC.
+  ⟨"CHECKMULTISIG never visits a bad key below a match", 0x02, tableChecker badKeyBelow [(derSig, goodKey)],
+    badKeyBelow, [[], derSig], .ok [[1]]⟩,
+  ⟨"CHECKMULTISIG visits a bad key first", 0x02, tableChecker [] [(derSig, goodKey)],
+    [0x51, 0x21] ++ goodKey ++ [0x20] ++ badKey ++ [0x52, 0xae], [[], derSig], .rejected .pubkeyType⟩,
+  -- The dummy (D3, lines 1004 to 1014).
+  ⟨"CHECKMULTISIG nonempty dummy without NULLDUMMY", 0, tableChecker [0x51, 0x01, 0xb1, 0x51, 0xae] table,
+    [0x51, 0x01, 0xb1, 0x51, 0xae], [[0x01], s1], .ok [[1]]⟩,
+  ⟨"CHECKMULTISIG nonempty dummy with NULLDUMMY", 0x10, tableChecker [0x51, 0x01, 0xb1, 0x51, 0xae] table,
+    [0x51, 0x01, 0xb1, 0x51, 0xae], [[0x01], s1], .rejected .sigNullDummy⟩,
+  ⟨"CHECKMULTISIG empty dummy with NULLDUMMY", 0x10, tableChecker [0x51, 0x01, 0xb1, 0x51, 0xae] table,
+    [0x51, 0x01, 0xb1, 0x51, 0xae], [[], s1], .ok [[1]]⟩,
+  ⟨"CHECKMULTISIG failure with nonempty dummy and NULLDUMMY", 0x10, tableChecker [0x51, 0x01, 0xb2, 0x51, 0xae] table,
+    [0x51, 0x01, 0xb2, 0x51, 0xae], [[0x01], s1], .rejected .sigNullDummy⟩,
+  -- Script code.
+  ⟨"CHECKMULTISIG after a code separator", 0, tableChecker [0xae] table, [0x51, 0x01, 0xb1, 0x51, 0xab, 0xae],
+    [[], s1], .ok [[1]]⟩,
+  ⟨"CHECKMULTISIG deletes its signature push", 0, tableChecker [0x00, 0x51, 0x01, 0xb1, 0x51, 0xae] table,
+    [0x00, 0x02, 0xa1, 0x01, 0x51, 0x01, 0xb1, 0x51, 0xae], [], .ok [[1]]⟩,
+  ⟨"CHECKMULTISIG deletes every signature push before the loop", 0, tableChecker (rep 1 0x00 ++ twoOfThree) table,
+    [0x00, 0x02, 0xa1, 0x01, 0x02, 0xa2, 0x01] ++ twoOfThree, [], .ok [[1]]⟩,
+  -- Skipped branches: no checker call and no key count.
+  ⟨"signature opcodes in a skipped branch", 0, ⟨fun _ _ _ => none⟩, [0x00, 0x63, 0xac, 0xad, 0xae, 0xaf, 0x68],
+    [], .ok []⟩,
+  ⟨"CHECKMULTISIG in a skipped branch counts once", 0, tableChecker [] table,
+    [0x00, 0x63, 0x01, 0x14, 0xae, 0x68] ++ rep 198 0x61, [], .ok []⟩
+]
+
+/-- A transaction with one input and one output, from the context of record 9 of `script_tests.json`. -/
+def spendTx? : Option DogeLib.Transaction.Transaction :=
+  match DogeLib.Transaction.Transaction.decodeBaseComplete
+      (hex "0100000001dc3e1270bc983b5fc117d86201475c85dbac7647c663e275f730cc87200f7a920000000000ffffffff0100000000000000000000000000") with
+  | .ok tx => some tx
+  | .error _ => none
+
+/-- A verifier that answers `some true` only for the signature `sig` without its hash type and the key `key`, and `none` for every other request. -/
+def strictVerifier (sig key : List UInt8) : SignatureVerifier :=
+  fun s k _ => if s == sig && k == key then some true else none
+
+/-- The `transactionChecker` cases: label, signature, key and expected answer. -/
+def checkerCases : List (String × List UInt8 × List UInt8 × Option Bool) := [
+  ("invalid key, verifier not called", derSig, [0x05], some false),
+  ("empty key, verifier not called", derSig, [], some false),
+  ("empty signature, verifier not called", [], goodKey, some false),
+  ("hash type removed", derSig, goodKey, some true),
+  ("hybrid key of 65 bytes reaches the verifier", derSig, 0x06 :: rep 64 0x11, none)
+]
+
+/-- Runs every case. Returns the number of failures. -/
+def check : IO Nat := do
+  let mut failures := 0
+  for c in cases do
+    let got := evalScript (some c.checker) c.flags c.script c.stack
+    unless c.expected.matches got do
+      IO.eprintln s!"FAIL signature opcode {c.label}: got {repr got}"
+      failures := failures + 1
+  let stripped := derSig.dropLast
+  let some spendTx := spendTx? | throw (IO.userError "the transaction of record 9 does not decode")
+  for (label, sig, key, expected) in checkerCases do
+    let got := (transactionChecker spendTx 0 (strictVerifier stripped goodKey)).checkSig sig key [0xac]
+    unless got == expected do
+      IO.eprintln s!"FAIL transactionChecker {label}: got {repr got}"
+      failures := failures + 1
+  let base := baseChecker.checkSig derSig goodKey [0xac]
+  unless base == some false do
+    IO.eprintln s!"FAIL baseChecker: got {repr base}"
+    failures := failures + 1
+  IO.println s!"signature opcodes: {cases.length} hand cases, {checkerCases.length + 1} checker cases, {failures} failures"
+  return failures
+
+end KnownAnswers.ScriptSignature
+
 /-- Entry point of `lake test`. -/
 def main : IO UInt32 := do
   let sha1 ← KnownAnswers.Sha1.check
@@ -3602,4 +3834,5 @@ def main : IO UInt32 := do
   let scriptEval ← KnownAnswers.ScriptEval.check
   let signatureCode ← KnownAnswers.SignatureCode.check
   let signatureEncoding ← KnownAnswers.SignatureEncoding.check
-  return if sha1 + blocks + short + long + ripemd + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts + proofOfWork + scriptReader + scriptNum + scriptEval + signatureCode + signatureEncoding == 0 then 0 else 1
+  let scriptSignature ← KnownAnswers.ScriptSignature.check
+  return if sha1 + blocks + short + long + ripemd + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts + proofOfWork + scriptReader + scriptNum + scriptEval + signatureCode + signatureEncoding + scriptSignature == 0 then 0 else 1

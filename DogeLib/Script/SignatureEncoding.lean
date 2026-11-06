@@ -22,7 +22,7 @@ They are byte predicates. No definition here does elliptic-curve arithmetic.
 | `pubKeyLength`, `isValidPubKey` | `CPubKey::GetLen`, `Set` and `IsValid` | D51, lines 59 to 66, 143 to 146 and 189 to 196 |
 
 The opcodes `OP_CHECKSIG` and `OP_CHECKMULTISIG` call `CheckSignatureEncoding` and then `CheckPubKeyEncoding` (D3, lines 898 and 972).
-This module specifies no opcode. Stage 3c of design record 0003 wires these checks into the evaluator.
+This module specifies no opcode. `DogeLib.Script.Eval` runs these checks in the signature opcodes.
 
 ## The lax parser and LOW_S
 

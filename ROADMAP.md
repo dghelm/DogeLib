@@ -53,17 +53,17 @@ The SHA-1 oracle operation remains deferred in issue #64.
 The Script layer implements stage 1 of [design record 0003](docs/design/0003-legacy-spend-validation.md): the instruction reader and the state of one `EvalScript` call.
 `Script.readInstruction` follows `GetOp2`, including the cursor after each failure, and shares its decoder with the legacy signature serializer.
 `Script.ExecState` gives the per-call reset and the main-stack hand-off of `VerifyScript`.
-The layer has no oracle operation and gives no verdict on a spend.
+The oracle exposes `script.read_op` and `script.eval` (#74). The layer gives no verdict on a spend.
 
 The Script layer also has the numeric part of stage 2 of [design record 0003](docs/design/0003-legacy-spend-validation.md): `CScriptNum` and `CastToBool` over integers, in `Script.Number`.
 `isMinimal_iff_encode_value` shows that Core's minimality test accepts exactly the encodings, and the decode theorems give every result, with the size check first.
 [COVERAGE.md](COVERAGE.md#operations) records the evidence and the exclusions.
 
-`Script.evalScript` implements one `EvalScript` call, stages 2b and 2c of [design record 0003](docs/design/0003-legacy-spend-validation.md).
-It runs pushes, NOPs, control flow, stack operations, `OP_SIZE`, equality, the numeric and hash opcodes and `OP_CODESEPARATOR`.
+`Script.evalScript` implements one `EvalScript` call, stages 2b, 2c and 3 of [design record 0003](docs/design/0003-legacy-spend-validation.md).
+It runs pushes, NOPs, control flow, stack operations, `OP_SIZE`, equality, the numeric and hash opcodes, `OP_CODESEPARATOR` and the signature opcodes.
 It follows Core's errors and check order, also in skipped branches.
-Signature opcodes, CLTV and CSV with their flags, and flags outside the seven of the design record give `unsupported`, never a rejection.
-On Core's `script_tests.json`, 745 records agree with Core, none disagrees, and 448 are unsupported.
+CLTV and CSV with their flags, and flags outside the seven of the design record give `unsupported`, never a rejection.
+On Core's `script_tests.json`, 867 records agree with Core, none disagrees, and 326 are unsupported.
 
 `Script.SignatureCode` implements push encoding and effective script-code preparation for stage 3.
 Its proofs cover the push reader round trip below 2^32 bytes and the exact traversal of `FindAndDelete`, including malformed suffixes.
@@ -72,8 +72,13 @@ Known answers include all sixteen Core deletion cases and every push-size transi
 `Script.SignatureEncoding` implements stage 3a: Core's encoding checks of signatures and public keys, with the lax DER parser that `CheckLowS` uses.
 It keeps the overflow case of [design record 0003](docs/design/0003-legacy-spend-validation.md), section 5.
 A strict-DER signature whose R or S is at least the group order passes LOW_S, whatever its S.
-The checks are not yet wired into an opcode.
-The signature opcodes, the rest of stage 3, are the next Script work.
+The signature opcodes run these checks.
+
+`Script.Signature` and the signature opcodes of `Script.Eval` complete stage 3.
+`evalScript` takes an optional checker: Core's `BaseSignatureChecker` as `baseChecker`, or `transactionChecker` with an elliptic-curve verifier as a parameter.
+`checkMultisigStep_matching` proves that `OP_CHECKMULTISIG` succeeds exactly when the signatures pair in order with a subsequence of the keys, given total checker answers.
+The oracle's `script.eval` still runs without a checker. Running it with `baseChecker` changes the oracle results and needs a maintainer decision.
+P2SH, `VerifyScript` and the timelocks of stage 4 are the next Script work.
 
 Steps 0 and 0b follow design record 0002: the first contributions adopt audited codec foundations and then define Dogecoin's bounded decoding contract. They replace the original plan to build fixed-width encodings and CompactSize from scratch. Design record 0002 preferred a pinned btc-verified dependency first. The decisions below choose an adaptation instead, because btc-verified's toolchain, file structure and trust policy all differ from EthLib's.
 

@@ -52,7 +52,7 @@ def expect (label : String) (result expected : Except CheckPowError Unit) : IO N
 /-- The compact encoding of mainnet's `powLimit`, `0x00000fff…ff` (D14 line 88): the easiest valid target. -/
 def easiestBits : UInt32 := 0x1e0fffff
 
-/-- A valid compact encoding of the target 1, which no digest of a real header meets. -/
+/-- A valid compact encoding of the target 1. Only a digest with the value 0 or 1 meets it. -/
 def hardestBits : UInt32 := 0x03000001
 
 /-- A compact target in hexadecimal, as Core prints `nBits`. -/
@@ -170,11 +170,11 @@ def checkAuxPow : IO Nat := do
     for (name, parent) in parents do
       failures := failures + (← expect s!"{label}, {name}"
         (checkBlockHeader .mainnet { h with auxpow := some { a with parentBlock := parent } }) (.error .auxProofOfWorkFailed))
-    -- No digest meets the target 1 (line 119).
+    -- None of these six parent digests meets the target 1, so the case is rejected at line 119.
     failures := failures + (← expect s!"{label}, child nBits = target 1"
       (checkBlockHeader .mainnet { h with pure := { h.pure with nBits := hardestBits } }) (.error .auxProofOfWorkFailed))
     -- The easiest target still accepts the unchanged parent digest.
-    -- The child's hash changes, so its chain root no longer occurs in the coinbase script (D55 line 120).
+    -- The child's hash changes, and the coinbase script does not contain the new chain root (D55 line 120).
     failures := failures + (← expect s!"{label}, child nBits = easiest"
       (checkBlockHeader .mainnet { h with pure := { h.pure with nBits := easiestBits } })
       (.error (.auxPow .missingChainRoot)))
@@ -182,7 +182,7 @@ def checkAuxPow : IO Nat := do
     let other := { h with pure := { h.pure with nVersion := withChainId h.pure.nVersion 0x63 } }
     failures := failures + (← expect s!"{label}, chain ID 0x63" (checkBlockHeader .mainnet other) (.error .wrongChainId))
     -- Testnet has fStrictChainId false, so the chain ID test passes, and so does the parent's digest.
-    -- The changed version changes the child's hash, so its chain root no longer occurs (D55 line 120).
+    -- The changed version changes the child's hash, and the coinbase script does not contain the new chain root (D55 line 120).
     failures := failures + (← expect s!"{label}, chain ID 0x63 on testnet" (checkBlockHeader .testnet other)
       (.error (.auxPow .missingChainRoot)))
     -- The two in-memory mismatches (lines 104 and 116).

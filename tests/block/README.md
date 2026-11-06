@@ -209,7 +209,9 @@ For the parents at heights 371337, 450000, 2000000 and 3000000 it does not.
 Core accepted those headers, so Core does not require the parent's own target.
 The specification takes the target from the child's `nBits`, as D6 line 118 does.
 
-Each fixture header and each AuxPoW header gives the same result on the mainnet records at heights 0, 145000 and 371337.
+The mainnet records at heights 0, 145000 and 371337 give the same result on 13 headers.
+They are the first four range headers, the three headers of `mainnet.json` and the six AuxPoW headers.
+The theorem `checkAuxPowProofOfWork_getAuxPowParams` covers every header.
 
 ### Cost
 

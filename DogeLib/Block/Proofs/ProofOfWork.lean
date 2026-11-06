@@ -46,7 +46,8 @@ For every parameter record and full header, `checkAuxPowProofOfWork` accepts exa
 - The chain ID condition: the header is legacy, or `strictChainId` is false, or its chain ID is `auxpowChainId`.
 - One of two branches:
   - There is no payload, the AuxPoW flag is clear, and the header's own scrypt digest satisfies `Work.checkProofOfWork` with the header's `nBits`.
-  - There is a payload, the AuxPoW flag is set, and the scrypt digest of the 80 parent bytes satisfies `Work.checkProofOfWork` with the `nBits` of this header, not of the parent.
+  - There is a payload, and the AuxPoW flag is set.
+    The scrypt digest of the 80 parent bytes satisfies `Work.checkProofOfWork` with the `nBits` of this header, not of the parent.
     `AuxPow.check` also accepts the payload with this header's hash, its chain ID and `strictChainId`.
 
 `Work.checkProofOfWork_iff` turns each proof-of-work condition into target validity and a digest at most the target.

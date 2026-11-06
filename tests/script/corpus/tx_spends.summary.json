@@ -1,0 +1,50 @@
+{
+  "check_transaction_method": "Estimated from pinned CheckTransaction in source order. No Core execution.",
+  "converter_sha256": "a72bdba013c5e568d5683c6c2a3944fc40539dca1db79cbd717505ee203d0e0b",
+  "estimated_earliest_stage": {
+    "2": 11,
+    "3": 55,
+    "4": 93
+  },
+  "exclusion_reasons_nonexclusive": {
+    "flag:DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM": 8,
+    "flag:WITNESS": 108,
+    "nonempty_witness": 48
+  },
+  "inside_milestone": 159,
+  "outside_milestone": 108,
+  "per_input_expectations": {
+    "accept": 171,
+    "unknown": 96
+  },
+  "records": 267,
+  "source_commit": "e0a1c157791544e818c901bd9341896965afbf9d",
+  "sources": {
+    "tx_invalid.json": {
+      "estimated_check_transaction": {
+        "bad-cb-length": 2,
+        "bad-txns-inputs-duplicate": 1,
+        "bad-txns-prevout-null": 2,
+        "bad-txns-vout-empty": 3,
+        "bad-txns-vout-negative": 1,
+        "no_rejection_found": 71
+      },
+      "inputs": 96,
+      "source_file": "src/test/data/tx_invalid.json",
+      "source_sha256": "2a4ceae08e4e2b1b86cc4bac86e6c5d6ad9b5d61c38b20a48bdedb78f113e34a",
+      "transactions": 80,
+      "zero_input_transactions": 0
+    },
+    "tx_valid.json": {
+      "estimated_check_transaction": {
+        "no_rejection_found": 118
+      },
+      "inputs": 171,
+      "source_file": "src/test/data/tx_valid.json",
+      "source_sha256": "77fadb4ec19115405b733d8f3a406aaf7010993bc080d128a232fd1681c0279f",
+      "transactions": 118,
+      "zero_input_transactions": 0
+    }
+  },
+  "stage_estimate_method": "Instruction scan only. No Script execution."
+}

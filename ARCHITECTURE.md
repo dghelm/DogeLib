@@ -80,7 +80,7 @@ Bottom-up. Each layer imports only the layers above it in this list.
 | `Work` | Proof-of-work arithmetic: 256-bit targets, their compact encoding, and the difficulty retarget |
 | `Transaction` | Raw transaction types, base serialization, transaction IDs, legacy signature hashing |
 | `Block` | Pure block headers, block hashes and transaction Merkle roots |
-| `Script` | The instruction reader of the Script interpreter, the state of one `EvalScript` call, Script numbers (`CScriptNum`) and the truth value of a stack item. The interpreter's errors and flags, and one `EvalScript` call for the opcodes of stages 2 and 3, including the numeric, hash and signature opcodes. The encoding checks of signatures and public keys, and the signature checker that the evaluator takes as a parameter. Timelocks and `VerifyScript` follow in later stages. |
+| `Script` | The instruction reader of the Script interpreter, the state of one `EvalScript` call, Script numbers (`CScriptNum`) and the truth value of a stack item. The interpreter's errors and flags, and one `EvalScript` call for the opcodes of stages 2 to 4, including the numeric, hash, signature and lock-time opcodes. The encoding checks of signatures and public keys, and the signature checker that the evaluator takes as a parameter. `VerifyScript` without a witness, and the spend predicate of one legacy input. |
 
 `Script` imports `Transaction`, because the interpreter and the legacy signature serializer share one instruction reader, `Transaction.readOp`, and later stages hash with `Transaction.legacySignatureHash`.
 `Script.Eval` also imports the hash definitions of `Cryptography` for the hash opcodes.

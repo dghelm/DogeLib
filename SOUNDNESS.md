@@ -769,8 +769,8 @@ The theorems are in `DogeLib.Script.Proofs.Eval`.
 `ok` is Core's `true` with `SCRIPT_ERR_OK`, and `rejected e` is Core's `false` with error `e`.
 `unsupported r` means that this stage lacks a capability that the call needs, and says nothing about Core's verdict.
 A flag outside the seven of design record 0003 is unsupported before any other check.
-An executed `OP_CHECKLOCKTIMEVERIFY` or `OP_CHECKSEQUENCEVERIFY` with its flag set is unsupported.
-Without a checker, an executed signature opcode is unsupported, and so is a signature check that the checker cannot decide.
+Without a checker, an executed signature opcode is unsupported, and so is `OP_CHECKLOCKTIMEVERIFY` or `OP_CHECKSEQUENCEVERIFY` with its flag set.
+A check that the checker cannot decide is also unsupported.
 
 For every flag set, script and caller stack:
 
@@ -822,13 +822,12 @@ Three boundaries limit the claim:
 That the definitions are Core's rests on a reading of D3 and D24 (A1) and on the known answers.
 `lake test` runs 140 hand cases and 46 underflow cases, with results written by hand from D3 and D24.
 The expected digests of the hash cases come from Core's `script_tests.json` (D45).
-It also runs all 1,193 records of Core's `script_tests.json` (D45) through a test-only composition of two calls, which follows `VerifyScript` without its P2SH branch (D3, lines 1409 to 1435).
-Both calls use `transactionChecker` over the record's spending transaction, with a verifier that is always unavailable.
-867 records agree with Core's expected result, 528 acceptances and 339 rejections, and none disagrees.
+It also runs all 1,193 records of Core's `script_tests.json` (D45) through `verifyScript`.
+The checker is `transactionChecker` over the record's spending transaction, with a verifier that is always unavailable.
+881 records agree with Core's expected result, 531 acceptances and 350 rejections, and none disagrees.
 
-326 records are unsupported.
-Of those, 165 have an unsupported flag, 103 have a witness, and 40 reach the verifier.
-13 reach the P2SH branch, and 5 need `OP_CHECKSEQUENCEVERIFY`.
+312 records are unsupported.
+Of those, 165 have an unsupported flag, 103 have a witness, and 44 reach the verifier.
 Core itself does not run.
 
 The definitions add no hypothesis or axiom.
@@ -904,7 +903,8 @@ The supporting byte and big-endian lemmas of the module use the same three axiom
 `DogeLib.Script.Eval` specifies `OP_CHECKSIG`, `OP_CHECKSIGVERIFY`, `OP_CHECKMULTISIG` and `OP_CHECKMULTISIGVERIFY` with that checker (D3, lines 880 to 1026).
 The theorems are in `DogeLib.Script.Proofs.Signature` and `DogeLib.Script.Proofs.Eval`.
 
-The checker is a structure with one function, `checkSig sig key scriptCode : Option Bool`.
+The checker is a structure with three functions: `checkSig sig key scriptCode`, `checkLockTime n` and `checkSequence n`, each returning `Option Bool`.
+[Script lock times and `VerifyScript`](#script-lock-times-and-verifyscript) covers the two lock-time functions.
 `none` means that the check is unavailable, and the evaluator then reports `unsupported`, never a rejection.
 `baseChecker` is Core's `BaseSignatureChecker`, which fails every check.
 `transactionChecker tx nIn verify` is Core's `TransactionSignatureChecker::CheckSig` with `SIGVERSION_BASE`.
@@ -965,6 +965,63 @@ By `#print axioms` with Lean `v4.35.0`:
 | `PairsMatch.length_eq`, `orderedMatch_length`, `multisigLoop_ok`, `multisigLoop_error` | `propext` |
 | `transactionChecker_invalidKey`, `transactionChecker_emptySig`, `transactionChecker_verify`, `transactionChecker_verify_congr`, `greedyMatchNoExit_iff`, `greedyMatchNoExit_short`, `greedyMatch_eq_noExit`, `greedyMatch_iff`, `execOpcode_signature_none`, `execOpcode_checkSig`, `execOpcode_checkMultisig`, the `checkSigStep_*` and `checkMultisigStep_*` theorems except `checkMultisigStep_matching_pushOrder`, `multisigCheck_ok`, `multisigLoop_multisigCheck_error`, `evalInstruction_signature_skipped` | `propext`, `Quot.sound` |
 | `pairsMatch_append`, `pairsMatch_reverse`, `orderedMatch_reverse`, `checkMultisigStep_matching_pushOrder` | `propext`, `Classical.choice`, `Quot.sound` |
+
+### Script lock times and `VerifyScript`
+
+`DogeLib.Script.Eval` specifies `OP_CHECKLOCKTIMEVERIFY` and `OP_CHECKSEQUENCEVERIFY` with their flags (D3, lines 350 to 427).
+`DogeLib.Script.Signature` gives Core's `CheckLockTime` and `CheckSequence` (D3, lines 1274 to 1353) as `lockTimeSatisfied` and `sequenceSatisfied`, the two new fields of `transactionChecker`.
+`DogeLib.Script.Verify` specifies `VerifyScript` with an empty witness (D3, lines 1409 to 1526), `IsPushOnly` and `IsPayToScriptHash` (D48), and the spend predicate `verifyLegacySpend`.
+The theorems are in `DogeLib.Script.Proofs.Eval`, `DogeLib.Script.Proofs.Signature` and `DogeLib.Script.Proofs.Verify`.
+
+For the lock-time opcodes, with any checker `c` and the opcode's flag set:
+
+- `execOpcode_cltv_underflow`, `execOpcode_cltv_decode` and `execOpcode_cltv_negative`: an empty stack, then a top item that fails the five-byte decode, then a negative operand, each before any checker request. The `csv` theorems give the same.
+- `execOpcode_cltv_checked`: a nonnegative operand goes to `c.checkLockTime`, and `true` leaves the state unchanged. `execOpcode_csv_checked` gives the same for an operand with bit 31 clear.
+- `execOpcode_csv_disabled`: an operand with bit 31 set leaves the state unchanged, for every checker.
+- `execOpcode_cltv_transaction`: with `transactionChecker` for an `InputContext`, a nonnegative operand passes exactly when it lies on the lock time's side of 500,000,000, does not exceed the lock time, and the input's sequence is not `0xffffffff`.
+- `execOpcode_csv_transaction`: with `transactionChecker`, an operand with bit 31 clear passes exactly when the version read as `uint32_t` is at least 2, bit 31 of the sequence is clear, the masked values have the same type bit, and the masked operand does not exceed the masked sequence.
+
+Without a checker, both opcodes with their flags are unsupported (`execOpcode_cltv`, `execOpcode_csv`), as before.
+With their flags clear, they are NOPs for every checker.
+
+These checks compare the operand with fields of the spending transaction.
+They do not compare the lock time with a block height or time, and they do not establish an input's age.
+Design record 0003, section 3, records that the mainnet activation of CSV at the pin is unverified.
+So a CSV result may hold only for relay policy (A5).
+
+`CheckSequence` masks the operand as an `int64_t`, and `sequenceSatisfied` masks `n.toNat`.
+The two agree for `n ≥ 0`, the only operands that the opcode passes.
+`transactionChecker` answers `none` for an input index outside the inputs, where Core's `vin[nIn]` is undefined behavior, so the result makes no claim.
+`InputContext` requires an index below the number of inputs, so `verifyLegacySpend` never reaches that case.
+
+For `verifyScript` with any checker `c`:
+
+- `verifyScript_unsupportedFlags`: a flag outside the seven gives `unsupported` before any evaluation. `hasFlag_sigPushOnly_eq_false`, `hasFlag_cleanStack_eq_false` and `hasFlag_witness_eq_false` show that the branches of those flags are unreachable.
+- `verifyScript_noP2sh`: without `P2SH` or without the template, the result is the two evaluations with the true-top check.
+- `verifyScript_p2sh`: with `P2SH`, the template, a push-only `scriptSig` whose final stack is `S ++ [redeem]`, and a `scriptPubKey` that accepts, the result is `redeem` on `S` with the true-top check.
+- `verifyScript_p2sh_notPushOnly`: the same request with a `scriptSig` that is not push-only gives `SIG_PUSHONLY`.
+- `verifyScript_p2sh_saved_ne_nil`: Core's assert at line 1469 holds, so the branch of `verifyScript` for an empty saved stack is unreachable. Its value is arbitrary and is not Core's behavior.
+- `evalScript_p2shTemplate`: the template on `S ++ [x]` pushes `[1]` when the HASH160 digest of `x` equals its 20 bytes, and `[]` otherwise, given room for two items.
+- `verifyScript_p2sh_hash` and `verifyScript_p2sh_hash_ne`: the composition from the digest of the supplied `redeem`.
+- `isPushOnly_iff`: `isPushOnly` is Core's loop over the instruction boundaries of `readInstruction`. Like Core, it treats `OP_RESERVED` as push-only.
+
+The P2SH theorems hold for the exact supplied redeem script.
+They do not say that no other redeem script has the same digest. That needs a collision hypothesis (A4).
+`verifyLegacySpend` takes the previous output's script from the caller, who establishes that it belongs to the referenced outpoint.
+A result of `verifyLegacySpend` holds for Core only under the verifier-agreement hypothesis of [Script signature opcodes and the checker](#script-signature-opcodes-and-the-checker).
+
+That the definitions are Core's rests on a reading of D3, D4, D24 and D48 (A1), and on the known answers.
+`lake test` runs 38 lock-time cases, 20 `verifyScript` cases, 11 `isPushOnly` cases and 3 `verifyLegacySpend` cases, with results written by hand from those sources.
+On `script_tests.json`, `verifyScript` with `transactionChecker` agrees with Core's expected result on 881 records, from 867, and disagrees on none.
+The oracle has no `VerifyScript` operation yet, so no comparison with Core's compiled code covers `verifyScript` or the lock-time opcodes with a checker.
+By `#print axioms` with Lean `v4.35.0`:
+
+| Theorem | Axioms |
+| --- | --- |
+| `baseChecker_checkLockTime`, `baseChecker_checkSequence` | None |
+| `lockTimeSatisfied_iff`, `InputContext.getElem?_index` | `propext` |
+| `transactionChecker_checkLockTime`, `transactionChecker_checkSequence`, `transactionChecker_checkLockTime_none`, `transactionChecker_checkSequence_none`, `sequenceSatisfied_iff`, `checkLockTimeStep_next`, `checkSequenceStep_next`, the `execOpcode_cltv*` and `execOpcode_csv*` theorems, `execOpcode_checker_congr`, `execOpcode_script_congr`, `isPushOnlyFrom_atEnd`, `isPushOnlyFrom_truncated`, `isPushOnlyFrom_instruction`, `verifyScript_unsupportedFlags`, `hasFlag_sigPushOnly_eq_false`, `hasFlag_cleanStack_eq_false`, `hasFlag_witness_eq_false`, `verifyScript_noP2sh`, `verifyScript_p2sh`, `verifyScript_p2sh_notPushOnly`, `verifyLegacySpend_eq` | `propext`, `Quot.sound` |
+| `isPushOnlyFrom_iff`, `isPushOnly_iff`, `isPayToScriptHash_iff`, `evalScript_p2shTemplate`, `evalScript_p2shTemplate_nil`, `verifyScript_p2sh_saved_ne_nil`, `verifyScript_p2sh_hash`, `verifyScript_p2sh_hash_ne` | `propext`, `Classical.choice`, `Quot.sound` |
 
 ### Compact encoding and difficulty retarget
 
@@ -1347,6 +1404,8 @@ Whatever those hypotheses leave unproved is part of what a reader trusts.
 `transactionChecker` takes the elliptic-curve check as a parameter `verify`.
 A Script result that uses it holds for Core only under the verifier-agreement hypothesis of [Script signature opcodes and the checker](#script-signature-opcodes-and-the-checker).
 The ordered-matching theorems of that subsection also assume a checker answer and passing encoding checks on every pair of signatures and keys.
+`verifyLegacySpend` requires an `InputContext`, whose index selects an input and whose transaction has fewer than 2^32 inputs and outputs.
+Core's transaction reader gives the two count bounds. A caller that builds a transaction from fields must supply them.
 
 `no_wrap_of_validProofOfWorkTarget` discharges the old-target bound of `no_wrap_of_le_powLimit` from Core's target-validity predicate.
 Its numerical bound holds for every selected mainnet and testnet record.
@@ -1372,6 +1431,7 @@ A security theorem rests on a model, such as a random oracle for a hash.
 DogeLib has no security theorem, so it has no idealisation.
 Equality of two hash plans needs no assumption about the hash function.
 A claim that different preimages give different digests needs a named collision hypothesis or a computational model.
+The P2SH theorems of `DogeLib.Script.Proofs.Verify` assume no property of HASH160, and they claim nothing about other redeem scripts with the same digest.
 
 ### A5. Protocol context
 

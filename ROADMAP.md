@@ -53,7 +53,7 @@ The SHA-1 oracle operation remains deferred in issue #64.
 The Script layer implements stage 1 of [design record 0003](docs/design/0003-legacy-spend-validation.md): the instruction reader and the state of one `EvalScript` call.
 `Script.readInstruction` follows `GetOp2`, including the cursor after each failure, and shares its decoder with the legacy signature serializer.
 `Script.ExecState` gives the per-call reset and the main-stack hand-off of `VerifyScript`.
-The oracle exposes `script.read_op` and `script.eval` (#74). The layer gives no verdict on a spend.
+The oracle exposes `script.read_op` and `script.eval` (#74).
 
 The Script layer also has the numeric part of stage 2 of [design record 0003](docs/design/0003-legacy-spend-validation.md): `CScriptNum` and `CastToBool` over integers, in `Script.Number`.
 `isMinimal_iff_encode_value` shows that Core's minimality test accepts exactly the encodings, and the decode theorems give every result, with the size check first.
@@ -62,8 +62,7 @@ The Script layer also has the numeric part of stage 2 of [design record 0003](do
 `Script.evalScript` implements one `EvalScript` call, stages 2b, 2c and 3 of [design record 0003](docs/design/0003-legacy-spend-validation.md).
 It runs pushes, NOPs, control flow, stack operations, `OP_SIZE`, equality, the numeric and hash opcodes, `OP_CODESEPARATOR` and the signature opcodes.
 It follows Core's errors and check order, also in skipped branches.
-CLTV and CSV with their flags, and flags outside the seven of the design record give `unsupported`, never a rejection.
-On Core's `script_tests.json`, 867 records agree with Core, none disagrees, and 326 are unsupported.
+Flags outside the seven of the design record give `unsupported`, never a rejection.
 
 `Script.SignatureCode` implements push encoding and effective script-code preparation for stage 3.
 Its proofs cover the push reader round trip below 2^32 bytes and the exact traversal of `FindAndDelete`, including malformed suffixes.
@@ -78,7 +77,21 @@ The signature opcodes run these checks.
 `evalScript` takes an optional checker: Core's `BaseSignatureChecker` as `baseChecker`, or `transactionChecker` with an elliptic-curve verifier as a parameter.
 `checkMultisigStep_matching` proves that `OP_CHECKMULTISIG` succeeds exactly when the signatures pair in order with a subsequence of the keys, given total checker answers.
 The oracle's `script.eval` still runs without a checker. Running it with `baseChecker` changes the oracle results and needs a maintainer decision.
-P2SH, `VerifyScript` and the timelocks of stage 4 are the next Script work.
+
+`Script.Verify` and the lock-time opcodes complete stage 4.
+CLTV and CSV follow Core with a checker, and `transactionChecker` gives Core's `CheckLockTime` and `CheckSequence` for the selected input.
+`verifyScript` follows `VerifyScript` with an empty witness, including the P2SH branch, and `verifyLegacySpend` checks one input of an `InputContext`.
+`verifyScript_p2sh` gives the P2SH composition, and it assumes nothing about HASH160.
+On Core's `script_tests.json`, 881 records agree with Core and none disagrees.
+312 are unsupported: 165 for flags, 103 for witness and 44 that reach the verifier.
+
+With a checker, all seven selected flags and all legacy opcode behaviors have defined results.
+The one exception is a checker answer of `none`, which gives `unsupported`.
+`transactionChecker` answers `none` only when its verifier does.
+Its other `none` cases, an index outside the inputs and a script code of 2^64 bytes or more, are unreachable through `verifyLegacySpend`.
+Without a checker, the signature opcodes and CLTV and CSV with their flags stay unsupported.
+
+Stage 5 is next: `script.verify_legacy` in the oracle and `script.eval` with `baseChecker`, in a new oracle format.
 
 Steps 0 and 0b follow design record 0002: the first contributions adopt audited codec foundations and then define Dogecoin's bounded decoding contract. They replace the original plan to build fixed-width encodings and CompactSize from scratch. Design record 0002 preferred a pinned btc-verified dependency first. The decisions below choose an adaptation instead, because btc-verified's toolchain, file structure and trust policy all differ from EthLib's.
 

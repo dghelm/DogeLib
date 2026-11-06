@@ -7,6 +7,7 @@ public import DogeLib.Script.Proofs.Signature
 public import DogeLib.Script.Proofs.SignatureCode
 public import DogeLib.Script.Proofs.SignatureEncoding
 public import DogeLib.Script.Proofs.State
+public import DogeLib.Script.Proofs.Verify
 
 /-!
 # `DogeLib.Script.Proofs`

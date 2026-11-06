@@ -2851,26 +2851,11 @@ def reasonLabel : Unsupported → String
   | .checkLockTimeVerify => "CHECKLOCKTIMEVERIFY"
   | .checkSequenceVerify => "CHECKSEQUENCEVERIFY"
 
-/-- Core's `CScript::IsPayToScriptHash` (D48, lines 204 to 211): `OP_HASH160`, a 20-byte push, `OP_EQUAL`, and nothing else. -/
-def isP2SHTemplate (script : List UInt8) : Bool :=
-  script.length == 23 && script[0]? == some 0xa9 && script[1]? == some 0x14 && script[22]? == some 0x87
-
-/-- `VerifyScript` (D3, lines 1409 to 1435) without its P2SH branch, for a record with an empty witness. Test code only. -/
-def verifyWithoutP2SH (checker : SignatureChecker) (flags : UInt32) (scriptSig scriptPubKey : List UInt8) : Outcome :=
-  match evalScript (some checker) flags scriptSig [] with
-  | .unsupported u => .unsupported (reasonLabel u)
+/-- A `VerifyResult` as a corpus outcome. -/
+def outcomeOf : VerifyResult → Outcome
+  | .accepted => .accepted
   | .rejected e => .rejected e
-  | .ok s =>
-    match evalScript (some checker) flags scriptPubKey s.stack with
-    | .unsupported u => .unsupported (reasonLabel u)
-    | .rejected e => .rejected e
-    | .ok t =>
-      match t.stack.getLast? with
-      | none => .rejected .evalFalse
-      | some top =>
-        if !castToBool top then .rejected .evalFalse
-        else if hasFlag flags ScriptFlags.p2sh && isP2SHTemplate scriptPubKey then .unsupported "P2SH"
-        else .accepted
+  | .unsupported u => .unsupported (reasonLabel u)
 
 /-- The fields of one corpus record that this test reads. -/
 structure Record where
@@ -2920,7 +2905,13 @@ def checkCorpus : IO Nat := do
   let mut failures := 0
   let mut agree := 0
   let mut agreeAccepted := 0
-  let mut unsupported : List (String × Nat) := [("P2SH", 0), ("signature verifier", 0)]
+  let mut unsupported : List (String × Nat) := [("signature verifier", 0)]
+  -- Records with P2SH set and the template as `scriptPubKey`.
+  let mut p2shAgree := 0
+  let mut p2shVerifier := 0
+  -- Records with a lock-time flag set and its opcode in a script.
+  let mut lockAgree := 0
+  let mut lockUnsupported := 0
   if lines.length != 1193 then
     IO.eprintln s!"FAIL {path}: {lines.length} records, expected 1193"
     failures := failures + 1
@@ -2932,9 +2923,15 @@ def checkCorpus : IO Nat := do
       if r.witness then Outcome.unsupported "witness"
       else
         let checker := transactionChecker r.spendTx r.inputIndex.toUInt32 fun _ _ _ => none
-        verifyWithoutP2SH checker r.flags r.scriptSig r.scriptPubKey
+        outcomeOf (verifyScript checker r.flags r.scriptSig r.scriptPubKey)
+    let p2sh := !r.witness && hasFlag r.flags ScriptFlags.p2sh && isPayToScriptHash r.scriptPubKey
+    let lock := !r.witness && unsupportedFlagBits r.flags == 0 &&
+      ((hasFlag r.flags ScriptFlags.checkLockTimeVerify && (r.scriptSig.contains 0xb1 || r.scriptPubKey.contains 0xb1)) ||
+        (hasFlag r.flags ScriptFlags.checkSequenceVerify && (r.scriptSig.contains 0xb2 || r.scriptPubKey.contains 0xb2)))
     match got with
     | .unsupported reason =>
+      if p2sh && reason == "signature verifier" then p2shVerifier := p2shVerifier + 1
+      if lock then lockUnsupported := lockUnsupported + 1
       unsupported :=
         if unsupported.any (·.1 == reason) then unsupported.map fun (k, n) => (k, if k == reason then n + 1 else n)
         else unsupported ++ [(reason, 1)]
@@ -2944,6 +2941,8 @@ def checkCorpus : IO Nat := do
         failures := failures + 1
       else if outcomeName got == r.expected then
         agree := agree + 1
+        if p2sh then p2shAgree := p2shAgree + 1
+        if lock then lockAgree := lockAgree + 1
         if r.expected == "OK" then agreeAccepted := agreeAccepted + 1
       else
         IO.eprintln s!"FAIL script_tests.json:{r.line}: got {outcomeName got}, expected {r.expected}"
@@ -2954,6 +2953,7 @@ def checkCorpus : IO Nat := do
   let total := unsupported.foldl (fun acc (_, n) => acc + n) 0
   let detail := ", ".intercalate (unsupported.map fun (k, n) => s!"{k} {n}")
   IO.println s!"script corpus: {lines.length} records, {agree} agree with Core ({agreeAccepted} accepted, {agree - agreeAccepted} rejected), {failures} failures, {total} unsupported: {detail}"
+  IO.println s!"script corpus: P2SH template with its flag {p2shAgree} agree, {p2shVerifier} reach the verifier; lock-time opcodes with their flags {lockAgree} agree, {lockUnsupported} unsupported"
   return failures
 
 /-- The expected result of a hand case. -/
@@ -3194,10 +3194,11 @@ def checkCases : IO Nat := do
     unless c.expected.matches got do
       IO.eprintln s!"FAIL script eval {c.label}: got {repr got}"
       failures := failures + 1
-    let signatureUnsupported := match c.expected with
-      | .unsupported (.signatureOpcode _) => true
+    -- Without a checker these opcodes are unsupported. `KnownAnswers.ScriptVerify` covers them with `baseChecker`.
+    let needsChecker := match c.expected with
+      | .unsupported (.signatureOpcode _) | .unsupported .checkLockTimeVerify | .unsupported .checkSequenceVerify => true
       | _ => false
-    unless signatureUnsupported do
+    unless needsChecker do
       let got := evalScript (some baseChecker) c.flags c.script c.stack
       unless c.expected.matches got do
         IO.eprintln s!"FAIL script eval {c.label} with baseChecker: got {repr got}"
@@ -3628,6 +3629,8 @@ open KnownAnswers.ScriptEval (Expect hex rep)
 /-- The test checker: `some true` for a listed pair, `some false` for another pair, and `none` unless the script code is `code`. -/
 def tableChecker (code : List UInt8) (valid : List (List UInt8 × List UInt8)) : SignatureChecker where
   checkSig sig key c := if c == code then some (valid.contains (sig, key)) else none
+  checkLockTime _ := none
+  checkSequence _ := none
 
 /-- Three test signatures and three test keys, of arbitrary bytes. With flags 0 no encoding check reads them. -/
 def s1 : List UInt8 := [0xa1, 0x01]
@@ -3681,7 +3684,7 @@ def cases : List Case := [
     .rejected .sigDer⟩,
   ⟨"CHECKSIG key encoding", 0x02, tableChecker [0xac] [], [0xac], [derSig, badKey], .rejected .pubkeyType⟩,
   ⟨"CHECKSIG encoding passes", 0x02, tableChecker [0xac] [(derSig, goodKey)], [0xac], [derSig, goodKey], .ok [[1]]⟩,
-  ⟨"CHECKSIG unavailable checker", 0, ⟨fun _ _ _ => none⟩, [0xac], [s1, k1],
+  ⟨"CHECKSIG unavailable checker", 0, ⟨fun _ _ _ => none, fun _ => none, fun _ => none⟩, [0xac], [s1, k1],
     .unsupported (.signatureOpcode 0xac)⟩,
   ⟨"CHECKSIG script code from the start", 0, tableChecker [0x61, 0xac] table, [0x61, 0xac], [s1, k1], .ok [[1]]⟩,
   ⟨"CHECKSIG after a code separator", 0, tableChecker [0xac] table, [0x61, 0xab, 0xac], [s1, k1], .ok [[1]]⟩,
@@ -3732,7 +3735,7 @@ def cases : List Case := [
     ⟨fun sig key code =>
       if code != twoOfThree then none
       else if sig == s1 && key == k1 then none
-      else some (table.contains (sig, key))⟩,
+      else some (table.contains (sig, key)), fun _ => none, fun _ => none⟩,
     twoOfThree, [[], s2, s1], .ok [[]]⟩,
   -- The order-dependent encoding check (D3, line 969), with STRICTENC.
   ⟨"CHECKMULTISIG never visits a bad key below a match", 0x02, tableChecker badKeyBelow [(derSig, goodKey)],
@@ -3756,7 +3759,7 @@ def cases : List Case := [
   ⟨"CHECKMULTISIG deletes every signature push before the loop", 0, tableChecker (rep 1 0x00 ++ twoOfThree) table,
     [0x00, 0x02, 0xa1, 0x01, 0x02, 0xa2, 0x01] ++ twoOfThree, [], .ok [[1]]⟩,
   -- Skipped branches: no checker call and no key count.
-  ⟨"signature opcodes in a skipped branch", 0, ⟨fun _ _ _ => none⟩, [0x00, 0x63, 0xac, 0xad, 0xae, 0xaf, 0x68],
+  ⟨"signature opcodes in a skipped branch", 0, ⟨fun _ _ _ => none, fun _ => none, fun _ => none⟩, [0x00, 0x63, 0xac, 0xad, 0xae, 0xaf, 0x68],
     [], .ok []⟩,
   ⟨"CHECKMULTISIG in a skipped branch counts once", 0, tableChecker [] table,
     [0x00, 0x63, 0x01, 0x14, 0xae, 0x68] ++ rep 198 0x61, [], .ok []⟩
@@ -3806,6 +3809,219 @@ def check : IO Nat := do
 
 end KnownAnswers.ScriptSignature
 
+/-!
+## `VerifyScript` and the lock-time opcodes
+
+Hand cases for stage 4, each at a boundary that Core's source states:
+`OP_CHECKLOCKTIMEVERIFY` and `OP_CHECKSEQUENCEVERIFY` (D3, lines 350 to 427), `CheckLockTime` and `CheckSequence` (D3, lines 1274 to 1353), `VerifyScript` (D3, lines 1409 to 1526) and `IsPushOnly` (D48, lines 239 to 259).
+Each expected result is read from those lines, not computed by DogeLib.
+The P2SH cases build the template from the HASH160 digest of the redeem script, and `lake test` checks HASH160 against its own vectors.
+-/
+
+namespace KnownAnswers.ScriptVerify
+
+open DogeLib.Script
+open KnownAnswers.ScriptEval (Expect hex rep)
+
+/-- A transaction with one input of sequence `sequence`, no outputs, version bits `version` and lock time `lockTime`. -/
+def mkTx (version lockTime sequence : UInt32) : DogeLib.Transaction.Transaction :=
+  { version
+    inputs := ⟨[{ prevout := DogeLib.Transaction.OutPoint.null, scriptSig := ⟨⟨[], by decide⟩⟩, sequence }], by simp⟩
+    outputs := ⟨[], by decide⟩
+    lockTime }
+
+/-- `transactionChecker` for input 0 of `mkTx`, with a verifier that is always unavailable. -/
+def txChecker (version lockTime sequence : UInt32) : SignatureChecker :=
+  transactionChecker (mkTx version lockTime sequence) 0 fun _ _ _ => none
+
+/-- A push of the bytes `b`, for at most 75 bytes. -/
+def push (b : List UInt8) : List UInt8 := b.length.toUInt8 :: b
+
+def cltv : UInt32 := ScriptFlags.checkLockTimeVerify
+def csv : UInt32 := ScriptFlags.checkSequenceVerify
+
+/-- One hand case of an evaluation: a label, flags, a checker, a script and the expected result on the empty stack. -/
+structure Case where
+  label : String
+  flags : UInt32
+  checker : Option SignatureChecker
+  script : List UInt8
+  expected : Expect
+
+/-- 499,999,999, 500,000,000 and 500,000,001 as script numbers. -/
+def n499999999 : List UInt8 := [0xff, 0x64, 0xcd, 0x1d]
+def n500000000 : List UInt8 := [0x00, 0x65, 0xcd, 0x1d]
+def n500000001 : List UInt8 := [0x01, 0x65, 0xcd, 0x1d]
+
+/-- The lock-time cases. Each operand stays on the stack, because neither opcode pops. -/
+def cases : List Case := [
+  -- CHECKLOCKTIMEVERIFY: the threshold (D24 line 35, D3 lines 1283 to 1287).
+  ⟨"CLTV 499,999,999 against 500,000,000", cltv, txChecker 1 500000000 0, push n499999999 ++ [0xb1],
+    .rejected .unsatisfiedLocktime⟩,
+  ⟨"CLTV 500,000,000 against 500,000,000", cltv, txChecker 1 500000000 0, push n500000000 ++ [0xb1],
+    .ok [n500000000]⟩,
+  ⟨"CLTV 499,999,999 against 499,999,999", cltv, txChecker 1 499999999 0, push n499999999 ++ [0xb1],
+    .ok [n499999999]⟩,
+  ⟨"CLTV 500,000,001 against 500,000,000", cltv, txChecker 1 500000000 0, push n500000001 ++ [0xb1],
+    .rejected .unsatisfiedLocktime⟩,
+  ⟨"CLTV 500,000,000 against 499,999,999", cltv, txChecker 1 499999999 0, push n500000000 ++ [0xb1],
+    .rejected .unsatisfiedLocktime⟩,
+  -- The comparison (D3 lines 1291 and 1292).
+  ⟨"CLTV 6 against 5", cltv, txChecker 1 5 0, [0x56, 0xb1], .rejected .unsatisfiedLocktime⟩,
+  ⟨"CLTV 0 against 0", cltv, txChecker 1 0 0, [0x00, 0xb1], .ok [[]]⟩,
+  -- The final sequence (D4 line 76, D3 lines 1304 and 1305).
+  ⟨"CLTV with sequence 0xffffffff", cltv, txChecker 1 0 0xffffffff, [0x00, 0xb1], .rejected .unsatisfiedLocktime⟩,
+  ⟨"CLTV with sequence 0xfffffffe", cltv, txChecker 1 0 0xfffffffe, [0x00, 0xb1], .ok [[]]⟩,
+  -- The five-byte operand (D3 line 377).
+  ⟨"CLTV five-byte 0xffffffff against 0xffffffff", cltv, txChecker 1 0xffffffff 0,
+    push [0xff, 0xff, 0xff, 0xff, 0x00] ++ [0xb1], .ok [[0xff, 0xff, 0xff, 0xff, 0x00]]⟩,
+  ⟨"CLTV five-byte 2^32 against 0xffffffff", cltv, txChecker 1 0xffffffff 0,
+    push [0x00, 0x00, 0x00, 0x00, 0x01] ++ [0xb1], .rejected .unsatisfiedLocktime⟩,
+  ⟨"CLTV six-byte operand", cltv, txChecker 1 0xffffffff 0, push [0x00, 0x00, 0x00, 0x00, 0x00, 0x00] ++ [0xb1],
+    .rejected .unknownError⟩,
+  -- The negative operand and the empty stack (D3 lines 360, 361, 382 and 383).
+  ⟨"CLTV -1", cltv, txChecker 1 0 0, [0x4f, 0xb1], .rejected .negativeLocktime⟩,
+  ⟨"CLTV negative zero is not negative", cltv, txChecker 1 0 0, push [0x80] ++ [0xb1], .ok [[0x80]]⟩,
+  ⟨"CLTV on an empty stack", cltv, txChecker 1 0 0, [0xb1], .rejected .invalidStackOperation⟩,
+  ⟨"CLTV with BaseSignatureChecker", cltv, some baseChecker, [0x00, 0xb1], .rejected .unsatisfiedLocktime⟩,
+  ⟨"CLTV without a checker", cltv, none, [0x00, 0xb1], .unsupported .checkLockTimeVerify⟩,
+  -- Flag off: NOP2 and NOP3 (D3 lines 352 to 358 and 394 to 400).
+  ⟨"NOP2 on an empty stack", 0, txChecker 1 0 0xffffffff, [0xb1], .ok []⟩,
+  ⟨"NOP3 on an empty stack", 0, txChecker 1 0 0xffffffff, [0xb2], .ok []⟩,
+  ⟨"NOP2 without a checker", csv, none, [0xb1], .ok []⟩,
+  -- CHECKSEQUENCEVERIFY: the version as uint32_t (D3 lines 1318 and 1319).
+  ⟨"CSV with version 1", csv, txChecker 1 0 10, [0x55, 0xb2], .rejected .unsatisfiedLocktime⟩,
+  ⟨"CSV with version 2", csv, txChecker 2 0 10, [0x55, 0xb2], .ok [[5]]⟩,
+  ⟨"CSV with version 0xffffffff", csv, txChecker 0xffffffff 0 10, [0x55, 0xb2], .ok [[5]]⟩,
+  ⟨"CSV with version 0x80000000", csv, txChecker 0x80000000 0 10, [0x55, 0xb2], .ok [[5]]⟩,
+  -- The disable bit in the operand (D4 line 81, D3 lines 418 and 419).
+  ⟨"CSV operand with bit 31, version 1", csv, txChecker 1 0 10,
+    push [0x00, 0x00, 0x00, 0x80, 0x00] ++ [0xb2], .ok [[0x00, 0x00, 0x00, 0x80, 0x00]]⟩,
+  ⟨"CSV operand with bit 31, BaseSignatureChecker", csv, some baseChecker,
+    push [0x00, 0x00, 0x00, 0x80, 0x00] ++ [0xb2], .ok [[0x00, 0x00, 0x00, 0x80, 0x00]]⟩,
+  ⟨"CSV operand with bit 31, no checker", csv, none, push [0x00, 0x00, 0x00, 0x80, 0x00] ++ [0xb2],
+    .unsupported .checkSequenceVerify⟩,
+  -- The disable bit in the sequence (D3 lines 1325 and 1326).
+  ⟨"CSV with sequence bit 31", csv, txChecker 2 0 0x8000000a, [0x55, 0xb2], .rejected .unsatisfiedLocktime⟩,
+  -- The type bit (D4 line 86, D3 lines 1341 to 1346).
+  ⟨"CSV time operand against height sequence", csv, txChecker 2 0 10, push [0x00, 0x00, 0x40] ++ [0xb2],
+    .rejected .unsatisfiedLocktime⟩,
+  ⟨"CSV height operand against time sequence", csv, txChecker 2 0 0x40000a, [0x55, 0xb2],
+    .rejected .unsatisfiedLocktime⟩,
+  ⟨"CSV time operand against time sequence", csv, txChecker 2 0 0x40000a, push [0x05, 0x00, 0x40] ++ [0xb2],
+    .ok [[0x05, 0x00, 0x40]]⟩,
+  -- The masked comparison (D4 line 90, D3 lines 1330 to 1332 and 1350 and 1351).
+  ⟨"CSV 11 against 10", csv, txChecker 2 0 10, [0x5b, 0xb2], .rejected .unsatisfiedLocktime⟩,
+  ⟨"CSV 10 against 10", csv, txChecker 2 0 10, [0x5a, 0xb2], .ok [[10]]⟩,
+  ⟨"CSV operand bits outside the mask", csv, txChecker 2 0 10, push [0x05, 0x00, 0x01] ++ [0xb2],
+    .ok [[0x05, 0x00, 0x01]]⟩,
+  ⟨"CSV sequence bits outside the mask", csv, txChecker 2 0 0x0001000a, [0x5a, 0xb2], .ok [[10]]⟩,
+  ⟨"CSV six-byte operand", csv, txChecker 2 0 10, push [0x00, 0x00, 0x00, 0x00, 0x00, 0x00] ++ [0xb2],
+    .rejected .unknownError⟩,
+  ⟨"CSV -1", csv, txChecker 2 0 10, [0x4f, 0xb2], .rejected .negativeLocktime⟩,
+  ⟨"CSV on an empty stack", csv, txChecker 2 0 10, [0xb2], .rejected .invalidStackOperation⟩
+]
+
+/-- The P2SH template for the redeem script `redeem`: `OP_HASH160`, its HASH160 digest, `OP_EQUAL`. -/
+def p2shOf (redeem : List UInt8) : List UInt8 :=
+  [0xa9, 0x14] ++ (DogeLib.Cryptography.Hash.hash160 ⟨redeem.toArray⟩).toList ++ [0x87]
+
+/-- The expected result of a `VerifyScript` case. -/
+inductive VExpect where
+  | accepted
+  | rejected (e : ScriptError)
+  | unsupported (u : Unsupported)
+  deriving BEq, Repr
+
+def VExpect.matches : VExpect → VerifyResult → Bool
+  | .accepted, .accepted => true
+  | .rejected e, .rejected e' => e == e'
+  | .unsupported u, .unsupported u' => u == u'
+  | _, _ => false
+
+def p2sh : UInt32 := ScriptFlags.p2sh
+
+/-- `VerifyScript` cases: label, flags, scriptSig, scriptPubKey and the expected result. -/
+def verifyCases : List (String × UInt32 × List UInt8 × List UInt8 × VExpect) := [
+  ("P2SH, redeem script OP_1", p2sh, push [0x51], p2shOf [0x51], .accepted),
+  ("P2SH, redeem script leaves false", p2sh, push [0x00], p2shOf [0x00], .rejected .evalFalse),
+  ("P2SH, redeem script OP_RETURN", p2sh, push [0x6a], p2shOf [0x6a], .rejected .opReturn),
+  ("P2SH, redeem script reads the item below", p2sh, [0x51] ++ push [0x75, 0x51], p2shOf [0x75, 0x51], .accepted),
+  ("P2SH, empty redeem script leaves nothing", p2sh, [0x00], p2shOf [], .rejected .evalFalse),
+  ("P2SH, scriptSig not push-only", p2sh, [0x61] ++ push [0x51], p2shOf [0x51], .rejected .sigPushOnly),
+  ("P2SH flag off, scriptSig not push-only", 0, [0x61] ++ push [0x51], p2shOf [0x51], .accepted),
+  ("P2SH flag off, redeem script leaves false", 0, push [0x00], p2shOf [0x00], .accepted),
+  ("P2SH, wrong redeem script", p2sh, push [0x52], p2shOf [0x51], .rejected .evalFalse),
+  ("P2SH, empty scriptSig", p2sh, [], p2shOf [0x51], .rejected .invalidStackOperation),
+  ("P2SH, OP_RESERVED in scriptSig", p2sh, [0x50] ++ push [0x51], p2shOf [0x51], .rejected .badOpcode),
+  ("P2SH, OP_RESERVED in a skipped branch is not push-only", p2sh, [0x00, 0x63, 0x50, 0x68] ++ push [0x51],
+    p2shOf [0x51], .rejected .sigPushOnly),
+  ("P2SH, extra items are not checked", p2sh, [0x51, 0x52] ++ push [0x51], p2shOf [0x51], .accepted),
+  ("not P2SH: the template and OP_NOP", p2sh, [0x61] ++ push [0x51], p2shOf [0x51] ++ [0x61], .accepted),
+  ("bare scripts, true top", p2sh, [0x51], [], .accepted),
+  ("bare scripts, false top", p2sh, [0x51], [0x00], .rejected .evalFalse),
+  ("bare scripts, empty stack", 0, [], [], .rejected .evalFalse),
+  ("scriptSig fails first", p2sh, [0x6a], p2shOf [0x51], .rejected .opReturn),
+  ("SIGPUSHONLY is unsupported", ScriptFlags.sigPushOnly, [0x61], [0x51], .unsupported (.flags 0x20)),
+  ("CLEANSTACK is unsupported", p2sh ||| ScriptFlags.cleanStack, push [0x51], p2shOf [0x51],
+    .unsupported (.flags 0x100))
+]
+
+/-- `isPushOnly` cases (D48, lines 239 to 259). -/
+def pushOnlyCases : List (List UInt8 × Bool) := [
+  ([], true), ([0x00], true), ([0x50], true), ([0x60], true), ([0x4f], true), ([0x4c, 0x01, 0x07], true),
+  ([0x61], false), ([0x51, 0x61], false), ([0x02, 0x01], false), ([0x4c], false), ([0xb1], false)
+]
+
+/-- The bytes as a transaction script. Every script here is far below 2^64 bytes. -/
+def toScript (b : List UInt8) : DogeLib.Transaction.Script :=
+  if h : b.length < 2 ^ 64 then ⟨⟨b, h⟩⟩ else ⟨⟨[], by decide⟩⟩
+
+/-- An input context over input 0 of `mkTx`. -/
+def ctx (version lockTime sequence : UInt32) : InputContext :=
+  ⟨mkTx version lockTime sequence, 0, by simp [mkTx], by simp [mkTx], by simp [mkTx]⟩
+
+/-- Runs every case. Returns the number of failures. -/
+def check : IO Nat := do
+  let mut failures := 0
+  for c in cases do
+    let got := evalScript c.checker c.flags c.script []
+    unless c.expected.matches got do
+      IO.eprintln s!"FAIL lock time {c.label}: got {repr got}"
+      failures := failures + 1
+  for (label, flags, ss, spk, expected) in verifyCases do
+    let got := verifyScript (txChecker 2 0 0) flags ss spk
+    unless expected.matches got do
+      IO.eprintln s!"FAIL verifyScript {label}: got {repr got}"
+      failures := failures + 1
+  for (script, expected) in pushOnlyCases do
+    unless isPushOnly script == expected do
+      IO.eprintln s!"FAIL isPushOnly {script}: expected {expected}"
+      failures := failures + 1
+  -- A spend whose P2SH redeem script checks the lock time of the input.
+  let redeem : List UInt8 := [0x55, 0xb1]
+  let prev := toScript (p2shOf redeem)
+  let mkSpend (lockTime sequence : UInt32) : InputContext :=
+    let base := ctx 1 lockTime sequence
+    let input := { base.input with scriptSig := toScript (push redeem) }
+    ⟨{ base.tx with inputs := ⟨[input], by simp⟩ }, 0, by simp, by simp, by simp [base, ctx, mkTx]⟩
+  let flags := p2sh ||| cltv
+  let spends : List (String × InputContext × VExpect) := [
+    ("spend, lock time 5", mkSpend 5 0, .accepted),
+    ("spend, lock time 4", mkSpend 4 0, .rejected .unsatisfiedLocktime),
+    ("spend, final sequence", mkSpend 5 0xffffffff, .rejected .unsatisfiedLocktime)
+  ]
+  for (label, c, expected) in spends do
+    let got := verifyLegacySpend c prev flags fun _ _ _ => none
+    unless expected.matches got do
+      IO.eprintln s!"FAIL verifyLegacySpend {label}: got {repr got}"
+      failures := failures + 1
+  let total := cases.length + verifyCases.length + pushOnlyCases.length + spends.length
+  IO.println s!"verify and lock time: {total} hand cases, {failures} failures"
+  return failures
+
+end KnownAnswers.ScriptVerify
+
 /-- Entry point of `lake test`. -/
 def main : IO UInt32 := do
   let sha1 ← KnownAnswers.Sha1.check
@@ -3835,4 +4051,5 @@ def main : IO UInt32 := do
   let signatureCode ← KnownAnswers.SignatureCode.check
   let signatureEncoding ← KnownAnswers.SignatureEncoding.check
   let scriptSignature ← KnownAnswers.ScriptSignature.check
-  return if sha1 + blocks + short + long + ripemd + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts + proofOfWork + scriptReader + scriptNum + scriptEval + signatureCode + signatureEncoding + scriptSignature == 0 then 0 else 1
+  let scriptVerify ← KnownAnswers.ScriptVerify.check
+  return if sha1 + blocks + short + long + ripemd + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts + proofOfWork + scriptReader + scriptNum + scriptEval + signatureCode + signatureEncoding + scriptSignature + scriptVerify == 0 then 0 else 1

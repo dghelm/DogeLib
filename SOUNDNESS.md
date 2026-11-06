@@ -992,9 +992,10 @@ The definition makes three choices where Core's types decide the result.
 That changes the result only for a transaction with 2^32 inputs or outputs, or for SINGLE with `nIn = 0xffffffff`.
 The script-code count is computed in `Nat`. A `CScript` cannot hold 2^32 bytes, so that case has no Core counterpart.
 
-Not specified: the `SIGVERSION_WITNESS_V0` branch, and `TransactionSignatureChecker::CheckSig`, which takes the hash type from the last byte of a signature.
-The caller prepares the script code. Core's interpreter passes the script after the last executed `OP_CODESEPARATOR`, with the signature removed by `FindAndDelete`.
+Not specified: the `SIGVERSION_WITNESS_V0` branch.
+The caller of `legacySignatureHash` prepares the script code. Core's interpreter passes the script after the last executed `OP_CODESEPARATOR`, with the signature removed by `FindAndDelete`.
 A theorem about a supplied script code says nothing about that preparation (A5).
+[Script signature-code preparation](#script-signature-code-preparation) specifies the preparation, and [the checker](#script-signature-opcodes-and-the-checker) specifies `TransactionSignatureChecker::CheckSig`, which takes the hash type from the last byte of a signature.
 
 By `#print axioms` with Lean `v4.35.0`:
 
@@ -1714,8 +1715,8 @@ Some concrete examples use `decide +kernel`, which the kernel checks without com
 
 These parts are not proved and not specified:
 
-- Scrypt, full header validity and `CheckAuxPowProofOfWork`.
-  `CAuxPow::check` alone is specified in [the AuxPoW check](#the-auxpow-check).
+- The checks of `ContextualCheckBlockHeader` other than the version gates, such as `nBits` against `GetNextWorkRequired`, and `CheckBlock`.
+  [Dogecoin's scrypt digest](#dogecoins-scrypt-digest), [the AuxPoW check](#the-auxpow-check) and [header proof of work](#header-proof-of-work) specify the scrypt digest, `CAuxPow::check` and `CheckAuxPowProofOfWork`.
   The supplied-hash check is specified separately below.
 
 The word-model refinements below cover multiplication, division, both shifts, bit length and low-64-bit extraction.
@@ -2107,12 +2108,13 @@ Core rejects blocks with witness data on main and test at the pin.
 The witness-format subsection records the separate script-verification and commitment mechanisms (D36), with their deployment parameters (D9).
 No DogeLib theorem establishes consensus acceptance of witness data.
 
-The legacy signature hash is the `SIGVERSION_BASE` mode of `SignatureHash`, and its script code is an input: the interpreter's preparation of it is not specified.
+The legacy signature hash is the `SIGVERSION_BASE` mode of `SignatureHash`, and its script code is an input.
+[Script signature-code preparation](#script-signature-code-preparation) specifies the interpreter's preparation of it.
 
 The work-parameter search covers each network and height, and the next-work wrapper selects the candidate height.
 The caller's hard-coded activation checks use the previous height, as the next-work subsection explains.
 Version gating takes its record from the caller, and does not select it from a height.
-Script and ledger work will need explicit context.
+Script verification takes its flags and its `InputContext` from the caller. Ledger work will need explicit context.
 
 ## Gap B: does the code that runs match the definitions?
 

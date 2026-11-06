@@ -23,11 +23,12 @@ import time
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 COMPARE = ROOT / "scripts" / "compare_core.py"
 sys.path.insert(0, str(ROOT / "scripts"))
-from oracle_script import harness_refused
+from oracle_script import harness_refused, refused_set, refusal_precedence_set, tx_spend_sets, locktime_sets
 
 # mode: (role of the wrapper, expected failure code). The role "core" stands
 # in for the harness, "oracle" for dogelib-oracle.
 MUTATIONS = {
+    "tx_valid_core_rejection": ("core", "TX_VALID_CORE"),
     "refused_core_verdict": ("core", "HARNESS_REFUSAL"),
     "refused_oracle_verdict": ("oracle", "ORACLE_REFUSAL"),
     "legacy_class": ("core", "MISMATCH"),
@@ -124,6 +125,7 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
     out = subprocess.run([oracle], input=data, capture_output=True, text=True, check=True).stdout
     responses = [json.loads(line) for line in out.splitlines()]
     requests = [json.loads(line) for line in data.splitlines()]
+    unavailable_ids = {r["id"] for r in responses if r.get("ok", {}).get("reason") == "signature_verifier"}
     for request, resp in zip(requests, responses):
         ok = resp.get("ok", {})
         if "format" in ok:
@@ -148,8 +150,13 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
     def set_ok(field, value):
         return lambda r: r["ok"].__setitem__(field, value)
 
-    if mode.startswith("refused_"):
-        ids = {r["id"] for r in requests if harness_refused(r)}
+    if mode == "tx_valid_core_rejection":
+        eligible = tx_spend_sets()[2][1]
+        ids = {r["id"] for r in requests if any({k: v for k, v in r.items() if k != "id"} == q for q in eligible)}
+        mutate_first(responses, lambda r: r["id"] in ids & unavailable_ids,
+                     lambda r: r.update(ok={"result": "rejected", "script_error": "EVAL_FALSE"}))
+    elif mode.startswith("refused_"):
+        ids = {max((r["id"] for r in requests if harness_refused(r)), key=lambda value: int(value[1:]))}
         def alter_refused(r):
             r.pop("error", None)
             r["ok"] = {"result": "accepted", "script_error": "OK"}
@@ -349,6 +356,22 @@ def main() -> int:
         return 2
     oracle = str(pathlib.Path(sys.argv[1]).resolve())
     failures = 0
+    assert all(harness_refused(r) for r in refused_set())
+    assert not any(harness_refused(r) for r in refusal_precedence_set())
+    # Empty-input base transactions and script bounds precede the flag refusal.
+    valid = refused_set()[0]
+    assert not harness_refused({**valid, "tx_hex": valid["tx_hex"] + "00"})
+    assert not harness_refused({**valid, "tx_hex": "01000000000000000000"})
+    assert not harness_refused({**valid, "prevout_script_hex": "00" * 1048577})
+    # Each stream names its target and constructs one push before that opcode.
+    for name, requests in locktime_sets():
+        op = 177 if "CLTV" in name else 178
+        assert requests
+        for r in requests:
+            script = bytes.fromhex(r["prevout_script_hex"])
+            assert script[0] <= 5 and script[1 + script[0]:] == bytes([op, 117, 81])
+            assert r["checker"] == "transaction" and not harness_refused(r)
+    print("ok   refusal precedence and reached timelock constructions")
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = pathlib.Path(tmpdir)
 
@@ -388,6 +411,12 @@ def main() -> int:
                 print(f"FAIL {mode}: expected exit 1 with FAIL {code}, got exit {result.returncode}, codes {sorted(codes)}")
                 print(result.stdout[-1500:] + result.stderr[-1500:])
                 continue
+            if mode.startswith("refused_"):
+                summaries = [line for line in result.stdout.splitlines() if line.startswith("Script harness refusal domain:")]
+                if not summaries or "8 requests, 0 compared, 0 unsupported, 8 harness-refused, 1 disagreements" not in summaries[0]:
+                    failures += 1
+                    print(f"FAIL {mode}: failed refusal counted as compared: {summaries}")
+                    continue
             if mode == "hang":
                 # The wrapper's child must be gone with it.
                 pid = int(pidfile.read_text())

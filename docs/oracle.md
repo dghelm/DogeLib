@@ -261,9 +261,12 @@ Core's binary and libsecp256k1 remain trusted runtime components, without a Lean
 Core asserts that WITNESS implies P2SH (D3, line 1519), and CLEANSTACK implies both P2SH and WITNESS (lines 1508 and 1509).
 The harness rejects flag combinations that violate these dependencies as request errors, without changing flags.
 The Lean oracle still reports those unsupported flags.
-Such combinations belong to the comparator's separate `harness-refused` category.
+
+The comparator classifies these combinations as `harness-refused` only after complete base decoding, input bounds and script limits pass.
+Earlier decode or adapter errors retain their ordinary comparison path.
 The comparator requires a harness request error and an exact Lean unsupported-flags result, or fails the request.
 A checked refusal counts as neither agreement nor disagreement.
+A failed refusal check fails the run and stays outside the compared count.
 
 ### Hash and block arguments
 
@@ -563,6 +566,17 @@ The Script comparison reports these sets separately:
   The comparator checks and excludes them as `harness-refused`.
 - Every inside-milestone record through `script.verify_legacy`, separately with `base` and `transaction`.
   Each request uses the recorded spending transaction, input index and previous-output script.
+- All 159 inside-milestone inputs of `tx_spends.jsonl`, with each checker and separate streams for accept and unknown expectations.
+  Requests retain the exact transaction bytes, input index, previous-output script and flags.
+  Core must accept all 91 accept inputs with its transaction checker, even when Lean reaches its unavailable verifier.
+  The 68 null expectations supply outcome counts without fixture agreement claims.
+- Targeted transaction-checker streams for CLTV and CSV under seed `20261107`.
+  Each script pushes its operand, executes its named opcode, then drops the operand and pushes true.
+  This construction reaches the target opcode without a signature check or an earlier Script error.
+  Cartesian boundaries and 500 seeded cases per opcode vary version, locktime, sequence and operand.
+  Boundaries include 499,999,999 and 500,000,000, equality, final sequences, versions 1 and 2, and disable and type bits.
+- Seven refusal-precedence requests combine unsafe flags with malformed transaction bytes, trailing bytes, empty inputs or an out-of-range index.
+  These errors must compare normally, without a harness-refused exemption.
 - 2,000 legacy mutations for each checker, under seed `20261106`.
   Mutations change scriptSig, scriptPubKey, version, sequence, locktime or flags.
   A scriptSig mutation serializes a fresh length in a synthetic one-input transaction.
@@ -627,8 +641,11 @@ One mutation runs the full composition path and corrupts a successful second-cal
 Another gives an unsupported result an opcode absent from the script instructions.
 Legacy mutations corrupt verdicts, add a forbidden stack, and invent unsupported results for either checker or Core.
 They also corrupt the unavailable verifier's opcode and fields.
+
 Two refusal mutations replace either the required Core refusal or Lean's unsupported-flags answer with a verdict.
-Each must fail with its own refusal error code.
+Each must fail with its own refusal error code, and the failed refusal must stay outside the compared count.
+A transaction-corpus mutation makes Core reject an accept input where Lean reaches the unavailable verifier.
+That mutation must fail the independent Core acceptance requirement.
 
 ### Compiled Rust CompactSize
 

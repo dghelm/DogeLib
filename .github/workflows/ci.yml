@@ -139,6 +139,7 @@ jobs:
           (cd tests/work/mainnet-headers && sha256sum -c SHA256SUMS)
           (cd tests/block && sha256sum -c SHA256SUMS)
           (cd tests/script/corpus && sha256sum -c SHA256SUMS)
+          (cd tests/script/signed-spends && sha256sum -c SHA256SUMS)
 
       - name: script corpus freshness
         if: ${{ !cancelled() }}

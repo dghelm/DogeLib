@@ -1910,6 +1910,13 @@ A user of the comparison trusts these parts of it:
   Its self-test, `scripts/test_compare_core.py`, requires two passing controls and 86 mutations that each fail with the code they target.
 - For `sighash.legacy`, the oracle's preimage is checked by hashing it, not byte by byte: Core does not expose its preimage.
 
+The separate `core-signer` tool generates [signed recovery-template fixtures](tests/script/signed-spends/README.md) with Core's `SignatureHash` and `CKey::Sign`.
+Each expected verdict comes from Core's `VerifyScript`, with the digest and transaction recorded.
+Fixture users trust the generator's template construction, high-S conversion, serialization and Core build.
+The generator records its source blob and uses Core's randomness code with a stderr logging adapter.
+Byte-for-byte regeneration checks reproducibility, but does not establish agreement with DogeLib.
+Lean does not consume these signed fixtures.
+
 Both programs could be wrong in the same way on an input that the comparison does not send.
 
 Any later foreign boundary, such as a C or Rust binding, is listed here with its size and its error handling.

@@ -1,15 +1,15 @@
 # Header proof of work
 
-**Status:** Proposed.
-The maintainer decides on adoption.
-Until then, this record sets no scope.
+**Status:** Adopted by the maintainer on 2026-11-06, with the amendment and the replacement that section 9 records.
+This record is frozen.
+Implementation status belongs in ROADMAP.md and COVERAGE.md.
 
 **Date:** 2026-11-06
 **Companions:** [Coverage](../../COVERAGE.md), [soundness](../../SOUNDNESS.md), [architecture](../../ARCHITECTURE.md), [oracle contract](../oracle.md) and [design record 0003](0003-legacy-spend-validation.md).
 
 ## 1. Purpose and boundary
 
-This record proposes the scope for an executable specification of Dogecoin's proof-of-work check of a block header.
+This record sets the scope for an executable specification of Dogecoin's proof-of-work check of a block header.
 That check is `CheckAuxPowProofOfWork` [C7].
 It covers both kinds of header that Core accepts:
 
@@ -25,13 +25,13 @@ The specification has four parts:
 
 DogeLib already specifies the 80-byte pure header, its double SHA-256 hash, the AuxPoW flag test and the compact-target check for a supplied hash.
 [SOUNDNESS.md](../../SOUNDNESS.md#target-validity-and-supplied-hash-proof-of-work) states that no theorem establishes the scrypt digest, AuxPoW validity or contextual header validity.
-This record proposes how to close the first two of those gaps.
+This record sets out how to close the first two of those gaps.
 The theorems in section 8 are targets, not implemented results.
 
 The record excludes these checks:
 
 - The contextual checks of `ContextualCheckBlockHeader` against chain history: `nBits` against `GetNextWorkRequired`, the time checks, the checkpoints and the rejection of outdated versions [C8].
-  Section 9 proposes one exception, the two version-gating checks, as an option for the maintainer.
+  Decision 1 of section 9 adds one exception: the two version-gating checks of stage 4b.
 - Block validity: the transaction Merkle root of the block, the coinbase rules and every other check of `CheckBlock`.
 - Chain selection, chain work and block-index state.
 - The framing of the P2P `headers` message, and storage on disk.
@@ -271,6 +271,15 @@ The lane that adds the Block definitions updates the `Block` row of ARCHITECTURE
 ### Stage 0: HMAC-SHA256 and PBKDF2-HMAC-SHA256
 
 This stage is a separate prerequisite lane, in the pattern of the SHA-1 and RIPEMD-160 lanes of design record 0003.
+The lane begins with a reuse assessment of two sources for adaptation:
+
+- `pyca/verified-garbage`, which defines HMAC, PBKDF2, Salsa20/8, scryptBlockMix, scryptROMix and RFC 7914 scrypt in Lean v4.35.0, under Apache-2.0 OR BSD.
+- EthLib's `Cryptography/Hash/Hmac.lean`, under CC0.
+
+Adapted material follows the rules of [CONTRIBUTING.md](../../CONTRIBUTING.md#material-from-other-projects).
+It still needs the independent vectors and the Core comparison of this record.
+If an adaptation changes the representation of a definition, the same change proves the new definition equivalent to the source definition.
+
 It adds HMAC-SHA256 over the existing SHA-256 [X2], and PBKDF2 with HMAC-SHA256 [X4].
 It keeps the key digest for keys longer than 64 bytes [C14].
 
@@ -286,6 +295,7 @@ The stage exits with these results:
 The stage adds a general model of scrypt with parameters N, r, p and the output length, following RFC 7914 sections 3 to 6 [X1].
 It also adds an executable `scrypt_1024_1_1_256` that follows Core's loops [C13, lines 187–218].
 The executable takes exactly 80 bytes, so its type excludes other lengths.
+The reuse assessment of stage 0 also covers the scrypt model and its building blocks.
 
 The stage exits with these results:
 
@@ -352,9 +362,9 @@ The stage exits with these results:
 - Per network, a theorem that every selected record gives the same result as the height-zero record.
 - Known answers through the compiled code for the fixtures of section 7.
 
-### Stage 4b, proposed: version gating
+### Stage 4b: version gating
 
-If the maintainer adopts decision 1, this stage adds the two version checks at the start of `ContextualCheckBlockHeader` [C8, lines 3072–3086].
+Under decision 1, this stage adds the two version checks at the start of `ContextualCheckBlockHeader` [C8, lines 3072–3086].
 The predicate reads only the version and a caller-selected record.
 With `fAllowLegacyBlocks` false, a legacy version is rejected as `late-legacy-block`.
 With `fAllowLegacyBlocks` true, a set AuxPoW flag is rejected as `early-auxpow-block`.
@@ -382,10 +392,10 @@ The comparison outputs differ by operation:
 The C20 digests are written in display order, the reverse of the output order, because the test compares `uint256::ToString` [C20, lines 19 and 31–35].
 A fixture importer must reverse them, and the fixture must record that order.
 
-These operations need a new oracle format revision.
-The implementer proposes the schemas and the format name in the relevant pull request.
-The format change needs the maintainer's approval ([AGENTS.md](../../AGENTS.md#changes-that-need-a-maintainer)).
-This record reserves no format name.
+These operations extend the current oracle format.
+Before the first release, the oracle, the harness, the fixtures and the comparator change together, with no compatibility promise to earlier development commits.
+The stage 5 pull request settles the schemas of the new operations under ordinary review.
+It does not rename the format and needs no separate maintainer decision.
 
 The Core harness calls `scrypt_1024_1_1_256_sp_generic`, the `CBlockHeader` reader with the stated stream version, `CAuxPow::check` and `CheckAuxPowProofOfWork`.
 It records the Core revision, the build options and the scrypt variant.
@@ -439,14 +449,20 @@ They do not show that the parameters, the input bytes or the byte order match Co
 | C20 | Five 80-byte headers and their scrypt digests, asserted by Core's test. The input and the digest are both fixed. |
 | C21, `check_auxpow` | The Boolean result of `CAuxPow::check` on cases that the test builds without mining. The harness records the built bytes, and the importer takes each expected result from the test's assertion. |
 | C21, `auxpow_pow` | Cases that mine a nonce at run time. Only the Core harness can reproduce them, so they are comparison evidence, not fixed known answers. |
-| C11 and mainnet headers | Full headers at checkpoint heights from 371,337. The double SHA-256 hash of each pure header must equal its checkpoint, so the chain's acceptance is evidence that Core's check returned `true`. |
+| C11 and mainnet headers | Full headers at checkpoint heights from 371,337. The double SHA-256 hash of each pure header must equal its checkpoint. That hash covers the 80-byte pure header and not the AuxPoW payload [C2, C3]. The checkpoint therefore fixes only the identity of the pure child header. The expected result for each full header comes from the pinned Core harness. |
 | Existing mainnet headers | The 312 headers before AuxPoW in `tests/work/mainnet-headers`. Their scrypt digests must satisfy their own targets. That check is a property check, not a known answer for any digest. |
 
 The fixture of checkpoint headers needs the AuxPoW payload.
 The Electrum source of the existing fixtures returns only the 80-byte pure header.
-`getblockheader <hash> false` on a synchronized node returns the full header with its payload (item 34).
-The record of a dump states the node version, the network, the command and the fetch date.
-The fixture records for each header whether its flag is set, because a checkpoint height does not imply an AuxPoW header.
+`getblockheader <hash> false` on a synchronized node is one source of the full header with its payload (item 34).
+The implementer chooses an accessible source that meets these rules:
+
+- The checkpoint establishes the identity of the pure child header only.
+  `CBlockHeader` inherits `GetHash` from the pure header, so the block hash does not cover the payload [C2, C3].
+- `CheckAuxPowProofOfWork` in the pinned Core harness runs on every fetched full header.
+- The fixture records the network and parameter record, the exact bytes and Core's result for each header.
+- The record of the fetch states the source, its version, the command and the fetch date.
+- The fixture records for each header whether its flag is set, because a checkpoint height does not imply an AuxPoW header.
 Each parent header can also be checked against its own chain, but that check gives only supporting evidence.
 
 Whatever the source, a test never fetches data or overwrites an expected value.
@@ -473,20 +489,25 @@ Each theorem states its domain and hypotheses in its doc comment:
 
 No target assumes collision resistance or another cryptographic property.
 
-## 9. Decisions proposed to the maintainer
+## 9. Decisions
 
-**Date:** 2026-11-06. **Decision maker:** Maintainer. Every row is a proposal until the maintainer decides it.
+**Date:** 2026-11-06. **Decision maker:** Maintainer.
+The maintainer decided each proposal as its status states:
 
-| Number | Topic | Proposal | Status |
+| Number | Topic | Decision | Status |
 | --- | --- | --- | --- |
-| 1 | Version gating | Include the legacy and early-AuxPoW checks as a pure predicate of the version and a caller-selected record, as stage 4b. The predicate is small, and it closes the gap of a valid AuxPoW header before activation. Exclude every other contextual check. | Proposed |
-| 2 | HMAC-SHA256 and PBKDF2 | A separate prerequisite lane, with independent vectors, review and precise theorem claims, as for SHA-1 and RIPEMD-160. | Proposed |
-| 3 | Scrypt model | A general RFC 7914 model with parameters N, r, p and the output length, and a separate executable fixed to Core's parameters, related by `powHash_eq_spec`. | Proposed |
-| 4 | Read mode of the embedded transaction | An explicit parameter. The Core paths use witness-allowed, as section 4.6 shows from the source. | Proposed |
-| 5 | Fixtures of full AuxPoW headers | A node RPC dump with `getblockheader <hash> false`, recorded with the node version, network, command and date, and checked against the checkpoint hashes. The maintainer chooses the source. | Proposed |
-| 6 | Oracle comparison | Compare the outputs of each operation as stage 5 lists them. For `scrypt.hash`, they are the exact digest bytes in output order. Expose the first failing check as a Lean diagnostic that the comparator does not compare. | Proposed |
-| 7 | Oracle format | The implementer proposes the schemas and the format name in the stage 5 pull request. The format change needs the maintainer's approval. | Proposed |
-| 8 | Rust work | Implementation refinement and Rust extraction stay outside this scope. | Proposed |
+| 1 | Version gating | Include the legacy and early-AuxPoW checks as a pure predicate of the version and a caller-selected record, as stage 4b. The predicate is small, and it closes the gap of a valid AuxPoW header before activation. Exclude every other contextual check. | Adopted |
+| 2 | HMAC-SHA256 and PBKDF2 | A separate prerequisite lane, with independent vectors, review and precise theorem claims, as for SHA-1 and RIPEMD-160. The lane begins with the reuse assessment of stage 0. | Adopted |
+| 3 | Scrypt model | A general RFC 7914 model with parameters N, r, p and the output length, and a separate executable fixed to Core's parameters, related by `powHash_eq_spec`. | Adopted |
+| 4 | Read mode of the embedded transaction | An explicit parameter. The Core paths use witness-allowed, as section 4.6 shows from the source. | Adopted |
+| 5 | Fixtures of full AuxPoW headers | The implementer chooses an accessible source, such as a node RPC dump with `getblockheader <hash> false`. The checkpoint establishes the identity of the pure child header only. The pinned Core harness checks every full header, and the fixture records the network and parameters, the exact bytes and Core's result (section 7). | Adopted with amendment |
+| 6 | Oracle comparison | Compare the outputs of each operation as stage 5 lists them. For `scrypt.hash`, they are the exact digest bytes in output order. Expose the first failing check as a Lean diagnostic that the comparator does not compare. | Adopted |
+| 7 | Oracle format | Before the first release, the oracle, harness, fixtures and comparator change together, with no compatibility promise to earlier development commits. The stage 5 pull request settles the schemas of the new operations under ordinary review. It does not rename the format and needs no separate maintainer decision. | Replaced |
+| 8 | Rust work | Implementation refinement and Rust extraction stay outside this scope. | Adopted |
+
+The amendment to decision 5 corrects the proposal, which took the checkpoint hashes as evidence for the payload.
+The proposal also left the choice of source to the maintainer.
+The replacement of decision 7 drops the proposal of a new format name with the maintainer's approval.
 
 ## 10. Remaining risks
 

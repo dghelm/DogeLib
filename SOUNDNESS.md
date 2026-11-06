@@ -844,7 +844,7 @@ Each one calls itself in tail position and keeps the values read so far in an ar
 So every theorem about `decodeElems`, `readElems` and `readElemsBounded` holds for the readers.
 
 These theorems are about results, not about stack use. Stack use is an observation of the compiled code (B1).
-In `lake test`, the recursive forms overflowed the stack at 16,000,000 elements, and the loop forms read 16,000,000.
+In one manual run of the `lake test` driver, the recursive forms overflowed the stack at 16,000,000 elements, and the loop forms read 16,000,000.
 In `lake env lean --run`, the recursive forms overflowed at 5,000,000.
 An element reader that itself recurses deeply can still use more stack, and `MAX_SIZE` itself (33,554,432 elements) was not run.
 CI reads lists of 3,000,000 elements through the three readers, which checks results, not stack use.
@@ -1178,7 +1178,7 @@ Both `atEnd` and `truncated` correspond to Core's `false`.
 The hand-off theorems cover the two `EvalScript` calls of `VerifyScript`, not the P2SH copy and restore of the stack.
 
 That the definitions are Core's rests on a reading of D24 and D3 (A1) and on the known answers.
-`lake test` runs 50 single reads and 8 loops with hand-derived results, 14 of them from Core's `script_tests.json`.
+`lake test` runs 50 single reads and 8 loops with hand-derived results, 15 of them from 14 records of Core's `script_tests.json`.
 It also runs `init` and `handOff` on one state with nonempty locals and raw stack entries.
 Core itself does not run.
 
@@ -1500,7 +1500,8 @@ The evaluator never passes such a script code, because its script has at most 10
 That the definitions are Core's rests on a reading of D3 and D25 (A1) and on the known answers.
 `lake test` runs 48 signature-opcode cases with a lookup-table test checker, 5 `transactionChecker` cases and one `baseChecker` case, with results written by hand from D3.
 The lookup table is a test backend and says nothing about which signatures are valid.
-The corpus records add 122 comparisons with Core's expected results, from 745 to 867.
+The corpus runners above add the 925 inside-milestone records of `script_tests.json`.
+[Script evaluation](#script-evaluation-one-evalscript-call) gives the 268 unsupported records and their reasons.
 
 The oracle's `script.eval` can select `baseChecker`, and its legacy operation can select a transaction checker.
 The transaction checker uses `coreVerifier`, so finite Core comparisons also cover signature-opcode results that verify a signature.
@@ -2281,7 +2282,8 @@ A user of the comparison trusts these parts of it:
   Any other exception from Core stops the harness, so it cannot pass as a result.
 - The `plan` label of `sighash.legacy`. The harness computes it from Core's conditions instead of observing it. It stops if the label is `fixed_digest` and Core's digest is not the value one.
 - The comparator, `scripts/compare_core.py`.
-  Its self-test, `scripts/test_compare_core.py`, requires two passing controls and 86 mutations that each fail with the code they target.
+  Its self-test, `scripts/test_compare_core.py`, runs 99 cases.
+  They are two passing controls, a check of its refusal and timelock constructions, and 96 mutations that each fail with the code they target.
 - For `sighash.legacy`, the oracle's preimage is checked by hashing it, not byte by byte: Core does not expose its preimage.
 
 The separate `core-signer` tool generates [signed recovery-template fixtures](tests/script/signed-spends/README.md) with Core's `SignatureHash` and `CKey::Sign`.

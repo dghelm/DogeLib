@@ -639,7 +639,7 @@ The transaction inputs and targeted timelocks have these counts:
 | Public-key parser boundaries | 20 | 20 | 0 | 0 | 0 |
 | Public-key infinity constructions | 36 | 36 | 0 | 0 | 0 |
 | Public-key x above order, including changed S and R | 72 | 72 | 0 | 0 | 0 |
-| Signed recovery spend | 1 | 1 | 0 | 0 | 0 |
+| Signed recovery spends | 25 | 25 | 0 | 0 | 0 |
 | Targeted CLTV, transaction, seed `20261107` | 932 | 932 | 0 | 0 | 0 |
 | Targeted CSV, transaction, seed `20261107` | 940 | 940 | 0 | 0 | 0 |
 | Refusal precedence | 7 | 7 | 0 | 0 | 0 |
@@ -720,7 +720,7 @@ The Script comparison reports these sets separately:
 - Below, at and above the 201-operation, 520-byte push, 1,000-item stack and 10,000-byte script limits.
   Cases include skipped branches, altstack moves and caller stacks above 1,000 items.
   Bounded pushes form accepted scripts of 9,999 and 10,000 bytes, followed by a 10,001-byte `SCRIPT_SIZE` case.
-- Eighteen adapter-limit requests sent to both programs, with results checked against the documented limits.
+- 22 adapter-limit requests sent to both programs, 18 for Script and four for `pubkey.verify`, with results checked against the documented limits.
 - 2,000 generated scripts under seed `20261105`, with nested conditionals, stack operations and numeric and hash candidates.
   Comparison depends on each returned capability result, rather than a fixed list of supported opcodes.
 

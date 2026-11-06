@@ -178,6 +178,7 @@ Unsupported capabilities have these fields:
 | `check_lock_time_verify`, `check_sequence_verify` | None |
 
 The evaluator determines whether a capability is needed.
+`script.eval` runs `evalScript` without a signature checker, so every executed signature opcode is unsupported.
 A skipped signature opcode, for example, does not itself cause an unsupported result.
 The adapter does not replace caller flags or classify unsupported results as Script rejection.
 

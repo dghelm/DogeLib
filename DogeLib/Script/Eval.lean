@@ -8,19 +8,21 @@ public import DogeLib.Cryptography.Hash.Sha256d
 public import DogeLib.Script.Error
 public import DogeLib.Script.Flags
 public import DogeLib.Script.Number
+public import DogeLib.Script.Signature
+public import DogeLib.Script.SignatureCode
 public import DogeLib.Script.State
 
 /-!
 # `Script.Eval`
 
-One call of Core's `EvalScript` in `SIGVERSION_BASE`, for the opcodes of stage 2: control flow, stack operations, numbers and hashes.
+One call of Core's `EvalScript` in `SIGVERSION_BASE`, for the opcodes of stages 2 and 3: control flow, stack operations, numbers, hashes and signatures.
 
 `EvalScript` is in `src/script/interpreter.cpp` lines 248 to 1046 of Dogecoin Core `v1.14.9` (SOURCES.md, D3).
-Design record 0003, section 4, sets the scope of this stage.
+Design record 0003, sections 3 and 4, sets the scope of these stages.
 
 ## Results
 
-`evalScript flags script stack` returns an `EvalResult`, one of three cases:
+`evalScript checker flags script stack` returns an `EvalResult`, one of three cases:
 
 - `ok s`: Core returns `true` with `SCRIPT_ERR_OK`. `s` is the final state.
 - `rejected e`: Core returns `false` with the error `e`.
@@ -46,10 +48,10 @@ Within the supported flags, this stage implements these opcodes:
 | `OP_EQUAL`, `OP_EQUALVERIFY` and `OP_CODESEPARATOR` | `0x87`, `0x88`, `0xab` |
 | The numeric opcodes: `OP_1ADD`, `OP_1SUB`, `OP_NEGATE` to `OP_SUB`, and `OP_BOOLAND` to `OP_WITHIN` | `0x8b`, `0x8c`, `0x8f` to `0x94`, `0x9a` to `0xa5` |
 | The hash opcodes, `OP_RIPEMD160` to `OP_HASH256` | `0xa6` to `0xaa` |
+| `OP_CHECKSIG`, `OP_CHECKSIGVERIFY`, `OP_CHECKMULTISIG` and `OP_CHECKMULTISIGVERIFY`, when the call has a checker | `0xac` to `0xaf` |
 | The reserved and invalid opcodes, which give Core's `BAD_OPCODE` when they execute | `0x50`, `0x62`, `0x65`, `0x66`, `0x89`, `0x8a`, `0xba` to `0xff` |
 
 An executed opcode outside this table is unsupported.
-The signature opcodes come in stage 3.
 `OP_CHECKLOCKTIMEVERIFY` and `OP_CHECKSEQUENCEVERIFY` with their flags set come in stage 4.
 The disabled opcodes give Core's `DISABLED_OPCODE`, executed or not.
 
@@ -58,6 +60,46 @@ Three flag effects are absent here, because the flags that cause them are unsupp
 - `MINIMALDATA`: `CheckMinimalPush` (lines 307 to 309) and the minimal requirement of `CScriptNum`.
 - `DISCOURAGE_UPGRADABLE_NOPS`: the errors of the NOPs (lines 354, 396 and 432).
 - `MINIMALIF`: the operand check of `OP_IF` (line 447). It applies only to `SIGVERSION_WITNESS_V0`.
+- `NULLFAIL`: the errors of the signature opcodes at lines 904 and 905 and 996 to 998.
+  `evalScript` reports a flag set with this bit as unsupported before it runs anything, so these branches are unreachable and absent.
+
+## The checker
+
+The parameter `checker : Option SignatureChecker` is Core's `checker` argument (D3, line 248).
+
+- `some c`: the signature opcodes follow Core, and call `c.checkSig` for each signature check.
+  When `c.checkSig` returns `none`, the opcode is `unsupported (.signatureOpcode op)`.
+- `none`: the call has no checker. Every executed signature opcode is `unsupported (.signatureOpcode op)` before it reads the stack, as in stage 2.
+  Such a result makes no claim about Core's verdict, even for an opcode that Core rejects for stack underflow.
+
+`baseChecker` is Core's `BaseSignatureChecker`, and `transactionChecker` is `TransactionSignatureChecker` (`DogeLib.Script.Signature`).
+Every opcode outside `0xac` to `0xaf` ignores the checker and the script (`execOpcode_checker_congr` in `DogeLib.Script.Proofs.Eval`).
+
+## Signature opcodes
+
+`OP_CHECKSIG` and `OP_CHECKSIGVERIFY` (lines 880 to 918) check in this order:
+
+1. Fewer than two items give `INVALID_STACK_OPERATION`.
+2. The script code is `effectiveScriptCode` from `beginCodeHash` with the signature push removed (lines 891 to 896).
+3. `checkSignatureEncoding` and then `checkPubKeyEncoding` (line 898). Their errors come before any checker call.
+4. The checker receives the signature, the public key and the script code (line 902).
+5. Both items are popped and the result is pushed. `OP_CHECKSIGVERIFY` pops it again, or gives `CHECKSIGVERIFY` (lines 907 to 916).
+
+`OP_CHECKMULTISIG` and `OP_CHECKMULTISIGVERIFY` (lines 920 to 1026) check in this order:
+
+1. An empty stack gives `INVALID_STACK_OPERATION`.
+2. The top item is the key count `n`, a four-byte `CScriptNum` without the minimal requirement. A failed decode gives `UNKNOWN_ERROR` through the `catch`. `n` outside 0 to 20 gives `PUBKEY_COUNT`.
+3. The opcode count grows by `n`. Above 201 it gives `OP_COUNT` (lines 932 to 934).
+4. Fewer than `n + 2` items give `INVALID_STACK_OPERATION`.
+5. The next item is the signature count `m`, decoded the same way. `m` outside 0 to `n` gives `SIG_COUNT`.
+6. Fewer than `n + m + 3` items give `INVALID_STACK_OPERATION`. This check already requires the dummy item.
+7. The script code is `effectiveScriptCode` with every signature push removed, before the loop (lines 952 to 961).
+8. `multisigLoop` matches signatures to keys, with the encoding checks of each visited pair before its checker call (lines 963 to 992).
+9. With `NULLDUMMY`, a nonempty dummy gives `SIG_NULLDUMMY`. The dummy is popped in any case (lines 1010 to 1014).
+10. The result is pushed. `OP_CHECKMULTISIGVERIFY` pops it again, or gives `CHECKMULTISIGVERIFY`.
+
+Core's second dummy check, `stack.size() < 1` at line 1010, is unreachable after step 6.
+The definition keeps it as a labelled branch.
 
 ## Numeric opcodes
 
@@ -111,6 +153,7 @@ Core compares the operand of `OP_PICK` and `OP_ROLL` with `(int)stack.size()` (l
 Here every size is a `Nat`.
 The two agree when the main stack has fewer than 2^31 items.
 After the first instruction the two stacks hold at most 1,000 items.
+The signature opcodes compare the counts with `(int)stack.size()` (lines 926, 940 and 948), within the same domain.
 So only a caller's stack of 2^31 items or more lies outside that domain.
 
 `OP_IF`, `OP_NOTIF`, `OP_VERIFY` and `OP_IFDUP` use `castToBool`, which inherits the boundary of Core's `CastToBool` (D3, line 40).
@@ -140,7 +183,10 @@ def maxScriptElementSize : Nat := 520
 inductive Unsupported where
   /-- The flag set has these bits outside `supportedFlags`. The evaluator checks them before anything else. -/
   | flags (bits : UInt32)
-  /-- An executed `OP_CHECKSIG`, `OP_CHECKSIGVERIFY`, `OP_CHECKMULTISIG` or `OP_CHECKMULTISIGVERIFY`. Stage 3. -/
+  /--
+  An executed `OP_CHECKSIG`, `OP_CHECKSIGVERIFY`, `OP_CHECKMULTISIG` or `OP_CHECKMULTISIGVERIFY` needed a signature check that is unavailable.
+  Either the call has no checker, or the checker returned `none`.
+  -/
   | signatureOpcode (opcode : UInt8)
   /-- An executed `OP_CHECKLOCKTIMEVERIFY` with `SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY` set. Stage 4. -/
   | checkLockTimeVerify
@@ -216,14 +262,108 @@ def hashTop (s : ExecState) (h : ByteArray → ByteArray) : StepResult :=
   | [] => .rejected .invalidStackOperation
   | x :: rest => .next { s with stack := rest.reverse ++ [(h ⟨x.toArray⟩).toList] }
 
+/-- `MAX_PUBKEYS_PER_MULTISIG`, the largest key count of `OP_CHECKMULTISIG` (D24, `src/script/script.h` line 28). -/
+def maxPubKeysPerMultisig : Nat := 20
+
+/--
+`OP_CHECKSIG` (`0xac`) and `OP_CHECKSIGVERIFY` (`0xad`) with the checker `c` (D3, lines 880 to 918), on the reversed stack `key :: sig :: rest`.
+The encoding checks run in Core's order, signature first, before the checker call (line 898).
+The checker receives the script code from `s.beginCodeHash` with the push of `sig` removed (lines 891 to 896).
+A checker result of `none` gives `unsupported (.signatureOpcode op)`.
+-/
+def checkSigStep (c : SignatureChecker) (script : List UInt8) (flags : UInt32) (s : ExecState) (op : UInt8) :
+    StepResult :=
+  match s.stack.reverse with
+  | key :: sig :: rest =>
+    match checkSignatureEncoding sig flags with
+    | .error e => .rejected e
+    | .ok () =>
+      match checkPubKeyEncoding key flags with
+      | .error e => .rejected e
+      | .ok () =>
+        match c.checkSig sig key (effectiveScriptCode script s.beginCodeHash [sig]) with
+        | none => .unsupported (.signatureOpcode op)
+        | some ok =>
+          if op = 0xad then
+            if ok then .next { s with stack := rest.reverse } else .rejected .checkSigVerify
+          else .next { s with stack := rest.reverse ++ [boolBytes ok] }
+  | _ => .rejected .invalidStackOperation
+
+/--
+One visited pair of the `OP_CHECKMULTISIG` loop (D3, lines 966 to 978): the encoding checks, signature first, and then the checker on the script code `code`.
+An encoding error gives `.error (.rejected e)`, and a checker result of `none` gives `.error (.unsupported (.signatureOpcode op))`.
+-/
+def multisigCheck (c : SignatureChecker) (flags : UInt32) (code : List UInt8) (op : UInt8)
+    (sig key : List UInt8) : Except StepResult Bool :=
+  match checkSignatureEncoding sig flags with
+  | .error e => .error (.rejected e)
+  | .ok () =>
+    match checkPubKeyEncoding key flags with
+    | .error e => .error (.rejected e)
+    | .ok () =>
+      match c.checkSig sig key code with
+      | none => .error (.unsupported (.signatureOpcode op))
+      | some ok => .ok ok
+
+/--
+`OP_CHECKMULTISIG` (`0xae`) and `OP_CHECKMULTISIGVERIFY` (`0xaf`) with the checker `c` (D3, lines 920 to 1026).
+The reversed stack is `nTop :: keys ++ mTop :: sigs ++ dummy :: below`, where `keys` has `n` items and `sigs` has `m`.
+Both lists are top first, the order of Core's `stacktop(-ikey)` and `stacktop(-isig)`.
+The counts decode without the minimal requirement, because `MINIMALDATA` is unsupported, and a failed decode gives `UNKNOWN_ERROR`.
+The result carries the opcode count after Core's `nOpCount += nKeysCount` (line 932).
+The module documentation lists the checks in Core's order.
+-/
+def checkMultisigStep (c : SignatureChecker) (script : List UInt8) (flags : UInt32) (s : ExecState) (op : UInt8) :
+    StepResult :=
+  match s.stack.reverse with
+  | [] => .rejected .invalidStackOperation
+  | nTop :: rest =>
+    match ScriptNum.decode nTop false with
+    | .error _ => .rejected .unknownError
+    | .ok nValue =>
+      let n := ScriptNum.getint nValue
+      if n < 0 ∨ (maxPubKeysPerMultisig : Int) < n then .rejected .pubkeyCount
+      else
+        let opCount := s.opCount + n.toNat
+        if maxOpsPerScript < opCount then .rejected .opCount
+        else if rest.length < n.toNat + 1 then .rejected .invalidStackOperation
+        else
+          let keys := rest.take n.toNat
+          match rest.drop n.toNat with
+          -- Unreachable after the depth check above.
+          | [] => .rejected .invalidStackOperation
+          | mTop :: rest' =>
+            match ScriptNum.decode mTop false with
+            | .error _ => .rejected .unknownError
+            | .ok mValue =>
+              let m := ScriptNum.getint mValue
+              if m < 0 ∨ n < m then .rejected .sigCount
+              else if rest'.length < m.toNat + 1 then .rejected .invalidStackOperation
+              else
+                let sigs := rest'.take m.toNat
+                match rest'.drop m.toNat with
+                -- Core's `stack.size() < 1` (line 1010), unreachable after the depth check above.
+                | [] => .rejected .invalidStackOperation
+                | dummy :: below =>
+                  let code := effectiveScriptCode script s.beginCodeHash sigs
+                  match multisigLoop (multisigCheck c flags code op) sigs keys with
+                  | .error r => r
+                  | .ok ok =>
+                    if hasFlag flags ScriptFlags.nullDummy && !dummy.isEmpty then .rejected .sigNullDummy
+                    else if op = 0xaf then
+                      if ok then .next { s with stack := below.reverse, opCount }
+                      else .rejected .checkMultisigVerify
+                    else .next { s with stack := below.reverse ++ [boolBytes ok], opCount }
+
 /--
 The `switch` of `EvalScript` (D3, lines 311 to 1030) for opcode `op` with pushed bytes `pushed`.
 `fExec` is whether the current branch executes. Core reaches this code with `fExec` false only for `OP_IF` to `OP_ENDIF`.
 `next` is the cursor after the instruction, which `OP_CODESEPARATOR` stores.
+`checker` and `script` are read only by the signature opcodes.
 The stacks list their items from the bottom to the top, so each operation reads the reversed stack, top first.
 -/
-def execOpcode (flags : UInt32) (fExec : Bool) (s : ExecState) (op : UInt8) (pushed : List UInt8)
-    (next : Nat) : StepResult :=
+def execOpcode (checker : Option SignatureChecker) (script : List UInt8) (flags : UInt32) (fExec : Bool)
+    (s : ExecState) (op : UInt8) (pushed : List UInt8) (next : Nat) : StepResult :=
   if op ≤ 0x4e then
     -- A push (lines 306 to 310).
     .next { s with stack := s.stack ++ [pushed] }
@@ -423,10 +563,19 @@ def execOpcode (flags : UInt32) (fExec : Bool) (s : ExecState) (op : UInt8) (pus
   | 0xaa => hashTop s Cryptography.Hash.Sha256d.hash
   -- `OP_CODESEPARATOR` (lines 873 to 878).
   | 0xab => .next { s with beginCodeHash := next }
+  -- `OP_CHECKSIG` and `OP_CHECKSIGVERIFY` (lines 880 to 918).
+  | 0xac | 0xad =>
+    match checker with
+    | none => .unsupported (.signatureOpcode op)
+    | some c => checkSigStep c script flags s op
+  -- `OP_CHECKMULTISIG` and `OP_CHECKMULTISIGVERIFY` (lines 920 to 1026).
+  | 0xae | 0xaf =>
+    match checker with
+    | none => .unsupported (.signatureOpcode op)
+    | some c => checkMultisigStep c script flags s op
   | _ =>
-    if isSignatureOpcode op then .unsupported (.signatureOpcode op)
     -- `default` (lines 1028 and 1029): `OP_RESERVED`, `OP_VER`, `OP_VERIF`, `OP_VERNOTIF`, `OP_RESERVED1`, `OP_RESERVED2` and `0xba` to `0xff`.
-    else .rejected .badOpcode
+    .rejected .badOpcode
 
 /--
 One iteration of the loop of `EvalScript` (D3, lines 282 to 1034), after `GetOp` read the instruction `i` at the cursor of `s`.
@@ -434,7 +583,8 @@ It checks the push size, the opcode count and the disabled opcodes, in that orde
 It then runs `execOpcode` when `fExec` holds or the opcode lies from `OP_IF` to `OP_ENDIF`, and checks the combined stack size.
 The cursor of the result is that of `s`. `evalLoop` moves it.
 -/
-def evalInstruction (flags : UInt32) (s : ExecState) (i : Instruction) : StepResult :=
+def evalInstruction (checker : Option SignatureChecker) (script : List UInt8) (flags : UInt32) (s : ExecState)
+    (i : Instruction) : StepResult :=
   if maxScriptElementSize < i.pushed.length then .rejected .pushSize
   else
     let opCount := countOp i.opcode s.opCount
@@ -444,7 +594,7 @@ def evalInstruction (flags : UInt32) (s : ExecState) (i : Instruction) : StepRes
       let s := { s with opCount }
       let r :=
         if s.fExec || (0x63 ≤ i.opcode && i.opcode ≤ 0x68) then
-          execOpcode flags s.fExec s i.opcode i.pushed i.next
+          execOpcode checker script flags s.fExec s i.opcode i.pushed i.next
         else .next s
       match r with
       | .next t =>
@@ -471,14 +621,15 @@ The loop of `EvalScript` (D3, lines 273 to 1035) from state `s`, and the final c
 At the end of the script, a nonempty `vfExec` gives `UNBALANCED_CONDITIONAL`.
 A short push gives `BAD_OPCODE` (lines 280 and 281).
 -/
-def evalLoop (flags : UInt32) (script : List UInt8) (s : ExecState) : EvalResult :=
+def evalLoop (checker : Option SignatureChecker) (flags : UInt32) (script : List UInt8) (s : ExecState) :
+    EvalResult :=
   match hr : readInstruction script s.pc with
   | .atEnd => if s.vfExec.isEmpty then .ok s else .rejected .unbalancedConditional
   | .truncated .. => .rejected .badOpcode
   | .instruction i =>
     have := readInstruction_progress hr
-    match evalInstruction flags s i with
-    | .next t => evalLoop flags script { t with pc := i.next }
+    match evalInstruction checker script flags s i with
+    | .next t => evalLoop checker flags script { t with pc := i.next }
     | .rejected e => .rejected e
     | .unsupported u => .unsupported u
 termination_by script.length - s.pc
@@ -486,12 +637,14 @@ decreasing_by omega
 
 /--
 `EvalScript` (D3, lines 248 to 1046) in `SIGVERSION_BASE`, on the caller's main stack `stack`.
+`checker` is Core's signature checker, or `none` for a call without one.
 A flag outside `supportedFlags` is unsupported, before any other check.
 A script above 10,000 bytes gives `SCRIPT_SIZE` (lines 266 and 267).
 -/
-def evalScript (flags : UInt32) (script : List UInt8) (stack : List (List UInt8)) : EvalResult :=
+def evalScript (checker : Option SignatureChecker) (flags : UInt32) (script : List UInt8)
+    (stack : List (List UInt8)) : EvalResult :=
   if unsupportedFlagBits flags ≠ 0 then .unsupported (.flags (unsupportedFlagBits flags))
   else if maxScriptSize < script.length then .rejected .scriptSize
-  else evalLoop flags script (ExecState.init stack)
+  else evalLoop checker flags script (ExecState.init stack)
 
 end DogeLib.Script

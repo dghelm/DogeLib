@@ -81,6 +81,6 @@ def operations : List Operation := [
       let bytes ← argScript args
       let flags ← argU32 args "flags"
       let stack ← argStack args
-      return evalJson (evalScript flags bytes stack) }]
+      return evalJson (evalScript none flags bytes stack) }]
 
 end DogeLib.Script.Exports

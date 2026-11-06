@@ -68,7 +68,12 @@ On Core's `script_tests.json`, 745 records agree with Core, none disagrees, and 
 `Script.SignatureCode` implements push encoding and effective script-code preparation for stage 3.
 Its proofs cover the push reader round trip below 2^32 bytes and the exact traversal of `FindAndDelete`, including malformed suffixes.
 Known answers include all sixteen Core deletion cases and every push-size transition.
-Signature encoding and opcode integration remain the next Script work.
+
+`Script.SignatureEncoding` implements stage 3a: Core's encoding checks of signatures and public keys, with the lax DER parser that `CheckLowS` uses.
+It keeps the overflow case of [design record 0003](docs/design/0003-legacy-spend-validation.md), section 5.
+A strict-DER signature whose R or S is at least the group order passes LOW_S, whatever its S.
+The checks are not yet wired into an opcode.
+The signature opcodes, the rest of stage 3, are the next Script work.
 
 Steps 0 and 0b follow design record 0002: the first contributions adopt audited codec foundations and then define Dogecoin's bounded decoding contract. They replace the original plan to build fixed-width encodings and CompactSize from scratch. Design record 0002 preferred a pinned btc-verified dependency first. The decisions below choose an adaptation instead, because btc-verified's toolchain, file structure and trust policy all differ from EthLib's.
 

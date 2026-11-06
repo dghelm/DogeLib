@@ -837,6 +837,63 @@ By `#print axioms` with Lean `v4.35.0`:
 | `readInstruction_progress`, `evalScript_unsupportedFlags`, `evalScript_scriptSize`, `evalScript_flags_congr`, `evalLoop_atEnd`, `evalLoop_truncated`, `evalLoop_instruction`, the `evalInstruction_*` theorems except `evalInstruction_wellFormed`, `execOpcode_frame`, `execOpcode_flags_congr`, `encode_ofBool`, the `execOpcode_*` effect, underflow and decode theorems, `numericOperand_ne_int64Min`, `numericOperand_add_one_le`, `numericOperand_sub_one_ge` | `propext`, `Quot.sound` |
 | `evalInstruction_wellFormed`, `evalLoop_ok`, `evalScript_ok`, `execOpcode_addSub_length`, `execOpcode_numeric_length_le_four`, `numericOperand_addSub_mem` | `propext`, `Classical.choice`, `Quot.sound` |
 
+### Script signature and public-key encoding
+
+`DogeLib.Script.SignatureEncoding` specifies the encoding checks that Core's signature opcodes run before they verify a signature (SOURCES.md, D3, D50 to D53).
+The theorems are in `DogeLib.Script.Proofs.SignatureEncoding`.
+For every byte string and every flag set:
+
+- `isValidSignatureEncoding_iff`: a signature passes `IsValidSignatureEncoding` exactly when it is `derBody r s` and one hash-type byte.
+  Here `r` and `s` are DER integers: not empty, first byte below `0x80`, and a leading zero only before a byte of at least `0x80`.
+  Together they have at most 66 bytes.
+- `laxStore_eq`: the lax parser stores `laxScalars` of the values of R and S.
+  That is both values when both are below the order `n`, and zero and zero otherwise.
+  Core's test that a value has more than 32 bytes never changes this result.
+- `parseDerLax_derBody` and `parseDerLax_dropLast_of_isValidSignatureEncoding`: the lax parser accepts every strict-DER signature without its hash type, and stores those scalars.
+- `checkLowS_iff`: `checkLowS` holds exactly when the parser succeeds and stores an S of at most `⌊n/2⌋`.
+  `checkLowS_derBody_iff`: on strict DER with R and S below `n`, that is the bound on S itself.
+- `checkLowS_derBody_of_overflow`: on strict DER with R or S at least `n`, `checkLowS` holds whatever S is.
+  `checkSignatureEncoding_overflowExample` gives one such signature with a high S, which passes `checkSignatureEncoding` with `DERSIG`, `STRICTENC` and `LOW_S`.
+- `checkSignatureEncoding_eq_sigDer_iff`, `checkSignatureEncoding_eq_sigHighS_iff` and `checkSignatureEncoding_eq_sigHashtype_iff` state when each error occurs.
+  `checkSignatureEncoding_error` shows that no other error occurs, and `checkSignatureEncoding_nil` that the empty signature always passes.
+  `isLowDerSignature_ne_sigDer` shows that the `SIG_DER` result of `IsLowDERSignature` is unreachable from `CheckSignatureEncoding`.
+- `checkPubKeyEncoding_eq_error_iff`: the only key error is `PUBKEYTYPE`, with `STRICTENC`.
+  `isCompressedOrUncompressedPubKey_iff` gives the accepted shapes, and `isValidPubKey_of_isCompressedOrUncompressedPubKey` shows that each gives a valid `CPubKey`.
+
+The LOW_S check follows `CheckLowS` and its parser, not a bound on the S bytes of the signature.
+Design record 0003, section 5, requires this case.
+A verifier that normalizes S loses the original value, so the definitions do not use one.
+The theorems are statements about bytes.
+They say nothing about elliptic-curve points, about which signatures verify, or about libsecp256k1's compiled code.
+
+The order `n` and the half order are copied from D53 and checked against SEC 2 (S2) by reading.
+`secp256k1HalfOrder_eq` proves that the half order is `n / 2`.
+No theorem derives `n` from the curve.
+
+Core's parser compares a long-form length with `sizeof(size_t)` (D50, lines 76 and 114).
+`parseDerLaxWith` takes that size as a parameter, and `parseDerLax` uses 8.
+`parseDerLaxWith_eq` proves the same result for every size of at least 4 on inputs of fewer than 2^24 bytes.
+So 32-bit and 64-bit builds agree on every Script stack item, which has at most 520 bytes.
+
+`checkPubKeyEncoding` omits Core's second test, which needs `SIGVERSION_WITNESS_V0` and `WITNESS_PUBKEYTYPE` (D3, lines 219 to 221).
+Design record 0003 runs only `SIGVERSION_BASE`, and that flag is unsupported.
+
+That the definitions are Core's rests on a reading of D3, D50 to D53 (A1), and on the known answers.
+`lake test` checks the 60 P2PK and P2PK NOT records of `script_tests.json` (D45) inside the milestone, and 86 hand-derived cases.
+The test takes each record's signature from the top of the stack after the specified `evalScript` runs `scriptSig`.
+Core itself does not run, and no comparison with Core's compiled code exists.
+The definitions add no hypothesis, axiom or execution boundary.
+By `#print axioms` with Lean `v4.35.0`:
+
+| Theorem | Axioms |
+| --- | --- |
+| `secp256k1HalfOrder_eq`, `secp256k1Order_lt`, `overflowExample_order_le`, `overflowExample_highS` | None |
+| `laxScalars_of_lt` | `propext` |
+| `checkLowS_iff`, `checkSignatureEncoding_eq`, `checkSignatureEncoding_nil`, `checkSignatureEncoding_of_flags`, `checkSignatureEncoding_eq_sigDer_iff`, `checkSignatureEncoding_eq_sigHighS_iff`, `checkSignatureEncoding_eq_sigHashtype_iff`, `checkSignatureEncoding_error`, `isLowDerSignature_ne_sigDer`, `isDefinedHashtypeSignature_iff`, `checkPubKeyEncoding_eq_error_iff`, `laxScalars_of_le`, `overflowExample_isValidSignatureEncoding` | `propext`, `Quot.sound` |
+| `isValidSignatureEncoding_iff`, `laxStore_eq`, `parseDerLax_derBody`, `parseDerLax_dropLast_of_isValidSignatureEncoding`, `parseDerLaxWith_eq`, `checkLowS_derBody_iff`, `checkLowS_derBody_of_overflow`, `checkSignatureEncoding_overflowExample`, `isCompressedOrUncompressedPubKey_iff`, `isValidPubKey_of_isCompressedOrUncompressedPubKey` | `propext`, `Classical.choice`, `Quot.sound` |
+
+The supporting byte and big-endian lemmas of the module use the same three axioms or fewer.
+
 ### Compact encoding and difficulty retarget
 
 The `Work` layer specifies Core's `SetCompact`, `GetCompact` and `CalculateDogecoinNextWorkRequired` (SOURCES.md, D6, D12, D13).

@@ -3294,6 +3294,286 @@ def check : IO Nat := do
 
 end KnownAnswers.SignatureCode
 
+/-!
+## Signature and public-key encoding
+
+Runs the encoding checks of `DogeLib.Script.SignatureEncoding` through the compiled code.
+
+### Core's script corpus
+
+The test selects every record of `tests/script/corpus/script_tests.jsonl` (SOURCES.md, D45 and D46) with these properties:
+
+- The record is inside the milestone, and its witness stack is empty.
+- Its `scriptPubKey` is one direct push, opcode `0x00` to `0x4b`, then `OP_CHECKSIG` (`0xac`), optionally followed by `OP_NOT` (`0x91`).
+
+The selected records are the P2PK and P2PK NOT records.
+The test runs the record's `scriptSig` with `evalScript` and the record's `effective_flags_mask`, and takes the top stack item as the signature.
+The pushed bytes of `scriptPubKey` are the public key.
+`OP_CHECKSIG` runs `CheckSignatureEncoding` and then `CheckPubKeyEncoding` before it verifies anything (D3, line 898).
+So each selected record expects one of these outcomes:
+
+- `SIG_DER`, `SIG_HIGH_S`, `SIG_HASHTYPE` or `PUBKEYTYPE`: the two checks, in Core's order, give exactly that error.
+- `OK` or `EVAL_FALSE`: both checks pass.
+
+The test skips and counts a selected record with any other expected error, and one whose `scriptSig` does not give a nonempty stack.
+The expected outcome is the record's, never a DogeLib result.
+The test fails on any disagreement, and when no record of one of the four errors is compared.
+Multisig records are not selected: their signature order needs the opcode of stage 3c.
+
+### Hand cases
+
+Every expected result is written by hand from `IsValidSignatureEncoding` and the other checks (D3, lines 66 to 223), the lax parser (D50, lines 27 to 166) and the order constants (D53, lines 13 to 27).
+None is computed by the definitions under test.
+The cases cover each strict-DER rule, and the lax parser's length forms, trailing bytes and overflows.
+They also cover the LOW_S bound and the overflow case of design record 0003, section 5.
+The rest cover the order of the three signature errors, the hash types and the public-key shapes.
+-/
+
+namespace KnownAnswers.SignatureEncoding
+
+open DogeLib.Script
+
+/-- `n` copies of the byte `b`. -/
+def rep (n : Nat) (b : UInt8) : List UInt8 := List.replicate n b
+
+/-- The bytes of a hexadecimal string. A bad digit gives no bytes, which no case expects. -/
+def hex (s : String) : List UInt8 := KnownAnswers.ScriptEval.hex s
+
+/-- The name of a check result: `OK`, or Core's error name. -/
+def resultName : Except ScriptError Unit → String
+  | .ok () => "OK"
+  | .error e => e.name
+
+/-- The public key of a P2PK or P2PK NOT `scriptPubKey`: one push of opcode `0x00` to `0x4b`, then `OP_CHECKSIG`, optionally then `OP_NOT`. -/
+def p2pkKey : List UInt8 → Option (List UInt8)
+  | [] => none
+  | op :: rest =>
+    let n := op.toNat
+    let key := rest.take n
+    let tail := rest.drop n
+    if n ≤ 0x4b && key.length == n && (tail == [0xac] || tail == [0xac, 0x91]) then some key else none
+
+/-- The result of `CheckSignatureEncoding` and then `CheckPubKeyEncoding`, as `OP_CHECKSIG` runs them (D3, line 898). -/
+def checkBoth (sig key : List UInt8) (flags : UInt32) : String :=
+  match checkSignatureEncoding sig flags with
+  | .error e => e.name
+  | .ok () => resultName (checkPubKeyEncoding key flags)
+
+/-- The four encoding errors. -/
+def encodingErrors : List String := ["SIG_DER", "SIG_HIGH_S", "SIG_HASHTYPE", "PUBKEYTYPE"]
+
+/-- Runs the selected corpus records. Returns the number of failures. -/
+def checkCorpus : IO Nat := do
+  let path : System.FilePath := "tests/script/corpus/script_tests.jsonl"
+  let lines := ((← IO.FS.readFile path).splitOn "\n").filter (!·.isEmpty)
+  let mut failures := 0
+  let mut selected := 0
+  let mut passes := 0
+  let mut skipped := 0
+  let mut errors : List (String × Nat) := encodingErrors.map (·, 0)
+  for text in lines do
+    let r ← match KnownAnswers.ScriptEval.parseRecord text with
+      | .ok r => pure r
+      | .error e => throw (IO.userError s!"{path}: {e}")
+    if !r.inside || r.witness then continue
+    let some key := p2pkKey r.scriptPubKey | continue
+    selected := selected + 1
+    let sig? := match evalScript r.flags r.scriptSig [] with
+      | .ok s => s.stack.getLast?
+      | _ => none
+    let some sig := sig? | skipped := skipped + 1; continue
+    let got := checkBoth sig key r.flags
+    if encodingErrors.contains r.expected then
+      if got == r.expected then
+        errors := errors.map fun (k, n) => (k, if k == r.expected then n + 1 else n)
+      else
+        IO.eprintln s!"FAIL script_tests.json:{r.line}: encoding checks give {got}, expected {r.expected}"
+        failures := failures + 1
+    else if r.expected == "OK" || r.expected == "EVAL_FALSE" then
+      if got == "OK" then passes := passes + 1
+      else
+        IO.eprintln s!"FAIL script_tests.json:{r.line}: encoding checks give {got}, expected both to pass ({r.expected})"
+        failures := failures + 1
+    else skipped := skipped + 1
+  for (k, n) in errors do
+    if n == 0 then
+      IO.eprintln s!"FAIL signature encoding corpus: no {k} record compared"
+      failures := failures + 1
+  let detail := ", ".intercalate (errors.map fun (k, n) => s!"{k} {n}")
+  IO.println s!"signature encoding corpus: {selected} P2PK records, {passes} pass both checks, {detail}, {skipped} skipped, {failures} failures"
+  return failures
+
+/-- The secp256k1 group order `n`, written out from D53 lines 13 to 16. -/
+def orderBytes : List UInt8 := hex "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141"
+/-- `n − 1`. -/
+def orderMinusOneBytes : List UInt8 := hex "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364140"
+/-- Half the order, `⌊n/2⌋`, written out from D53 lines 24 to 27. -/
+def halfBytes : List UInt8 := hex "7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0"
+/-- `⌊n/2⌋ + 1`. -/
+def halfPlusOneBytes : List UInt8 := hex "7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A1"
+
+/-- A strict-DER signature with R = 1, S = 1 and hash type `0x01`. -/
+def basic : List UInt8 := hex "300602010102010101"
+/-- Strict DER with R = 1, S = `⌊n/2⌋ + 1`, a high S, and hash type `0x01`. -/
+def highS : List UInt8 := hex "30250201010220" ++ halfPlusOneBytes ++ [0x01]
+
+/-- The `isValidSignatureEncoding` cases: label, bytes, expected result. -/
+def derCases : List (String × List UInt8 × Bool) := [
+  ("R = 1, S = 1, 9 bytes", basic, true),
+  ("8 bytes", hex "3005020101020001", false),
+  ("73 bytes, R and S of 33 bytes", hex "3046022100" ++ rep 32 0xff ++ hex "02210080" ++ rep 31 0x00 ++ [0x01], true),
+  ("74 bytes", hex "3047022200" ++ rep 33 0xff ++ hex "02210080" ++ rep 31 0x00 ++ [0x01], false),
+  ("compound tag 0x31", hex "310602010102010101", false),
+  ("total length one more", hex "300702010102010101", false),
+  ("total length one less", hex "300502010102010101", false),
+  ("R length past the end", hex "300602040102010101", false),
+  ("trailing byte: lengths do not add up", hex "30070201010201010101", false),
+  ("R tag 0x03", hex "300603010102010101", false),
+  ("S tag 0x03", hex "300602010103010101", false),
+  ("zero-length R", hex "300602000202010101", false),
+  ("zero-length S", hex "300602020101020001", false),
+  ("negative R", hex "300602018102010101", false),
+  ("negative S", hex "300602010102018101", false),
+  ("excess R padding", hex "30070202000102010101", false),
+  ("required R padding", hex "30070202008002010101", true),
+  ("R = 0, one zero byte", hex "300602010002010101", true),
+  ("excess S padding", hex "30070201010202000101", false),
+  ("required S padding", hex "30070201010202008001", true),
+  ("empty", [], false)]
+
+/-- The `parseDerLax` cases, on bytes without a hash type: label, bytes, expected result. -/
+def laxCases : List (String × List UInt8 × Option (Nat × Nat)) := [
+  ("R = 1, S = 2", hex "3006020101020102", some (1, 2)),
+  ("empty", [], none),
+  ("sequence tag 0x31", hex "3106020101020102", none),
+  ("sequence length ignored", hex "3000020101020102", some (1, 2)),
+  ("long-form sequence length", hex "308106020101020102", some (1, 2)),
+  ("long-form sequence length 0x80, no bytes", hex "3080020101020102", some (1, 2)),
+  ("long-form sequence length past the end", hex "30850201", none),
+  ("long-form R length with leading zeros", hex "30000282000105020107", some (5, 7)),
+  ("long-form R length of 8 bytes", hex "3000028801" ++ rep 7 0x00 ++ hex "0101020102", none),
+  ("R length past the end", hex "3006020501020102", none),
+  ("missing S", hex "3003020101", none),
+  ("S tag 0x03", hex "3006020101030102", none),
+  ("trailing bytes ignored", hex "3006020101020102ffff", some (1, 2)),
+  ("negative R, unsigned value", hex "3006020181020102", some (0x81, 2)),
+  ("excess R padding", hex "300702020001020102", some (1, 2)),
+  ("zero-length R", hex "30050200020102", some (0, 2)),
+  ("R = n − 1 with a leading zero", hex "3026022100" ++ orderMinusOneBytes ++ hex "020101",
+    some (0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364140, 1)),
+  ("R = n overflows", hex "30250220" ++ orderBytes ++ hex "020101", some (0, 0)),
+  ("S = n overflows", hex "3025020101" ++ [0x02, 0x20] ++ orderBytes, some (0, 0)),
+  ("R of 33 significant bytes overflows", hex "3026022101" ++ rep 32 0x00 ++ hex "020101", some (0, 0)),
+  ("R of 32 bytes 0xff and a leading zero overflows", hex "3026022100" ++ rep 32 0xff ++ hex "020101", some (0, 0))]
+
+/-- The `laxIntegerLength` cases at position 0 with an 8-byte `size_t`: label, bytes, expected length and next position.
+They test the count of significant bytes and the skipped leading zeros of D50, lines 72 to 77. -/
+def lengthCases : List (String × List UInt8 × Option (Nat × Nat)) := [
+  ("seven significant bytes", hex "8701" ++ rep 6 0x00, some (0x1000000000000, 8)),
+  ("eight significant bytes", hex "8801" ++ rep 7 0x00, none),
+  ("eight bytes, seven of them leading zeros", hex "88" ++ rep 7 0x00 ++ [0x01], some (1, 9))]
+
+/-- The `checkLowS` cases, on bytes without a hash type: label, bytes, expected result. -/
+def lowSCases : List (String × List UInt8 × Bool) := [
+  ("S = ⌊n/2⌋", hex "30250201010220" ++ halfBytes, true),
+  ("S = ⌊n/2⌋ + 1", hex "30250201010220" ++ halfPlusOneBytes, false),
+  ("S = 1", hex "3006020101020101", true),
+  ("not parseable", hex "3106020101020101", false),
+  ("overflow: R = 2^256 − 1 and S = 2^255 − 1",
+    hex "3045022100" ++ rep 32 0xff ++ hex "02207f" ++ rep 31 0xff, true)]
+
+/-- The flag sets of the cases. -/
+def derSig := ScriptFlags.derSig
+def lowS := ScriptFlags.lowS
+def strictEnc := ScriptFlags.strictEnc
+def allEnc := ScriptFlags.derSig ||| ScriptFlags.lowS ||| ScriptFlags.strictEnc
+
+/-- The `checkSignatureEncoding` cases: label, signature, flags, expected result. -/
+def sigCases : List (String × List UInt8 × UInt32 × String) := [
+  ("empty, no flags", [], 0, "OK"),
+  ("empty, all encoding flags", [], allEnc, "OK"),
+  ("not DER, no flags", hex "300603010102010101", 0, "OK"),
+  ("not DER, DERSIG", hex "300603010102010101", derSig, "SIG_DER"),
+  ("not DER, LOW_S", hex "300603010102010101", lowS, "SIG_DER"),
+  ("not DER, STRICTENC", hex "300603010102010101", strictEnc, "SIG_DER"),
+  ("high S, LOW_S", highS, lowS, "SIG_HIGH_S"),
+  ("high S, DERSIG", highS, derSig, "OK"),
+  ("high S, STRICTENC", highS, strictEnc, "OK"),
+  ("hash type 0x00, STRICTENC", hex "300602010102010100", strictEnc, "SIG_HASHTYPE"),
+  ("hash type 0x00, DERSIG", hex "300602010102010100", derSig, "OK"),
+  ("hash type 0x00, LOW_S", hex "300602010102010100", lowS, "OK"),
+  ("not DER and hash type 0x00, STRICTENC", hex "300603010102010100", strictEnc, "SIG_DER"),
+  ("high S and hash type 0x00, LOW_S and STRICTENC",
+    hex "30250201010220" ++ halfPlusOneBytes ++ [0x00], lowS ||| strictEnc, "SIG_HIGH_S"),
+  ("overflow example, all encoding flags",
+    hex "3045022100" ++ rep 32 0xff ++ hex "02207f" ++ rep 31 0xff ++ [0x01], allEnc, "OK"),
+  ("hash type 0x01", basic, strictEnc, "OK"),
+  ("hash type 0x02", hex "300602010102010102", strictEnc, "OK"),
+  ("hash type 0x03", hex "300602010102010103", strictEnc, "OK"),
+  ("hash type 0x04", hex "300602010102010104", strictEnc, "SIG_HASHTYPE"),
+  ("hash type 0x81", hex "300602010102010181", strictEnc, "OK"),
+  ("hash type 0x83", hex "300602010102010183", strictEnc, "OK"),
+  ("hash type 0x84", hex "300602010102010184", strictEnc, "SIG_HASHTYPE"),
+  ("hash type 0x80", hex "300602010102010180", strictEnc, "SIG_HASHTYPE")]
+
+/-- The public-key cases: label, key, flags, expected `checkPubKeyEncoding` result, expected `isValidPubKey`. -/
+def keyCases : List (String × List UInt8 × UInt32 × String × Bool) := [
+  ("compressed 0x02", 0x02 :: rep 32 0x11, strictEnc, "OK", true),
+  ("compressed 0x03", 0x03 :: rep 32 0x11, strictEnc, "OK", true),
+  ("uncompressed 0x04", 0x04 :: rep 64 0x11, strictEnc, "OK", true),
+  ("hybrid 0x06", 0x06 :: rep 64 0x11, strictEnc, "PUBKEYTYPE", true),
+  ("hybrid 0x07", 0x07 :: rep 64 0x11, strictEnc, "PUBKEYTYPE", true),
+  ("hybrid 0x06, no flags", 0x06 :: rep 64 0x11, 0, "OK", true),
+  ("header 0x05", 0x05 :: rep 64 0x11, strictEnc, "PUBKEYTYPE", false),
+  ("0x02 with 32 bytes", 0x02 :: rep 31 0x11, strictEnc, "PUBKEYTYPE", false),
+  ("0x02 with 65 bytes", 0x02 :: rep 64 0x11, strictEnc, "PUBKEYTYPE", false),
+  ("0x04 with 33 bytes", 0x04 :: rep 32 0x11, strictEnc, "PUBKEYTYPE", false),
+  ("0x04 with 64 bytes", 0x04 :: rep 63 0x11, strictEnc, "PUBKEYTYPE", false),
+  ("empty", [], strictEnc, "PUBKEYTYPE", false),
+  ("empty, no flags", [], 0, "OK", false)]
+
+/-- Every encoding known answer. Returns the number of failures. -/
+def check : IO Nat := do
+  let corpusFailures ← checkCorpus
+  let mut failures := 0
+  let mut count := 0
+  for (label, bytes, expected) in derCases do
+    count := count + 1
+    if isValidSignatureEncoding bytes != expected then
+      IO.eprintln s!"FAIL isValidSignatureEncoding {label}: expected {expected}"
+      failures := failures + 1
+  for (label, bytes, expected) in laxCases do
+    count := count + 1
+    if parseDerLax bytes != expected then
+      IO.eprintln s!"FAIL parseDerLax {label}: got {parseDerLax bytes}, expected {expected}"
+      failures := failures + 1
+  for (label, bytes, expected) in lengthCases do
+    count := count + 1
+    if laxIntegerLength 8 bytes 0 != expected then
+      IO.eprintln s!"FAIL laxIntegerLength {label}: got {laxIntegerLength 8 bytes 0}, expected {expected}"
+      failures := failures + 1
+  for (label, bytes, expected) in lowSCases do
+    count := count + 1
+    if checkLowS bytes != expected then
+      IO.eprintln s!"FAIL checkLowS {label}: expected {expected}"
+      failures := failures + 1
+  for (label, sig, flags, expected) in sigCases do
+    count := count + 1
+    let got := resultName (checkSignatureEncoding sig flags)
+    if got != expected then
+      IO.eprintln s!"FAIL checkSignatureEncoding {label}: got {got}, expected {expected}"
+      failures := failures + 1
+  for (label, key, flags, expected, valid) in keyCases do
+    count := count + 1
+    let got := resultName (checkPubKeyEncoding key flags)
+    if got != expected || isValidPubKey key != valid then
+      IO.eprintln s!"FAIL public key {label}: got {got} and {isValidPubKey key}, expected {expected} and {valid}"
+      failures := failures + 1
+  IO.println s!"signature encoding hand cases: {count} cases, {failures} failures"
+  return corpusFailures + failures
+
+end KnownAnswers.SignatureEncoding
+
 /-- Entry point of `lake test`. -/
 def main : IO UInt32 := do
   let sha1 ← KnownAnswers.Sha1.check
@@ -3321,4 +3601,5 @@ def main : IO UInt32 := do
   let scriptNum ← KnownAnswers.ScriptNum.check
   let scriptEval ← KnownAnswers.ScriptEval.check
   let signatureCode ← KnownAnswers.SignatureCode.check
-  return if sha1 + blocks + short + long + ripemd + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts + proofOfWork + scriptReader + scriptNum + scriptEval + signatureCode == 0 then 0 else 1
+  let signatureEncoding ← KnownAnswers.SignatureEncoding.check
+  return if sha1 + blocks + short + long + ripemd + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts + proofOfWork + scriptReader + scriptNum + scriptEval + signatureCode + signatureEncoding == 0 then 0 else 1

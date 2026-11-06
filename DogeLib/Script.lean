@@ -4,6 +4,7 @@ public import DogeLib.Script.Error
 public import DogeLib.Script.Eval
 public import DogeLib.Script.Flags
 public import DogeLib.Script.Instruction
+public import DogeLib.Script.MultisigRecovery
 public import DogeLib.Script.Number
 public import DogeLib.Script.Signature
 public import DogeLib.Script.SignatureCode

@@ -1025,6 +1025,77 @@ By `#print axioms` with Lean `v4.35.0`:
 | `transactionChecker_checkLockTime`, `transactionChecker_checkSequence`, `transactionChecker_checkLockTime_none`, `transactionChecker_checkSequence_none`, `sequenceSatisfied_iff`, `checkLockTimeStep_next`, `checkSequenceStep_next`, the `execOpcode_cltv*` and `execOpcode_csv*` theorems, `execOpcode_checker_congr`, `execOpcode_script_congr`, `isPushOnlyFrom_atEnd`, `isPushOnlyFrom_truncated`, `isPushOnlyFrom_instruction`, `verifyScript_unsupportedFlags`, `hasFlag_sigPushOnly_eq_false`, `hasFlag_cleanStack_eq_false`, `hasFlag_witness_eq_false`, `verifyScript_noP2sh`, `verifyScript_p2sh`, `verifyScript_p2sh_notPushOnly`, `verifyLegacySpend_eq` | `propext`, `Quot.sound` |
 | `isPushOnlyFrom_iff`, `isPushOnly_iff`, `isPayToScriptHash_iff`, `evalScript_p2shTemplate`, `evalScript_p2shTemplate_nil`, `verifyScript_p2sh_saved_ne_nil`, `verifyScript_p2sh_hash`, `verifyScript_p2sh_hash_ne` | `propext`, `Classical.choice`, `Quot.sound` |
 
+### Script worked property: multisig with recovery
+
+`DogeLib.Script.MultisigRecovery` builds the redeem script of design record 0003, section 7, for `k` of `n` keys with `1 ≤ k ≤ n ≤ 16`:
+`OP_IF OP_k <keys> OP_n OP_CHECKMULTISIG OP_ELSE <1000000> OP_CHECKLOCKTIMEVERIFY OP_DROP <R> OP_CHECKSIG OP_ENDIF`.
+`DogeLib.Script.Proofs.MultisigRecovery` proves the equivalence of section 7 for this template and its 2-of-3 instance.
+
+`MultisigRecoverySpend` collects the hypotheses, one field each:
+
+- supported flags, with `P2SH` and `CHECKLOCKTIMEVERIFY` set
+- `1 ≤ k ≤ n ≤ 16`, 33-byte keys and a 33-byte recovery key `R`
+- a previous output that is the P2SH commitment to the exact redeem bytes
+- a push-only `scriptSig` whose evaluation succeeds with the final stack `S ++ [redeem]`
+
+The `InputContext` of `verifyLegacySpend` gives an input index that selects an input and fewer than 2^32 inputs and outputs.
+The template discharges the other resource bounds of section 7.
+The redeem script has `34 n + 47` bytes, 149 for 2-of-3 (`multisigRecoveryScript_length`).
+Each of its pushes has at most 33 payload bytes.
+A run counts at most `n + 7` operations, including skipped opcodes above `OP_16` and the key count.
+The `scriptSig` evaluation checks the 520-byte limit on the push of the redeem script, so `n` is at most 13.
+
+`OrdinaryBranch` and `RecoveryBranch` state the two cases without a hypothesis that execution succeeds:
+
+- Ordinary: `S` is `below ++ dummy :: sigs ++ [sel]` with `k` signatures and `castToBool sel`.
+  Every pair that Core's matching loop visits, top first (`multisigVisits`), passes `SigEncodingOk` and `KeyEncodingOk`.
+  With `NULLDUMMY` the dummy is empty.
+  The signatures pair in order with a subsequence of the keys under `sigAccepted` (`OrderedMatch`).
+- Recovery: `S` is `below ++ [sigR, sel]` with `castToBool sel = false`.
+  The lock time is at least 1,000,000 and below 500,000,000, and the input's sequence is not `0xffffffff`.
+  `sigR` and `R` pass the encoding predicates, and `sigAccepted` holds for `sigR` against `R`.
+
+`checkSignatureEncoding_ok_iff` and `checkPubKeyEncoding_ok_iff` prove that the predicates are exactly the checks of `Script.SignatureEncoding`, including the LOW_S overflow case.
+By `sigAccepted_iff`, `sigAccepted` means that the key passes `isValidPubKey`.
+It also means that `verify` answers `some true` on the signature without its hash-type byte and the legacy digest.
+Both cases allow any stack below, nonminimal pushes and any selector bytes, with negative zero as false.
+
+The theorems:
+
+- `multisigRecovery_sound`: acceptance implies one of the two branches. It assumes no stack bound on `S` and no totality of `verify`.
+- `multisigRecovery_ordinary_complete`: the ordinary branch implies acceptance when `S.length + n + 1 ≤ 1000` and the checker decides every visited pair.
+- `multisigRecovery_recovery_complete`: the recovery branch implies acceptance when `S.length + 2 ≤ 1000`. `sigAccepted` is already a decided answer.
+- `multisigRecovery_accepted_iff` and `multisigRecovery_twoOfThree_accepted_iff`: the equivalence, for a verifier that decides every request and the ordinary stack bound.
+- `multisigRecovery_ordinary_unsupported` and `multisigRecovery_recovery_unsupported`: an answer `none` on a reached call gives `unsupported`, never a rejection.
+- `multisigRecovery_lockTime_lt`: with `CHECKLOCKTIMEVERIFY`, a false selector and a lock time below 1,000,000 give `UNSATISFIED_LOCKTIME` before any signature check.
+  `multisigRecovery_accepted_lockTime_lt`: such a spend is accepted only through the ordinary branch.
+  Without the flag, `OP_CHECKLOCKTIMEVERIFY` is `OP_NOP2`, and a known answer accepts the recovery branch with lock time 0.
+- `verifyLegacySpend_scriptSig_rejected` and `verifyLegacySpend_scriptSig_unsupported`: a failed `scriptSig` evaluation passes through.
+
+The theorems hold relative to the verifier parameter, under the verifier-agreement hypothesis of [Script signature opcodes and the checker](#script-signature-opcodes-and-the-checker).
+They do not establish unforgeability, private-key ownership, distinct signers or bridge custody.
+
+Duplicate keys are allowed, and a match against duplicate keys is not distinct authorization.
+The P2SH composition uses the exact supplied redeem script. A different redeem script with the same digest needs a separate hash-commitment argument (A4).
+Every hash type that the flags admit is allowed, including NONE, SINGLE and ANYONECANPAY, so a signature need not commit to the whole transaction.
+
+The lock-time conditions compare the operand with fields of the spending transaction.
+A claim that recovery cannot enter a chain before a height or time needs transaction-finality and chain-context results that DogeLib does not have.
+The template is a property target. A production bridge instance needs its own fixtures and custody review.
+
+`lake test` runs 24 hand cases through `verifyLegacySpend` with a table verifier, a test backend that ignores the digest.
+They cover both branches, signatures in the wrong order, a missing signature, and the lock-time and sequence boundaries.
+They also cover a negative-zero selector, the dummy with and without `NULLDUMMY`, the CLTV flag clear, and each encoding error.
+No comparison with Core's compiled code covers the template.
+By `#print axioms` with Lean `v4.35.0`:
+
+| Theorem | Axioms |
+| --- | --- |
+| `multisigVisits_cons`, `greedyMatch_cons`, `smallIntOpcode_facts` | None |
+| `multisigLoop_cons`, `multisigLoop_visits_error`, `pushEncoding_small`, `countOp_small`, `multisigRecoveryScript_eq`, `trueTop_boolBytes` | `propext` |
+| `multisigLoop_visits_ok`, `multisigLoop_ok_visits`, `checkSignatureEncoding_ok_iff`, `checkPubKeyEncoding_ok_iff`, `multisigCheck_eq_ok_iff`, `sigAccepted_iff`, `sigAccepted_of_checkSig`, `multisigRecoveryScript_length`, `checkSigStep_recovery`, `effectiveScriptCode_length_le`, `transactionChecker_checkSig_ne_none`, `hash160_toList_length`, `verifyLegacySpend_scriptSig_rejected`, `verifyLegacySpend_scriptSig_unsupported` and the other layout lemmas | `propext`, `Quot.sound` |
+| `multisigRecovery_sound`, `multisigRecovery_ordinary_complete`, `multisigRecovery_recovery_complete`, `multisigRecovery_accepted_iff`, `multisigRecovery_twoOfThree_accepted_iff`, `multisigRecovery_ordinary_unsupported`, `multisigRecovery_recovery_unsupported`, `multisigRecovery_lockTime_lt`, `multisigRecovery_accepted_lockTime_lt`, `multisigRecoveryScript_twoOfThree` and the evaluation lemmas | `propext`, `Classical.choice`, `Quot.sound` |
+
 ### Compact encoding and difficulty retarget
 
 The `Work` layer specifies Core's `SetCompact`, `GetCompact` and `CalculateDogecoinNextWorkRequired` (SOURCES.md, D6, D12, D13).
@@ -1406,6 +1477,10 @@ Whatever those hypotheses leave unproved is part of what a reader trusts.
 `transactionChecker` takes the elliptic-curve check as a parameter `verify`.
 A Script result that uses it holds for Core only under the verifier-agreement hypothesis of [Script signature opcodes and the checker](#script-signature-opcodes-and-the-checker).
 The ordered-matching theorems of that subsection also assume a checker answer and passing encoding checks on every pair of signatures and keys.
+
+The worked property of [multisig with recovery](#script-worked-property-multisig-with-recovery) assumes a checker answer only on the pairs that Core visits, and its soundness direction assumes none.
+Its converses also assume a bound on the stack below the redeem script.
+
 `verifyLegacySpend` requires an `InputContext`, whose index selects an input and whose transaction has fewer than 2^32 inputs and outputs.
 Core's transaction reader gives the two count bounds. A caller that builds a transaction from fields must supply them.
 

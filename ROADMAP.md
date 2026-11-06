@@ -97,6 +97,13 @@ Base gives 925 compared verdicts, while transaction gives 881 compared verdicts 
 Each checker also has 2,000 legacy mutations under seed `20261106`, with unsupported results separate from agreement.
 These streams have zero disagreements. The Lean adapter has no ECDSA backend.
 
+The worked property of design record 0003, section 7, is done for `k` of `n` keys with `1 ≤ k ≤ n ≤ 16`, and for 2-of-3.
+`multisigRecovery_sound` and the two converses prove that acceptance is equivalent to the two branches.
+The branches state the encoding predicates, `NULLDUMMY`, ordered matching and the lock-time conditions explicitly.
+Under CLTV, a lock time below 1,000,000 cannot pass the recovery branch.
+[SOUNDNESS.md](SOUNDNESS.md#script-worked-property-multisig-with-recovery) records what the theorems do not establish.
+A key count from 17 to 20 is deferred (#82), because it needs a data push for the count.
+
 Steps 0 and 0b follow design record 0002: the first contributions adopt audited codec foundations and then define Dogecoin's bounded decoding contract. They replace the original plan to build fixed-width encodings and CompactSize from scratch. Design record 0002 preferred a pinned btc-verified dependency first. The decisions below choose an adaptation instead, because btc-verified's toolchain, file structure and trust policy all differ from EthLib's.
 
 ## Milestones

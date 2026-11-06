@@ -8,7 +8,10 @@ The original source is `C2SP/wycheproof`, commit `d17cc89fa5c8f4f4d378b5385ebf75
 EthLib's fixture names preserve Wycheproof's test identifiers 1 through 252.
 The expectations come from Wycheproof, not from DogeLib.
 EthLib computed `msg_hash` as SHA-256 of each source message.
-The data keeps the Apache License 2.0 in `LICENSE`.
+
+The data keeps the Apache License 2.0 in [LICENSES/wycheproof-Apache-2.0.txt](../../../LICENSES/wycheproof-Apache-2.0.txt).
+The fixture directory also keeps the upstream `LICENSE` copy.
+The complete Wycheproof tree at the source commit contains no `NOTICE` file.
 The adaptation adds this README and selects the verification entries in the hash manifest.
 
 `lake test` reads the uncompressed coordinates directly, without a public-key parser.
@@ -21,7 +24,8 @@ They check the fixture boundary and do not call `Ecdsa.verify`.
 Case 1 also runs through `decide +kernel` in `DogeLib.Cryptography.Proofs.Secp256k1.Ecdsa`.
 Its digest is not a byte palindrome, so its accepted result exercises the byte order in a full verification.
 A separate integer check fixes `01` followed by 31 zero bytes as `e = 2^248`, before reduction modulo `n`.
-The driver reports elapsed nanoseconds around each scalar verification, with fixture IO and decoding outside the interval.
+The driver forces each scalar verification with `IO.lazyPure` between the two clock reads.
+Fixture IO and decoding occur outside the interval.
 The design record's comparison point is about 1.15 milliseconds per verification, rather than a hard test threshold.
 
 These cases test the scalar verifier, which accepts high S when the ECDSA equation holds.

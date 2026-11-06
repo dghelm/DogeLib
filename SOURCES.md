@@ -143,7 +143,7 @@ Design records and module documentation cite these identifiers.
 | R1 | [Aeneas documentation](https://github.com/AeneasVerif/aeneas) (for discovery only: pin a revision before use) |
 | S1 | [C++11 working draft N3337](https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2012/n3337.pdf): [expr.mul] 5.6 paragraph 4, [conv.integral] 4.7 paragraph 2, [over.ics.rank] 13.3.3.2 paragraph 2, [expr.shift] 5.8 paragraph 2 |
 | S2 | [SEC 2: Recommended Elliptic Curve Domain Parameters, version 2.0](https://www.secg.org/sec2-v2.pdf), §2.4.1: the order `n` of secp256k1 |
-| W1 | [Wycheproof secp256k1 P1363 vectors](https://github.com/C2SP/wycheproof/tree/d17cc89fa5c8f4f4d378b5385ebf75da5d0926c9), `ecdsa_secp256k1_sha256_p1363_test.json`. Cases 1 to 252 via EthLib at its pin. Apache 2.0. [Fixture provenance](tests/cryptography/secp256k1/README.md). |
+| W1 | [Wycheproof secp256k1 P1363 vectors](https://github.com/C2SP/wycheproof/tree/d17cc89fa5c8f4f4d378b5385ebf75da5d0926c9), `ecdsa_secp256k1_sha256_p1363_test.json`. Cases 1 to 252 via EthLib at its pin. [Apache 2.0 licence](LICENSES/wycheproof-Apache-2.0.txt). [Fixture provenance](tests/cryptography/secp256k1/README.md). |
 
 ## Historical header fixture
 

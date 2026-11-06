@@ -4525,7 +4525,7 @@ def check : IO Nat := do
       let r := readNat (sig.extract 0 32)
       let s := readNat (sig.extract 32 64)
       let start ← IO.monoNanosNow
-      let got := Ecdsa.verify q hash r s
+      let got ← IO.lazyPure (fun _ => Ecdsa.verify q hash r s)
       if got then accepted := accepted + 1 else rejected := rejected + 1
       let stop ← IO.monoNanosNow
       nanos := nanos + (stop - start)

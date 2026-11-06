@@ -1085,7 +1085,8 @@ The template is a property target. A production bridge instance needs its own fi
 
 `lake test` runs 25 hand cases through `verifyLegacySpend` with a table verifier, a test backend that ignores the digest.
 They cover both branches, signatures in the wrong order, a missing signature, and the lock-time and sequence boundaries.
-They also cover a negative-zero selector, the dummy with and without `NULLDUMMY`, the CLTV flag clear, and each encoding error: DER, high S, hash type and key type.
+They also cover a negative-zero selector, the dummy with and without `NULLDUMMY`, and the CLTV flag clear.
+Each encoding error has a case: DER, high S, hash type and key type.
 No comparison with Core's compiled code covers the template.
 By `#print axioms` with Lean `v4.35.0`:
 

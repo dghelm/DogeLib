@@ -12,6 +12,10 @@ public import DogeLib.Script.Signature
 - `transactionChecker_emptySig`: with a valid key, an empty signature gives `some false`, for every verifier.
 - `transactionChecker_verify`: otherwise the result is exactly `verify` on the signature without its last byte, the key and `legacySignatureHash` with that byte zero-extended as the hash type.
 - `transactionChecker_verify_congr`: two verifiers that agree on that one request give the same result.
+- `baseChecker_checkLockTime`, `baseChecker_checkSequence`: `BaseSignatureChecker` fails every lock-time and sequence check.
+- `transactionChecker_checkLockTime`, `transactionChecker_checkSequence`: for an input in range, the checks are `lockTimeSatisfied` and `sequenceSatisfied` on its sequence, for every verifier.
+  `transactionChecker_checkLockTime_none`, `transactionChecker_checkSequence_none`: for an index outside the inputs, both give `none`.
+- `lockTimeSatisfied_iff`, `sequenceSatisfied_iff`: the conditions of Core's `CheckLockTime` and `CheckSequence`, with the constants written out.
 
 ## The matching loop of `OP_CHECKMULTISIG`
 
@@ -37,6 +41,63 @@ open DogeLib.Transaction
 
 /-- For every signature, public key and script code: `baseChecker` returns `some false`. -/
 theorem baseChecker_checkSig (sig key code : List UInt8) : baseChecker.checkSig sig key code = some false := rfl
+
+/-- For every operand: `baseChecker` fails the lock-time check. -/
+theorem baseChecker_checkLockTime (n : Int) : baseChecker.checkLockTime n = some false := rfl
+
+/-- For every operand: `baseChecker` fails the sequence check. -/
+theorem baseChecker_checkSequence (n : Int) : baseChecker.checkSequence n = some false := rfl
+
+/-- For every transaction, verifier and operand, and every index `nIn` that selects input `i`: the lock-time check is `lockTimeSatisfied` on the transaction's lock time and the sequence of `i`. -/
+theorem transactionChecker_checkLockTime {tx : Transaction} {nIn : UInt32} {i : TxIn} (verify : SignatureVerifier)
+    (h : tx.inputs.val[nIn.toNat]? = some i) (n : Int) :
+    (transactionChecker tx nIn verify).checkLockTime n = some (lockTimeSatisfied tx.lockTime i.sequence n) := by
+  simp [transactionChecker, h]
+
+/-- For every transaction, verifier and operand, and every index `nIn` that selects input `i`: the sequence check is `sequenceSatisfied` on the version bits and the sequence of `i`. -/
+theorem transactionChecker_checkSequence {tx : Transaction} {nIn : UInt32} {i : TxIn} (verify : SignatureVerifier)
+    (h : tx.inputs.val[nIn.toNat]? = some i) (n : Int) :
+    (transactionChecker tx nIn verify).checkSequence n = some (sequenceSatisfied tx.version i.sequence n) := by
+  simp [transactionChecker, h]
+
+/-- For every transaction, verifier and operand, and every index outside the inputs: the lock-time check is unavailable. -/
+theorem transactionChecker_checkLockTime_none {tx : Transaction} {nIn : UInt32} (verify : SignatureVerifier)
+    (h : tx.inputs.val.length ≤ nIn.toNat) (n : Int) : (transactionChecker tx nIn verify).checkLockTime n = none := by
+  simp [transactionChecker, h]
+
+/-- For every transaction, verifier and operand, and every index outside the inputs: the sequence check is unavailable. -/
+theorem transactionChecker_checkSequence_none {tx : Transaction} {nIn : UInt32} (verify : SignatureVerifier)
+    (h : tx.inputs.val.length ≤ nIn.toNat) (n : Int) : (transactionChecker tx nIn verify).checkSequence n = none := by
+  simp [transactionChecker, h]
+
+/--
+For every lock time, sequence and operand `n`: `lockTimeSatisfied` holds exactly when `n` and the lock time lie on the same side of 500,000,000, `n` is at most the lock time, and the sequence is not `0xffffffff`.
+-/
+theorem lockTimeSatisfied_iff (lockTime sequence : UInt32) (n : Int) :
+    lockTimeSatisfied lockTime sequence n = true ↔
+      ((lockTime.toNat < 500000000 ∧ n < 500000000) ∨ (500000000 ≤ lockTime.toNat ∧ 500000000 ≤ n)) ∧
+        n ≤ lockTime.toNat ∧ sequence ≠ 0xffffffff := by
+  unfold lockTimeSatisfied lockTimeThreshold sequenceFinal
+  simp only [Bool.and_eq_true, Bool.or_eq_true, decide_eq_true_eq, bne_iff_ne, ne_eq, and_assoc]
+  rfl
+
+/--
+For every version, sequence and operand `n`, with the masked values `m s = s &&& 0x40ffff`:
+`sequenceSatisfied` holds exactly when the version is at least 2, bit 31 of the sequence is clear, `m n` and `m sequence` are both below `0x400000` or both at least `0x400000`, and `m n` is at most `m sequence`.
+The operand is masked as `n.toNat`.
+-/
+theorem sequenceSatisfied_iff (version sequence : UInt32) (n : Int) :
+    sequenceSatisfied version sequence n = true ↔
+      2 ≤ version.toNat ∧ sequence.toNat &&& 0x80000000 = 0 ∧
+        ((sequence.toNat &&& 0x40ffff < 0x400000 ∧ n.toNat &&& 0x40ffff < 0x400000) ∨
+          (0x400000 ≤ sequence.toNat &&& 0x40ffff ∧ 0x400000 ≤ n.toNat &&& 0x40ffff)) ∧
+        n.toNat &&& 0x40ffff ≤ sequence.toNat &&& 0x40ffff := by
+  have hm : sequenceLockTimeTypeFlag ||| sequenceLockTimeMask = 0x40ffff := by decide
+  unfold sequenceSatisfied
+  dsimp only
+  rw [hm]
+  simp only [Bool.and_eq_true, Bool.or_eq_true, decide_eq_true_eq, beq_iff_eq, and_assoc]
+  simp only [sequenceLockTimeTypeFlag, sequenceLockTimeDisableFlag]
 
 /-- For every transaction, input index, verifier, signature and script code, and every public key that fails `isValidPubKey`: the check returns `some false`. -/
 theorem transactionChecker_invalidKey (tx : Transaction) (nIn : UInt32) (verify : SignatureVerifier)

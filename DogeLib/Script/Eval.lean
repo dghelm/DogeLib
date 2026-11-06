@@ -15,7 +15,7 @@ public import DogeLib.Script.State
 /-!
 # `Script.Eval`
 
-One call of Core's `EvalScript` in `SIGVERSION_BASE`, for the opcodes of stages 2 and 3: control flow, stack operations, numbers, hashes and signatures.
+One call of Core's `EvalScript` in `SIGVERSION_BASE`, for the opcodes of stages 2 to 4: control flow, stack operations, numbers, hashes, signatures and lock times.
 
 `EvalScript` is in `src/script/interpreter.cpp` lines 248 to 1046 of Dogecoin Core `v1.14.9` (SOURCES.md, D3).
 Design record 0003, sections 3 and 4, sets the scope of these stages.
@@ -42,7 +42,7 @@ Within the supported flags, this stage implements these opcodes:
 | --- | --- |
 | Every push, `OP_1NEGATE`, and `OP_1` to `OP_16` | `0x00` to `0x4f`, `0x51` to `0x60` |
 | `OP_NOP`, `OP_NOP1`, and `OP_NOP4` to `OP_NOP10` | `0x61`, `0xb0`, `0xb3` to `0xb9` |
-| `OP_CHECKLOCKTIMEVERIFY` and `OP_CHECKSEQUENCEVERIFY` when their flags are clear | `0xb1`, `0xb2` |
+| `OP_CHECKLOCKTIMEVERIFY` and `OP_CHECKSEQUENCEVERIFY` when their flags are clear, or when the call has a checker | `0xb1`, `0xb2` |
 | `OP_IF`, `OP_NOTIF`, `OP_ELSE`, `OP_ENDIF`, `OP_VERIFY` and `OP_RETURN` | `0x63`, `0x64`, `0x67` to `0x6a` |
 | Every stack operation, from `OP_TOALTSTACK` to `OP_TUCK`, and `OP_SIZE` | `0x6b` to `0x7d`, `0x82` |
 | `OP_EQUAL`, `OP_EQUALVERIFY` and `OP_CODESEPARATOR` | `0x87`, `0x88`, `0xab` |
@@ -51,8 +51,8 @@ Within the supported flags, this stage implements these opcodes:
 | `OP_CHECKSIG`, `OP_CHECKSIGVERIFY`, `OP_CHECKMULTISIG` and `OP_CHECKMULTISIGVERIFY`, when the call has a checker | `0xac` to `0xaf` |
 | The reserved and invalid opcodes, which give Core's `BAD_OPCODE` when they execute | `0x50`, `0x62`, `0x65`, `0x66`, `0x89`, `0x8a`, `0xba` to `0xff` |
 
-An executed opcode outside this table is unsupported.
-`OP_CHECKLOCKTIMEVERIFY` and `OP_CHECKSEQUENCEVERIFY` with their flags set come in stage 4.
+Every opcode has a row in this table, except the disabled opcodes.
+Without a checker, an executed signature opcode is unsupported, and so is `OP_CHECKLOCKTIMEVERIFY` or `OP_CHECKSEQUENCEVERIFY` with its flag set.
 The disabled opcodes give Core's `DISABLED_OPCODE`, executed or not.
 
 Three flag effects are absent here, because the flags that cause them are unsupported:
@@ -73,7 +73,20 @@ The parameter `checker : Option SignatureChecker` is Core's `checker` argument (
   Such a result makes no claim about Core's verdict, even for an opcode that Core rejects for stack underflow.
 
 `baseChecker` is Core's `BaseSignatureChecker`, and `transactionChecker` is `TransactionSignatureChecker` (`DogeLib.Script.Signature`).
-Every opcode outside `0xac` to `0xaf` ignores the checker and the script (`execOpcode_checker_congr` in `DogeLib.Script.Proofs.Eval`).
+Every opcode outside `0xac` to `0xaf`, `0xb1` and `0xb2` ignores the checker, and every opcode outside `0xac` to `0xaf` ignores the script (`execOpcode_checker_congr` and `execOpcode_script_congr` in `DogeLib.Script.Proofs.Eval`).
+
+## Lock-time opcodes
+
+With its flag clear, `OP_CHECKLOCKTIMEVERIFY` is `OP_NOP2` and `OP_CHECKSEQUENCEVERIFY` is `OP_NOP3` (lines 352 to 358 and 394 to 400).
+With its flag set and a checker `c`, each checks in this order (lines 360 to 427):
+
+1. An empty stack gives `INVALID_STACK_OPERATION`.
+2. The top item is a five-byte `CScriptNum` without the minimal requirement, because `MINIMALDATA` is unsupported. A failed decode gives `UNKNOWN_ERROR` through the `catch`.
+3. A negative operand gives `NEGATIVE_LOCKTIME`.
+4. `OP_CHECKSEQUENCEVERIFY` only: an operand with `SEQUENCE_LOCKTIME_DISABLE_FLAG` set acts as a NOP.
+5. `c.checkLockTime` or `c.checkSequence` receives the operand. `false` gives `UNSATISFIED_LOCKTIME`, and `none` gives `unsupported`.
+
+Neither opcode pops its operand.
 
 ## Signature opcodes
 
@@ -188,9 +201,15 @@ inductive Unsupported where
   Either the call has no checker, or the checker returned `none`.
   -/
   | signatureOpcode (opcode : UInt8)
-  /-- An executed `OP_CHECKLOCKTIMEVERIFY` with `SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY` set. Stage 4. -/
+  /--
+  An executed `OP_CHECKLOCKTIMEVERIFY` with `SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY` set needed a lock-time check that is unavailable.
+  Either the call has no checker, or the checker returned `none`.
+  -/
   | checkLockTimeVerify
-  /-- An executed `OP_CHECKSEQUENCEVERIFY` with `SCRIPT_VERIFY_CHECKSEQUENCEVERIFY` set. Stage 4. -/
+  /--
+  An executed `OP_CHECKSEQUENCEVERIFY` with `SCRIPT_VERIFY_CHECKSEQUENCEVERIFY` set needed a sequence check that is unavailable.
+  Either the call has no checker, or the checker returned `none`.
+  -/
   | checkSequenceVerify
   deriving DecidableEq, Repr
 
@@ -220,6 +239,9 @@ def isDisabled (op : UInt8) : Bool :=
 
 /-- The signature opcodes, `OP_CHECKSIG` to `OP_CHECKMULTISIGVERIFY` (`0xac` to `0xaf`). -/
 def isSignatureOpcode (op : UInt8) : Bool := 0xac ≤ op && op ≤ 0xaf
+
+/-- The opcodes that read the checker: the signature opcodes and `OP_CHECKLOCKTIMEVERIFY` and `OP_CHECKSEQUENCEVERIFY` (`0xb1`, `0xb2`). -/
+def readsChecker (op : UInt8) : Bool := isSignatureOpcode op || op == 0xb1 || op == 0xb2
 
 /-- The opcode count after an instruction (D3, line 286): opcodes above `OP_16` (`0x60`) count. -/
 def countOp (op : UInt8) (opCount : Nat) : Nat := if 0x60 < op then opCount + 1 else opCount
@@ -355,11 +377,50 @@ def checkMultisigStep (c : SignatureChecker) (script : List UInt8) (flags : UInt
                       else .rejected .checkMultisigVerify
                     else .next { s with stack := below.reverse ++ [boolBytes ok], opCount }
 
+/-- The largest number of bytes in the operand of `OP_CHECKLOCKTIMEVERIFY` and `OP_CHECKSEQUENCEVERIFY` (D3, lines 377 and 408). -/
+def lockTimeNumSize : Nat := 5
+
+/--
+`OP_CHECKLOCKTIMEVERIFY` (`0xb1`) with its flag set and the checker `c` (D3, lines 360 to 390).
+The operand is the top item, a five-byte script number. The opcode never pops it.
+-/
+def checkLockTimeStep (c : SignatureChecker) (s : ExecState) : StepResult :=
+  match s.stack.reverse with
+  | [] => .rejected .invalidStackOperation
+  | top :: _ =>
+    match ScriptNum.decode top false lockTimeNumSize with
+    | .error _ => .rejected .unknownError
+    | .ok n =>
+      if n < 0 then .rejected .negativeLocktime
+      else match c.checkLockTime n with
+        | none => .unsupported .checkLockTimeVerify
+        | some true => .next s
+        | some false => .rejected .unsatisfiedLocktime
+
+/--
+`OP_CHECKSEQUENCEVERIFY` (`0xb2`) with its flag set and the checker `c` (D3, lines 402 to 427).
+The operand is the top item, a five-byte script number. The opcode never pops it.
+An operand with `SEQUENCE_LOCKTIME_DISABLE_FLAG` set acts as a NOP, before any checker call (lines 418 and 419).
+-/
+def checkSequenceStep (c : SignatureChecker) (s : ExecState) : StepResult :=
+  match s.stack.reverse with
+  | [] => .rejected .invalidStackOperation
+  | top :: _ =>
+    match ScriptNum.decode top false lockTimeNumSize with
+    | .error _ => .rejected .unknownError
+    | .ok n =>
+      if n < 0 then .rejected .negativeLocktime
+      else if n.toNat &&& sequenceLockTimeDisableFlag ≠ 0 then .next s
+      else match c.checkSequence n with
+        | none => .unsupported .checkSequenceVerify
+        | some true => .next s
+        | some false => .rejected .unsatisfiedLocktime
+
 /--
 The `switch` of `EvalScript` (D3, lines 311 to 1030) for opcode `op` with pushed bytes `pushed`.
 `fExec` is whether the current branch executes. Core reaches this code with `fExec` false only for `OP_IF` to `OP_ENDIF`.
 `next` is the cursor after the instruction, which `OP_CODESEPARATOR` stores.
-`checker` and `script` are read only by the signature opcodes.
+`checker` is read only by the signature and lock-time opcodes, and `script` only by the signature opcodes.
 The stacks list their items from the bottom to the top, so each operation reads the reversed stack, top first.
 -/
 def execOpcode (checker : Option SignatureChecker) (script : List UInt8) (flags : UInt32) (fExec : Bool)
@@ -375,10 +436,18 @@ def execOpcode (checker : Option SignatureChecker) (script : List UInt8) (flags 
   | 0x61 => .next s
   -- `OP_CHECKLOCKTIMEVERIFY` (lines 350 to 390). Without its flag it is `OP_NOP2`.
   | 0xb1 =>
-    if hasFlag flags ScriptFlags.checkLockTimeVerify then .unsupported .checkLockTimeVerify else .next s
+    if hasFlag flags ScriptFlags.checkLockTimeVerify then
+      match checker with
+      | none => .unsupported .checkLockTimeVerify
+      | some c => checkLockTimeStep c s
+    else .next s
   -- `OP_CHECKSEQUENCEVERIFY` (lines 392 to 427). Without its flag it is `OP_NOP3`.
   | 0xb2 =>
-    if hasFlag flags ScriptFlags.checkSequenceVerify then .unsupported .checkSequenceVerify else .next s
+    if hasFlag flags ScriptFlags.checkSequenceVerify then
+      match checker with
+      | none => .unsupported .checkSequenceVerify
+      | some c => checkSequenceStep c s
+    else .next s
   -- `OP_NOP1` and `OP_NOP4` to `OP_NOP10` (lines 429 to 435).
   | 0xb0 | 0xb3 | 0xb4 | 0xb5 | 0xb6 | 0xb7 | 0xb8 | 0xb9 => .next s
   -- `OP_IF` and `OP_NOTIF` (lines 437 to 460).

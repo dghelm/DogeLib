@@ -33,14 +33,15 @@ public import DogeLib.Script.Proofs.State
 - `evalInstruction_wellFormed`: a successful step and the cursor move keep `ExecState.WellFormed`.
 - `execOpcode_frame`: an opcode never changes the cursor, sets the separator cursor only to the cursor after the instruction, and adds at most one entry to `vfExec`, only for `OP_IF` and `OP_NOTIF`.
   Only `OP_CHECKMULTISIG` and `OP_CHECKMULTISIGVERIFY` change the opcode count, which they raise to at most 201.
-- `execOpcode_checker_congr`: every opcode outside `0xac` to `0xaf` gives the same result for any checker and script.
+- `execOpcode_checker_congr`: every opcode outside `0xac` to `0xaf`, `0xb1` and `0xb2` gives the same result for any checker and script.
+- `execOpcode_script_congr`: every opcode outside `0xac` to `0xaf` gives the same result for any script.
 
 ## Opcode effects
 
 The `execOpcode_*` theorems give the stack effect of each implemented opcode.
 Stacks are written bottom first and top last, as in `ExecState`.
 `execOpcode_underflow` gives `INVALID_STACK_OPERATION` for each stack opcode on a stack with too few items.
-`execOpcode_signature_none`, `execOpcode_cltv` and `execOpcode_csv` give the unsupported results.
+`execOpcode_signature_none`, `execOpcode_cltv` and `execOpcode_csv` give the unsupported results without a checker.
 
 ## Numeric and hash opcodes
 
@@ -61,6 +62,17 @@ Stacks are written bottom first and top last, as in `ExecState`.
 - `checkMultisigStep_loopError`, `checkMultisigStep_dummy`, `checkMultisigStep_nullDummy`: a loop error comes first. Without `NULLDUMMY` any dummy is consumed. With it, a nonempty dummy gives `SIG_NULLDUMMY`.
 - `checkMultisigStep_matching`, `checkMultisigStep_matching_verify`, `checkMultisigStep_matching_pushOrder`: with total checker answers and no encoding error, the result is whether the signatures pair in order with a subsequence of the keys.
 - `evalInstruction_signature_skipped`: in a skipped branch a signature opcode only counts, and `OP_CHECKMULTISIG` adds no key count.
+
+## Lock-time opcodes
+
+- `execOpcode_nop2`, `execOpcode_nop3`: with its flag clear, each opcode is a NOP for every checker.
+- `execOpcode_cltv`, `execOpcode_csv`: with its flag set and no checker, each opcode is unsupported.
+- `execOpcode_cltv_underflow`, `execOpcode_cltv_decode`, `execOpcode_cltv_negative`: with a checker, the checks before the checker call, in Core's order.
+- `execOpcode_cltv_checked`: a nonnegative operand goes to `checkLockTime`, and the state is unchanged when it holds.
+- `execOpcode_csv_underflow`, `execOpcode_csv_decode`, `execOpcode_csv_negative`, `execOpcode_csv_checked`: the same for `OP_CHECKSEQUENCEVERIFY`.
+- `execOpcode_csv_disabled`: an operand with bit 31 set is a NOP for every checker.
+- `checkLockTimeStep_next`, `checkSequenceStep_next`: neither opcode changes the state when it succeeds.
+`DogeLib.Script.Proofs.Verify` states both opcodes over `transactionChecker`.
 
 These theorems are statements about the definitions. They do not say that the definitions match Core.
 -/
@@ -138,6 +150,20 @@ theorem checkMultisigStep_frame {c : SignatureChecker} {flags : UInt32} {s t : E
     | (rename_i hloop; exact absurd h (multisigLoop_multisigCheck_error hloop t))
     | skip
 
+/-- For every checker and state: if `OP_CHECKLOCKTIMEVERIFY` with its flag set succeeds, the state is unchanged. -/
+theorem checkLockTimeStep_next {c : SignatureChecker} {s t : ExecState} (h : checkLockTimeStep c s = .next t) :
+    t = s := by
+  unfold checkLockTimeStep at h
+  repeat' (split at h)
+  all_goals first | (cases h; done) | (injection h with h; exact h.symm)
+
+/-- For every checker and state: if `OP_CHECKSEQUENCEVERIFY` with its flag set succeeds, the state is unchanged. -/
+theorem checkSequenceStep_next {c : SignatureChecker} {s t : ExecState} (h : checkSequenceStep c s = .next t) :
+    t = s := by
+  unfold checkSequenceStep at h
+  repeat' (split at h)
+  all_goals first | (cases h; done) | (injection h with h; exact h.symm)
+
 /--
 For every checker, script, flag set, branch flag, state, opcode, pushed bytes and next cursor: if `execOpcode` succeeds, the result has the same cursor.
 Its opcode count is unchanged, except for `OP_CHECKMULTISIG` (`0xae`) and `OP_CHECKMULTISIGVERIFY` (`0xaf`), which can raise it to at most 201.
@@ -161,6 +187,8 @@ theorem execOpcode_frame {flags : UInt32} {fExec : Bool} {s t : ExecState} {op :
     | (refine (fun hf => ?_) (checkMultisigStep_frame h)
        obtain ⟨h1, h2, h3, h4, h5⟩ := hf
        exact ⟨h1, .inr ⟨by decide, h2, h3⟩, .inl h4, by simp [h5]⟩)
+    | (cases checkLockTimeStep_next h; simp)
+    | (cases checkSequenceStep_next h; simp)
     | skip
 
 /-- For all flag sets that agree on `DERSIG`, `LOW_S` and `STRICTENC`, `checkSignatureEncoding` agrees on every signature. -/
@@ -588,17 +616,112 @@ theorem execOpcode_nop3 {flags : UInt32} {fExec : Bool} {s : ExecState} {pushed 
     execOpcode checker script flags fExec s 0xb2 pushed next = .next s := by
   simp [execOpcode, h]
 
-/-- With `SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY`, `OP_CHECKLOCKTIMEVERIFY` is unsupported. -/
+/-- Without a checker and with `SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY`, `OP_CHECKLOCKTIMEVERIFY` is unsupported before it reads the stack. -/
 theorem execOpcode_cltv {flags : UInt32} {fExec : Bool} {s : ExecState} {pushed : List UInt8} {next : Nat}
     (h : hasFlag flags ScriptFlags.checkLockTimeVerify = true) :
-    execOpcode checker script flags fExec s 0xb1 pushed next = .unsupported .checkLockTimeVerify := by
+    execOpcode none script flags fExec s 0xb1 pushed next = .unsupported .checkLockTimeVerify := by
   simp [execOpcode, h]
 
-/-- With `SCRIPT_VERIFY_CHECKSEQUENCEVERIFY`, `OP_CHECKSEQUENCEVERIFY` is unsupported. -/
+/-- Without a checker and with `SCRIPT_VERIFY_CHECKSEQUENCEVERIFY`, `OP_CHECKSEQUENCEVERIFY` is unsupported before it reads the stack. -/
 theorem execOpcode_csv {flags : UInt32} {fExec : Bool} {s : ExecState} {pushed : List UInt8} {next : Nat}
     (h : hasFlag flags ScriptFlags.checkSequenceVerify = true) :
-    execOpcode checker script flags fExec s 0xb2 pushed next = .unsupported .checkSequenceVerify := by
+    execOpcode none script flags fExec s 0xb2 pushed next = .unsupported .checkSequenceVerify := by
   simp [execOpcode, h]
+
+/-! ## Opcode effects: lock times
+
+In this section `c` is any checker, and the flag of the opcode is set.
+-/
+
+/-- For every checker: `OP_CHECKLOCKTIMEVERIFY` on an empty stack gives `INVALID_STACK_OPERATION` (D3, lines 360 and 361). -/
+theorem execOpcode_cltv_underflow {c : SignatureChecker} {flags : UInt32} {fExec : Bool} {s : ExecState}
+    {pushed : List UInt8} {next : Nat} (hf : hasFlag flags ScriptFlags.checkLockTimeVerify = true)
+    (hs : s.stack = []) :
+    execOpcode (some c) script flags fExec s 0xb1 pushed next = .rejected .invalidStackOperation := by
+  simp [execOpcode, hf, checkLockTimeStep, hs]
+
+/-- For every checker: a top item that fails the five-byte decode gives `UNKNOWN_ERROR` (D3, line 377 and lines 1037 to 1040). -/
+theorem execOpcode_cltv_decode {c : SignatureChecker} {flags : UInt32} {fExec : Bool} {s : ExecState}
+    {pushed : List UInt8} {next : Nat} {rest : List (List UInt8)} {top : List UInt8} {e : ScriptNum.DecodeError}
+    (hf : hasFlag flags ScriptFlags.checkLockTimeVerify = true) (hs : s.stack = rest ++ [top])
+    (hd : ScriptNum.decode top false lockTimeNumSize = .error e) :
+    execOpcode (some c) script flags fExec s 0xb1 pushed next = .rejected .unknownError := by
+  simp [execOpcode, hf, checkLockTimeStep, hs, hd]
+
+/-- For every checker: a negative operand gives `NEGATIVE_LOCKTIME` (D3, lines 382 and 383). -/
+theorem execOpcode_cltv_negative {c : SignatureChecker} {flags : UInt32} {fExec : Bool} {s : ExecState}
+    {pushed : List UInt8} {next : Nat} {rest : List (List UInt8)} {top : List UInt8} {n : Int}
+    (hf : hasFlag flags ScriptFlags.checkLockTimeVerify = true) (hs : s.stack = rest ++ [top])
+    (hd : ScriptNum.decode top false lockTimeNumSize = .ok n) (hn : n < 0) :
+    execOpcode (some c) script flags fExec s 0xb1 pushed next = .rejected .negativeLocktime := by
+  simp [execOpcode, hf, checkLockTimeStep, hs, hd, hn]
+
+/--
+For every checker `c`: a nonnegative operand `n` goes to `c.checkLockTime n` (D3, lines 386 and 387).
+`true` leaves the state unchanged, `false` gives `UNSATISFIED_LOCKTIME`, and `none` gives `unsupported`.
+-/
+theorem execOpcode_cltv_checked {c : SignatureChecker} {flags : UInt32} {fExec : Bool} {s : ExecState}
+    {pushed : List UInt8} {next : Nat} {rest : List (List UInt8)} {top : List UInt8} {n : Int}
+    (hf : hasFlag flags ScriptFlags.checkLockTimeVerify = true) (hs : s.stack = rest ++ [top])
+    (hd : ScriptNum.decode top false lockTimeNumSize = .ok n) (hn : 0 ≤ n) :
+    execOpcode (some c) script flags fExec s 0xb1 pushed next =
+      match c.checkLockTime n with
+      | none => .unsupported .checkLockTimeVerify
+      | some true => .next s
+      | some false => .rejected .unsatisfiedLocktime := by
+  rcases hc : c.checkLockTime n with _ | _ | _ <;>
+    simp [execOpcode, hf, checkLockTimeStep, hs, hd, Int.not_lt.mpr hn, hc]
+
+/-- For every checker: `OP_CHECKSEQUENCEVERIFY` on an empty stack gives `INVALID_STACK_OPERATION` (D3, lines 402 and 403). -/
+theorem execOpcode_csv_underflow {c : SignatureChecker} {flags : UInt32} {fExec : Bool} {s : ExecState}
+    {pushed : List UInt8} {next : Nat} (hf : hasFlag flags ScriptFlags.checkSequenceVerify = true)
+    (hs : s.stack = []) :
+    execOpcode (some c) script flags fExec s 0xb2 pushed next = .rejected .invalidStackOperation := by
+  simp [execOpcode, hf, checkSequenceStep, hs]
+
+/-- For every checker: a top item that fails the five-byte decode gives `UNKNOWN_ERROR` (D3, line 408 and lines 1037 to 1040). -/
+theorem execOpcode_csv_decode {c : SignatureChecker} {flags : UInt32} {fExec : Bool} {s : ExecState}
+    {pushed : List UInt8} {next : Nat} {rest : List (List UInt8)} {top : List UInt8} {e : ScriptNum.DecodeError}
+    (hf : hasFlag flags ScriptFlags.checkSequenceVerify = true) (hs : s.stack = rest ++ [top])
+    (hd : ScriptNum.decode top false lockTimeNumSize = .error e) :
+    execOpcode (some c) script flags fExec s 0xb2 pushed next = .rejected .unknownError := by
+  simp [execOpcode, hf, checkSequenceStep, hs, hd]
+
+/-- For every checker: a negative operand gives `NEGATIVE_LOCKTIME` (D3, lines 413 and 414). -/
+theorem execOpcode_csv_negative {c : SignatureChecker} {flags : UInt32} {fExec : Bool} {s : ExecState}
+    {pushed : List UInt8} {next : Nat} {rest : List (List UInt8)} {top : List UInt8} {n : Int}
+    (hf : hasFlag flags ScriptFlags.checkSequenceVerify = true) (hs : s.stack = rest ++ [top])
+    (hd : ScriptNum.decode top false lockTimeNumSize = .ok n) (hn : n < 0) :
+    execOpcode (some c) script flags fExec s 0xb2 pushed next = .rejected .negativeLocktime := by
+  simp [execOpcode, hf, checkSequenceStep, hs, hd, hn]
+
+/--
+For every checker `c`: a nonnegative operand with `SEQUENCE_LOCKTIME_DISABLE_FLAG` (bit 31) set leaves the state unchanged, and the checker is not called (D3, lines 418 and 419).
+-/
+theorem execOpcode_csv_disabled {c : SignatureChecker} {flags : UInt32} {fExec : Bool} {s : ExecState}
+    {pushed : List UInt8} {next : Nat} {rest : List (List UInt8)} {top : List UInt8} {n : Int}
+    (hf : hasFlag flags ScriptFlags.checkSequenceVerify = true) (hs : s.stack = rest ++ [top])
+    (hd : ScriptNum.decode top false lockTimeNumSize = .ok n) (hn : 0 ≤ n)
+    (hb : n.toNat &&& sequenceLockTimeDisableFlag ≠ 0) :
+    execOpcode (some c) script flags fExec s 0xb2 pushed next = .next s := by
+  simp [execOpcode, hf, checkSequenceStep, hs, hd, Int.not_lt.mpr hn, hb]
+
+/--
+For every checker `c`: a nonnegative operand `n` with bit 31 clear goes to `c.checkSequence n` (D3, lines 422 and 423).
+`true` leaves the state unchanged, `false` gives `UNSATISFIED_LOCKTIME`, and `none` gives `unsupported`.
+-/
+theorem execOpcode_csv_checked {c : SignatureChecker} {flags : UInt32} {fExec : Bool} {s : ExecState}
+    {pushed : List UInt8} {next : Nat} {rest : List (List UInt8)} {top : List UInt8} {n : Int}
+    (hf : hasFlag flags ScriptFlags.checkSequenceVerify = true) (hs : s.stack = rest ++ [top])
+    (hd : ScriptNum.decode top false lockTimeNumSize = .ok n) (hn : 0 ≤ n)
+    (hb : n.toNat &&& sequenceLockTimeDisableFlag = 0) :
+    execOpcode (some c) script flags fExec s 0xb2 pushed next =
+      match c.checkSequence n with
+      | none => .unsupported .checkSequenceVerify
+      | some true => .next s
+      | some false => .rejected .unsatisfiedLocktime := by
+  rcases hc : c.checkSequence n with _ | _ | _ <;>
+    simp [execOpcode, hf, checkSequenceStep, hs, hd, Int.not_lt.mpr hn, hb, hc]
 
 /-! ## Opcode effects: stack operations -/
 
@@ -1255,14 +1378,32 @@ theorem execOpcode_checkMultisig {c : SignatureChecker} {flags : UInt32} {fExec 
   rcases hop with hop | hop <;> subst hop <;> rfl
 
 /--
-For all checkers, scripts, flag sets, branch flags, states, opcodes outside `0xac` to `0xaf`, pushed bytes and next cursors:
+For all checkers, scripts, flag sets, branch flags, states, pushed bytes and next cursors, and every opcode outside `0xac` to `0xaf`, `0xb1` and `0xb2`:
 `execOpcode` gives the same result for any two checkers and any two scripts.
 So the result of every other opcode is that of stage 2, where the definition had neither parameter.
 -/
 theorem execOpcode_checker_congr {c₁ c₂ : Option SignatureChecker} {sc₁ sc₂ : List UInt8} {flags : UInt32}
     {fExec : Bool} {s : ExecState} {op : UInt8} {pushed : List UInt8} {next : Nat}
-    (hop : isSignatureOpcode op = false) :
+    (hop : readsChecker op = false) :
     execOpcode c₁ sc₁ flags fExec s op pushed next = execOpcode c₂ sc₂ flags fExec s op pushed next := by
+  have h : op ∉ [0xac, 0xad, 0xae, 0xaf, 0xb1, 0xb2] :=
+    allBytes (fun op => readsChecker op = false → op ∉ [0xac, 0xad, 0xae, 0xaf, 0xb1, 0xb2]) (by decide +kernel)
+      op hop
+  simp only [List.mem_cons, List.mem_nil_iff, or_false, not_or] at h
+  obtain ⟨h1, h2, h3, h4, h5, h6⟩ := h
+  unfold execOpcode
+  split <;> (try rfl)
+  split <;> (try rfl)
+  split <;> first | rfl | (exfalso; simp_all) | skip
+
+/--
+For all checkers, scripts, flag sets, branch flags, states, pushed bytes and next cursors, and every opcode outside `0xac` to `0xaf`:
+`execOpcode` gives the same result for any two scripts.
+-/
+theorem execOpcode_script_congr {sc₁ sc₂ : List UInt8} {flags : UInt32}
+    {fExec : Bool} {s : ExecState} {op : UInt8} {pushed : List UInt8} {next : Nat}
+    (hop : isSignatureOpcode op = false) :
+    execOpcode checker sc₁ flags fExec s op pushed next = execOpcode checker sc₂ flags fExec s op pushed next := by
   have h : op ∉ [0xac, 0xad, 0xae, 0xaf] :=
     allBytes (fun op => isSignatureOpcode op = false → op ∉ [0xac, 0xad, 0xae, 0xaf]) (by decide +kernel) op hop
   simp only [List.mem_cons, List.mem_nil_iff, or_false, not_or] at h

@@ -528,6 +528,33 @@ For `sighash.legacy` with plan `hash_bytes`, the double SHA-256 of the oracle's 
 This checks the preimage against Core's digest, not byte by byte against a preimage from Core.
 Outside the checked `harness-refused` category, a request error from either program fails the comparison.
 
+The comparison at DogeLib `c822efa7d07b6b582eb114721366f9efc744eba5` and Core `e0a1c157791544e818c901bd9341896965afbf9d` passed 372,486 stream requests.
+It reported zero failures, including 12 checked harness refusals, plus 18 adapter-limit cases and the 1,193 two-call compositions.
+The transaction inputs and targeted timelocks have these counts:
+
+| Stream | Requests | Agreement | Unsupported | Harness-refused | Disagreements |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Transaction inputs, accept, base | 91 | 91 | 0 | 0 | 0 |
+| Transaction inputs, unknown, base | 68 | 68 | 0 | 0 | 0 |
+| Transaction inputs, accept, transaction | 91 | 49 | 42 | 0 | 0 |
+| Transaction inputs, unknown, transaction | 68 | 50 | 18 | 0 | 0 |
+| Targeted CLTV, transaction, seed `20261107` | 932 | 932 | 0 | 0 | 0 |
+| Targeted CSV, transaction, seed `20261107` | 940 | 940 | 0 | 0 | 0 |
+| Refusal precedence | 7 | 7 | 0 | 0 | 0 |
+| Synthetic flag refusals | 8 | 0 | 0 | 8 | 0 |
+
+Agreement in the unknown streams means agreement with Core on the input, not agreement with a fixture expectation.
+All 91 independent Core acceptance requirements passed, including the 42 unavailable-verifier inputs.
+All 932 CLTV requests and 940 CSV requests reach their target opcode by construction.
+The outcome counts are CLTV: 151 accepted, 84 negative-locktime and 697 unsatisfied-locktime rejections.
+CSV gives 414 accepted, 60 negative-locktime and 466 unsatisfied-locktime rejections.
+
+At the same DogeLib revision, `lake test` runs all 159 eligible transaction inputs with `verifyLegacySpend` and an unavailable verifier.
+All 159 decode as complete base bytes, and the runner excludes the other 108 input records.
+For the 91 required acceptances, 49 accept and 42 reach the verifier, with no rejection.
+For the 68 null expectations, 7 accept, 43 reject and 18 reach the verifier.
+The null expectations supply counts only.
+
 The request stream is deterministic, and the random sets use a fixed seed:
 
 - The fixtures of `tests/oracle/`, except the request errors, `oracle.version` and the request that repeats a key.

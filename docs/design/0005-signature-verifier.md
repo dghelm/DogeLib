@@ -59,24 +59,37 @@ The record also cites these documents outside Core:
 | Reference | Document | Subject |
 | --- | --- | --- |
 | X1 | [SEC 1 v2](https://www.secg.org/sec1-v2.pdf) §2.2.1, §2.3.3–§2.3.6 and §4.1.4, [SEC 2 v2](https://www.secg.org/sec2-v2.pdf) §2.4.1 | The group law, point encodings, ECDSA verification and the curve parameters. |
-| X2 | EthLib `6a93711`, `EthLib/Cryptography/Secp256k1/` `Field.lean`, `Curve.lean`, `Encoding.lean` and `Ecdsa.lean`, with the proofs under `EthLib/Cryptography/Proofs/Secp256k1/` | A pure Lean ECDSA verifier under CC0 1.0. SOURCES.md E6 already cites `Encoding.lean`. |
+| X2 | EthLib `bb6dfe55`, `EthLib/Cryptography/Inverse.lean`, `EthLib/Cryptography/Jacobian.lean` and `EthLib/Cryptography/Secp256k1/` `Field.lean`, `Curve.lean`, `Errors.lean`, `Encoding.lean` and `Ecdsa.lean`, with the proofs under `EthLib/Cryptography/Proofs/` | A pure Lean ECDSA verifier under CC0 1.0, with an extended Euclidean inverse, Jacobian scalar multiplication and a joint multiplication `mulAdd`. |
+| X4 | EthLib `6a93711`, the same `Secp256k1` files | The earlier affine verifier with a Fermat inverse. SOURCES.md pins this commit, and E6 cites its `Encoding.lean`. It is the origin of the EthLib code that DogeLib has already adapted. |
 | X3 | `C2SP/wycheproof` at `d17cc89fa5c8f4f4d378b5385ebf75da5d0926c9`, `ecdsa_secp256k1_sha256_bitcoin_test.json` and `ecdsa_secp256k1_sha256_p1363_test.json` | Edge cases of ECDSA verification under the Apache License 2.0. EthLib pins 818 cases from them. |
 
-An implementation lane adds the identifiers it uses to [SOURCES.md](../../SOURCES.md), without a change to any pin.
+An implementation lane adds the identifiers it uses to [SOURCES.md](../../SOURCES.md).
+The plan cites EthLib at `bb6dfe5`, which pull request #91 proposes as the new EthLib pin.
+This record therefore depends on #91 (decision 1). It changes no pin itself.
 The findings come from source inspection, without a Core comparison run.
 
 ## 3. Contract for implementation
 
 The central operation is `coreVerifier : SignatureVerifier`, a total function.
 It takes the signature bytes without the hash-type byte, the public-key bytes and a `Hash256` digest.
-It always returns `some b`, where `b` is the result of `CPubKey(pubKey).Verify(digest, sig)` [C1].
-`transactionChecker tx nIn coreVerifier` then answers every request with `some`.
+It always returns `some b`, where `b` is the result of `CPubKey(pubKey).Verify(digest, sig)` [C1] on a 64-bit build of Core.
+`transactionChecker tx nIn coreVerifier` then answers every `checkSig` request with `some` when the script code is shorter than 2^64 bytes.
+Its `checkLockTime` and `checkSequence` answer with `some` when the input index `nIn` is below the input count, as before.
+
+The 64-bit qualification comes from `parseDerLax`, which fixes `sizeof(size_t)` at 8 bytes.
+After it skips leading zero bytes, Core's lax parser rejects a long-form length field of `sizeof(size_t)` bytes or more [C2, lines 72–78 and 108–114].
+On a 32-bit build, that test rejects every length of at least 2^24.
+
+On both builds, the next test rejects a length above the remaining input [C2, lines 88–90 and 126–128].
+So the two builds can differ only on a signature of at least 2^24 bytes.
+A Script push has at most 520 bytes, and the operation of stage 3 keeps the oracle limit of 1 MiB for an item. No request of this record reaches that case.
+The Core harness is a 64-bit build, and every agreement claim of this record is about a 64-bit build.
 
 The digest is a `Hash256` in the order in which Core stores a `uint256`.
 Core passes `hash.begin()` to `secp256k1_ecdsa_verify` [C1, line 185].
 The scalar `e` is therefore the big-endian value of the 32 digest bytes, reduced mod `n` [C10].
 For the fixed digest one of `SIGHASH_SINGLE` without a matching output, the bytes are `01` and 31 zero bytes (`Transaction.legacyOne`), so `e = 2^248`.
-A verifier that reads the digest in display order gives a different `e` for every digest.
+A verifier that reads the digest in display order can give a different `e`. It does so for the digest one, which then gives `e = 1`.
 
 The function follows Core's order, although only the Boolean result is part of the contract:
 
@@ -129,7 +142,8 @@ It returns true when the x-coordinate of `P`, reduced mod `n`, is R.
 The source tests `x = R` and, when `R + n < p`, `x = R + n` in Jacobian coordinates [C9, lines 244–272].
 Since `2n > p`, those two tests are the test of `x mod n = R`.
 
-EthLib's `Ecdsa.verify` computes the same test in affine coordinates [X2].
+EthLib's `Ecdsa.verify` computes the same test [X2].
+It forms `u1 G + u2 Q` with `mulAdd` in Jacobian coordinates, converts the result to affine coordinates and compares `x mod n` with `r`.
 It requires `0 < r < n`, `0 < s < n` and a key on the curve other than infinity, and it reduces `e` mod `n`.
 A lane must show that the two tests agree on every scalar and point that sections 4.1 and 4.2 produce.
 A theorem or an argument in SOUNDNESS.md can show it.
@@ -139,8 +153,8 @@ A theorem or an argument in SOUNDNESS.md can show it.
 ### 5.1 Option A: a Lean verifier adapted from EthLib
 
 The specification library contains the curve, the point parser of section 4.1 and `coreVerifier`.
-The code adapts EthLib's `Field`, `Curve` and `Ecdsa` definitions and parts of `Encoding` [X2].
-Those four files have 372 lines at `6a93711` and import only Lean core.
+The code adapts EthLib's `Inverse`, `Jacobian`, `Field`, `Curve` and `Ecdsa` definitions and parts of `Encoding` and `Errors` [X2].
+At `bb6dfe5`, those seven files have 674 lines and import only Lean core and one another.
 `coreVerifier` reuses `parseDerLax`, `isValidPubKey` and the order constants of `Script.SignatureEncoding`.
 
 The comparison then checks DogeLib's ECDSA against Core's libsecp256k1 on every request that reaches a signature check.
@@ -183,35 +197,34 @@ The oracle also needs a running Core-derived process to answer the `transaction`
 
 ### 5.5 Measured cost of option A
 
-A prototype compiled EthLib's definitions at `6a93711` unchanged and timed one verification.
+A prototype compiled EthLib's definitions unchanged and timed one verification.
 The machine was an AMD Ryzen AI MAX+ 395, with the process fixed to one core by `taskset`.
 The input was test 1 of the Wycheproof P1363 file, which EthLib's proofs pin [X3].
 Half the runs changed the digest, and every run gave the expected result.
 
 | Variant | Milliseconds per verification, three runs |
 | --- | --- |
-| EthLib's definitions unchanged: affine points, a Fermat inverse at each addition | 64.8, 64.5, 64.6 |
-| The same affine formulas with an extended Euclidean inverse | 20.2, 20.0, 20.4 |
-| Jacobian coordinates, one joint double-and-add pass and one inverse | 1.31, 1.33, 1.35 |
+| EthLib `bb6dfe5` unchanged: Jacobian points, a Euclidean inverse and `mulAdd` [X2] | 1.15, 1.15, 1.14 |
+| EthLib `6a93711` unchanged: affine points, a Fermat inverse at each addition [X4] | 64.8, 64.5, 64.6 |
+| `6a93711` with an extended Euclidean inverse, measurement only | 20.2, 20.0, 20.4 |
+| A Jacobian verifier written for the prototype, measurement only | 1.31, 1.33, 1.35 |
 
-Only the first variant is an adaptation of EthLib, and the other two are measurements only.
 The prototype did not time libsecp256k1.
 
 The number of verifications in the comparison of section 7 is not measured.
 An estimate is a few thousand: 104 requests of section 1, the signature requests of the mutation streams, and the inputs of section 8.
-At 65 milliseconds each, 2,000 verifications take about 130 seconds on one core.
-`lake test` runs fewer inputs than the comparison, so the unchanged definitions fit both budgets if the estimate holds.
-A seeded stream of hundreds of thousands of signature requests would need the Jacobian variant.
+At 1.15 milliseconds each, 2,000 verifications take about 2.3 seconds on one core.
+A seeded stream of 100,000 signature requests would take about 2 minutes, so speed does not limit the comparison.
 
 ### 5.6 Recommendation
 
-Choose option A, with EthLib's definitions unchanged for the curve arithmetic (decision 1).
+Choose option A, with EthLib's definitions at `bb6dfe5` unchanged for the curve arithmetic (decision 1).
 It is the only option in which the comparison tests ECDSA, and it needs no maintainer-only change.
 It also gives outside users a complete legacy spend check in Lean.
 Design record 0003, section 8, chose "a trusted backend for comparison". This record asks the maintainer to replace that choice (decision 1).
 
-Options B and C remain possible later as a fast path for large seeded streams.
-Either one then needs its own record, with the boundary of section 5.4.
+Option A at `bb6dfe5` is fast enough for the planned streams, so options B and C have no speed advantage that this scope needs.
+Either one would need its own record, with the boundary of section 5.4.
 
 ## 6. Placement and checks
 
@@ -219,10 +232,12 @@ Under option A, the code has this layout:
 
 | Module | Contents | Source |
 | --- | --- | --- |
-| `DogeLib.Cryptography.Secp256k1.Field` | `Fp`, `Fn`, powers, the inverse and the square root | EthLib `Field.lean`, unchanged except for the namespace |
-| `DogeLib.Cryptography.Secp256k1.Curve` | `Point`, the group law and scalar multiplication | EthLib `Curve.lean`, unchanged except for the namespace |
-| `DogeLib.Cryptography.Secp256k1.PubKey` | `parsePubKey`: the parser of section 4.1, with the hybrid prefixes | EthLib `Encoding.lean` for `decompress` and the coordinate reads, plus C6 |
-| `DogeLib.Cryptography.Secp256k1.Ecdsa` | `verify` on scalars, a point and a digest | EthLib `Ecdsa.lean`, unchanged except for the namespace and the digest type |
+| `DogeLib.Cryptography.Inverse` | The extended Euclidean inverse mod `m` | EthLib `Inverse.lean` at `bb6dfe5`, unchanged except for the namespace |
+| `DogeLib.Cryptography.Jacobian` | Jacobian points, doubling, addition, `mulBits` and `mulAdd` | EthLib `Jacobian.lean` at `bb6dfe5`, unchanged except for the namespace |
+| `DogeLib.Cryptography.Secp256k1.Field` | `Fp`, `Fn`, powers, the inverse and the square root | EthLib `Field.lean` at `bb6dfe5`, unchanged except for the namespace |
+| `DogeLib.Cryptography.Secp256k1.Curve` | `Point`, the group law, scalar multiplication and `mulAdd` | EthLib `Curve.lean` at `bb6dfe5`, unchanged except for the namespace |
+| `DogeLib.Cryptography.Secp256k1.PubKey` | `parsePubKey`: the parser of section 4.1, with the hybrid prefixes | EthLib `Encoding.lean` at `bb6dfe5` for `decompress` and the coordinate reads, plus C6 |
+| `DogeLib.Cryptography.Secp256k1.Ecdsa` | `verify` on scalars, a point and a digest | EthLib `Ecdsa.lean` at `bb6dfe5`, unchanged except for the namespace and the digest type |
 | `DogeLib.Script.CoreVerifier` | `coreVerifier`, the six steps of section 3 | C1, with `parseDerLax` and `isValidPubKey` |
 
 The curve modules belong to the `Cryptography` layer, which ARCHITECTURE.md already reserves for secp256k1.
@@ -237,7 +252,7 @@ The root DogeLib package has no Lake dependencies, so its `Proofs` library canno
 Decision 3 chooses between three placements for any adopted proof:
 
 - No adopted proof now. Section 9 lists the theorems that need no Mathlib.
-- The separate `Refinement` package, which already pins Mathlib `v4.35.0`, the version that EthLib uses.
+- The separate `Refinement` package, which already pins Mathlib `v4.35.0`, the version that EthLib requires at `bb6dfe5`.
 - A new optional package for proofs that need Mathlib.
 
 SOUNDNESS.md changes in the implementation lanes:
@@ -250,7 +265,7 @@ SOUNDNESS.md changes in the implementation lanes:
 
 ### Stage 1: the curve and ECDSA
 
-Adapt the EthLib modules of section 6, except the key parser.
+After #91 merges, adapt the EthLib modules of section 6 at `bb6dfe5`, except the key parser.
 Add the known answers of section 8 for `Ecdsa.verify` on points and scalars.
 Exit: the build and `lake test` pass, `check-decls` reports no finding, and the licence and source rows exist.
 
@@ -310,7 +325,10 @@ At least one known answer runs through `decide +kernel` in the `Proofs` library,
 A signed fixture needs a signer that is independent of DogeLib.
 The recommended signer is a small program built with the Core harness, which calls `CKey::Sign` at the pin [C12] (decision 5).
 It signs with fixed test keys and RFC 6979 nonces, so the signatures are deterministic and low-S.
-It runs only to make fixtures and is not part of the comparison loop.
+For a transaction fixture, it computes the digest with Core's `SignatureHash` at the pin, not with DogeLib's `legacySignatureHash`.
+EthLib's `Sign.lean` at `bb6dfe5` also signs, but it shares code with the verifier under test, so it is not an independent source.
+
+The signer runs only to make fixtures and is not part of the comparison loop.
 Each fixture records the keys, the unsigned transaction, the digest, the signatures, the harness revision and Core's verdict.
 The Lean verdict is never the source of an expected value.
 
@@ -324,8 +342,8 @@ The fixtures use compressed keys, `SIGHASH_ALL`, and the flags `P2SH`, `STRICTEN
 | A change to a committed field: an output value, an output script, the version, a previous outpoint | Rejection, because the digest changes |
 | The two multisig signatures in the reverse order | Rejection, because the ordered matching fails |
 | The branch selector of the other branch, with the same signatures | Rejection |
-| A lock time below 1,000,000, signed again | `UNSATISFIED_LOCKTIME` on the recovery branch |
-| A lock time below 1,000,000, not signed again | Rejection by the signature check |
+| A lock time below 1,000,000, signed again or not | `UNSATISFIED_LOCKTIME` on the recovery branch. CLTV runs before `OP_CHECKSIG`, so the signature is never checked. |
+| A different lock time of at least 1,000,000 and below 500,000,000, not signed again | Rejection by the signature check, because CLTV passes and the digest changes |
 | A final sequence on the recovery input, signed again | `UNSATISFIED_LOCKTIME` |
 | A high S for one signature | `SIG_HIGH_S` with `LOW_S`, and acceptance without it |
 | A hybrid key in place of a compressed key, with `STRICTENC` clear and the spend signed again | Core's result |
@@ -347,6 +365,7 @@ These targets need no Mathlib:
 These targets need Mathlib and depend on decision 3:
 
 - The group law and the prime field facts that EthLib proves.
+- That `mulAdd` is the sum of the two products on points of the curve, and that the Jacobian steps agree with the affine group law.
 - That a signature of SEC 1 signing verifies under `Ecdsa.verify`.
 - That `parsePubKey` returns the encoded point, and accepts exactly the encodings of section 4.1.
 
@@ -360,11 +379,11 @@ Each proposal awaits the maintainer's decision:
 
 | Number | Topic | Proposal | Status |
 | --- | --- | --- | --- |
-| 1 | Verifier backend | Option A: a pure Lean verifier adapted from EthLib, with the curve arithmetic unchanged. It replaces the choice of "a trusted backend for comparison" in design record 0003, section 8. Options B and C stay out of scope. | Proposed |
-| 2 | Speed | Keep EthLib's affine arithmetic, at about 65 milliseconds per verification. A faster executable path waits until a stream needs it, and then needs an equality theorem with the affine definition. | Proposed |
+| 1 | Verifier backend | Option A: a pure Lean verifier adapted from EthLib at `bb6dfe5`, with the curve arithmetic unchanged. It depends on #91, which moves the EthLib pin to that commit. It replaces the choice of "a trusted backend for comparison" in design record 0003, section 8. Options B and C stay out of scope. | Proposed |
+| 2 | Speed | Keep EthLib's arithmetic at `bb6dfe5`, at about 1.15 milliseconds per verification. No further fast path is in scope. | Proposed |
 | 3 | Proofs that need Mathlib | No adopted proof in the first lanes. The theorems of section 9 that need no Mathlib come first. A later lane proposes a package for the others. | Proposed |
-| 4 | Oracle surface | The `transaction` checker uses `coreVerifier`, and the reason `signature_verifier` is removed. Add `pubkey.verify`. Both settle in the stage 3 pull request under the [development policy](../oracle.md#format-stability) of `dogelib-oracle/1`. | Proposed |
-| 5 | Signer for fixtures | A program built with the pinned Core harness, which calls `CKey::Sign` with fixed test keys. DogeLib does not sign. | Proposed |
+| 4 | Oracle surface | Approve the scope: the `transaction` checker uses `coreVerifier`, the reason `signature_verifier` is removed, and an operation verifies one signature in both programs. The field names and result shapes of section 7 are routine details for the stage 3 review under the [development policy](../oracle.md#format-stability) of `dogelib-oracle/1`. | Proposed |
+| 5 | Signer for fixtures | An implementation proposal, not a reserved decision: a program built with the pinned Core harness, which calls `SignatureHash` and `CKey::Sign` with fixed test keys. DogeLib does not sign. | Proposed |
 | 6 | Rust work | Implementation refinement and Rust extraction stay outside this scope. | Proposed |
 
 ## 11. Remaining risks
@@ -375,9 +394,11 @@ Each proposal awaits the maintainer's decision:
 | The key parser rejects the hybrid encodings, as EthLib's decoder does. | A known answer for each prefix and parity, and the hybrid mutation of section 8. |
 | A high S fails because normalization is missing. | `coreVerifier_normalize`, and the Wycheproof bitcoin cases with a high S through the Core comparison. |
 | The overflow case of `parseDerLax` gives a nonzero scalar. | `parseDerLax` keeps that case, and a known answer checks it through `coreVerifier`. |
-| Verification is too slow for a large stream. | The budget of section 5.5. The faster paths of decision 2 need a separate decision. |
+| Verification is too slow for a large stream. | The budget of section 5.5, measured on `bb6dfe5`. |
+| #91 does not merge, or merges a different EthLib commit. | Stage 1 waits for the pin. A different commit needs a new timing and a review of section 6. |
+| A 32-bit build of Core parses a long length field differently. | Every agreement claim names a 64-bit build, and the harness is one. |
 | The fixtures and Core share a signer, so a signing fault is invisible. | The signer only makes inputs. The Lean verifier is an independent implementation that must accept them, and the mutations must fail in both. |
 | The harness build differs from a release build of Core. | The harness records its build options, as it does for the existing comparison. |
 
-There is no pin change, trust-policy exception, public API implementation or fixture-format change in this record.
+This record changes no pin and makes no trust-policy exception, public API implementation or fixture-format change. Its plan depends on the pin change of #91.
 Adoption of the scope does not establish any target theorem, and it does not authorize the merge of a later implementation.

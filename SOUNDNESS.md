@@ -148,7 +148,7 @@ Those belong to the definitions of the objects that are hashed.
 `decode_sound` identifies the consumed prefix as the returned header's encoding.
 `encode_length` establishes exactly 80 bytes, and `getHash_val` identifies their double SHA-256 digest.
 These claims cover the pure header even when its version sets the AuxPoW bit.
-Core's full `CBlockHeader` then carries additional data, which this codec does not parse (D41).
+Core's full `CBlockHeader` then carries an AuxPoW payload, which the full header codec of the next subsection reads (D41).
 No theorem establishes scrypt proof of work, AuxPoW validity or contextual header validity.
 
 `computeMerkleRoot_nil` and `computeMerkleRoot_singleton` cover empty and one-leaf lists.
@@ -175,6 +175,47 @@ The isolated fetched blocks have no authenticated chain connection.
 Finite comparisons and structural theorems do not establish collision resistance or transaction validity.
 The checked header codec, length, digest and Merkle structural proofs depend on `propext` and `Quot.sound`, by `#print axioms`.
 The declaration check inspects all declarations under the unchanged standard-axiom policy (C1, C2).
+
+### Full headers and the AuxPoW payload
+
+`BlockHeader.read` follows `CBlockHeader::SerializationOp` (D41) and the payload fields of `CMerkleTx` and `CAuxPow` (D54).
+The read mode of the embedded transaction is a parameter, `TxReadMode`.
+Design record 0004, section 4.6, gives the witness-allowed mode for Core's network, disk and raw RPC paths at the pin.
+That conclusion comes from source inspection, and a caller that picks the mode chooses which Core path it models.
+
+`read_auxpow_isSome` shows that a decoded header has a payload exactly when its flag is set, in each mode and for every input.
+So the two mismatch rejections of `CheckAuxPowProofOfWork` cannot follow from decoded bytes.
+`read_pure` and `encode_take` show that the first 80 bytes are the pure header in the 80-byte codec.
+
+The round trips `read_encode_allowWitness` and `read_encode_base` take three hypotheses.
+The payload is present exactly when the flag is set.
+Both branches and the transaction counts are within `MAX_SIZE`.
+In the witness-allowed mode, the transaction has witness data, or an input, or no output.
+`noInputsExample_not_roundTrip` shows a transaction outside that shape.
+
+Base mode returns the base projection, because its writer drops every witness stack.
+`baseProjection_eq` gives the projection as the header itself when no transaction has witness data.
+
+These round trips are canonicality over encoder output only.
+No theorem says that every accepted byte string is the encoding of its result.
+In the witness-allowed mode that claim is false.
+
+Core accepts an extended encoding whose stacks are all empty, and its writer then emits the base form (D4, lines 214 to 263).
+`extendedEmptyStacks_read` gives two such byte strings that read as one header with different lengths.
+The reader keeps this acceptance and does not reject the extended form.
+`extendedEmptyStacks_read_base` shows that base mode reads the same extended bytes as a different transaction, with 35 bytes left over.
+
+`read_extends` shows that bytes appended to an accepted input stay in the remainder, in each mode.
+With the round-trip hypotheses, `read_take_encode_allowWitness` and `read_take_encode_base` follow: the reader rejects every proper prefix of an encoding.
+No theorem says which error the reader reports.
+
+The mainnet fixtures come from a third-party explorer, Blockchair, on 2026-11-06.
+An independent Python parser checks each block against Core's checkpoint hash, the explorer's separately decoded fields and the block's own Merkle root (`tests/block/README.md`).
+The checkpoint fixes only the 80-byte pure header, because the block hash does not cover the payload (D41, D40).
+The pinned Core harness has not yet read these full headers. That check belongs to stage 5 of design record 0004.
+
+By `#print axioms`, the round trips and truncation theorems depend on `propext`, `Classical.choice` and `Quot.sound`, and the other codec theorems on `propext` and `Quot.sound`.
+The two concrete examples are checked by kernel reduction with `rfl`.
 
 ### RIPEMD-160 and Hash160
 
@@ -1653,6 +1694,10 @@ A chain-level application still assumes that the previous block passed Core's ch
 The header path supplies `GetConsensus(0)` to `CheckAuxPowProofOfWork` (D33, `src/validation.cpp` line 2933).
 That function passes the record to `CheckProofOfWork` (D6, `src/dogecoin.cpp` lines 107 and 118).
 Every record within a network has the same `powLimit` (D14, the record copies at lines 126-136, 282-300 and 425-432).
+
+The round trips of the full header codec assume a payload exactly when the flag is set, and counts within `MAX_SIZE`.
+The witness-allowed round trip also assumes a transaction shape.
+[Full headers and the AuxPoW payload](#full-headers-and-the-auxpow-payload) states them.
 
 The chain-level application also requires that the supplied hash is the correct scrypt digest.
 No theorem here establishes that digest computation, AuxPoW validity or full header validity.

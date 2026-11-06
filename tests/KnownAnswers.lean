@@ -2325,6 +2325,24 @@ def jsonFile (path : System.FilePath) : IO Lean.Json := do
   | .ok j => return j
   | .error e => throw (IO.userError e)
 
+/-- Whether `BlockHeader.read mode bs` returns exactly `h` and `rest`. -/
+def readsAs (mode : TxReadMode) (bs : List UInt8) (h : BlockHeader) (rest : List UInt8) : Bool :=
+  match BlockHeader.read mode bs with
+  | .ok (h', rest') => h' == h && rest' == rest
+  | .error _ => false
+
+/-- Whether `BlockHeader.read mode bs` fails with `e`. -/
+def readFails (mode : TxReadMode) (bs : List UInt8) (e : Transaction.WitnessReadError) : Bool :=
+  match BlockHeader.read mode bs with
+  | .ok _ => false
+  | .error e' => e' == e
+
+/-- Whether `BlockHeader.read mode bs` fails. -/
+def readRejects (mode : TxReadMode) (bs : List UInt8) : Bool :=
+  match BlockHeader.read mode bs with
+  | .ok _ => false
+  | .error _ => true
+
 /-- Check pure-header decoding, encoding, hash bytes, all truncated prefixes and an arbitrary suffix. -/
 def checkHeader (label : String) (raw : List UInt8) (expected : Hash256) : IO Nat := do
   let some (h, rest) := Codec.decode (α := PureBlockHeader) raw
@@ -2337,6 +2355,10 @@ def checkHeader (label : String) (raw : List UInt8) (expected : Hash256) : IO Na
   for n in [:80] do
     failures := failures + (← require s!"{label}: truncated at {n}"
       ((Codec.decode (α := PureBlockHeader) (raw.take n)).isNone))
+  if !h.isAuxpow then
+    for mode in [TxReadMode.allowWitness, .base] do
+      failures := failures + (← require s!"{label}: full header without payload, {repr mode}"
+        (readsAs mode (raw ++ [0x42, 0xff]) ⟨h, none⟩ [0x42, 0xff]))
   return failures
 
 /-- Check all 312 recorded mainnet headers against recorded links and the independent final digest. -/
@@ -2437,11 +2459,164 @@ def checkMerkleVectors : IO Nat := do
       (rebuilt == leaves))
   return failures
 
+/-- One recorded AuxPoW payload: the fields that the independent importer parsed and checked against Blockchair's decoded JSON. -/
+structure PayloadRecord where
+  txHex : List UInt8
+  txid : Hash256
+  hashBlock : List UInt8
+  merkleBranch : List (List UInt8)
+  index : Int
+  chainMerkleBranch : List (List UInt8)
+  chainIndex : Int
+  parentBlock : List UInt8
+
+/-- Parse the `payload` object of an AuxPoW header record. -/
+def parsePayload (j : Lean.Json) : Except String PayloadRecord := do
+  let hexField (k : String) : Except String (List UInt8) := do
+    return (← parseHex (← j.getObjValAs? String k)).toList
+  let hexList (k : String) : Except String (List (List UInt8)) := do
+    (← (← j.getObjVal? k).getArr?).toList.mapM fun e => do return (← parseHex (← e.getStr?)).toList
+  return {
+    txHex := ← hexField "txHex", txid := ← parseHash (← j.getObjValAs? String "txid"),
+    hashBlock := ← hexField "hashBlock", merkleBranch := ← hexList "merkleBranch",
+    index := ← (← j.getObjVal? "index").getInt?, chainMerkleBranch := ← hexList "chainMerkleBranch",
+    chainIndex := ← (← j.getObjVal? "chainIndex").getInt?, parentBlock := ← hexField "parentBlock" }
+
+/--
+Check the full mainnet headers of `tests/block/auxpow-headers.json` in both read modes.
+Each record is a whole raw block. The test checks the consumed length, the remainder and the payload fields.
+It also checks the re-encoding, the checkpoint hash, every proper prefix and the transaction list in the remainder.
+-/
+def checkAuxPowHeaders : IO Nat := do
+  let rows ← match (← jsonFile "tests/block/auxpow-headers.json").getArr? with
+    | .ok rows => pure rows
+    | .error e => throw (IO.userError e)
+  let mut failures ← require "six AuxPoW header fixtures" (rows.size == 6)
+  let mut prefixes := 0
+  for row in rows do
+    let parsed : Except String (Nat × Hash256 × Bool × Nat × Nat × List UInt8 × PayloadRecord) := do
+      let height ← (← row.getObjVal? "height").getNat?
+      let hash ← parseHash (← row.getObjValAs? String "blockHash")
+      let flag ← row.getObjValAs? Bool "auxpowFlag"
+      let len ← (← row.getObjVal? "headerLength").getNat?
+      let txCount ← (← row.getObjVal? "txCount").getNat?
+      let block := (← parseHex (← row.getObjValAs? String "block")).toList
+      let payload ← parsePayload (← row.getObjVal? "payload")
+      return (height, hash, flag, len, txCount, block, payload)
+    let (height, hash, flag, len, txCount, block, p) ← match parsed with
+      | .ok r => pure r
+      | .error e => throw (IO.userError e)
+    let label := s!"AuxPoW header {height}"
+    let header := block.take len
+    let remainder := block.drop len
+    for mode in [TxReadMode.allowWitness, .base] do
+      let ml := s!"{label}, {repr mode}"
+      match BlockHeader.read mode block with
+      | .error _ => failures := failures + (← require s!"{ml}: read" false)
+      | .ok (h, rest) =>
+        failures := failures + (← require s!"{ml}: remainder" (rest == remainder))
+        failures := failures + (← require s!"{ml}: checkpoint hash" (h.pure.getHash == hash))
+        failures := failures + (← require s!"{ml}: flag" (h.pure.isAuxpow == flag))
+        failures := failures + (← require s!"{ml}: re-encoding" (BlockHeader.encode mode h == header))
+        failures := failures + (← require s!"{ml}: complete read"
+          (match BlockHeader.decodeComplete mode header with
+           | .ok h' => h' == h
+           | .error _ => false))
+        match h.auxpow with
+        | none => failures := failures + (← require s!"{ml}: payload" false)
+        | some a =>
+          failures := failures + (← require s!"{ml}: transaction bytes"
+            (encodeTx .allowWitness a.tx == p.txHex))
+          failures := failures + (← require s!"{ml}: no witness data" (!a.tx.hasWitness))
+          failures := failures + (← require s!"{ml}: transaction ID" (a.tx.tx.txid == p.txid))
+          failures := failures + (← require s!"{ml}: hashBlock" (a.hashBlock.val == p.hashBlock))
+          failures := failures + (← require s!"{ml}: coinbase branch"
+            (a.merkleBranch.val.map (·.val) == p.merkleBranch))
+          failures := failures + (← require s!"{ml}: nIndex" (a.signedIndex.toInt == p.index))
+          failures := failures + (← require s!"{ml}: chain branch"
+            (a.chainMerkleBranch.val.map (·.val) == p.chainMerkleBranch))
+          failures := failures + (← require s!"{ml}: nChainIndex" (a.signedChainIndex.toInt == p.chainIndex))
+          failures := failures + (← require s!"{ml}: parent header" (Codec.encode a.parentBlock == p.parentBlock))
+        match CountedList.decodeBounded Transaction.Transaction.readBase rest with
+        | .ok (txs, []) =>
+          failures := failures + (← require s!"{ml}: transaction count" (txs.val.length == txCount))
+          failures := failures + (← require s!"{ml}: Merkle root"
+            (blockMerkleRoot txs.val == (⟨h.pure.hashMerkleRoot, false⟩ : MerkleResult)))
+        | _ => failures := failures + (← require s!"{ml}: transaction list" false)
+      for k in [:len] do
+        failures := failures + (← require s!"{ml}: truncated at {k}" (readRejects mode (header.take k)))
+      prefixes := prefixes + len
+  IO.println s!"AuxPoW headers: {rows.size} records, {prefixes} truncated prefixes across both modes"
+  return failures
+
+/-- A pure header with only the AuxPoW flag set: version `0x00000100`, every other field zero. -/
+def flaggedPure : List UInt8 := [0x00, 0x01, 0x00, 0x00] ++ List.replicate 76 0
+
+/-- A coinbase-shaped transaction in base form: one input with a zero outpoint, an empty script, sequence `0xffffffff`, no outputs. -/
+def oneInputTx : List UInt8 :=
+  [0x01, 0, 0, 0] ++ [0x01] ++ List.replicate 36 0 ++ [0x00, 0xff, 0xff, 0xff, 0xff] ++ [0x00] ++ [0, 0, 0, 0]
+
+/-- The same transaction in the extended form, flags `01`, with one empty witness stack. -/
+def oneInputTxExtended : List UInt8 :=
+  [0x01, 0, 0, 0] ++ [0x00, 0x01] ++ [0x01] ++ List.replicate 36 0 ++ [0x00, 0xff, 0xff, 0xff, 0xff] ++
+    [0x00] ++ [0x00] ++ [0, 0, 0, 0]
+
+/-- The payload fields after the transaction, all zero, with empty branches. -/
+def zeroTail : List UInt8 :=
+  List.replicate 32 0 ++ [0x00] ++ [0, 0, 0, 0] ++ [0x00] ++ [0, 0, 0, 0] ++ List.replicate 80 0
+
+/--
+Hand-written full headers, from Core's format (D41, D54, D4): the read mode of the embedded transaction, errors and truncation.
+The bytes are written here from the format, not produced by the encoder under test.
+-/
+def checkAuxPowCases : IO Nat := do
+  let base := flaggedPure ++ oneInputTx ++ zeroTail
+  let ext := flaggedPure ++ oneInputTxExtended ++ zeroTail
+  let mut failures := 0
+  -- Both encodings read as one header in the witness-allowed mode, with nothing left over.
+  match BlockHeader.read .allowWitness base, BlockHeader.read .allowWitness ext with
+  | .ok (h1, []), .ok (h2, []) =>
+    failures := failures + (← require "empty stacks: same header" (h1 == h2))
+    failures := failures + (← require "empty stacks: writer emits base form"
+      (BlockHeader.encode .allowWitness h2 == base))
+  | _, _ => failures := failures + (← require "empty stacks: both encodings read" false)
+  -- Base mode reads the extended form as a different transaction and leaves 35 bytes.
+  failures := failures + (← require "empty stacks: base mode"
+    (match BlockHeader.read .base ext with
+     | .ok (h, rest) => rest.length == 35 &&
+        h.auxpow.map (fun (a : AuxPow) => (a.tx.tx.inputs.val.length, a.tx.tx.outputs.val.length)) == some (0, 1)
+     | .error _ => false))
+  failures := failures + (← require "base form: base mode" (readsAs .base base
+    (match BlockHeader.read .allowWitness base with | .ok (h, _) => h | .error _ => ⟨⟨0, Hash256.zero, Hash256.zero, 0, 0, 0⟩, none⟩) []))
+  -- A flag set with only the pure header: the payload read is truncated.
+  for mode in [TxReadMode.allowWitness, .base] do
+    failures := failures + (← require s!"flag set, no payload, {repr mode}"
+      (readFails mode flaggedPure (.read .truncated)))
+  -- Flags 02 in the embedded transaction.
+  let flags2 := flaggedPure ++ ([0x01, 0, 0, 0, 0x00, 0x02] ++ [0x01] ++ List.replicate 36 0 ++
+    [0x00, 0xff, 0xff, 0xff, 0xff] ++ [0x00] ++ [0, 0, 0, 0]) ++ zeroTail
+  failures := failures + (← require "flags 02" (readFails .allowWitness flags2 .unknownOptionalData))
+  -- A coinbase branch count of MAX_SIZE + 1 (0x02000001), before any hash.
+  let tooLarge := flaggedPure ++ oneInputTx ++ List.replicate 32 0 ++ [0xfe, 0x01, 0x00, 0x00, 0x02]
+  for mode in [TxReadMode.allowWitness, .base] do
+    failures := failures + (← require s!"branch count above MAX_SIZE, {repr mode}"
+      (readFails mode tooLarge (.read .tooLarge)))
+  -- Every proper prefix of the hand-written headers.
+  for (label, bytes, mode) in [("base form", base, TxReadMode.allowWitness), ("base form", base, .base),
+      ("extended form", ext, .allowWitness)] do
+    for k in [:bytes.length] do
+      failures := failures + (← require s!"{label}, {repr mode}: truncated at {k}"
+        (readRejects mode (bytes.take k)))
+  IO.println s!"AuxPoW hand-written cases: {failures} failures"
+  return failures
+
 /-- Check genesis commitments, the AuxPoW bit predicate, and all block fixtures. -/
 def check : IO Nat := do
   let mut failures ← checkHeaders
   failures := failures + (← checkMainnet)
   failures := failures + (← checkMerkleVectors)
+  failures := failures + (← checkAuxPowHeaders)
+  failures := failures + (← checkAuxPowCases)
   let parsed : Except String (PureBlockHeader × Transaction.Transaction × Hash256) := do
     let raw := (← parseHex KnownAnswers.Codec.headerHex).toList
     let some (h, []) := Codec.decode (α := PureBlockHeader) raw | throw "genesis header"

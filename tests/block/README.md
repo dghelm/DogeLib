@@ -1,8 +1,8 @@
 # Block known answers
 
-`lake test` checks pure headers, full headers with the AuxPoW payload, transaction Merkle roots and mutation flags.
+`lake test` checks pure headers, full headers with the AuxPoW payload, the AuxPoW check, transaction Merkle roots and mutation flags.
 The test never fetches data or overwrites expectations.
-`SHA256SUMS` pins the four fixture files.
+`SHA256SUMS` pins the five fixture files.
 
 ## Mainnet blocks
 
@@ -98,6 +98,75 @@ It checks the consumed length, the remainder, the checkpoint hash, the flag, the
 It also checks the payload fields, and the transaction list and Merkle root of the remainder.
 It checks that the reader rejects every proper prefix of each full header, 7222 prefixes in all.
 It also reads the 315 flag-clear pure headers above as full headers without a payload, in both modes.
+
+## AuxPoW check
+
+`check-auxpow.json` holds 42 records for `AuxPow.check`, the specification of `CAuxPow::check` (D55).
+Each record has the serialized payload, the block hash in internal byte order, the chain ID, `fStrictChainId`, the expected Boolean and the expected error line.
+`import_check_auxpow.py` wrote the file with Python `hashlib` and its own writers of Core's stream format, without DogeLib:
+
+```text
+python3 -I tests/block/import_check_auxpow.py tests/block/check-auxpow.json
+```
+
+The script is deterministic, so running it again must reproduce the file byte for byte.
+
+### The `check_auxpow` cases
+
+26 records transcribe the deterministic test `check_auxpow` of `src/test/auxpow_tests.cpp` at Core commit `e0a1c157791544e818c901bd9341896965afbf9d`, lines 186 to 323 (D56).
+The script follows `CAuxpowBuilder` and the test body statement by statement.
+It writes `CScript` pushes as `push_int64` and `CScriptNum::serialize` do, and `COINBASE_FLAGS` is empty, because at the pin only `miner.cpp` and RPC read it.
+It computes the parent Merkle root and branch as `BlockMerkleRoot` and `BlockMerkleBranch` do, and `tamperWith` as a little-endian increment.
+It copies `getExpectedIndex` and `CheckMerkleBranch` from D55, because the test calls them to build its inputs.
+The arguments are those of the test: block hash 12345, chain ID `0x62`, and `fStrictChainId` true, from the mainnet record that `GetConsensus(371337)` returns (D14 lines 120 to 121).
+
+Each expected Boolean is the `BOOST_CHECK` at the recorded line.
+These details of the test matter:
+
+- `scr << 5` appends `OP_5` to `scr` itself (line 224).
+- The cases at lines 219 and 220 still use the coinbase without inputs from line 213.
+  So Core rejects them at line 106, before it reads the hash or chain ID that they change.
+- `get(tx)` always takes the Merkle branch of position 0, so the case at line 231 pairs the second transaction with the first one's branch.
+- The case at line 248 writes the size word `1 << 31`, which overflows a signed `int`. The script writes `00 00 00 80`, GCC's result. Core rejects the case at line 91, before it reads that word.
+
+These bytes are a transcription, not bytes that Core wrote.
+A transcription mistake changes the bytes but not the expected Boolean, which comes from the `BOOST_CHECK`.
+For an accepted case, such a mistake would very likely make the test fail.
+For a rejected case, wrong bytes can still be rejected, so the Boolean alone would not detect the mistake.
+The expected error line narrows that gap, but it comes from the same reading as the transcription.
+Stage 5 of design record 0004 has the Core harness build these cases with Core's own classes and compare the bytes.
+
+### Boundary cases
+
+16 records test the boundaries that design record 0004, stage 3, lists.
+Each has one coinbase transaction, so its coinbase branch is empty, and the block hash `00 01 … 1f`, so its chain roots are not byte palindromes.
+They cover these inputs:
+
+- branch lengths 30 and 31
+- root offsets 20 and 21 without a marker
+- a second marker, and the root before the marker
+- the root in internal byte order
+- 7 and 8 bytes after the root
+- `nChainIndex` −1, −2, out of range and in another slot
+- a parent on our chain ID, with `fStrictChainId` false and true
+- chain ID −1
+
+The script builds both their bytes and their expected results from its reading of D55, so a misreading can affect both.
+The note of each record names the source line.
+
+### Expected error lines
+
+`error_line` names the line of `src/auxpow.cpp` whose `return error` the case reaches first, or `null` when the case is accepted.
+It comes from reading the construction and `CAuxPow::check`, not from running any implementation.
+`lake test` compares it with the line of the Lean diagnostic, so the test pins the Lean error order.
+Core reports only a Boolean, so that comparison is not evidence from Core.
+
+### Mainnet headers
+
+`lake test` also runs `AuxPow.check` on the six mainnet headers of `auxpow-headers.json`.
+It passes each header's own block hash and chain ID, and `fStrictChainId` true.
+All six chain IDs are `0x62`, and all six payloads are accepted.
+These results are Lean evidence only. The Core harness check of these headers belongs to stage 5.
 
 ## Hand-written AuxPoW cases
 

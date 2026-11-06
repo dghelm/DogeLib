@@ -1,6 +1,7 @@
 module
 
 public import DogeLib.Block.Proofs.AuxPow
+public import DogeLib.Block.Proofs.AuxPowCheck
 public import DogeLib.Block.Proofs.Header
 public import DogeLib.Block.Proofs.Merkle
 

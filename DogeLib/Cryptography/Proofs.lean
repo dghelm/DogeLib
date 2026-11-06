@@ -8,6 +8,7 @@ public import DogeLib.Cryptography.Proofs.Hash.Sha1
 public import DogeLib.Cryptography.Proofs.Hash.Sha256
 public import DogeLib.Cryptography.Proofs.Hash.Sha256d
 public import DogeLib.Cryptography.Proofs.Secp256k1.Ecdsa
+public import DogeLib.Cryptography.Proofs.Secp256k1.PubKey
 
 /-!
 # `DogeLib.Cryptography.Proofs`

@@ -1,5 +1,6 @@
 module
 
+public import DogeLib.Script.Proofs.CoreVerifier
 public import DogeLib.Script.Proofs.Eval
 public import DogeLib.Script.Proofs.Instruction
 public import DogeLib.Script.Proofs.MultisigRecovery

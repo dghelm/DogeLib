@@ -3213,15 +3213,15 @@ Runs `evalScript`, one `EvalScript` call, through the compiled code.
 Each record of `tests/script/corpus/script_tests.jsonl` is a `VerifyScript` call (SOURCES.md, D45 and D46), not one `EvalScript` call.
 This test composes two calls of `evalScript` as `VerifyScript` does without its P2SH branch (D3, lines 1409 to 1435).
 It runs `scriptSig` on an empty stack, and then `scriptPubKey` on the resulting main stack.
-Both calls use `transactionChecker` over the record's spending transaction and input index, with a verifier that is always unavailable.
-So a record whose verdict needs an elliptic-curve check is unsupported, and every record that fails before such a check is compared.
+Both calls use `transactionChecker` over the record's spending transaction and input index, with `coreVerifier`.
+So every record whose verdict needs an elliptic-curve check is compared, and the count of `signature verifier` results must be zero.
 An empty final stack or a false top item gives `EVAL_FALSE`.
 The composition is test code. DogeLib does not specify `VerifyScript` yet.
 
 Three cases give an unsupported result instead of a comparison:
 
 - A nonempty witness stack, which design record 0003 reports as unsupported.
-- An unsupported result of either call. A signature check that reaches the verifier counts as `signature verifier`.
+- An unsupported result of either call. With `coreVerifier`, a signature opcode never gives one.
 - Both calls succeed with a true top item, the P2SH flag is set and `scriptPubKey` is the exact P2SH template (D48, `CScript::IsPayToScriptHash`, lines 204 to 211). Core's verdict then depends on the P2SH branch.
 
 The flags are the record's `effective_flags_mask`.
@@ -3332,7 +3332,7 @@ def checkCorpus : IO Nat := do
     let got :=
       if r.witness then Outcome.unsupported "witness"
       else
-        let checker := transactionChecker r.spendTx r.inputIndex.toUInt32 fun _ _ _ => none
+        let checker := transactionChecker r.spendTx r.inputIndex.toUInt32 coreVerifier
         outcomeOf (verifyScript checker r.flags r.scriptSig r.scriptPubKey)
     let p2sh := !r.witness && hasFlag r.flags ScriptFlags.p2sh && isPayToScriptHash r.scriptPubKey
     let lock := !r.witness && unsupportedFlagBits r.flags == 0 &&
@@ -3359,6 +3359,9 @@ def checkCorpus : IO Nat := do
         failures := failures + 1
   if agree == 0 then
     IO.eprintln "FAIL script corpus: no record compared"
+    failures := failures + 1
+  if unsupported.any fun (k, n) => k == "signature verifier" && n != 0 then
+    IO.eprintln "FAIL script corpus: a record reaches an unavailable verifier"
     failures := failures + 1
   let total := unsupported.foldl (fun acc (_, n) => acc + n) 0
   let detail := ", ".intercalate (unsupported.map fun (k, n) => s!"{k} {n}")
@@ -4614,7 +4617,8 @@ end KnownAnswers.MultisigRecovery
 /-!
 ## Transaction spend corpus
 
-Run the inside-milestone inputs of `tx_spends.jsonl` through `verifyLegacySpend` with an unavailable verifier.
+Run the inside-milestone inputs of `tx_spends.jsonl` through `verifyLegacySpend` with `coreVerifier`.
+Every eligible input must give a verdict: an unsupported result fails the test.
 D28 and D29 supply the transactions, and D30 supplies the per-input acceptance requirement for `tx_valid`.
 An invalid transaction supplies no individual Script expectation.
 The witness-allowed prefix reader follows D30, while a separate complete base decode checks the oracle input domain.
@@ -4694,7 +4698,7 @@ def check : IO Nat := do
       if hn : tx.inputs.val.length < 2 ^ 32 then
         if ho : tx.outputs.val.length < 2 ^ 32 then
           let ctx : InputContext := ⟨tx, r.inputIndex, hi, hn, ho⟩
-          let got := verifyLegacySpend ctx r.prevScript r.flags fun _ _ _ => none
+          let got := verifyLegacySpend ctx r.prevScript r.flags coreVerifier
           match got with
           | .accepted =>
             if r.accept then accepted := accepted + 1 else unknownAccepted := unknownAccepted + 1
@@ -4712,12 +4716,13 @@ def check : IO Nat := do
       else throw (IO.userError "input count exceeds context bound")
     else throw (IO.userError "spend index outside transaction")
   let unknown := unknownAccepted + unknownRejected + unknownVerifier
-  unless lines.length == 267 && excluded == 108 && baseDecoded == 159 && required == 91 && unknown == 68 do
+  unless lines.length == 267 && excluded == 108 && baseDecoded == 159 && required == 91 && unknown == 68 &&
+      verifier == 0 && unknownVerifier == 0 do
     IO.eprintln "FAIL transaction spend corpus counts"
     failures := failures + 1
   IO.println s!"transaction spends: {lines.length} records, {excluded} excluded, {baseDecoded} complete base decodes, {failures} failures"
-  IO.println s!"transaction spends required accept: {required} inputs, {accepted} accepted, {verifier} reach unavailable verifier"
-  IO.println s!"transaction spends unknown expectation: {unknown} inputs, {unknownAccepted} accepted, {unknownRejected} rejected, {unknownVerifier} reach unavailable verifier (no agreement claim)"
+  IO.println s!"transaction spends required accept: {required} inputs, {accepted} accepted, {verifier} unsupported at a signature opcode"
+  IO.println s!"transaction spends unknown expectation: {unknown} inputs, {unknownAccepted} accepted, {unknownRejected} rejected, {unknownVerifier} unsupported at a signature opcode (no agreement claim)"
   return failures
 
 end KnownAnswers.TxSpends
@@ -4858,6 +4863,179 @@ def check : IO Nat := do
 
 end KnownAnswers.Secp256k1
 
+/-!
+## Core's signature verifier
+
+### Public-key parsing
+
+libsecp256k1's own test of `secp256k1_ec_pubkey_parse` at the compatibility pin supplies the points and the expectations (SOURCES.md, D57).
+`run_ec_pubkey_parse_test` lists 12 valid points, 4 points with a valid `x` only and 7 invalid points.
+`ec_pubkey_parse_pointtest` tries each one with every first byte from 0 to 255 and every length from 3 to 65.
+Its formulas `xpass` and `ypass` give the expectation, and this test copies them.
+No expectation comes from DogeLib.
+
+The 23 points are copied from libsecp256k1 as Dogecoin Core bundles it at `e0a1c157791544e818c901bd9341896965afbf9d`, under the MIT licence in `LICENSES/libsecp256k1-MIT.txt`.
+When a key must parse, the test checks the `x` of the point and, for a compressed key, the parity of `y`.
+When `ypass` holds, it also checks `y`, as the upstream test does when it serializes the point again.
+
+The points cover every row of design record 0005, section 4.1, and each failure: `x ≥ p`, `y ≥ p`, no square root, the wrong hybrid parity and a point off the curve.
+
+### `coreVerifier` hand cases
+
+- The digest one: `tx_valid.json` (D30) requires the acceptance of input 1 of the `SIGHASH_SINGLE` bug transaction, whose only check signs the fixed digest `01` followed by 31 zero bytes.
+  The test runs its signature and key through `coreVerifier` with `Transaction.legacyOne`, and expects `true`.
+  With the digest bytes reversed, `e` is 1 instead of `2^248`, and the test expects `false`.
+- A high S: the same signature with S replaced by `n − S`, encoded again in DER.
+  Core normalizes S before it verifies (D50, line 184), so the test expects `true`.
+- Overflow: the same signature with R replaced by `n`, and with S replaced by a 33-byte value.
+  The lax parser stores zero for both scalars (D50, lines 132 to 164), and `secp256k1_ecdsa_sig_verify` rejects a zero R, so the test expects `false`.
+- Steps 1 to 4 of `CPubKey::Verify`: each gives `false`. The cases are an invalid key length, a key off the curve, the empty signature and a signature that the lax parser rejects.
+-/
+
+namespace KnownAnswers.CoreVerifier
+
+open DogeLib DogeLib.Script DogeLib.Cryptography.Secp256k1
+open KnownAnswers.Sha256Cavp (parseHex)
+
+/-- Hex to a byte list. Malformed hex gives the empty list, which the length check or the expected result then rejects. -/
+def hex (s : String) : List UInt8 :=
+  match parseHex s with
+  | .ok b => b.toList
+  | .error _ => []
+
+/-- The 64-byte `x ‖ y` inputs of `run_ec_pubkey_parse_test` (D57, lines 5231 to 5398), with `xvalid` and `yvalid`. -/
+def parsePoints : List (String × Bool × Bool) :=
+  -- `valid`: lines 5231 to 5316.
+  [ "0000000000000000000000000000425200000000000000000000000000000000000064efa17b7761e1e42706989fb483b8d2d49bf78fae9803f099b834edeb00",
+    "7ae96a2b657c07106e64479eac3434e99cf0497512f58995c1396c28719501ee4218f20ae6c646b363db68605822fb14264ca8d2587fdd6fbc750d587e76a7ee",
+    "fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2c0e994b14ea72f8c3eb95c71ef692575e775058332d7e52d0995cf8038871b67d",
+    "fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2cf166b4eb158d073c146a38e1096da8a188afa7ccd281ad2f66a307fb778e45b2",
+    "00000000000000000000000000000000000000000000000000000000000000014218f20ae6c646b363db68605822fb14264ca8d2587fdd6fbc750d587e76a7ee",
+    "0000000000000000000000000000000000000000000000000000000000000001bde70df51939b94c9c24979fa7dd04ebd9b3572da7802290438af2a681895441",
+    "1fe1e5ef3fceb5c135ab7741333ce5a6e80d68167653f6b2b24bcbcfaaaff507fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2e",
+    "cbb0deab125754f1fdb2038b0434ed9cb3fb53ab735391129994a535d925f673fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2e",
+    "146d3b65add9f54ccca28533c88e2cbc63f7443e1658783ab41f8ef97c2a10b5fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2e",
+    "1fe1e5ef3fceb5c135ab7741333ce5a6e80d68167653f6b2b24bcbcfaaaff5070000000000000000000000000000000000000000000000000000000000000001",
+    "cbb0deab125754f1fdb2038b0434ed9cb3fb53ab735391129994a535d925f6730000000000000000000000000000000000000000000000000000000000000001",
+    "146d3b65add9f54ccca28533c88e2cbc63f7443e1658783ab41f8ef97c2a10b50000000000000000000000000000000000000000000000000000000000000001"
+  ].map (·, true, true) ++
+  -- `onlyxvalid`: lines 5317 to 5347.
+  [ "1fe1e5ef3fceb5c135ab7741333ce5a6e80d68167653f6b2b24bcbcfaaaff507fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc30",
+    "cbb0deab125754f1fdb2038b0434ed9cb3fb53ab735391129994a535d925f673fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc30",
+    "146d3b65add9f54ccca28533c88e2cbc63f7443e1658783ab41f8ef97c2a10b5fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc30",
+    "00000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000003"
+  ].map (·, true, false) ++
+  -- `invalid`: lines 5348 to 5398.
+  [ "0a2d2ba93507f1df233770c2a797962cc61f6d15da14ecd47d8d27ae1cd5f8530000000000000000000000000000000000000000000000000000000000000001",
+    "fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc304218f20ae6c646b363db68605822fb14264ca8d2587fdd6fbc750d587e76a7ee",
+    "fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc30bde70df51939b94c9c24979fa7dd04ebd9b3572da7802290438af2a681895441",
+    "fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2ef484145cb0149b825dff412fa052a83fcb72db61d56f3770ce066b7349a2aa28",
+    "fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2e0b7beba34feb647da200bed05fad57c0348d249e2a90c88f31f9948bb65d5207",
+    "00000000000000000000000000000000000000000000000000000000000000008f537eefdfc1606a0727cd69b4a7333d38ed44e3932a7179eecb4b6fba9360dc",
+    "000000000000000000000000000000000000000000000000000000000000000070ac8110203e9f95f8d832964b58ccc2c712bb1c6cd58e861134b48f456c9b53"
+  ].map (·, false, false)
+
+/--
+`ec_pubkey_parse_pointtest` (D57, lines 5154 to 5225) for one input.
+Returns the number of failures, and the numbers of keys that parsed by `xpass` and by `ypass`.
+-/
+def pointTest (input : List UInt8) (xvalid yvalid : Bool) : Nat × Nat × Nat := Id.run do
+  let mut failures := 0
+  let mut xCount := 0
+  let mut yCount := 0
+  let x := ofBytesBE (input.take 32)
+  let y := ofBytesBE (input.drop 32)
+  let ysign := (input.getD 63 0 &&& 1).toNat + 2
+  for len in [3:66] do
+    for i in [0:256] do
+      let key := (i.toUInt8) :: input.take (len - 1)
+      let xpass := xvalid && len == 33 && (i &&& 254) == 2
+      let ypass := xvalid && yvalid && (i &&& 4) == (if len == 65 then 4 else 0) &&
+        (i == 4 || (i &&& 251) == ysign) && (len == 33 || len == 65)
+      match parsePubKey key with
+      | some (.affine px py) =>
+        let ok := (xpass || ypass) && px.val == x &&
+          (len != 33 || (py.val % 2 == 1) == (i == 3)) &&
+          (!ypass || (py.val % 2) + 2 == ysign && py.val == y)
+        if ok then
+          if xpass then xCount := xCount + 1
+          if ypass then yCount := yCount + 1
+        else failures := failures + 1
+      | some .infinity => failures := failures + 1
+      | none => if xpass || ypass then failures := failures + 1
+  return (failures, xCount, yCount)
+
+/-- The DER encoding of a nonnegative integer, with a zero byte before a set top bit. -/
+def derInt (v : Nat) : List UInt8 :=
+  let rec bytes (fuel v : Nat) (acc : List UInt8) : List UInt8 :=
+    match fuel with
+    | 0 => acc
+    | fuel + 1 => if v = 0 then acc else bytes fuel (v / 256) ((v % 256).toUInt8 :: acc)
+  let b := bytes 64 v []
+  let b := if b.isEmpty then [0] else b
+  let b := if b.headD 0 &&& 0x80 != 0 then 0 :: b else b
+  0x02 :: (b.length.toUInt8) :: b
+
+/-- A DER signature of two integer encodings. -/
+def derSig (r s : List UInt8) : List UInt8 := 0x30 :: (r.length + s.length).toUInt8 :: (r ++ s)
+
+/-- Input 1 of the `SIGHASH_SINGLE` bug transaction of `tx_valid.json` (D30), lines 53 to 56: R, S and the key. -/
+def oneR : Nat := 0xc9cdd08798a28af9d1baf44a6c77bcc7e279f47dc487c8c899911bc48feaffcc
+def oneS : Nat := 0x503c5c50ae3998a733263c5c0f7061b483e2b56c4c41b456e7d2f5a78a74c077
+def oneKey : List UInt8 := hex "02d5c25adb51b61339d2b05315791e21bbe80ea470a49db0135720983c905aace0"
+/-- The signature bytes of that input, without the hash-type byte `03`. -/
+def oneSig : List UInt8 :=
+  hex "3045022100c9cdd08798a28af9d1baf44a6c77bcc7e279f47dc487c8c899911bc48feaffcc0220503c5c50ae3998a733263c5c0f7061b483e2b56c4c41b456e7d2f5a78a74c077"
+
+/-- Runs the parse test and the hand cases. Returns the number of failures. -/
+def check : IO Nat := do
+  let mut failures := 0
+  let mut xTotal := 0
+  let mut yTotal := 0
+  for (h, xvalid, yvalid) in parsePoints do
+    let input := hex h
+    unless input.length == 64 do throw (IO.userError "point length")
+    let (f, xs, ys) := pointTest input xvalid yvalid
+    if f != 0 then IO.eprintln s!"FAIL ec_pubkey_parse_pointtest {h}: {f} failures"
+    failures := failures + f
+    xTotal := xTotal + xs
+    yTotal := yTotal + ys
+  -- `xpass`: each of the 16 points with a valid `x` parses with 33 bytes and the first byte `02` or `03`.
+  -- `ypass`: each of the 12 valid points parses with 33 bytes and its parity byte, with `04`, and with its hybrid byte.
+  unless parsePoints.length == 23 && xTotal == 32 && yTotal == 36 do
+    IO.eprintln s!"FAIL ec_pubkey_parse_pointtest counts: {xTotal} xpass, {yTotal} ypass"
+    failures := failures + 1
+  let reversed : Hash256 := ⟨Transaction.legacyOne.val.reverse, by simp [Transaction.legacyOne]⟩
+  let n := secp256k1Order
+  let cases : List (String × List UInt8 × List UInt8 × Hash256 × Bool) := [
+    ("digest one", oneSig, oneKey, Transaction.legacyOne, true),
+    ("digest one reversed", oneSig, oneKey, reversed, false),
+    ("re-encoded signature", derSig (derInt oneR) (derInt oneS), oneKey, Transaction.legacyOne, true),
+    ("high S", derSig (derInt oneR) (derInt (n - oneS)), oneKey, Transaction.legacyOne, true),
+    ("high S, digest reversed", derSig (derInt oneR) (derInt (n - oneS)), oneKey, reversed, false),
+    ("R overflow", derSig (derInt n) (derInt oneS), oneKey, Transaction.legacyOne, false),
+    ("S of 33 bytes", derSig (derInt oneR) (0x02 :: 33 :: 0x01 :: List.replicate 32 0), oneKey,
+      Transaction.legacyOne, false),
+    ("invalid key length", oneSig, oneKey.dropLast, Transaction.legacyOne, false),
+    ("key off the curve", oneSig, 0x04 :: hex (parsePoints[15]!.1), Transaction.legacyOne, false),
+    ("empty signature", [], oneKey, Transaction.legacyOne, false),
+    ("lax parser rejects", [0x31] ++ oneSig.drop 1, oneKey, Transaction.legacyOne, false)
+  ]
+  for (label, sig, key, digest, expected) in cases do
+    let got := coreVerifier sig key digest
+    unless got == some expected do
+      IO.eprintln s!"FAIL coreVerifier {label}: got {got}"
+      failures := failures + 1
+  -- The re-encoded signature is the corpus signature, so the hand encodings start from Core's bytes.
+  unless derSig (derInt oneR) (derInt oneS) == oneSig do
+    IO.eprintln "FAIL coreVerifier: DER re-encoding differs from the corpus signature"
+    failures := failures + 1
+  IO.println s!"public-key parse test: {parsePoints.length} points, 256 first bytes, lengths 3 to 65, {xTotal} xpass and {yTotal} ypass parses, {failures} failures"
+  IO.println s!"coreVerifier: {cases.length} hand cases"
+  return failures
+
+end KnownAnswers.CoreVerifier
+
 
 namespace KnownAnswers.Pbkdf2
 
@@ -4919,6 +5097,7 @@ def main : IO UInt32 := do
   let pbkdf2 ← KnownAnswers.Pbkdf2.check
   let hmac ← KnownAnswers.Hmac.check
   let secp256k1 ← KnownAnswers.Secp256k1.check
+  let coreVerifier ← KnownAnswers.CoreVerifier.check
   let sha1 ← KnownAnswers.Sha1.check
   let dir : System.FilePath := "tests/cryptography/sha256/cavp"
   let short ← KnownAnswers.Sha256Cavp.checkFile (dir / "SHA256ShortMsg.rsp") 65
@@ -4950,5 +5129,5 @@ def main : IO UInt32 := do
   let scriptVerify ← KnownAnswers.ScriptVerify.check
   let multisigRecovery ← KnownAnswers.MultisigRecovery.check
   let txSpends ← KnownAnswers.TxSpends.check
-  return if pbkdf2 + hmac + secp256k1 + sha1 + blocks + auxpowCheck + short + long + ripemd + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts + proofOfWork + scriptReader + scriptNum + scriptEval + signatureCode + signatureEncoding + scriptSignature + scriptVerify + multisigRecovery + txSpends == 0 then 0 else 1
+  return if pbkdf2 + hmac + secp256k1 + coreVerifier + sha1 + blocks + auxpowCheck + short + long + ripemd + genesis + codec + compactSize + countedList + transactions + witness + txCorpus + sighash + compact + retarget + nextWork + mainnetHeaders + operators + shifts + proofOfWork + scriptReader + scriptNum + scriptEval + signatureCode + signatureEncoding + scriptSignature + scriptVerify + multisigRecovery + txSpends == 0 then 0 else 1
 

@@ -611,7 +611,8 @@ A 32-bit build can differ only on a signature of at least 2^24 bytes (design rec
 The test tries 23 points with every first byte and every length from 3 to 65, and its formulas give the expectations.
 `lake test` also runs 11 `coreVerifier` hand cases and both Core corpora with `coreVerifier`, as [Script signature opcodes and the checker](#script-signature-opcodes-and-the-checker) states.
 These finite checks establish no all-input correctness claim.
-The oracle still answers the `transaction` checker with a verifier that is always unavailable, and the Core harness does not yet run `coreVerifier`.
+The oracle's `transaction` checker uses `coreVerifier`, and `pubkey.verify` calls `Script.coreVerify` for one signature ([docs/oracle.md](docs/oracle.md#public-key-verification)).
+The Core harness answers the same requests with Core's `CPubKey::Verify`.
 
 By `#print axioms` with Lean `v4.35.0`:
 
@@ -1492,7 +1493,7 @@ The lookup table is a test backend and says nothing about which signatures are v
 The corpus records add 122 comparisons with Core's expected results, from 745 to 867.
 
 The oracle's `script.eval` can select `baseChecker`, and its legacy operation can select a transaction checker.
-Finite Core comparisons cover signature-opcode results that do not need the unavailable Lean verifier.
+The transaction checker uses `coreVerifier`, so finite Core comparisons also cover signature-opcode results that verify a signature.
 By `#print axioms` with Lean `v4.35.0`:
 
 | Theorem | Axioms |

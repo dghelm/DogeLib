@@ -10,7 +10,7 @@ The maintainer decides when to release and creates the tag.
 ## 1. Choose the release-candidate commit
 
 1. Select a commit on `main` whose `ci` and `core` workflows passed.
-2. Make sure that [COVERAGE.md](../COVERAGE.md), [SOUNDNESS.md](../SOUNDNESS.md) and [README.md](../README.md) describe that commit.
+2. Make sure that [COVERAGE.md](../COVERAGE.md), [SOUNDNESS.md](../SOUNDNESS.md), [README.md](../README.md) and the [release notes](#4-write-the-release-notes) describe that commit.
    A documentation fix is a normal pull request, and it gives a new candidate commit.
 3. Do not merge other pull requests until the release is tagged, or choose a new candidate after the merge.
 
@@ -65,23 +65,26 @@ The report header gives the first three:
 - The pins of the refinement package: its `lean-toolchain`, Aeneas, Charon and the Rust toolchain, from [SOURCES.md](../SOURCES.md) and [Refinement/Rust/README.md](../Refinement/Rust/README.md).
 - The oracle format name, from [docs/oracle.md](oracle.md).
 
-## 4. Write the changelog
+## 4. Write the release notes
 
-Write the changelog as the release notes, in `build/release/release-notes.md`.
-Start from the squash-merge titles on `main` since the previous release, or since the first commit for 0.1.0:
+The release notes are a committed file, `docs/release-notes/<version>.md`, such as [0.1.0](release-notes/0.1.0.md).
+Write them before you choose the candidate, in the documentation pull request of step 1, so that the candidate commit contains them.
+Do not write the candidate's own hash into the notes. The tag and the validation report identify it.
+
+List the merged pull requests since the previous release, or all of them for 0.1.0:
 
 ```bash
-git log --format='%s' <previous-tag>..<candidate>
+gh pr list --state merged --limit 200 --json number,title,mergedAt
 ```
 
 Group the entries by layer, and link each capability to its row in [COVERAGE.md](../COVERAGE.md#operations).
 Name each breaking change, from the titles with `!`.
 State the boundaries of the release, as the [status in README.md](../README.md#status) gives them.
-For example, DogeLib has no ECDSA backend, and it does not specify scrypt or AuxPoW.
+For example, DogeLib does not specify the contextual header checks other than version gating, or block validity.
 Check the notes with the writing checker:
 
 ```bash
-uv run --no-project --python 3.12 python scripts/check_writing.py --stdin description < build/release/release-notes.md
+uv run --no-project --python 3.12 python scripts/check_writing.py docs/release-notes/<version>.md
 ```
 
 ## 5. Tag and publish
@@ -101,7 +104,7 @@ The maintainer does these steps:
 
    ```bash
    tar -czf build/release/validation-<candidate>.tar.gz -C build/release validation-<candidate>
-   gh release create v0.1.0 --title "DogeLib 0.1.0" --notes-file build/release/release-notes.md build/release/validation-<candidate>.tar.gz
+   gh release create v0.1.0 --title "DogeLib 0.1.0" --notes-file docs/release-notes/0.1.0.md build/release/validation-<candidate>.tar.gz
    ```
 
 At and after 0.1.0, the maintainer sets the compatibility policy for outside consumers of the oracle ([format stability](oracle.md#format-stability)).

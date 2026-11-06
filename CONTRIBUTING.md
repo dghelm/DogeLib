@@ -348,11 +348,16 @@ fix(tx)!: keep output amounts as raw signed values
 build: pin Lean v4.35.0
 ```
 
-Before 0.1.0, the oracle and its Core harness are development interfaces that evolve with their fixtures and comparator.
-Routine schema changes within an approved scope follow ordinary independent review, without a separate maintainer decision or a new format name.
-These routine changes do not count as public-contract or fixture-format changes under this rule.
+In 0.x releases, the oracle and its Core harness are development interfaces that evolve with their fixtures and comparator.
+A consumer pins a release or commit and uses that release's own oracle, harness and comparison tools.
+Within an approved scope, an additive operation needs ordinary independent review, without a separate maintainer decision or a new format name.
+
+A change to the behavior or record shape of an existing operation also needs only ordinary independent review.
+Its pull request title has `!`, its commit body ends with a `BREAKING CHANGE:` footer, and the next release notes name it.
+A stability promise for 1.0 is a separate future decision.
+
+An additive operation does not count as a public-contract or fixture-format change under this rule, so its title has no `!`.
 The Core compatibility target, theorem weakening or domain reduction, new trust assumptions and agreed protocol semantics remain maintainer-only decisions.
-At and after 0.1.0, the maintainer sets the compatibility policy for outside consumers.
 See [format stability](docs/oracle.md#format-stability).
 
 ### Bodies

@@ -125,9 +125,10 @@ From design record 0001, section 9. A first release has:
 
 ## Decisions
 
-The maintainer decided the pre-release oracle policy on 2026-11-06.
-Before 0.1.0, the oracle, Core harness, fixtures and comparator evolve together without compatibility promises to earlier development commits.
-Routine schema changes within an approved scope receive ordinary independent review in their implementation pull request.
+The maintainer decided the oracle development policy on 2026-11-06, and on the same day extended it from the pre-release period to all 0.x releases.
+A consumer pins a release or commit and uses that release's oracle, harness and comparison tools.
+Within an approved scope, additive operations and changes to existing operations receive ordinary independent review.
+A change to an existing operation is marked as breaking.
 See [format stability](docs/oracle.md#format-stability).
 
 | Decision | Choice | Reason | Confirmed by |
@@ -139,6 +140,7 @@ See [format stability](docs/oracle.md#format-stability).
 | btc-verified reuse form | Adaptation into DogeLib's layout, with provenance, not a dependency | Different toolchain, colocated proofs, and `bv_decide` steps | Step 0b, codec foundations, with Lean core and `Std` only |
 | Writing standard | EthLib's `WRITING.md` and checker, with DogeLib vocabulary | Follows the model project | Adopted |
 | Oracle record format | JSON Lines, `dogelib-oracle/1`, in [docs/oracle.md](docs/oracle.md) | One request and one response per line, so a harness can keep the oracle open. Hashes in both byte orders, preimages, checker selection and legacy Script verification. | Maintainer, 2026-11-06: reset to `/1` and pre-release development policy. |
+| Oracle policy in 0.x | Consumers pin a release. Within an approved scope, additive operations and changes to existing operations get ordinary independent review. A change to an existing operation has `!`, a `BREAKING CHANGE:` footer and a release-notes entry. One format implementation per release. | Keeps routine oracle work out of the maintainer-only public-contract rule after 0.1.0. Core target, theorem weakening, trust assumptions and protocol semantics stay maintainer-only. A 1.0 stability promise is a later decision. | Maintainer, 2026-11-06 |
 | Core compatibility pin | Dogecoin Core `v1.14.9`, commit `e0a1c15` | The latest Core release on 2026-11-03 | Maintainer, 2026-11-03, issue #5 |
 | First signature-proof domain | Script code with no instruction that fails to parse, in a transaction with fewer than 2^32 inputs and 2^32 outputs | `legacySignatureHashPlan_eq_reference` holds on it. On a script that ends in a short push the two forms differ. | Step 5, `proof/legacy-sighash-reference` (#27) |
 | Rust refinement tools | Aeneas `d1e177b` and Charon `a58d159` (Adopted in SOURCES.md). Mathlib only in the separate `Refinement` Lake package. No trust-policy exception for Aeneas's axioms | Both tools target Lean `v4.35.0`. EthLib requires Mathlib. EthLib's trust policy allows only the three standard axioms | Maintainer, 2026-11-04, PR #33 |

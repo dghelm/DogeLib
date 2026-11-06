@@ -16,15 +16,20 @@ In particular, `script.eval` does not check a complete spend.
 
 ## Format stability
 
-Before the first release (0.1.0), the oracle, Core harness, fixtures and comparator evolve together.
-Earlier development commits have no compatibility promise.
-A routine schema change within an approved feature scope is settled in its implementation pull request under ordinary independent review.
-It needs neither a separate maintainer decision nor a new format name.
-The oracle supports no aliases or migration tooling for earlier format names.
+In 0.x releases, the oracle and its Core harness are development interfaces that evolve with their fixtures and comparator.
+A consumer pins a release or commit and uses that release's own oracle, harness and comparison tools.
+Other releases and development commits have no compatibility promise.
+
+Within an approved scope, an additive operation needs ordinary independent review, without a separate maintainer decision or a new format name.
+A change to the behavior or record shape of an existing operation also needs only ordinary independent review.
+Its pull request title has `!`, its commit body ends with a `BREAKING CHANGE:` footer, and the next release notes name it.
+
+Each release supports one format implementation.
+The oracle has no aliases or migration tooling for older interfaces or format names.
 Development formats `/2` to `/6` preceded the reset to `dogelib-oracle/1` and are not supported.
 
 The Core compatibility target, theorem weakening or domain reduction, new trust assumptions and changes to agreed protocol semantics remain maintainer-only decisions.
-At and after 0.1.0, the maintainer sets the compatibility policy for outside consumers.
+A stability promise for 1.0 is a separate future decision.
 See [the maintainer-only rules](../AGENTS.md#changes-that-need-a-maintainer).
 
 ## Running it

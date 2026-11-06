@@ -80,4 +80,28 @@ timeout 10s taskset -c 0-7 .lake/build/bin/known-answers --scrypt-rfc 3
 The selector also accepts case 4, but that case needs a separate resource decision before a run.
 `lake test` runs only the default cases and the rejection checks.
 It evaluates no scrypt digest in the kernel and uses no `native_decide`.
-The fixed Dogecoin executable and its header vectors belong to the next lane.
+The [next section](#dogecoin-header-digests) covers the Dogecoin executable and its header vectors.
+
+## Dogecoin header digests
+
+`tests/KnownAnswers/ScryptPow.lean`, namespace `KnownAnswers.ScryptPow`, records the five pairs of `inputhex` and `expected` from Dogecoin Core's `src/test/scrypt_tests.cpp`, lines 17–18, at the pin (SOURCES.md, D62).
+Each input is an 80-byte header.
+Core prints each expected digest with `uint256::ToString`, which reverses the bytes (line 34).
+The test reverses each recorded digest into output order before it compares the bytes.
+No expected value comes from DogeLib.
+
+The test runs every pair through the compiled `scrypt_1024_1_1_256`.
+With the environment variable `DOGELIB_SCRYPT_MODEL` set, it also runs the first pair through the compiled RFC 7914 list model.
+That model is `Spec.scrypt` with N = 1024, r = 1, p = 1 and 32 output bytes.
+That run checks both sides of `powHash_eq_spec` against one Core digest.
+
+The measurements below used Lean `v4.35.0`, the native `known-answers` executable, and CPU affinity `0-7` on 2026-11-06.
+They are individual observations on a shared machine, rather than performance guarantees.
+
+| Run | Result | Time |
+| --- | --- | --- |
+| Executable, pairs 1–5 | All five digests agree | 1.52–1.63 ms per digest |
+| Model, pair 1 | The digest agrees | 23.8 seconds |
+
+The model run stays outside the default `lake test`, because it exceeds the 10-second limit of the optional section 12 cases.
+Its cost comes from the quadratic reference fill of ROMix.

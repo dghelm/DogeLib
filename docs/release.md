@@ -16,7 +16,8 @@ The maintainer decides when to release and creates the tag.
 
 ## 2. Run the validation workflow
 
-The `validation` workflow runs every automated gate of the [checks table](../AGENTS.md#checks) and keeps the report and logs ([BUILDING.md](../BUILDING.md#validation-reports)).
+The `validation` workflow runs every automated gate of the [checks table](../AGENTS.md#checks), including both Rust gates and both Core comparisons.
+It keeps the report and logs ([BUILDING.md](../BUILDING.md#validation-reports)).
 A manual dispatch runs on the head of a branch, not on an arbitrary commit.
 
 1. Make sure that `main` is at the candidate commit:
@@ -45,12 +46,10 @@ A manual dispatch runs on the head of a branch, not on an arbitrary commit.
    ```
 
 5. Read the report.
-   Every gate must pass, or the release waits for a fix.
-   The report records the manual gates as **not run**.
-   A reviewer does the two manual reviews on the candidate commit: source and coverage, and soundness.
+   Every automated gate must pass, or the release waits for a fix.
+   The report records only the two manual gates as **not run**: source and coverage review, and soundness review.
+   A reviewer does these two reviews on the candidate commit.
    Record their results with the release.
-   Run any other gate that the report marks **not run** on the same commit.
-   Record its command, revision and result.
 
 Keep the report and the complete logs with the release.
 Do not commit them. The `build/` directory is ignored.

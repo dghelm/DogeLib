@@ -292,7 +292,11 @@ The Core stamp records existing libraries.
 The Core result records whether the harness step and comparison succeeded, possibly with reuse of existing libraries.
 
 The `validation` workflow runs on manual dispatch and tag pushes, and uploads the report and logs even after gate failures.
-It excludes the two Rust tool gates and records them as not run.
+It installs the pinned Rust extraction tools with `Refinement/Rust/setup-tools.sh`.
+It then runs the report with the pinned Core checkout as `--core-clone` and without `--gates`.
+So the runner runs every automated gate of the table, including both Rust gates and both Core comparisons.
+It records the two manual gates, source and coverage review and soundness review, as not run.
 The workflow builds the committed Lean model with the Mathlib cache.
+
 A report records checks on one machine at one commit.
 It is not a proof, and CI results on other commits are separate evidence.

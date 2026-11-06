@@ -674,6 +674,47 @@ By `#print axioms` with Lean `v4.35.0`:
 | `readInstruction_eq_instruction_iff_readOp`, `readInstruction_eq_fail_iff_readOp`, `readInstruction_eq_truncated_iff_readOp`, `WithinStackLimit.handOff` | `propext`, `Quot.sound` |
 | `readInstruction_eq_instruction_iff`, `readInstruction_consumes`, `readInstruction_nonpush`, `readInstruction_truncated_iff`, `IsBoundary.le_length`, `IsBoundary.eq_or_next_le`, `IsBoundary.not_inside`, `WellFormed.advance`, `WellFormed.pc_le_length`, `WellFormed.beginCodeHash_le_length` | `propext`, `Classical.choice`, `Quot.sound` |
 
+### Script signature-code preparation
+
+`Script.SignatureCode` specifies Core's vector push encoding and legacy script-code preparation (SOURCES.md, D24 and D3).
+It reuses `Transaction.findAndDelete`, including its `Nat` count and the exclusion of Core counts above `INT_MAX`.
+`readInstruction_pushEncoding` proves that every payload shorter than 2^32 bytes reads as one instruction with exactly that payload and any tail unread.
+`pushHeader_encoding` gives the length-field width and exact payload size.
+PUSHDATA4 lengths wrap modulo 2^32 outside that domain, as Core's `WriteLE32` does.
+Script's 520-byte limit for pushed items lies within the round-trip domain.
+
+`findAndDelete_traversal` proves that every input and pattern follow `DeletionTraversal`, with the exact output and count.
+Each pass removes leading copies, retains one whole instruction without a search inside it, and continues at its end.
+A failed read preserves every remaining byte after leading deletions, including bytes that the failed reader did not consume.
+`dropMatches_decomposition` identifies the removed prefix, and `dropMatches_exhausted` excludes a match at the cursor after leading deletions for every nonempty pattern.
+The cursors belong to the input after preceding deletions.
+They need not be boundaries of the original script when an arbitrary pattern ends inside an instruction.
+
+The result can contain a match that one pass creates across retained pieces.
+For example, deleting `00 51` from `00 00 51 51` leaves `00 51`, as Core's test requires.
+The traversal theorem does not assert that the final bytes contain no matches.
+
+`effectiveScriptCode_nil`, `effectiveScriptCode_single` and `effectiveScriptCode_append` give suffix selection, single-signature deletion and ordered composition for every input.
+The signature list follows `stacktop(-isig-k)` for increasing `k`, nearest the stack top first, and includes each signature's hash-type byte.
+The caller establishes the separator cursor and supplies the signatures.
+The existing signature serializer removes remaining separator instructions.
+No interpreter opcode calls this preparation yet, and no theorem establishes commutation of signature deletion passes.
+
+`lake test` runs all sixteen cases of Core's `script_FindAndDelete` (D46), eight additional malformed suffix cases and eight push-size boundaries.
+It also checks exact intermediate and final bytes for two signature deletions, including retained separator and payload bytes.
+The expectations come from Core's assertions and a reading of D24 and D3.
+Core itself does not run.
+These finite tests do not prove equivalence to compiled Core.
+
+The definitions add no axiom, cryptographic hypothesis or execution boundary.
+By `#print axioms` with Lean `v4.35.0`:
+
+| Theorem | Axioms |
+| --- | --- |
+| `pushLengthBytes_length` | `propext` |
+| `readInstruction_pushEncoding` | `propext`, `Classical.choice`, `Quot.sound` |
+| `leValue_pushLengthBytes`, `pushHeader_encoding`, `findAndDelete_empty`, `dropMatches_decomposition`, `dropMatches_exhausted`, `findAndDeleteLoop_traversal`, `DeletionTraversal.zero`, `findAndDeleteLoop_empty`, `findAndDelete_eq_loop`, `findAndDelete_traversal`, `findAndDeleteLoop_malformed`, `effectiveScriptCode_nil`, `effectiveScriptCode_single`, `effectiveScriptCode_append` | `propext`, `Quot.sound` |
+
 ### Script numbers and truth values
 
 `DogeLib.Script.Number` specifies Core's `CScriptNum` and `CastToBool` (SOURCES.md, D24 and D3).

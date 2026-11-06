@@ -102,6 +102,31 @@ They test the compiled code only on those inputs.
 The SHA-256 definition and proof adapt EthLib at commit `6a93711`.
 The current pin `bb6dfe5` restructures them in `d59f0e3a`, which DogeLib has not ported.
 
+### HMAC-SHA-256
+
+`Hmac.hmac_eq_spec` equates the executable with a separate list model for every byte-array key and message.
+The model adapts verified-garbage's `Spec/Hmac.lean` at the pin, under BSD-3-Clause, and retains its bit-vector byte representation.
+Its hash is a parameter, instantiated with DogeLib's executable SHA-256 through byte conversions.
+`fromBytes_toBytes` and `toBytes_fromBytes` prove both conversion round trips.
+The executable and structural lemmas adapt EthLib's HMAC files at the pin.
+The existing DogeLib SHA-256 API requires no algorithm changes to those files.
+
+`Hmac.hmac_eq_fips` replaces the executable hash with the FIPS 180-4 model.
+Its hypotheses require `key.size < 2^61` and `64 + message.size < 2^61`.
+The inner hash input has `64 + message.size` bytes, and the outer input has 96 bytes.
+A key longer than 64 bytes is hashed before zero padding.
+The bound on the key admits that hash input.
+Both theorems state algorithm equalities, with no cryptographic assumption or security conclusion.
+
+`hmac_eq_spec` and the conversion round trips depend on `propext` and `Quot.sound`.
+`hmac_eq_fips` also depends on `Classical.choice`, by `#print axioms` on Lean `v4.35.0`.
+
+A reader must compare the list model with RFC 2104 §2 and FIPS 198-1 §4 (A1).
+The Lean compiler, C compiler and runtime remain trusted (B1), including Lean core's byte-array operations (B2).
+`lake test` compares the compiled executable with all seven RFC 4231 HMAC-SHA-256 cases.
+Case 5 fixes only the first 16 bytes, and cases 6 and 7 exercise 131-byte keys.
+No theorem or test here establishes agreement with compiled Core or constant-time behaviour (A3).
+
 ### Double SHA-256
 
 `Sha256d.hash` is `CHash256` of Dogecoin Core (SOURCES.md, D8): SHA-256 applied to the SHA-256 digest of the message.

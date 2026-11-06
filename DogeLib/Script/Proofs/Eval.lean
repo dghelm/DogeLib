@@ -82,7 +82,8 @@ For every checker, script, flag set and state: if `OP_CHECKSIG` or `OP_CHECKSIGV
 -/
 theorem checkSigStep_frame {c : SignatureChecker} {flags : UInt32} {s t : ExecState} {op : UInt8}
     (h : checkSigStep c script flags s op = .next t) :
-    t.pc = s.pc ∧ t.opCount = s.opCount ∧ t.beginCodeHash = s.beginCodeHash ∧ t.vfExec = s.vfExec := by
+    t.pc = s.pc ∧ t.opCount = s.opCount ∧ t.beginCodeHash = s.beginCodeHash ∧ t.vfExec = s.vfExec ∧
+      t.altstack = s.altstack := by
   unfold checkSigStep at h
   repeat' split at h
   all_goals first
@@ -155,7 +156,7 @@ theorem execOpcode_frame {flags : UInt32} {fExec : Bool} {s t : ExecState} {op :
     | (cases h; done)
     | (injection h with h; subst h; simp_all; try omega)
     | (refine (fun hf => ?_) (checkSigStep_frame h)
-       obtain ⟨h1, h2, h3, h4⟩ := hf
+       obtain ⟨h1, h2, h3, h4, _⟩ := hf
        exact ⟨h1, .inl h2, .inl h3, by simp [h4]⟩)
     | (refine (fun hf => ?_) (checkMultisigStep_frame h)
        obtain ⟨h1, h2, h3, h4, h5⟩ := hf
@@ -1579,7 +1580,7 @@ theorem checkMultisigStep_opCount {c : SignatureChecker} {flags : UInt32} {s : E
 
 /--
 For every checker, script, flag set and opcode, and a state whose key count `n` lies in 0 to 20 and passes the opcode count:
-if fewer than `n` items lie below the key count, so that the signature count is missing, the step gives `INVALID_STACK_OPERATION` (D3, lines 940 and 941).
+if fewer than `n + 1` items lie below the key count, so that the signature count is missing, the step gives `INVALID_STACK_OPERATION` (D3, lines 940 and 941).
 -/
 theorem checkMultisigStep_keyDepth {c : SignatureChecker} {flags : UInt32} {s : ExecState} {op : UInt8}
     {nTop : List UInt8} {rest : List (List UInt8)} {nv : Int}

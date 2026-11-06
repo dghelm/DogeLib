@@ -12,6 +12,7 @@
 #include <openssl/bn.h>
 #include <array>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <algorithm>
 
@@ -78,14 +79,15 @@ CMutableTransaction transaction() {
 // Replace S with n-S, then encode the positive DER integer with its sign byte.
 Bytes highS(const Bytes& sig) {
     const size_t rlen = sig.at(3), soff = 6 + rlen, slen = sig.at(5 + rlen);
-    BIGNUM *order = nullptr;
-    BN_hex2bn(&order, "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141");
-    BIGNUM* s = BN_bin2bn(sig.data() + soff, slen, nullptr);
-    if (!order || !s || !BN_sub(s, order, s)) throw std::runtime_error("high S conversion failed");
-    Bytes encoded(BN_num_bytes(s));
-    BN_bn2bin(s, encoded.data());
-    BN_free(order);
-    BN_free(s);
+    BIGNUM* rawOrder = nullptr;
+    const int parsed = BN_hex2bn(&rawOrder, "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141");
+    using Bn = std::unique_ptr<BIGNUM, decltype(&BN_free)>;
+    Bn order(rawOrder, BN_free);
+    Bn s(BN_bin2bn(sig.data() + soff, slen, nullptr), BN_free);
+    if (!parsed || !order || !s || !BN_sub(s.get(), order.get(), s.get()))
+        throw std::runtime_error("high S conversion failed");
+    Bytes encoded(BN_num_bytes(s.get()));
+    BN_bn2bin(s.get(), encoded.data());
     if (encoded.front() & 0x80) encoded.insert(encoded.begin(), 0);
     Bytes result{0x30, static_cast<unsigned char>(4 + rlen + encoded.size()), 0x02,
                  static_cast<unsigned char>(rlen)};
@@ -197,6 +199,8 @@ void generate() {
     emit("recovery-final-sequence", "final sequence", "vin[0].nSequence", {4}, tx, true);
     emit("recovery-hybrid", "hybrid key without STRICTENC", "redeemScript.recoveryKey,flags.STRICTENC", {4},
          transaction(), true, false, false, false, FLAGS & ~SCRIPT_VERIFY_STRICTENC, true);
+    emit("recovery-hybrid-strict", "hybrid key with STRICTENC", "redeemScript.recoveryKey", {4},
+         transaction(), true, false, false, false, FLAGS, true);
 }
 }
 int main(int argc, char**) {

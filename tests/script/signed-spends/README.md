@@ -1,6 +1,6 @@
 # Signed recovery-template spends
 
-`recovery.jsonl` contains 24 signed spends and mutations from design record 0005, section 8.
+`recovery.jsonl` contains 25 signed spends and mutations from design record 0005, section 8.
 The source of every digest, signature and expected verdict is Dogecoin Core at `e0a1c157791544e818c901bd9341896965afbf9d` ([SOURCES.md](../../../SOURCES.md)).
 No DogeLib result supplies an expectation.
 Lean does not consume these fixtures yet.
@@ -47,12 +47,15 @@ All transactions have one input and one output.
 The baseline has version 1, lock time 1,000,000, sequence `0xfffffffe`, output value 100,000,000 and output script `OP_TRUE`.
 The outpoint is synthetic, so the fixtures check Script execution rather than UTXO availability or contextual transaction validity.
 The flags are `P2SH`, `STRICTENC`, `DERSIG`, `LOW_S`, `NULLDUMMY` and `CHECKLOCKTIMEVERIFY` (numeric value 543).
-The high-S acceptance cases clear `LOW_S`, and the hybrid-key case clears `STRICTENC`.
+The high-S acceptance cases clear `LOW_S`, and the hybrid-key acceptance case clears `STRICTENC`.
+The companion hybrid-key case keeps `STRICTENC` and records Core's `PUBKEYTYPE` rejection.
 
 The four baseline records cover signer pairs (1, 2), (1, 3), (2, 3), and the recovery branch.
 Both branches have committed-field, selector and high-S mutations.
+Each multisig high-S case changes only the first signature.
 The remaining records cover reversed multisig signatures, both low-locktime signing choices, and a stale signature at lock time 1,000,001.
-They also cover a final sequence and a hybrid recovery key.
+They also cover a final sequence and a hybrid recovery key under both settings of `STRICTENC`.
+
 The hybrid key uses the uncompressed coordinates with the matching `06` or `07` parity prefix.
 Core supplies each verdict, including `UNSATISFIED_LOCKTIME`, `SIG_HIGH_S`, `EVAL_FALSE` and `INVALID_STACK_OPERATION`.
 

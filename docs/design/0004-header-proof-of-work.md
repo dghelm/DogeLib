@@ -276,6 +276,8 @@ The lane begins with a reuse assessment of two sources for adaptation:
 - `pyca/verified-garbage`, which defines HMAC, PBKDF2, Salsa20/8, scryptBlockMix, scryptROMix and RFC 7914 scrypt in Lean v4.35.0, under Apache-2.0 OR BSD.
 - EthLib's `Cryptography/Hash/Hmac.lean`, under CC0.
 
+The [reuse assessment](../assessments/0004-crypto-reuse.md) gives the result.
+
 Adapted material follows the rules of [CONTRIBUTING.md](../../CONTRIBUTING.md#material-from-other-projects).
 It still needs the independent vectors and the Core comparison of this record.
 If an adaptation changes the representation of a definition, the same change proves the new definition equivalent to the source definition.

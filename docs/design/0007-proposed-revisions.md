@@ -112,7 +112,12 @@ The NOPs are the opcodes that earlier soft forks redefined.
 `OP_CHECKLOCKTIMEVERIFY` and `OP_CHECKSEQUENCEVERIFY` act as `OP_NOP2` and `OP_NOP3` when their flags are clear [C1, lines 350–358 and 392–400].
 With `SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS`, each NOP fails instead.
 That flag is in `STANDARD_SCRIPT_VERIFY_FLAGS`, which is node policy, not consensus [C9].
-DogeLib does not support that flag (`DogeLib.Script.supportedFlags`), so the theorems of this record are about consensus behaviour only.
+
+DogeLib does not support that flag (`DogeLib.Script.supportedFlags`).
+The supported flags still include `STRICTENC`, `LOW_S` and `NULLDUMMY`, which design record 0003 identifies as policy only at this pin.
+`ConnectBlock` sets neither `STRICTENC` nor `LOW_S`, and it sets `NULLDUMMY` only in the witness branch, which never runs [C2, lines 1894–1917].
+So the theorems of this record cover every flag set that DogeLib supports.
+A consensus reading of a theorem also needs a justification of the selected flags for the network and the activation context.
 
 ## 4. Options for location and dependency direction
 
@@ -236,7 +241,7 @@ It cannot succeed where the baseline step fails, and it cannot change the state 
 The framework then proves, once for every proposal, that restriction lifts through the loop and through `VerifyScript`:
 
 - If `evalLoopWith step₁` returns `ok t`, then `evalLoopWith step₀` returns `ok t`, by induction on the distance from the cursor to the end of the script.
-- `verifyScriptWith` runs the loop on `scriptSig`, on `scriptPubKey` and on a P2SH redeem script. Each run starts from the final stack of an earlier run. Equal final states make the later runs equal, so acceptance lifts.
+- `verifyScriptWith` runs the loop on `scriptSig`, on `scriptPubKey` and on a P2SH redeem script. Each run starts from the final stack of an earlier run. From the same start, a later revised run can still reject where the baseline run succeeds. But each successful revised run gives the same successful baseline state, so acceptance lifts.
 
 The equal final state matters.
 Suppose that a step succeeds in both versions but leaves a different stack.
@@ -333,7 +338,7 @@ soft_fork :  ∀ active ctx,  R active ctx = accepted  →  B ctx = accepted
 A revision that rejects every input satisfies `soft_fork`.
 So a soft-fork proposal also proves two *witnesses*:
 
-- A *strictness witness*: one context where the baseline accepts and the active revision rejects. Without it, the revision changes nothing.
+- A *strictness witness*: one context where the baseline accepts and the active revision rejects. It shows a proper reduction of acceptance through a concrete rejection. A change of rejection errors, or of acceptance into an unsupported result, does not show that.
 - A *use witness*: one context where the active revision accepts and the redefined rule runs. Without it, the revision could reject every use of the rule.
 
 A *characterization* states exactly when the active revision accepts, for a named class of inputs.

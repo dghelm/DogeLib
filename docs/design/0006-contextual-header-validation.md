@@ -158,8 +158,9 @@ The specification must keep each behaviour, and a theorem or a known answer must
 
 19. `GetBaseVersion` is `nVersion % 256` with C++ signed remainder [C7, pureheader.h lines 88–95].
     A negative version therefore has a base version of zero or less, and fails both thresholds once they apply.
-    The AuxPoW flag never changes the base version, because it never changes the sign of `nVersion`.
+    A chain ID that changes bit 31 changes the sign, and so changes the base version whenever the low byte is nonzero.
     A chain ID that changes bit 31 changes the sign, and so the base version.
+    `0x00000000` and `0x80000000` both have base version zero.
     For example, `0x00000003` has base version 3, and `0x80000003` has base version −253.
     Other changes of the chain ID keep the base version.
 20. The thresholds use `>=` on the candidate height [C1, lines 3113–3114]:

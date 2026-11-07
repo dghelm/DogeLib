@@ -75,7 +75,7 @@ Chain acceptance gives a second expected result.
 Mainnet accepted the headers at heights 1–12, so each time must be greater than the median of the view below it.
 
 The test also requires the adapter error `shortView` for views that lack required history.
-An example is the view at height 12 without its last two entries.
+An example is the view at height 12 without its last three entries, which leaves 10 of the 11 required entries.
 It requires that the view at height 12 truncated to its first 11 entries gives the same median as the full view.
 
 The genesis hash anchors only height 0.

@@ -86,7 +86,7 @@ Bottom-up. Each layer imports only the layers above it in this list.
 | `Cryptography` | SHA-1, SHA-256, double SHA-256, HMAC-SHA-256, PBKDF2-HMAC-SHA-256, RIPEMD-160 and Hash160, secp256k1 curve arithmetic, ECDSA verification on scalars, and libsecp256k1's public-key parser |
 | `Work` | Proof-of-work arithmetic: 256-bit targets, their compact encoding, and the difficulty retarget |
 | `Transaction` | Raw transaction types, base serialization, transaction IDs, legacy signature hashing |
-| `Block` | Pure block headers, full headers with the AuxPoW payload and their codec, and the AuxPoW check. Header proof of work and `CheckBlockHeader`, the contextual parameters by height and the checkpoint tables, block hashes and transaction Merkle roots |
+| `Block` | Pure block headers, full headers with the AuxPoW payload and their codec, and the AuxPoW check. Header proof of work and `CheckBlockHeader`, the contextual parameters by height and the checkpoint tables, contextual header validation, block hashes and transaction Merkle roots |
 | `Script` | The instruction reader of the Script interpreter, the state of one `EvalScript` call, Script numbers (`CScriptNum`) and the truth value of a stack item. The interpreter's errors and flags, and one `EvalScript` call for the opcodes of stages 2 to 4, including the numeric, hash, signature and lock-time opcodes. The encoding checks of signatures and public keys, the signature checker that the evaluator takes as a parameter, and `coreVerifier`, Core's `CPubKey::Verify`. `VerifyScript` without a witness, and the spend predicate of one legacy input. |
 
 `Cryptography.Inverse` and `Cryptography.Jacobian` support `Cryptography.Secp256k1.Field`, `Curve` and `Ecdsa`.

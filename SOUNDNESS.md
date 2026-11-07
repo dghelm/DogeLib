@@ -2058,6 +2058,64 @@ By `#print axioms` with Lean `v4.35.0`:
 | `propext`, `Quot.sound` | `getConsensus_testnet`, `retargetInterval_before`, `blocksToGoBack_le`, `retargetInterval_eq_record_of_nonretarget` |
 | `propext`, `Classical.choice`, `Quot.sound` | `getNextWorkRequired_genesis`, `getNextWorkRequired_minDifficulty` |
 
+### Median time past
+
+`DogeLib.Work.MedianTimePast` specifies `CBlockIndex::GetMedianTimePast` (D18, lines 284-298).
+Core collects the time of the entry and the times of up to ten predecessors, and stops early after genesis.
+It sorts the collected times and returns the element at index `count / 2`, so an even count gives the upper median.
+`ContextualCheckBlockHeader` calls it on the predecessor of a header (D33, lines 3103-3104).
+That comparison with the header time is not specified yet.
+
+`medianTimePast` takes the checked finite view of [next-work selection](#next-work-selection-and-work-parameters), newest first.
+Let `h` be the height of the first entry, and let `k = medianTimeSpan = min(11, h + 1)`.
+Core's walk has the full chain, so it always collects `k` times.
+A finite view can stop above genesis, and Core's function on such a view would give a different median, not an error.
+So `medianTimePast` returns the adapter error `shortView` for a view with fewer than `k` entries.
+
+`medianTimePast` returns `invalidView` when `validateWorkView` rejects the view, and `emptyView` for the empty view.
+These errors are adapter contracts, not Core rejection codes.
+
+The times are UInt32 values widened to Int, as `GetBlockTime` widens them to int64_t (D18, lines 274-277).
+The widening is exact, so the sort and the comparisons agree with Core's int64_t order on every UInt32 time.
+`sortedTimes` sorts with `List.mergeSort` from Lean core.
+`sortedTimes_perm` and `sortedTimes_sorted` prove that it is an ascending permutation of the first `k` times, for every view.
+
+The theorems below hold for every view whose first entry is `last`:
+
+- `medianTimePast_eq`: if the view passes `validateWorkView` and has at least `k` entries, the result is index `k / 2` of `sortedTimes`.
+- `medianTimePast_short`: if the view passes `validateWorkView` and has fewer than `k` entries, the result is `shortView`.
+- `medianTimePast_invalid` and `medianTimePast_nil` give the two other adapter errors.
+- `medianTimePast_ok` gives the hypotheses and the index of `medianTimePast_eq` from a success.
+- `medianTimePast_mem`: a success is the time of one of the first `k` entries.
+- `medianTimePast_bounds`: a success lies between the least and the greatest of those times.
+- `medianTimePast_rank`: for a success, at least `k / 2 + 1` of those times are at most the result, and at least `k - k / 2` are at least the result.
+  This statement does not mention the sort, so it fixes the upper median independently of `sortedTimes`.
+- `medianTimePast_congr_prefix`: two views that pass `validateWorkView` and agree on their first `k` entries give the same result, success or error.
+
+`lake test` reads a fixture of the 13 mainnet headers at heights 0–12.
+Two public Electrum servers returned the same bytes for these headers.
+The [fixture README](tests/work/mainnet-genesis-headers/README.md) records the sources, the date and the exact request.
+The test hashes the headers with compiled `Sha256d`, checks all predecessor links and requires Core's genesis hash (D9).
+
+It compares the median at each height with a table derived by hand.
+The table includes the even counts at heights 1, 3, 5, 7 and 9.
+It also requires chain acceptance at heights 1–12: each header time is greater than the median of its predecessor.
+The genesis hash anchors only height 0, so the provenance of heights 1–12 relies on the two sources.
+
+The test also reads the 312 mainnet headers at heights 144719–145030.
+It requires `shortView` for the 10 predecessors with fewer than 11 entries in the view, and chain acceptance for the 301 candidates from 144730.
+Four windows have times out of order, so that the median differs from the time of the sixth entry.
+The test compares those four medians with heights derived by hand.
+Thirteen synthetic cases cover even counts, times out of order, equal times, the UInt32 bounds and each adapter error, with hand-derived results.
+These checks do not run Core or prove equivalence on other inputs.
+
+By `#print axioms` with Lean `v4.35.0`:
+
+| Axioms | Theorems |
+| --- | --- |
+| `propext`, `Quot.sound` | `sortedTimes_perm`, `sortedTimes_sorted`, `length_sortedTimes`, `medianTimePast_nil`, `medianTimePast_invalid` |
+| `propext`, `Classical.choice`, `Quot.sound` | `medianTimeSpan_bounds`, `medianTimePast_short`, `medianTimePast_eq`, `medianTimePast_ok`, `medianTimePast_mem`, `medianTimePast_bounds`, `medianTimePast_rank`, `medianTimePast_congr_prefix` |
+
 ### What cannot be proved yet
 
 A `partial` definition, an `opaque` constant, or a definition that unfolds to one cannot be evaluated by the kernel.
@@ -2148,6 +2206,11 @@ The comparison of digests with Core's compiled scrypt covers only the requests t
 
 `checkAuxPowProofOfWork_iff` characterizes DogeLib's definition of `CheckAuxPowProofOfWork`, and no theorem connects that definition to Core's code.
 DogeLib does not specify full header validity: [Header proof of work](#header-proof-of-work) lists the checks that it omits.
+
+The median-time-past theorems require a view that passes `validateWorkView`, and most of them require at least `medianTimeSpan` entries.
+`medianTimePast` checks both conditions and returns an adapter error when one fails, so no caller discharges them silently.
+No theorem says that the view is the chain below a given header.
+The caller supplies that link, as Core's lookup of `pindexPrev` by hash supplies it.
 
 ### A3. Side channels
 

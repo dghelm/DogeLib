@@ -1,7 +1,7 @@
 # Header-sequence validation
 
-**Status:** Proposed.
-Section 13 lists the proposals that wait for a maintainer decision.
+**Status:** Adopted on 2026-11-07, with the decisions that section 13 records.
+This record is frozen.
 Implementation status belongs in ROADMAP.md and COVERAGE.md.
 
 **Date:** 2026-11-07
@@ -806,27 +806,28 @@ Every claim that this record enables stays header-local in the labels of design 
 
 ## 13. Decisions
 
-These proposals wait for a maintainer decision:
+**Date:** 2026-11-07. **Decision maker:** Maintainer.
+The maintainer decided each proposal as its status states:
 
 | Number | Topic | Proposal | Alternative | Status |
 | --- | --- | --- | --- | --- |
-| 1 | State model | Option S3: an explicit block-index model as the definition, with the linear case as the theorem `process_linear` (section 5.2). | S2: a list of headers anchored on a tip, which cannot express steps 1, 4 and 6 or branches. | Proposed |
-| 2 | Anchors | Entries without a predecessor above height 0, with the adapter errors of `contextualCheckBlockHeader` below them (section 5.3). | An index that must reach height 0. | Proposed |
-| 3 | Map representation | M1: an association list behind one lookup and insertion interface (section 6.1). | M2 `Std.HashMap`, or M3 a function. | Proposed |
-| 4 | Failure state | Keep both flags, `scriptsValid` and the failed list apart, and specify step 6 with its marks (section 6.2). | Omit step 6, because only block validation fills the failed list. | Proposed |
-| 5 | Order of the failed list | List order in the specification and the harness. A theorem shows that the verdict does not depend on the order. The comparison excludes `marked_failed_child` when two members of `failed_blocks` are ancestors of one predecessor (section 8.3). | Model address order, which is not observable from a request. | Proposed |
-| 6 | Adjusted time | T1: one value for the call (section 6.3). | T2: one value for each header. | Proposed |
-| 7 | Checkpoints | Derive the last checkpoint from the index and the enabled flag, with the entry height (section 5.4). | Take known checkpoint heights from the caller for each step, as in design record 0006. | Proposed |
-| 8 | Chain work | W2: `GetBlockProof` and `nChainWork` for each entry, in stage 4. No best header (section 6.4). | W1: no chain work. W3: also `pindexBestHeader`. | Proposed |
-| 9 | Proof of work | Call `checkBlockHeader` directly on full headers (section 6.5). | A header-check parameter. | Proposed |
-| 10 | Peer layer | Exclude the checks of the `headers` message (section 6.6). | Add a wrapper for the message. | Proposed |
-| 11 | Core harness | H2: a transcription of C1 and the index part of C3 that calls Core's helpers (section 8.2). | H1: link `validation.cpp` and call `ProcessNewBlockHeaders` on a scratch chainstate. | Proposed |
-| 12 | Comparison | Compare `valid`, `failed_at`, the reason, DoS score and reject code, `last_hash`, `added` and `marked_failed_child`. Exclude the Lean diagnostic. Exclude `marked_failed_child` when two members of `failed_blocks` are ancestors of one predecessor (sections 8.1 and 8.3). | Compare only `valid` and the reason, which cannot separate the three `bad-prevblk` steps. | Proposed |
-| 13 | Fixtures | Full-header copies of the three ranges after AuxPoW activation, in additional directories. Synthetic regtest sequences mined by an independent script. No testnet sequence fixture (section 9.2). | Real testnet headers, or synthetic testnet sequences mined at the minimum difficulty. | Proposed |
-| 14 | Block bodies | Exclude `CheckBlock`, `ContextualCheckBlock`, `AcceptBlock` and `ConnectBlock` (section 1). | None in this scope. | Proposed |
-| 15 | `CheckBlockIndex` | Exclude it, because it never changes a verdict (item 26). | Model its assertions as an adapter error. | Proposed |
-| 16 | Rust work | Implementation refinement and Rust extraction stay outside this scope. | None in this scope. | Proposed |
-| 17 | Height bound | The adapter error `heightOutOfRange` for a candidate at height 2147483647, so that every entry stays below that height (section 7.1). | Allow that one height in the index, and let later steps return `invalidView`. | Proposed |
+| 1 | State model | Option S3: an explicit block-index model as the definition, with the linear case as the theorem `process_linear` (section 5.2). | S2: a list of headers anchored on a tip, which cannot express steps 1, 4 and 6 or branches. | Accepted |
+| 2 | Anchors | Entries without a predecessor above height 0, with the adapter errors of `contextualCheckBlockHeader` below them (section 5.3). | An index that must reach height 0. | Accepted |
+| 3 | Map representation | M1: an association list behind one lookup and insertion interface (section 6.1). | M2 `Std.HashMap`, or M3 a function. | Accepted |
+| 4 | Failure state | Keep both flags, `scriptsValid` and the failed list apart, and specify step 6 with its marks (section 6.2). | Omit step 6, because only block validation fills the failed list. | Accepted |
+| 5 | Order of the failed list | List order in the specification and the harness. A theorem shows that the verdict does not depend on the order. The comparison excludes `marked_failed_child` when two members of `failed_blocks` are ancestors of one predecessor (section 8.3). | Model address order, which is not observable from a request. | Accepted |
+| 6 | Adjusted time | T1: one value for the call (section 6.3). | T2: one value for each header. | Accepted |
+| 7 | Checkpoints | Derive the last checkpoint from the index and the enabled flag, with the entry height (section 5.4). | Take known checkpoint heights from the caller for each step, as in design record 0006. | Accepted |
+| 8 | Chain work | W2: `GetBlockProof` and `nChainWork` for each entry, in stage 4. No best header (section 6.4). | W1: no chain work. W3: also `pindexBestHeader`. | Accepted |
+| 9 | Proof of work | Call `checkBlockHeader` directly on full headers (section 6.5). | A header-check parameter. | Accepted |
+| 10 | Peer layer | Exclude the checks of the `headers` message (section 6.6). | Add a wrapper for the message. | Accepted |
+| 11 | Core harness | H2: a transcription of C1 and the index part of C3 that calls Core's helpers (section 8.2). | H1: link `validation.cpp` and call `ProcessNewBlockHeaders` on a scratch chainstate. | Accepted |
+| 12 | Comparison | Compare `valid`, `failed_at`, the reason, DoS score and reject code, `last_hash`, `added` and `marked_failed_child`. Exclude the Lean diagnostic. Exclude `marked_failed_child` when two members of `failed_blocks` are ancestors of one predecessor (sections 8.1 and 8.3). | Compare only `valid` and the reason, which cannot separate the three `bad-prevblk` steps. | Accepted |
+| 13 | Fixtures | Full-header copies of the three ranges after AuxPoW activation, in additional directories. Synthetic regtest sequences mined by an independent script. No testnet sequence fixture (section 9.2). | Real testnet headers, or synthetic testnet sequences mined at the minimum difficulty. | Accepted |
+| 14 | Block bodies | Exclude `CheckBlock`, `ContextualCheckBlock`, `AcceptBlock` and `ConnectBlock` (section 1). | None in this scope. | Accepted |
+| 15 | `CheckBlockIndex` | Exclude it, because it never changes a verdict (item 26). | Model its assertions as an adapter error. | Accepted |
+| 16 | Rust work | Implementation refinement and Rust extraction stay outside this scope. | None in this scope. | Accepted |
+| 17 | Height bound | The adapter error `heightOutOfRange` for a candidate at height 2147483647, so that every entry stays below that height (section 7.1). | Allow that one height in the index, and let later steps return `invalidView`. | Accepted |
 
 ## 14. Remaining risks
 

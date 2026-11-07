@@ -435,7 +435,9 @@ A candidate time 60 seconds after the predecessor passes checks 5 and 6, with th
 - `AllowDigishieldMinDifficultyForBlock` needs a predecessor at height 157500 or more, and a candidate time more than 120 seconds after it (D6, lines 26 to 39).
   Then the required value is `testnetLimit`.
 - Below candidate 145000, at a height that is not a retarget, a candidate time more than 120 seconds after the predecessor requires `testnetLimit` (D17, lines 60 and 61).
-  Otherwise the walk returns the last `nBits` that is not `testnetLimit`, at a height that is not a multiple of 240 (D17, lines 65 to 69).
+  Otherwise the walk goes back from the predecessor and stops at the first entry that meets one of three conditions (D17, lines 65 to 69).
+  Its `nBits` is not `testnetLimit`, or its height is a multiple of 240, or it has no predecessor.
+  The walk returns the `nBits` of that entry, which can be `testnetLimit` at a multiple of 240.
 -/
 def testnetCases : List Case :=
   let base := fun (_ : Nat) => testnetBits

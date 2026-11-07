@@ -471,7 +471,9 @@ A legacy version has a clear AuxPoW flag, so at most one of the two checks can r
 
 The record is an argument that carries only `fAllowLegacyBlocks`.
 Core takes the record from `GetConsensus` at the height of the new header (D14, lines 494 to 506).
-The specification does not model that selection for this field, and no theorem says which record a caller should pass.
+`getContextualParams` models that selection ([contextual parameters and checkpoints](#contextual-parameters-and-checkpoints)).
+`checkVersion` does not call it, and no theorem says which record a caller should pass.
+
 The oracle adapter projects the field from the D14 parameter trees and compares 207 boundaries with Core's actual selected records.
 A caller that passes the wrong record gets the result of the wrong era.
 The known answers state the record that Core selects on each side of each activation height, from D14.
@@ -481,6 +483,48 @@ It omits the rest of `ContextualCheckBlockHeader`: `nBits` against `GetNextWorkR
 So an accepted result does not mean that Core accepts the header in context.
 
 By `#print axioms`, `PureBlockHeader.isLegacy_iff` depends on `propext`, and the other theorems on `propext` and `Quot.sound`.
+
+### Contextual parameters and checkpoints
+
+`getContextualParams` repeats the search of `GetConsensus` (D14, lines 494 to 506) over a projection of each network's records.
+The projection keeps `fAllowLegacyBlocks`, `BIP65Height` and `BIP66Height` (D15, lines 51, 53 and 82).
+`getContextualParams_mainnet`, `_testnet` and `_regtest` give the selected record at every UInt32 height.
+`allowLegacyBlocks_getConsensus` shows that the selected `fAllowLegacyBlocks` is false exactly from height 371337 on mainnet, 158100 on testnet and 20 on regtest.
+`getContextualParams_eq_work` shows that the search selects the effective height that `Work.getConsensus` selects.
+
+`ContextualParams.bipHeights_records` shows that every record of a network's tree has the `BIP65Height` and `BIP66Height` of the height-zero record.
+Design record 0006, item 3, gives the reason in Core: each record is a copy of the previous one, and no copy changes these fields.
+`bip65Height_getConsensus` and `bip66Height_getConsensus` give the selected values at every UInt32 height.
+The theorems are about the transcribed records.
+A transcription mistake in D14 would make them claims about the wrong records (A1).
+The known answers compare 23 selected records with values copied from D14, each with its line.
+
+`lastCheckpoint` follows `GetLastCheckpoint` (D67, lines 18 to 30) and the `fCheckpointsEnabled` test of `ContextualCheckBlockHeader` (D33, line 3093).
+It walks the network's table from the greatest height down, and returns the first height in the known list.
+`checkpointHeights_sorted` shows that the heights of each table increase strictly, so the walk follows the key order of Core's `std::map`.
+`lastCheckpoint_eq` shows that the result is `none` when checkpoints are disabled.
+Otherwise the result is the greatest table height in the known list, or `none` if the list has no table height.
+`lastCheckpoint_eq_some_iff` and `lastCheckpoint_eq_none_iff` state the same result as conditions.
+
+The flag and the known list are inputs that a node computes from its own state: the option `-checkpoints` and the block index.
+No theorem says that a caller supplies the values that a node would compute.
+Core's `GetLastCheckpoint` returns the block-index entry of a checkpoint hash, and check 4 reads the `nHeight` of that entry.
+`lastCheckpoint` returns the table key instead.
+The two agree unless the block index holds a block with a checkpoint hash at another height.
+To exclude that case needs collision resistance of double SHA-256, which DogeLib does not model (A4).
+
+The known answers compare ten of the 43 table hashes with the double SHA-256 of independent pure headers.
+The tables are also compared with D9 by their sizes and end heights.
+The oracle's `block.check_version` keeps its own projection of `fAllowLegacyBlocks`, `legacyGateTree` in `Block.Exports.Oracle`.
+No theorem relates that projection to `getContextualParams`.
+
+By `#print axioms` with Lean `v4.35.0`:
+
+| Axioms | Theorems in `Block.Proofs.ContextualParams` |
+| --- | --- |
+| None | `ContextualParams.bipHeights_records`, `checkpointHeights_sorted` |
+| `propext`, `Quot.sound` | `getContextualParams_mainnet`, `getContextualParams_testnet`, `getContextualParams_regtest`, `allowLegacyBlocks_getConsensus`, `bip65Height_getConsensus`, `bip66Height_getConsensus`, `getContextualParams_eq_work` |
+| `propext`, `Classical.choice`, `Quot.sound` | `find?_reverse_eq_max?_filter`, `lastCheckpoint_eq`, `lastCheckpoint_eq_some_iff`, `lastCheckpoint_eq_none_iff` |
 
 ### RIPEMD-160 and Hash160
 
@@ -2136,6 +2180,9 @@ The legacy signature hash is the `SIGVERSION_BASE` mode of `SignatureHash`, and 
 The work-parameter search covers each network and height, and the next-work wrapper selects the candidate height.
 The caller's hard-coded activation checks use the previous height, as the next-work subsection explains.
 Version gating takes its record from the caller, and does not select it from a height.
+
+`getContextualParams` selects the contextual fields of a record by network and height.
+`lastCheckpoint` takes the node's checkpoint state as an explicit input.
 Script verification takes its flags and its `InputContext` from the caller. Ledger work will need explicit context.
 
 ## Gap B: does the code that runs match the definitions?

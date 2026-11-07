@@ -38,7 +38,7 @@ Three-second spacing returns the limit below height 10 (`src/pow.cpp:54-62`).
 From height 10, the DigiShield modulation gives `1 + trunc((3 - 1)/8) = 1`, preserving the target (`src/dogecoin.cpp:50-86`).
 
 The activation cases also cover the regtest transition at height 20 and version thresholds 1251 and 1351.
-The version cases supply eleven linked predecessors above a trusted anchor.
+The version cases supply eleven linked predecessors, and the lowest of them is a trusted anchor.
 These supplied index entries are context, not assertions of full-chain acceptance.
 
 Each request supplies an index, an ordered failed list, exact full headers and one adjusted time, 1296688702.

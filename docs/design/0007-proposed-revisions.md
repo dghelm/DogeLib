@@ -1,8 +1,8 @@
 # Proposed revisions
 
-**Status:** Proposed.
-The maintainer has not adopted this record.
-Section 13 lists the decisions that adoption needs.
+**Status:** Adopted on 2026-11-07, with the decisions that section 13 records.
+This record is frozen.
+Implementation status belongs in ROADMAP.md and COVERAGE.md.
 
 **Date:** 2026-11-07
 **Companions:** [Contribution policy](../../CONTRIBUTING.md), [sources](../../SOURCES.md), [architecture](../../ARCHITECTURE.md), [coverage](../../COVERAGE.md), [soundness](../../SOUNDNESS.md), [design record 0001](0001-initial-handoff.md) and [design record 0006](0006-contextual-header-validation.md).
@@ -558,22 +558,22 @@ Neither is part of this scope.
 
 ## 13. Decisions
 
-**Date:** none yet. **Decision maker:** Maintainer.
-Each proposal below is open:
+**Date:** 2026-11-07. **Decision maker:** Maintainer.
+The maintainer decided each proposal as its status states:
 
 | Number | Topic | Proposal | Status |
 | --- | --- | --- | --- |
-| 1 | Location | Option L2: the libraries `Proposals` and `ProposalProofs` in the root package, rooted under `DogeLib.Proposals` (section 4). Option L3 stays available for a proposal that needs an excluded dependency. | Open |
-| 2 | Enforcement | Add the prefix `DogeLib.Proposals` to the import check of `scripts/CheckRefinementImports.lean`, and add the proposal roots to `check-decls` (section 4). | Open |
-| 3 | Revised definitions | Option M2: a Script loop with a step parameter in the proposal library, pinned to the baseline by agreement theorems. No baseline file changes (section 6). | Open |
-| 4 | Activation | An explicit `active : Bool` at the rule level, and one optional activation height per network at the block level, with no default value. No signalling model now (section 7). | Open |
-| 5 | Compatibility classes | Inactive equality for every proposal. A soft fork adds restriction of acceptance, a strictness witness and a use witness. The labels Script-local and header-local, and the classes relaxation, incompatible and unclassified (section 8). | Open |
-| 6 | Legacy projection | The candidate definition of section 8.4, with the identity for revisions that keep encodings and state effects. A non-identity projection waits for the first proposal that needs one. | Open |
-| 7 | Identity | `DogeLib.Proposals.<Name>` with a descriptive name, external documents in a SOURCES.md table with identifiers `P1` on, and a separate COVERAGE.md section. The Lean definition is the object of every claim (section 5). | Open |
-| 8 | Oracle | No proposal operation in 0.x. `Exports` stays baseline-only. A later decision can add a `ProposalExports` library (section 9). | Open |
-| 9 | Worked example | `ExampleVersionVerify` on `OP_NOP10`, kept in the `Proposals` library as a permanent test of the framework, with documentation that says it is not a proposal (section 10). | Open |
-| 10 | Errors | A generic error type in the framework loop. A proposal uses the sum of `ScriptError` and its own errors (section 6.2). | Open |
-| 11 | Version-bit condition | Add Core's `Condition` to the baseline with the theorem `checkBlockHeader_not_versionBitsCondition`, or defer both to a signalling record (section 11). | Open |
+| 1 | Location | Option L2: the libraries `Proposals` and `ProposalProofs` in the root package, rooted under `DogeLib.Proposals` (section 4). Option L3 stays available for a proposal that needs an excluded dependency. | Accepted |
+| 2 | Enforcement | Add the prefix `DogeLib.Proposals` to the import check of `scripts/CheckRefinementImports.lean`, and add the proposal roots to `check-decls` (section 4). | Accepted |
+| 3 | Revised definitions | Option M2: a Script loop with a step parameter in the proposal library, pinned to the baseline by agreement theorems. No baseline file changes (section 6). | Accepted |
+| 4 | Activation | An explicit `active : Bool` at the rule level, and one optional activation height per network at the block level, with no default value. No signalling model now (section 7). | Accepted |
+| 5 | Compatibility classes | Inactive equality for every proposal. A soft fork adds restriction of acceptance, a strictness witness and a use witness. The labels Script-local and header-local, and the classes relaxation, incompatible and unclassified (section 8). | Accepted |
+| 6 | Legacy projection | The candidate definition of section 8.4, with the identity for revisions that keep encodings and state effects. A non-identity projection waits for the first proposal that needs one. | Accepted |
+| 7 | Identity | `DogeLib.Proposals.<Name>` with a descriptive name, external documents in a SOURCES.md table with identifiers `P1` on, and a separate COVERAGE.md section. The Lean definition is the object of every claim (section 5). | Accepted |
+| 8 | Oracle | No proposal operation in 0.x. `Exports` stays baseline-only. A later decision can add a `ProposalExports` library (section 9). | Accepted |
+| 9 | Worked example | `ExampleVersionVerify` on `OP_NOP10`, kept in the `Proposals` library as a permanent test of the framework, with documentation that says it is not a proposal (section 10). | Accepted |
+| 10 | Errors | A generic error type in the framework loop. A proposal uses the sum of `ScriptError` and its own errors (section 6.2). | Accepted |
+| 11 | Version-bit condition | Add Core's `Condition` to the baseline with the theorem `checkBlockHeader_not_versionBitsCondition`, or defer both to a signalling record (section 11). | Deferred to a signalling record |
 
 ## 14. Remaining risks
 

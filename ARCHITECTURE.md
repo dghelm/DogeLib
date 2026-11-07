@@ -65,6 +65,7 @@ Refinement/Rust/                     Rust sources and extraction scripts
 tests/<layer>/                       fixtures with recorded provenance
 tests/KnownAnswers.lean              the driver that `lake test` runs
 tests/KnownAnswers/                  known answers by topic and shared fixture readers
+tests/KnownAnswers/Proposals/        known answers of the proposed-revisions library
 harness/core/                        the Dogecoin Core harness: Core's code on the oracle's requests
 scripts/                             repository tools and checks
 DogeLib/Proposals/Framework/        the framework for proposed revisions
@@ -136,6 +137,9 @@ Two checks enforce this direction:
 A proposal lives under `DogeLib.Proposals.<Name>`, and `DogeLib/Proposals.lean` imports it.
 Its proof tree is a root of `ProposalProofs`, and `DogeLib/Proposals/Proofs.lean` imports it.
 A proposal never gets a row in the baseline tables of [COVERAGE.md](COVERAGE.md), and the oracle has no proposal operation.
+
+`DogeLib.Proposals.ExampleVersionVerify` is the worked example of design record 0007, section 10.
+It is not a proposal for Dogecoin. Decision 9 keeps it in the library as a permanent test of the framework.
 
 ## Adopted upstream code
 

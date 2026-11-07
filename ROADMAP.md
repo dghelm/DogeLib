@@ -86,7 +86,7 @@ Section 12 of the record gives two stages:
 | Stage | Deliverable | Status |
 | --- | --- | --- |
 | 1 | The `Proposals` and `ProposalProofs` libraries, the import check, the activation model and the Script loop with a step parameter | Specified in `DogeLib.Proposals.Framework`, with the framework targets of section 11 except `checkBlockHeader_not_versionBitsCondition` (decision 11), and the import-check self-test |
-| 2 | The worked example `ExampleVersionVerify`, with its theorem targets and known answers | Not started |
+| 2 | The worked example `ExampleVersionVerify`, with its theorem targets and known answers | Specified in `DogeLib.Proposals.ExampleVersionVerify`, with every target of section 10.3 and known answers through the compiled code |
 
 One other candidate is unscheduled, and it needs an approved scope before work starts:
 

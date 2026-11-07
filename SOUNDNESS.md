@@ -2267,6 +2267,51 @@ By `#print axioms` with Lean `v4.35.0`:
 | `propext` | `Activation.none_inactive`, `Activation.isActive_lt`, `Activation.isActive_of_le`, `baselineVerdict_eq_accepted`, `VerifyOutcome.verdict_eq_accepted` |
 | `propext`, `Quot.sound` | `evalLoopWith_baseline`, `evalScriptWith_baseline`, `verifyScriptWith_baseline`, `evalLoopWith_restricts`, `evalScriptWith_restricts`, `verifyScriptWith_restricts`, `verifyScript_of_restricts`, `evalLoopWith_congr`, `evalScriptWith_congr`, `verifyScriptWith_congr`, `Activation.isActive_iff`, `Activation.isActive_mono`, `inactiveEq_verifyScriptWith`, `restrictsAcceptance_verifyScriptWith` |
 
+### Proposed revisions: the worked example
+
+`DogeLib.Proposals.ExampleVersionVerify` is the worked example of [design record 0007](docs/design/0007-proposed-revisions.md), section 10.
+It is not a proposal for Dogecoin, and no network activates it.
+Decision 9 keeps it in the `Proposals` library as a permanent test of the framework.
+
+The example redefines `OP_NOP10` (`0xb9`).
+With `active` true and the opcode in an executing branch, `exampleStep` runs the baseline `evalInstruction` and then `versionCheck` on its successful state.
+`versionCheck` rejects an empty stack, an operand of more than five bytes and a negative operand.
+It also rejects an operand above the transaction version, read as an unsigned 32-bit value.
+Without a transaction context it reports an unsupported capability.
+It never pops the operand, and it returns the state that it receives or fails.
+
+What the proofs say. Every theorem is Script-local: it is about one call of `evalScript`, `verifyScript` or `verifyLegacySpend`, not about a block or a chain.
+
+- `exampleStep_restricts`: for every `active`, context, checker, flag set and baseline error map, the example step restricts the baseline step.
+- `example_inactive_eq`, `example_evalScript_inactive_eq`, `example_spend_inactive_eq`: with `active` false, each revised definition equals the baseline result with the error under `Sum.inl`. This holds for every other argument. Every result agrees, including each rejection and each unsupported capability.
+- `example_soft_fork_local`: for every `active`, input, previous `scriptPubKey`, flag set and verifier, if the revised spend predicate accepts, `verifyLegacySpend` accepts. `example_verifyScript_soft_fork_local` states the same for `verifyScript`, including P2SH.
+- `example_eq_of_no_nop10`: for every `active` and context, the revision equals the baseline on scripts without an instruction `0xb9`. The condition covers `scriptSig`, `scriptPubKey` and every redeem script that the P2SH evaluation can take. So a baseline comparison also applies to the revision on those scripts.
+- `example_strict`: a concrete spend with version 1 and the previous `scriptPubKey` `01 02 b9`, which `verifyLegacySpend` accepts and the active revision rejects with `versionTooLow`.
+- `example_use`: the same spend with version 2, which the active revision accepts. Its `scriptPubKey` lies in `RunsRule`, so `OP_NOP10` runs at the top level.
+- `example_softFork`: the four results above in the framework's `SoftFork` structure, over `SpendArgs`.
+- `example_accepted_iff`, `example_spend_accepted_iff`: let `scriptPubKey` be the push of an operand `b` of at most five bytes, then `OP_NOP10`, then a script `S`. Let `scriptSig` and `S` have no instruction `0xb9`. Then the active revision with a context accepts exactly when the baseline accepts and `0 ≤ ScriptNum.value b ≤ version`, for every checker and flag set.
+- `example_step_state`, `example_evalScript_state`: a successful revised step or evaluation is a baseline success with the projected state. `example_soft_fork_projected`: an accepted input projects to an input that the baseline accepts. `projection` is the identity.
+
+The example adds no axiom and no trust assumption.
+It inherits the gaps of the baseline definitions that it reuses: the `SignatureVerifier` hypothesis of `transactionChecker` and the unsupported flag set of `verifyScript`.
+It has these boundaries:
+
+- **Unsupported reason.** The framework's unsupported reasons are the baseline type `Unsupported`, which the example cannot extend. A missing context reports `noContext`, which is `Unsupported.signatureOpcode 0xb9`. The baseline reports `signatureOpcode op` only for `0xac` to `0xaf`, but no theorem states that, so a consumer that reads the reason relies on the documentation.
+- **Order of the context check.** Section 10.1 lists the missing context fifth. The definition checks it after the negative operand and before the version comparison, which reads the context, as `OP_CHECKLOCKTIMEVERIFY` does.
+- **Error order.** The baseline step checks the stack size before `versionCheck` runs. A caller's initial stack of more than 1,000 items gives `STACK_SIZE` before the example's own error (section 10.2). A known answer checks that case. The order changes an error, never acceptance.
+- **Characterization domain.** `example_accepted_iff` covers an operand pushed by `OP_0` or a direct push of one to five bytes. It does not cover `OP_1NEGATE`, `OP_1` to `OP_16`, the `OP_PUSHDATA` forms or a longer operand. It also excludes a second `OP_NOP10`, even in a branch that does not execute.
+- **Witnesses.** `example_strict` and `example_use` are computed by the kernel with `decide +kernel`. The spends contain no signature opcode, so no digest is computed.
+- **Evidence.** The known answers in `tests/KnownAnswers/Proposals/ExampleVersionVerify.lean` have results derived by hand from section 10.1. No other implementation of the rule exists, so there is no comparison.
+
+By `#print axioms` with Lean `v4.35.0`:
+
+| Axioms | Theorems |
+| --- | --- |
+| None | `projection_eq_identity` |
+| `propext` | `readInstruction_operandScript_nop10` |
+| `propext`, `Quot.sound` | `versionCheck_next`, `exampleStep_false`, `exampleStep_restricts`, `exampleStep_eq_of_not_nop10`, `example_evalScript_inactive_eq`, `example_inactive_eq`, `example_spend_inactive_eq`, `example_inactiveEq`, `example_verifyScript_soft_fork_local`, `example_soft_fork_local`, `example_restrictsAcceptance`, `example_evalScript_eq_of_no_nop10`, `example_eq_of_no_nop10`, `example_step_state`, `example_evalScript_state`, `example_soft_fork_projected`, `toNat_lengthByte`, `readInstruction_operandScript_zero`, `readInstruction_append`, `opcodeFreeFrom_append`, `example_strict`, `example_use`, `example_softFork` |
+| `propext`, `Classical.choice`, `Quot.sound` | `example_accepted_iff`, `example_spend_accepted_iff` |
+
 ### What cannot be proved yet
 
 A `partial` definition, an `opaque` constant, or a definition that unfolds to one cannot be evaluated by the kernel.

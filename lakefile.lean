@@ -67,7 +67,8 @@ lean_lib «Proposals» where
 @[default_target]
 lean_lib «ProposalProofs» where
   requiresModuleSystem := true
-  roots := #[`DogeLib.Proposals.Proofs, `DogeLib.Proposals.Framework.Proofs]
+  roots := #[`DogeLib.Proposals.Proofs, `DogeLib.Proposals.Framework.Proofs,
+    `DogeLib.Proposals.ExampleVersionVerify.Proofs]
   precompileModules := false
 
 /-- The oracle: answers requests in the record format of `docs/oracle.md`,

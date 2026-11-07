@@ -24,6 +24,8 @@ Each item below links to its evidence.
   - Full headers with the AuxPoW payload, and `CAuxPow::check` ([full headers](SOUNDNESS.md#full-headers-and-the-auxpow-payload), [the AuxPoW check](SOUNDNESS.md#the-auxpow-check)).
   - `CheckAuxPowProofOfWork` and `CheckBlockHeader` with `fCheckPOW` true. `checkAuxPowProofOfWork_iff` characterizes acceptance for every parameter record and full header ([header proof of work](SOUNDNESS.md#header-proof-of-work)).
   - The two version gates of `ContextualCheckBlockHeader` ([version gating](SOUNDNESS.md#version-gating)).
+- **Contextual header validation.** `ContextualCheckBlockHeader` on a checked view of the predecessor's chain, with the adjusted time and the last known checkpoint as inputs ([design record 0006](docs/design/0006-contextual-header-validation.md)).
+  `contextualCheck_eq_ok_iff` and one theorem for each rejection give the exact result on the domain, with no Core comparison yet ([contextual header validation](SOUNDNESS.md#contextual-header-validation)).
 - **Signatures.** The secp256k1 curve and ECDSA verification, adapted from EthLib, and Core's public-key parser and `CPubKey::Verify` as `Script.coreVerifier` ([design record 0005](docs/design/0005-signature-verifier.md)).
   Its theorems give the result of each of Core's checks, and reduce the final test to the point computation `Point.mulAdd` ([Core's verifier](SOUNDNESS.md#secp256k1-public-key-parser-and-cores-verifier)).
   No theorem proves that DogeLib's point arithmetic computes Core's `secp256k1_ecmult` result. Finite comparisons with Core are the evidence for that step.
@@ -52,7 +54,7 @@ A comparison covers its requests and no other inputs.
 
 DogeLib does not specify these parts of Dogecoin:
 
-- The contextual checks of a header against chain history, except the two version gates (for example `nBits` against the expected work, the checkpoints and the time checks)
+- The sources of the inputs of the contextual header check: the node's clock and peer offsets, its block index and its choice of chain
 - Block validity, `CheckBlock`, and transaction validity outside one input's Script verification
 - The witness v0 signature hash, and witness script verification
 - Full-node validation: the UTXO set, chain selection and the mempool

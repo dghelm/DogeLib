@@ -308,3 +308,12 @@ Two cases deliberately disagree between the flag and payload presence, so they c
 The split form of `block.check_pow` preserves those in-memory states and compares both implementations on identical components.
 The ten serializable cases also pass through the complete full-header reader.
 These snapshots record comparison evidence, rather than fixed source-test known answers.
+
+## Contextual check headers
+
+Three subdirectories hold public mainnet pure headers for the contextual header check.
+Each has its own README, which records its sources, fetch date and anchor hash, and its own `SHA256SUMS`:
+
+- `mainnet-auxpow-activation-headers/`: heights 371320–371340, around AuxPoW activation.
+- `mainnet-bip65-headers/`: heights 3464739–3464760, around `BIP65Height`.
+- `mainnet-bip66-headers/`: heights 1032483–1034390, around `BIP66Height`.

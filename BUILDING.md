@@ -59,9 +59,12 @@ Every other opaque dependency remains a finding ([SOUNDNESS.md](SOUNDNESS.md#c1-
 It is empty, and a new finding is fixed, never added to it.
 
 `lake test` runs known answers through the compiled specification.
-Eight directories hold fixture files, each with a README that gives their provenance:
+Eleven directories hold fixture files, each with a README that gives their provenance:
 
 - `tests/block/`: pure-header and Merkle-root known answers.
+- `tests/block/mainnet-auxpow-activation-headers/`: public mainnet headers at heights 371320–371340, for the contextual header check around AuxPoW activation.
+- `tests/block/mainnet-bip65-headers/`: public mainnet headers at heights 3464739–3464760, for the contextual header check around `BIP65Height`.
+- `tests/block/mainnet-bip66-headers/`: public mainnet headers at heights 1032483–1034390, for the contextual header check around `BIP66Height`.
 - `tests/cryptography/ripemd160/`: RIPEMD-160 vectors and Hash160 digests checked with hashlib and compiled Core.
 - `tests/cryptography/sha1/cavp/`: the NIST CAVP vectors, for SHA-1.
 - `tests/cryptography/sha256/cavp/`: the NIST CAVP vectors, for SHA-256.

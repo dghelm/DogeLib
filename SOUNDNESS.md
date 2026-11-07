@@ -480,7 +480,8 @@ The known answers state the record that Core selects on each side of each activa
 
 The operation covers only these two checks.
 It omits the rest of `ContextualCheckBlockHeader`: `nBits` against `GetNextWorkRequired`, the checkpoints, the time checks and the rejection of outdated versions.
-So an accepted result does not mean that Core accepts the header in context.
+So an accepted result of `checkVersion` does not mean that Core accepts the header in context.
+[Contextual header validation](#contextual-header-validation) composes all seven checks.
 
 By `#print axioms`, `PureBlockHeader.isLegacy_iff` depends on `propext`, and the other theorems on `propext` and `Quot.sound`.
 
@@ -525,6 +526,88 @@ By `#print axioms` with Lean `v4.35.0`:
 | None | `ContextualParams.bipHeights_records`, `checkpointHeights_sorted` |
 | `propext`, `Quot.sound` | `getContextualParams_mainnet`, `getContextualParams_testnet`, `getContextualParams_regtest`, `allowLegacyBlocks_getConsensus`, `bip65Height_getConsensus`, `bip66Height_getConsensus`, `getContextualParams_eq_work` |
 | `propext`, `Classical.choice`, `Quot.sound` | `find?_reverse_eq_max?_filter`, `lastCheckpoint_eq`, `lastCheckpoint_eq_some_iff`, `lastCheckpoint_eq_none_iff` |
+
+### Contextual header validation
+
+`DogeLib.Block.ContextualCheck` specifies `ContextualCheckBlockHeader` (D33, lines 3066 to 3119).
+`contextualCheckBlockHeader` runs Core's seven checks in source order and returns the first failure.
+It composes `checkVersion`, `Work.nextWorkRequired`, `Work.medianTimePast`, `getContextualParams` and `lastCheckpoint` without a change to them.
+The source review, not a theorem, connects the composition to Core.
+
+The function first checks its domain, and returns an adapter error outside it.
+The domain is a nonempty view on which `medianTimePast` and `nextWorkRequired` succeed, with an adjusted time of at most `INT64_MAX - 7200`.
+Core's callers always pass a predecessor, so the empty view is outside the domain.
+
+On a view that is too short, Core computes a different median or fails an assertion.
+So the function rejects such a view with an adapter error.
+Above `INT64_MAX - 7200`, Core's sum `nAdjustedTime + 2 * 60 * 60` overflows `int64_t`, which is undefined behaviour (design record 0006, decision 9).
+The domain checks run before check 1.
+So an input outside the domain never gets a Core rejection, even when Core would reject it at an earlier check.
+
+Check 3 compares `nBits` with the required value as raw 32-bit values, as D33 line 3089 does.
+So another compact encoding of the same target fails.
+Checks 5 and 6 compare widened `Int` times.
+On the domain, no value overflows `int64_t`, so these comparisons equal Core's.
+Check 7 uses `PureBlockHeader.getBaseVersion`, the remainder of the signed version by 256 that truncates toward zero, as C++ `%` does (D10, lines 88 to 95).
+The reject reason prints that value as the eight hexadecimal digits of its 32-bit pattern, as Core's `%08x` does (D71).
+
+The theorems in `Block.Proofs.ContextualCheck` hold for every network, header, adjusted time and last checkpoint:
+
+- `contextualCheck_eq_ok_iff`: on a view `prev :: rest`, the function accepts exactly when the input is in the domain and the seven conditions hold.
+  Each condition is stated over the inputs, the median, the required value and the record at the candidate height.
+- `contextualCheck_eq_lateLegacyBlock_iff` and the six other `contextualCheck_eq_*_iff` theorems give one rejection each.
+  The function returns the rejection exactly when the input is in the domain, all earlier conditions hold and the condition of that check fails.
+  For `bad-version`, the error carries `getBaseVersion`.
+- `contextualCheck_nil`, `contextualCheck_of_medianTimePast_error`, `contextualCheck_of_nextWorkRequired_error` and `contextualCheck_of_adjustedTime` give the adapter error outside the domain.
+- `contextualCheck_congr_header`: two headers with the same `nVersion`, `nTime` and `nBits` give the same result.
+- `contextualCheck_adjustedTime_mono`: an acceptance stays an acceptance for every greater adjusted time up to `INT64_MAX - 7200`.
+- `contextualCheck_no_checkpoint`: with no last checkpoint, the function never returns `bad-fork-prior-to-checkpoint`.
+- `contextualCheck_congr_prefix`: two views that pass `validateWorkView`, start with the same predecessor and agree on their first `contextualViewDepth` entries give the same result.
+  The depth is the greater of 11 and `retargetInterval params h + 1`, where `h` is the predecessor height and `params` is the work record at the candidate height.
+  `contextualViewDepth_eq` gives its values.
+  On mainnet and testnet, the depth is 241 below candidate height 145000 and 11 from it.
+  On regtest, it is 14401 below candidate height 10 and 11 from it.
+- `contextualCheck_complete`: a view that passes `validateWorkView` and reaches height 0, with an adjusted time in the domain, gives only Core rejections, never an adapter error.
+- `badVersion_iff`: let `b` be the signed remainder of `nVersion` by 256.
+  Check 7 rejects exactly when `b` is below 3 from `BIP66Height`, or below 4 from `BIP65Height`, with each network's heights.
+
+These theorems establish the behaviour of DogeLib's definitions.
+A claim of agreement with Core needs the source review and a Core comparison, which design record 0006 plans as its stage 4.
+No Core comparison of this operation exists.
+
+Three inputs are execution boundaries.
+The caller supplies them, and no theorem says that a caller supplies the values that a node would compute:
+
+- **The adjusted time.** Core passes `GetAdjustedTime()`, the system time plus a peer offset (D72, lines 34 to 37).
+  By default the offset is at most 70 minutes in either direction (D73, line 13).
+  The function takes the adjusted time as an `Int64` and does not model the clock or the peers.
+- **The last known checkpoint.** Core reads `fCheckpointsEnabled` and the checkpoint hashes in its block index `mapBlockIndex` (D33, lines 3093 to 3100, and D67).
+  The function takes the resulting height, and `contextualCheckBlockHeaderWithCheckpoints` derives it from the enabled flag and the known table heights with `lastCheckpoint`.
+  The [checkpoint subsection](#contextual-parameters-and-checkpoints) explains why the table key stands for the `nHeight` of the block-index entry.
+- **The link from the header to the view.** No check reads a hash, so the function cannot check that the view is the chain of the header's `hashPrevBlock`.
+  Core's `AcceptBlockHeader` finds `pindexPrev` by that hash before the call (D33, lines 3205 to 3267).
+  A caller that passes the view of another chain gets the result for that chain.
+
+`lake test` runs the compiled function on the five mainnet fixtures: heights 0–12, 144719–145030, 371320–371340, 1032483–1034390 and 3464739–3464760.
+Two public Electrum servers returned the same bytes for the three ranges under `tests/block`.
+At AuxPoW heights, the servers return each header with its AuxPoW payload, and the fixtures keep only the 80-byte pure headers.
+The test checks every predecessor link, the checkpoint at 371337 and the hashes in the comments on `BIP66Height` and `BIP65Height` (D14, lines 85 to 87).
+The hash in the comment on `BIP66Height` identifies the block at 1032483, 1900 blocks below that height, so that fixture starts at 1032483.
+
+Chain acceptance gives the expected result for 2231 real candidates.
+Hand-derived mutations of the real headers cover each rejection on both sides of its boundary and the order of the checks.
+Synthetic views cover the minimum-difficulty rules of testnet and the version thresholds of testnet and regtest.
+They also cover another encoding of the same target on mainnet and a median of times out of order.
+Their required `nBits` values are derived by hand from D17 and D6.
+These checks do not run Core, and they do not establish proof of work, AuxPoW validity or equivalence on other inputs.
+
+By `#print axioms` with Lean `v4.35.0`:
+
+| Axioms | Theorems in `Block.Proofs.ContextualCheck` |
+| --- | --- |
+| `propext` | `bind_unit_eq_ok`, `bind_unit_eq_error`, `checkDiffbits_eq_ok_iff`, `checkDiffbits_eq_error_iff`, `checkTimeTooOld_eq_error_iff`, `checkTimeTooNew_eq_error_iff`, `checkBaseVersion_eq_error_iff` |
+| `propext`, `Quot.sound` | `checkVersion_mapError_eq_ok_iff`, `checkVersion_mapError_eq_error_iff`, `checkCheckpoint_eq_ok_iff`, `checkCheckpoint_eq_error_iff`, `checkTimeTooOld_eq_ok_iff`, `checkTimeTooNew_eq_ok_iff`, `contextualChecks_isRejection`, `contextualViewDepth_eq`, `badVersion_iff` |
+| `propext`, `Classical.choice`, `Quot.sound` | `checkBaseVersion_eq_ok_iff`, `contextualChecks_eq_ok_iff`, `contextualCheck_nil`, `contextualCheck_of_medianTimePast_error`, `contextualCheck_of_nextWorkRequired_error`, `contextualCheck_of_adjustedTime`, `contextualCheck_eq_contextualChecks`, `contextualCheck_eq_iff_contextualChecks`, `contextualCheck_eq_ok_iff`, the seven `contextualCheck_eq_*_iff` rejection theorems, `contextualCheck_congr_header`, `contextualCheck_adjustedTime_mono`, `contextualCheck_no_checkpoint`, `contextualCheck_congr_prefix`, `contextualCheck_complete` |
 
 ### RIPEMD-160 and Hash160
 
@@ -2031,6 +2114,16 @@ The UInt32 times widen to Int, and the fixed network spacings of 1 or 60 keep th
 `getNextWorkRequired_minDifficulty` proves the minimum result when validation succeeds and the all-block minimum condition holds.
 `recoverLastNonMinDifficulty_mem` proves that a successful recovery returns a supplied entry's compact, without a header-validity hypothesis.
 These caller claims do not establish target validity.
+
+Two theorems bound the history that the caller reads.
+
+`nextWorkRequired_congr_prefix` takes two views that pass `validateWorkView` and start with the same entry at height `h`.
+If they agree on their first `retargetInterval params h + 1` entries, where `params` is the record at the candidate height, the results are equal.
+A retarget reads the entry at index `blocksToGoBack`, at most the interval.
+The recovery walk stops at the latest at a height divisible by the interval (`recoverLastNonMinDifficulty_congr_prefix`).
+
+`nextWorkRequired_ok` shows that a checked view that reaches height 0 gives a value, never an adapter error, for every network and candidate time.
+It uses `difficultyAdjustmentInterval_getConsensus_pos`: every selected record has a positive interval.
 The separate target-check theorem supplies the old-target bound when target validity is assumed.
 
 `lake test` includes source-derived network and branch examples and all six D7 retarget answers through synthetic contiguous views.
@@ -2056,7 +2149,8 @@ By `#print axioms` with Lean `v4.35.0`:
 | None | `getConsensus_mainnet`, `getConsensus_regtest` |
 | `propext` | `retargetInterval_after`, `blocksToGoBack_first`, `blocksToGoBack_later`, `recoverLastNonMinDifficulty_mem`, `retargetInterval_no_recovery` |
 | `propext`, `Quot.sound` | `getConsensus_testnet`, `retargetInterval_before`, `blocksToGoBack_le`, `retargetInterval_eq_record_of_nonretarget` |
-| `propext`, `Classical.choice`, `Quot.sound` | `getNextWorkRequired_genesis`, `getNextWorkRequired_minDifficulty` |
+| `propext`, `Quot.sound` | `validateWorkView_cons_cons`, `length_of_validateWorkView`, `recoverLastNonMinDifficulty_congr_prefix`, `difficultyAdjustmentInterval_getConsensus_pos`, `recoverLastNonMinDifficulty_ok` |
+| `propext`, `Classical.choice`, `Quot.sound` | `getNextWorkRequired_genesis`, `getNextWorkRequired_minDifficulty`, `getNextWorkRequiredFromView_congr_prefix`, `nextWorkRequired_congr_prefix`, `nextWorkRequired_ok` |
 
 ### Median time past
 
@@ -2064,7 +2158,7 @@ By `#print axioms` with Lean `v4.35.0`:
 Core collects the time of the entry and the times of up to ten predecessors, and stops early after genesis.
 It sorts the collected times and returns the element at index `count / 2`, so an even count gives the upper median.
 `ContextualCheckBlockHeader` calls it on the predecessor of a header (D33, lines 3103-3104).
-That comparison with the header time is not specified yet.
+[Contextual header validation](#contextual-header-validation) specifies that comparison with the header time.
 
 `medianTimePast` takes the checked finite view of [next-work selection](#next-work-selection-and-work-parameters), newest first.
 Let `h` be the height of the first entry, and let `k = medianTimeSpan = min(11, h + 1)`.
@@ -2303,6 +2397,8 @@ Version gating takes its record from the caller, and does not select it from a h
 
 `getContextualParams` selects the contextual fields of a record by network and height.
 `lastCheckpoint` takes the node's checkpoint state as an explicit input.
+`contextualCheckBlockHeader` selects its record at the candidate height, and takes the network, the adjusted time and the last known checkpoint as explicit inputs.
+Its [subsection](#contextual-header-validation) records those inputs as execution boundaries.
 Script verification takes its flags and its `InputContext` from the caller. Ledger work will need explicit context.
 
 ## Gap B: does the code that runs match the definitions?
@@ -2586,6 +2682,11 @@ Production CI never uses this flag.
 A correct definition gives a wrong answer when a client calls it outside its input domain.
 A prefix decoder returns a remainder, and a client that ignores it accepts trailing bytes.
 Each public operation documents its input domain, its failure behavior and whether it consumes the whole input.
+
+`contextualCheckBlockHeader` has three inputs that only the caller can make correct: the adjusted time, the last known checkpoint and the view of the header's chain.
+No theorem says that a caller supplies the values that a node would compute.
+A client that passes another chain, a stale time or a checkpoint that its block index does not hold gets the result for those inputs.
+[Contextual header validation](#contextual-header-validation) describes each input.
 
 ### D2. Dependency changes
 

@@ -194,6 +194,9 @@ class Reports(unittest.TestCase):
                               '(cd tests/work/mainnet-genesis-headers && sha256sum -c SHA256SUMS) && '
                               '(cd tests/work/mainnet-headers && sha256sum -c SHA256SUMS) && '
                               '(cd tests/block && sha256sum -c SHA256SUMS) && '
+                              '(cd tests/block/mainnet-auxpow-activation-headers && sha256sum -c SHA256SUMS) && '
+                              '(cd tests/block/mainnet-bip65-headers && sha256sum -c SHA256SUMS) && '
+                              '(cd tests/block/mainnet-bip66-headers && sha256sum -c SHA256SUMS) && '
                               '(cd tests/script/corpus && sha256sum -c SHA256SUMS) && '
                               '(cd tests/script/signed-spends && sha256sum -c SHA256SUMS)',
             'refinement': 'lake -d Refinement build --wfail',

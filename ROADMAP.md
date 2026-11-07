@@ -78,6 +78,16 @@ Section 10 of the record gives four stages, and section 11 gives their theorem t
 The adoption of the scope establishes no target theorem.
 Each stage reports its evidence in COVERAGE.md and SOUNDNESS.md when it merges.
 
+[Design record 0007](docs/design/0007-proposed-revisions.md) sets how DogeLib specifies proposed revisions and proves their compatibility with the baseline.
+The maintainer adopted the record on 2026-11-07.
+Decisions 1 to 10 of its section 13 are accepted, and decision 11 is deferred to a signalling record.
+Section 12 of the record gives two stages, which are not scheduled:
+
+| Stage | Deliverable | Status |
+| --- | --- | --- |
+| 1 | The `Proposals` and `ProposalProofs` libraries, the import check, the activation model and the Script loop with a step parameter | Not started |
+| 2 | The worked example `ExampleVersionVerify`, with its theorem targets and known answers | Not started |
+
 One other candidate is unscheduled, and it needs an approved scope before work starts:
 
 - **Arithmetic agreement with Core's verifier.** A Lean proof that `Point.mulAdd` computes Core's `secp256k1_ecmult` result ([design record 0005](docs/design/0005-signature-verifier.md), section 4.3).

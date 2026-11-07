@@ -30,6 +30,7 @@ from oracle_script import harness_refused, refused_set, refusal_precedence_set, 
 MUTATIONS = {
     "contextual_valid": ("core", "CONTEXTUAL_HEADER"),
     "contextual_reason": ("core", "CONTEXTUAL_HEADER"),
+    "contextual_reason_value": ("core", "CONTEXTUAL_HEADER"),
     "pow_reconstruction": ("core", "AUXPOW_RECONSTRUCTION"),
     "pow_mined_reconstruction": ("core", "AUXPOW_POW_RECONSTRUCTION"),
     "pow_scrypt": ("core", "SCRYPT_DIGEST"),
@@ -376,6 +377,18 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
                 break
         else:
             raise SystemExit("wrapper: no contextual response to mutate")
+    if mode == "contextual_reason_value":
+        from oracle_contextual import EXPECTATIONS, key, contextual_sets
+        contextual_sets()
+        for request, response in zip(requests, responses):
+            if (request["op"] == "block.contextual_check" and "ok" in response
+                    and response["ok"]["valid"] is False and key(request) not in EXPECTATIONS):
+                reason = response["ok"]["reject_reason"]
+                response["ok"]["reject_reason"] = "time-too-new" if reason == "time-too-old" else "time-too-old"
+                break
+        else:
+            if any(request["op"] == "block.contextual_check" for request in requests):
+                raise SystemExit("wrapper: no contextual rejection without an independent expectation")
     if mode.startswith("pow_") and mode not in ("pow_reconstruction", "pow_mined_reconstruction"):
         op, field = {"pow_scrypt": ("scrypt.hash", "digest_hex"),
                      "pow_reader": ("block.header.read", "consumed"),
@@ -521,13 +534,17 @@ def main() -> int:
             else:
                 w = wrapper(tmp, mode, role, oracle)
                 oracle_side, harness_side = (w, wrapper(tmp, "none", "core", oracle)) if role == "oracle" else (oracle, w)
-            extra = ([] if mode in ("composition_stack", "targeted_early_error") else ["--quick"]) + ["--timeout", "5" if mode == "hang" else "120"]
+            extra = ([] if mode in ("composition_stack", "targeted_early_error", "contextual_reason_value") else ["--quick"]) + ["--timeout", "5" if mode == "hang" else "120"]
             result = compare(oracle_side, harness_side, extra, env)
             codes = {line.split()[1] for line in result.stdout.splitlines() if line.startswith("FAIL ")}
             if result.returncode != 1 or code not in codes:
                 failures += 1
                 print(f"FAIL {mode}: expected exit 1 with FAIL {code}, got exit {result.returncode}, codes {sorted(codes)}")
                 print(result.stdout[-1500:] + result.stderr[-1500:])
+                continue
+            if mode == "contextual_reason_value" and (codes != {"CONTEXTUAL_HEADER"} or "first difference at" not in result.stdout):
+                failures += 1
+                print(f"FAIL {mode}: did not reach result-value comparison: {result.stdout[-1500:]}")
                 continue
             if mode == "targeted_early_error" and codes != {"TARGETED_OPCODE"}:
                 failures += 1

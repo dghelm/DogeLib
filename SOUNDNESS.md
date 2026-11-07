@@ -2556,8 +2556,8 @@ A user of the comparison trusts these parts of it:
   Any other exception from Core stops the harness, so it cannot pass as a result.
 - The `plan` label of `sighash.legacy`. The harness computes it from Core's conditions instead of observing it. It stops if the label is `fixed_digest` and Core's digest is not the value one.
 - The comparator, `scripts/compare_core.py`.
-  Its self-test, `scripts/test_compare_core.py`, counts 99 cases: two passing controls and 97 negative checks that each fail with the code they target.
-  The negative checks are 88 stream mutations, eight Rust-side mutations and one acceptance-count gap.
+  Its self-test, `scripts/test_compare_core.py`, counts 102 cases: two passing controls and 100 negative checks that each fail with the code they target.
+  The negative checks are 91 stream mutations, eight Rust-side mutations and one acceptance-count gap.
   Assertions about its refusal and timelock constructions run outside that count.
 - For `sighash.legacy`, the oracle's preimage is checked by hashing it, not byte by byte: Core does not expose its preimage.
 
@@ -2583,12 +2583,16 @@ Both programs could be wrong in the same way on an input that the comparison doe
 
 The five header PoW operations are IO-adapter entry points into the existing specification definitions.
 Their JSON conversion and Lean diagnostic strings have no refinement theorem.
-The Core harness transcribes only the two contextual version branches and calls Core's own version predicates.
+The Core harness transcribes the two version branches for `block.check_version` and all seven checks for `block.contextual_check`.
+The latter transcription follows D33, lines 3066 to 3119, and calls Core helpers for each compared value.
+Users trust that transcription and the harness's construction of `mapBlockIndex` and `fCheckpointsEnabled` (D67, D69).
 Its `LogPrintStr` replacement writes errors to standard error and does not replace any consensus predicate.
 
 The build disables SSE2, and its stamp records the generic scrypt variant and configure options.
 The comparison still assumes Core's little-endian header memory layout and arithmetic shift of signed versions.
-Neither the oracle nor the harness checks complete contextual header validity or block validity.
+The contextual operation checks `ContextualCheckBlockHeader` on the stated input domain.
+The caller supplies the predecessor view, adjusted time and known checkpoint state.
+Neither program checks the node-state conditions in `AcceptBlockHeader` or full-block validity.
 
 Any later foreign boundary, such as a C or Rust binding, is listed here with its size and its error handling.
 

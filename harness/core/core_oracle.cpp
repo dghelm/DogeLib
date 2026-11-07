@@ -9,8 +9,8 @@
 // Every result value comes from Core's code, with the exceptions that the
 // documentation names: `plan` of sighash.legacy is a label computed here from
 // Core's conditions, and sighash.legacy has no `preimage_hex`, because Core
-// hashes its preimage without exposing it. The third exception is the
-// block.check_version verdict, from two transcribed branches and Core predicates.
+// hashes its preimage without exposing it. The block.check_version verdict
+// comes from two transcribed branches and Core predicates.
 // block.contextual_check also transcribes D33 and calls Core helpers for compared values.
 //
 // An exception from Core that is not one of the four mapped read errors ends

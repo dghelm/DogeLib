@@ -143,11 +143,19 @@ def contextual_sets():
         EXPECTATIONS[key(req)] = dict(valid=reason is None, reject_reason=reason)
     rng = random.Random(SEED)
     mutations = []
-    pool = [r for r, _ in fixtures + boundaries]
-    for _ in range(500):
-        req = rng.choice(pool)
+    pools = {network: [r for r, _ in fixtures + boundaries if r['network'] == network]
+             for network in ['mainnet', 'testnet', 'regtest']}
+    # Table heights from D9/D68, above every candidate in each network's pool.
+    future_checkpoint = {'mainnet': 5050000, 'testnet': 5900000}
+    for i in range(500):
+        network = ['mainnet', 'testnet', 'regtest'][i % 3]
+        req = rng.choice(pools[network])
         field = rng.choice(['version','time','bits','adjusted_time','known_checkpoints'])
-        value = (rng.choice([[],[0]]) if field == 'known_checkpoints' else
+        checkpoints = [[], [0]]
+        if network in future_checkpoint:
+            height = future_checkpoint[network]
+            checkpoints += [[height], [0, height]]
+        value = (rng.choice(checkpoints) if field == 'known_checkpoints' else
                  rng.choice([-2**63,-1,0,2**63-7201]) if field == 'adjusted_time' else rng.getrandbits(32))
         mutations.append(change(req, **{field:value}))
     return [('contextual fixtures',[r for r,_ in fixtures]),

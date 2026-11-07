@@ -225,6 +225,7 @@ def contextualCheck : Operation where
       else
         match error with
         | .invalidView e | .nextWork e => throw (.spec (Work.Exports.viewErrorJson e))
+        | .adjustedTimeOutOfRange => throw (.request "adjusted_time is outside the signed safe range")
         | _ => throw (.spec (Json.mkObj [("kind", .str "work_view"),
             ("reason", .str (if error == .emptyView then "empty_view" else "short_view"))]))
 

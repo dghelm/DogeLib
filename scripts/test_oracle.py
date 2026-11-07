@@ -330,6 +330,7 @@ def check_contextual(oracle):
         (change(sample, known_checkpoints=[1]), {"kind":"request"}),
         (change(sample, known_checkpoints=[1], checkpoints_enabled=False), {"kind":"request"}),
         (change(sample, adjusted_time=2**63-7200), {"kind":"request"}),
+        (change(sample, adjusted_time=-2**63-1), {"kind":"request"}),
         (change(sample, bytes_hex="00"), {"kind":"request"}),
         (change(sample, chain=[]), {"kind":"work_view","reason":"empty_view"}),
         (change(sample, chain=[dict(height=100,time=0,bits=0)]), {"kind":"work_view","reason":"short_view"}),

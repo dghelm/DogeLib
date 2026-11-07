@@ -509,7 +509,7 @@ The request supplies these fields:
 - `chain`: the `work.next` entries, newest first, starting at the predecessor.
 - `adjusted_time`: an integer from `INT64_MIN` to `INT64_MAX - 7200`.
 - `checkpoints_enabled`: a Boolean.
-- `known_checkpoints`: an array of heights from the network's checkpoint table (D67, D14).
+- `known_checkpoints`: an array of heights from the network's checkpoint table (D9, D68).
   Repeated heights have no additional effect.
 
 A height outside that table is a request error, even with checkpoints disabled.
@@ -937,9 +937,14 @@ Chain acceptance supplies their expected verdicts with adjusted time equal to th
 The 172 boundary expectations follow D33 and the hand derivations in `KnownAnswers.ContextualCheck`.
 They cover all seven checks, first-failure order, medians near genesis and out of order, equivalent-target compact encodings, checkpoint equality and disabled checkpoints.
 They also cover signed versions, the future-time bounds, AuxPoW and BIP heights on all networks, and testnet delay boundaries at candidates 100001, 157500 and 157501.
+
 A further 500 requests mutate version, time, bits, adjusted time or known checkpoints with seed `20261109`.
+They use 167 mainnet, 167 testnet and 166 regtest contexts.
+Mainnet and testnet checkpoint mutations include table heights above the candidate, which can produce `bad-fork-prior-to-checkpoint`.
 
 The comparator self-test corrupts `valid` and `reject_reason` independently.
-Both mutations must fail with `CONTEXTUAL_HEADER`.
+These mutations must fail with `CONTEXTUAL_HEADER`.
+A third mutation swaps one rejection string for another on a request without an independent expectation.
+That mutation preserves the response shape and must fail the stream comparison of result values.
 It also checks Boolean types, result fields, acceptance reasons, rejection reasons and the exclusion of Lean diagnostics.
 These runs give finite evidence, not an all-input equivalence theorem with compiled Core.

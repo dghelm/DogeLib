@@ -59,6 +59,23 @@ DogeLib does not specify these parts of Dogecoin:
 
 [ROADMAP.md](ROADMAP.md) records completed milestones and next work.
 
+## Try it
+
+This example builds the oracle and checks the Core-signed recovery-branch spend of the [signed-spend fixtures](tests/script/signed-spends/README.md) with `coreVerifier`.
+It needs [elan](BUILDING.md) and `jq`.
+
+```bash
+lake build dogelib-oracle
+jq -c 'select(.id == "recovery") | {id, op: "script.verify_legacy", tx_hex, input_index,
+       prevout_script_hex: .script_pubkey_hex, flags, checker: "transaction"}' \
+  tests/script/signed-spends/recovery.jsonl | .lake/build/bin/dogelib-oracle
+# {"id":"recovery","ok":{"result":"accepted","script_error":"OK"}}
+```
+
+Core's recorded verdict for this spend is also `OK`.
+Under the hypotheses of `MultisigRecoverySpend`, `multisigRecovery_sound_coreVerifier` proves that an accepted spend of this template satisfies the ordinary branch or the recovery branch ([worked property](SOUNDNESS.md#script-worked-property-multisig-with-recovery)).
+The [verifier section](SOUNDNESS.md#secp256k1-public-key-parser-and-cores-verifier) states the step of `coreVerifier` that no theorem relates to Core.
+
 ## Documents
 
 | Document | Contents |

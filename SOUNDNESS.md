@@ -516,8 +516,7 @@ To exclude that case needs collision resistance of double SHA-256, which DogeLib
 
 The known answers compare ten of the 43 table hashes with the double SHA-256 of independent pure headers.
 The tables are also compared with D9 by their sizes and end heights.
-The oracle's `block.check_version` keeps its own projection of `fAllowLegacyBlocks`, `legacyGateTree` in `Block.Exports.Oracle`.
-No theorem relates that projection to `getContextualParams`.
+The oracle's `block.check_version` selects `fAllowLegacyBlocks` with `getContextualParams` and its `toVersionGateParams` projection.
 
 By `#print axioms` with Lean `v4.35.0`:
 
@@ -572,8 +571,20 @@ The theorems in `Block.Proofs.ContextualCheck` hold for every network, header, a
   Check 7 rejects exactly when `b` is below 3 from `BIP66Height`, or below 4 from `BIP65Height`, with each network's heights.
 
 These theorems establish the behaviour of DogeLib's definitions.
-A claim of agreement with Core needs the source review and a Core comparison, which design record 0006 plans as its stage 4.
-No Core comparison of this operation exists.
+`block.contextual_check` compares the compiled specification with H2 of design record 0006.
+The harness transcribes D33, lines 3066 to 3119, and calls Core's helpers for each compared value.
+It compares `valid` and the first `reject_reason`, excluding Lean diagnostics.
+The [comparison stream](docs/oracle.md#contextual-header-comparison-evidence) includes 2231 real mainnet candidates, hand-derived boundaries and 500 mutations with seed `20261109`.
+The comparison gives finite evidence, not an equivalence theorem with compiled Core.
+
+The H2 transcription is an evidence boundary (A1).
+A mistake in its branch order or reject strings could make a wrong specification agree with the harness.
+Independent source review compares it line by line with D33.
+Hand-derived expected verdicts and reasons provide a separate check.
+
+The harness links `checkpoints.cpp`, owns its block-index map, and inserts each known table hash with its table height.
+It refuses short views before calling Core, where a short median walk would otherwise give a different value.
+Neither the harness nor the oracle establishes the caller-supplied context.
 
 Three inputs are execution boundaries.
 The caller supplies them, and no theorem says that a caller supplies the values that a node would compute:
@@ -2592,8 +2603,8 @@ A user of the comparison trusts these parts of it:
   Any other exception from Core stops the harness, so it cannot pass as a result.
 - The `plan` label of `sighash.legacy`. The harness computes it from Core's conditions instead of observing it. It stops if the label is `fixed_digest` and Core's digest is not the value one.
 - The comparator, `scripts/compare_core.py`.
-  Its self-test, `scripts/test_compare_core.py`, counts 99 cases: two passing controls and 97 negative checks that each fail with the code they target.
-  The negative checks are 88 stream mutations, eight Rust-side mutations and one acceptance-count gap.
+  Its self-test, `scripts/test_compare_core.py`, counts 102 cases: two passing controls and 100 negative checks that each fail with the code they target.
+  The negative checks are 91 stream mutations, eight Rust-side mutations and one acceptance-count gap.
   Assertions about its refusal and timelock constructions run outside that count.
 - For `sighash.legacy`, the oracle's preimage is checked by hashing it, not byte by byte: Core does not expose its preimage.
 
@@ -2619,12 +2630,16 @@ Both programs could be wrong in the same way on an input that the comparison doe
 
 The five header PoW operations are IO-adapter entry points into the existing specification definitions.
 Their JSON conversion and Lean diagnostic strings have no refinement theorem.
-The Core harness transcribes only the two contextual version branches and calls Core's own version predicates.
+The Core harness transcribes the two version branches for `block.check_version` and all seven checks for `block.contextual_check`.
+The latter transcription follows D33, lines 3066 to 3119, and calls Core helpers for each compared value.
+Users trust that transcription and the harness's construction of `mapBlockIndex` and `fCheckpointsEnabled` (D67, D69).
 Its `LogPrintStr` replacement writes errors to standard error and does not replace any consensus predicate.
 
 The build disables SSE2, and its stamp records the generic scrypt variant and configure options.
 The comparison still assumes Core's little-endian header memory layout and arithmetic shift of signed versions.
-Neither the oracle nor the harness checks complete contextual header validity or block validity.
+The contextual operation checks `ContextualCheckBlockHeader` on the stated input domain.
+The caller supplies the predecessor view, adjusted time and known checkpoint state.
+Neither program checks the node-state conditions in `AcceptBlockHeader` or full-block validity.
 
 Any later foreign boundary, such as a C or Rust binding, is listed here with its size and its error handling.
 

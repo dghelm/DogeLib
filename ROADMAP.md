@@ -73,7 +73,7 @@ Section 10 of the record gives four stages, and section 11 gives their theorem t
 | 1 | Median time past on a checked view, with its depth requirement | Specified in `Work.MedianTimePast`, with theorems and known answers |
 | 2 | Parameters by height: `fAllowLegacyBlocks`, `BIP65Height`, `BIP66Height` and the checkpoint tables | Specified in `Block.ContextualParams`, with theorems and known answers |
 | 3 | The composition `contextualCheckBlockHeader`, with its characterization theorems and known answers | Specified in `Block.ContextualCheck`, with the theorems of section 11 and known answers from five mainnet ranges and synthetic views |
-| 4 | The oracle operation `block.contextual_check`, the Core harness and the comparison | Not started |
+| 4 | The oracle operation `block.contextual_check`, the Core harness and the comparison | Implemented with the H2 transcription, independent fixture expectations, boundary cases, seed `20261109` mutations and comparator self-tests. [Evidence boundary](SOUNDNESS.md#contextual-header-validation) and [streams](docs/oracle.md#contextual-header-comparison-evidence) |
 
 The adoption of the scope establishes no target theorem.
 Each stage reports its evidence in COVERAGE.md and SOUNDNESS.md when it merges.

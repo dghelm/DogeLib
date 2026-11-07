@@ -50,7 +50,8 @@ An input outside the domain returns an adapter error, never a Core rejection:
 The function checks the domain before check 1.
 So an input outside the domain returns an adapter error even when Core would reject it at an earlier check.
 On the domain, the function runs Core's checks in Core's order, and source review connects each check to Core.
-No theorem or comparison establishes agreement with compiled Core.
+No theorem establishes agreement with compiled Core.
+The oracle compares finite requests with a transcription that calls Core helpers (docs/oracle.md).
 
 Every time comparison widens `nTime` to `Int`, as `GetBlockTime` widens it to `int64_t` (D10, lines 73 to 76).
 On the domain, the `Int` comparisons equal Core's signed 64-bit comparisons, because no value overflows.

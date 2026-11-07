@@ -13,7 +13,8 @@ The conversions between JSON values and the arguments and results of the oracle,
 - A byte string is a string of hexadecimal digits, two per byte, in serialization order. Upper and lower case are accepted.
 - A field of at most 32 bits is a JSON number with an integer value, in any notation: `5`, `5.0` and `50e-1` are all 5.
   The check uses the mantissa and exponent of the parsed number, never a floating-point value.
-- A 64-bit field is a string of decimal digits with no sign and no leading zero, so that no JSON reader rounds it.
+- An unsigned 64-bit field is a string of decimal digits with no sign and no leading zero, so that no JSON reader rounds it.
+- The signed `adjusted_time` field is a JSON number with an integer value, checked exactly by `argInt`.
 
 Lean core's `Json.parse` reads the request. It keeps the last value of a repeated key.
 -/

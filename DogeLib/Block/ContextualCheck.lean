@@ -240,6 +240,17 @@ def contextualCheckBlockHeader (network : WorkNetwork) (header : PureBlockHeader
       adjustedTime.toInt lastCheckpointHeight
 
 /--
+The number of leading view entries that `contextualCheck_congr_prefix` (in `DogeLib.Block.Proofs.ContextualCheck`) requires to agree, for the predecessor `prev`.
+It is the greater of `nMedianTimeSpan` and `retargetInterval params prev.nHeight + 1`, where `params` is the record of `getConsensus` at the candidate height.
+`nextWorkRequired` reads fewer than `retargetInterval params prev.nHeight + 1` entries (`nextWorkRequired_congr_prefix`).
+`contextualViewDepth_eq` gives its values: 241 on mainnet and testnet below candidate height 145000, and 11 from that height.
+On regtest it is 14401 below candidate height 10, and 11 from that height.
+-/
+def contextualViewDepth (network : WorkNetwork) (prev : BlockIndex) : Nat :=
+  max nMedianTimeSpan
+    (retargetInterval (getConsensus network (UInt32.ofNat (prev.nHeight + 1))) prev.nHeight + 1)
+
+/--
 `contextualCheckBlockHeader` with the checkpoint state of design record 0006, decision 2.
 `checkpointsEnabled` is `fCheckpointsEnabled`, and `knownCheckpoints` holds the table heights whose hashes the node's block index contains.
 `lastCheckpoint` derives the height that check 4 compares.

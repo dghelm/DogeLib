@@ -86,6 +86,10 @@ One other candidate is unscheduled, and it needs an approved scope before work s
 DogeLib specifies Dogecoin Core.
 A property of an application template belongs in a downstream project.
 
+One design is in progress.
+[Design record 0007](docs/design/0007-proposed-revisions.md) proposes how DogeLib specifies proposed revisions and proves their compatibility with the baseline.
+The maintainer has not adopted it.
+
 ## Milestones
 
 ### A: a small byte codec (steps 0, 0b and 2)

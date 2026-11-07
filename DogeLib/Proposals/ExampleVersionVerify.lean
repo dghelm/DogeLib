@@ -6,7 +6,7 @@ public import DogeLib.Proposals.Framework.Compatibility
 # `Proposals.ExampleVersionVerify`
 
 **This module is not a proposal for Dogecoin.**
-No one proposes this rule for any network, and no network will activate it.
+No one proposes this rule for any network, and no network activates it.
 It is the worked example of design record 0007, section 10.
 Decision 9 keeps it in the `Proposals` library as a permanent test of the framework.
 Its theorems show that the framework states and proves a Script-local soft fork from end to end.

@@ -62,13 +62,29 @@ Each item below is complete.
 
 Release 0.1.0 is out, as tag `v0.1.0` at commit `7510cc9`.
 
-The next work comes from these candidates, starting with the application spend property.
-None of them is scheduled, and each needs an approved scope before work starts:
+The current milestone is contextual header validation, under [design record 0006](docs/design/0006-contextual-header-validation.md).
+The maintainer adopted the record on 2026-11-07, with all nine decisions of its section 12.
+The milestone specifies the checks of `ContextualCheckBlockHeader` other than the version gates.
+They are `nBits` against `GetNextWorkRequired`, the checkpoints, the time checks and the rejection of outdated versions.
+Section 10 of the record gives four stages, and section 11 gives their theorem targets:
 
-- **A full application spend property.** A worked property that covers a complete spend of an application template, beyond one input's Script verification.
-- **Contextual header validation.** The checks of `ContextualCheckBlockHeader` other than the version gates: `nBits` against `GetNextWorkRequired`, the checkpoints, the time checks and the rejection of outdated versions.
+| Stage | Deliverable | Status |
+| --- | --- | --- |
+| 1 | Median time past on a checked view, with its depth requirement | Not started |
+| 2 | Parameters by height: `fAllowLegacyBlocks`, `BIP65Height`, `BIP66Height` and the checkpoint tables | Not started |
+| 3 | The composition `contextualCheckBlockHeader`, with its characterization theorems and known answers | Not started |
+| 4 | The oracle operation `block.contextual_check`, the Core harness and the comparison | Not started |
+
+The adoption of the scope establishes no target theorem.
+Each stage reports its evidence in COVERAGE.md and SOUNDNESS.md when it merges.
+
+One other candidate is unscheduled, and it needs an approved scope before work starts:
+
 - **Arithmetic agreement with Core's verifier.** A Lean proof that `Point.mulAdd` computes Core's `secp256k1_ecmult` result ([design record 0005](docs/design/0005-signature-verifier.md), section 4.3).
   The proof needs Mathlib, so it requires a package proposal first.
+
+DogeLib specifies Dogecoin Core.
+A property of an application template belongs in a downstream project.
 
 ## Milestones
 

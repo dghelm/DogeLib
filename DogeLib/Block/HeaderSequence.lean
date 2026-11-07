@@ -72,7 +72,7 @@ The state of the block index that `AcceptBlockHeader` reads.
 `failedBlocks` holds the members of Core's `gFailedBlocks` (D33, line 180), in the order in which step 6 of the record visits them.
 -/
 structure HeaderIndex where
-  /-- The entries, keyed by block hash. A later pair shadows an earlier pair with the same key. -/
+  /-- The entries, keyed by block hash. The first pair with a key shadows every later pair with that key, and `insert` adds pairs at the head. -/
   entries : List (Hash256 × IndexEntry)
   /-- The hashes of the members of `gFailedBlocks`, in visit order. -/
   failedBlocks : List Hash256

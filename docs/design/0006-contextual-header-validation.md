@@ -54,7 +54,7 @@ The line ranges identify the inspected source:
 | C10 | [consensus/params.h, lines 43–53 and 79–88](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/consensus/params.h#L43-L88) | The majority fields, `BIP34Height`, `BIP65Height`, `BIP66Height`, `fAllowLegacyBlocks` and `nHeightEffective`. |
 | C11 | [timedata.cpp, lines 34–37 and 70–85](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/timedata.cpp#L34-L85), [timedata.h, line 13](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/timedata.h#L13) | `GetAdjustedTime` and the bound on the peer offset. |
 | C12 | [init.cpp, line 951](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/init.cpp#L951) | The option `-checkpoints`. |
-| C13 | [validation.cpp, lines 3121–3203](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.cpp#L3121-L3203) | `ContextualCheckBlock`. |
+| C13 | [validation.cpp, lines 3121–3203](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.cpp#L3121-L3203), [line 1877](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.cpp#L1877) | `ContextualCheckBlock`, and the BIP30 shortcut of `ConnectBlock` that reads `BIP34Height`. |
 
 The registry already records seven of these files: `validation.cpp` (D33), `pow.cpp` (D17), `dogecoin.cpp` (D6), `chain.h` (D18), `pureheader.h` (D10), `chainparams.cpp` (D14) and `consensus/params.h` (D15).
 An implementation lane adds an identifier for each other file that it uses, from D64 on, without a change to any pin.
@@ -82,7 +82,7 @@ The handoff for this record listed four subjects that the source inspection sett
 
 - **Future time.** At the pin, `CheckBlockHeader` contains only the proof-of-work check [C2]. The future-time check is check 6 of `ContextualCheckBlockHeader`.
 - **Outdated versions.** `IsSuperMajority` has a declaration and a definition, but no caller [C5]. Check 7 is the only rejection of outdated versions, and it uses fixed heights.
-- **BIP34.** Check 7 does not read `BIP34Height`. Only `ContextualCheckBlock` reads it, for the coinbase height [C13].
+- **BIP34.** Check 7 does not read `BIP34Height`. Among the consensus checks, `ContextualCheckBlock` reads it for the coinbase height, and `ConnectBlock` reads it for the BIP30 shortcut [C13].
 - **Checkpoints.** `GetLastCheckpoint` searches the whole block index, not the candidate's chain [C8]. Section 4.3 gives the consequences.
 
 ## 4. Core behaviour that the specification must preserve
@@ -108,6 +108,7 @@ The specification must keep each behaviour, and a theorem or a known answer must
    It does not decode either value.
    So a compact value that encodes the same target in another form fails the check.
 5. `GetNextWorkRequired` receives the candidate header, and reads its time for the minimum-difficulty rules of testnet and regtest [C6].
+   On testnet, the two rules start at different heights (section 9.2).
    So `nTime` can change the expected `nBits`, as well as the result of checks 5 and 6.
 6. `GetNextWorkRequired` asserts when a retarget ancestor is absent [C6, pow.cpp lines 83–85].
    A node always has the full chain, so the assertion does not fail in Core.
@@ -148,14 +149,19 @@ The specification must keep each behaviour, and a theorem or a known answer must
     By default, the offset is at most 70 minutes in either direction [C11, timedata.h line 13].
     The specification takes the adjusted time as an explicit `int64_t` input and does not model its source.
 18. The bound is `nAdjustedTime + 7200` in signed 64-bit arithmetic [C1, line 3107].
-    The sum overflows only for an adjusted time above `INT64_MAX − 7200`, so the oracle refuses those values.
+    The sum overflows only for an adjusted time above `INT64_MAX − 7200`, which is undefined behaviour in C++.
+    So Core's agreement domain includes only adjusted times up to that bound.
+    The specification returns an adapter error above the bound, and the oracle refuses those values (decision 9).
     The check accepts a header time equal to the bound.
 
 ### 4.6 Outdated versions (check 7)
 
 19. `GetBaseVersion` is `nVersion % 256` with C++ signed remainder [C7, pureheader.h lines 88–95].
     A negative version therefore has a base version of zero or less, and fails both thresholds once they apply.
-    The AuxPoW flag and the chain ID do not change the base version.
+    The AuxPoW flag never changes the base version, because it never changes the sign of `nVersion`.
+    A chain ID that changes bit 31 changes the sign, and so the base version.
+    For example, `0x00000003` has base version 3, and `0x80000003` has base version −253.
+    Other changes of the chain ID keep the base version.
 20. The thresholds use `>=` on the candidate height [C1, lines 3113–3114]:
 
     | Network | `BIP66Height` (base version at least 3) | `BIP65Height` (base version at least 4) |
@@ -265,12 +271,14 @@ contextualCheckBlockHeader
 
 The names are proposals.
 The function returns `.ok ()` exactly when Core's function returns `true`, on the domain of section 4.1 and section 5.
+That domain also requires an adjusted time of at most `INT64_MAX − 7200` (item 18).
 `ContextualHeaderError` has two kinds of constructor:
 
 - One rejection for each check of section 3, in source order, each with Core's reject reason.
   The `bad-version` reason carries the base version.
 - Adapter errors for an input outside the domain, which are not Core verdicts.
   The inputs are an empty view, a view that `validateWorkView` rejects, a view too short for the median, and each `NextWorkError` of check 3.
+  An adjusted time above `INT64_MAX − 7200` is also an adapter error.
 
 The function composes existing definitions without a change to them:
 
@@ -359,7 +367,7 @@ The proposed mainnet ranges are pure 80-byte headers, each with at least 11 pred
 | Heights 0 to 12 | The median of fewer than 11 entries, with even and odd counts | Checkpoint 0, the genesis hash [C9] |
 | About 371,320 to 371,340 | AuxPoW activation: checks 1 and 2 with real versions, and check 3 under DigiShield | Checkpoint 371337 [C9] |
 | About 1,034,370 to 1,034,390 | `BIP66Height` on real versions | The hash in the comment on `BIP66Height` [C9, line 87] |
-| About 3,464,740 to 3,464,760 | `BIP65Height` on real versions | The hash in the comment on `BIP65Height` [C9, line 86] |
+| About 3,464,739 to 3,464,760 | `BIP65Height` on real versions | The hash in the comment on `BIP65Height` [C9, line 86] |
 
 The fixtures need only the pure header, because the function reads no payload.
 The Electrum server of the existing fixtures is one possible source.
@@ -367,7 +375,17 @@ The lane must confirm that the source returns the 80-byte pure header at AuxPoW 
 An independent Python check confirms the predecessor links and the anchor hash of each range, before the fixture enters the repository.
 
 Testnet and regtest need synthetic contexts.
-On testnet, the minimum-difficulty rules apply below height 145000 and from 157500 [C9, lines 237 and 291–295]. AuxPoW activates at 158100.
+On testnet, two minimum-difficulty rules apply at different candidate heights:
+
+- The rule between retargets applies below candidate height 145000, at heights that are not retargets [C6, pow.cpp lines 54–62, and C9, line 237].
+  From candidate 145000, the selected record turns it off [C9, line 287].
+  From predecessor height 145000, every block is a retarget [C6, pow.cpp line 50].
+- The rule for every block, `AllowDigishieldMinDifficultyForBlock`, needs a predecessor at height 157500 or more [C6, dogecoin.cpp lines 33–35].
+  So it starts at candidate 157501, although the record that permits it applies from candidate 157500 [C9, lines 291–295].
+  At candidate 157500, the interval of one also skips the rule between retargets, so no minimum-difficulty rule applies.
+
+The fixtures must include candidates at 157500 and 157501, each with a time on both sides of the delay.
+AuxPoW activates at 158100.
 Real testnet headers are optional evidence, and section 12 lists the choice.
 
 ### 9.3 Expected values
@@ -387,11 +405,11 @@ Each rejection needs a mutation on each side of its boundary:
 | Check | Mutations |
 | --- | --- |
 | 1, 2 | A legacy version at the activation height, and the AuxPoW flag one height before it, on each network. |
-| 3 | `nBits` plus and minus one. Another compact encoding of the same target. On testnet, a candidate time one second on each side of the delay that permits minimum difficulty. |
+| 3 | `nBits` plus and minus one. Another compact encoding of the same target. On testnet, a candidate time one second on each side of the delay that permits minimum difficulty, at candidates 157500 and 157501 and below 145000. |
 | 4 | A last checkpoint at the candidate height (accept) and one above it (reject). No known checkpoint, and checkpoints disabled with a higher known checkpoint. |
 | 5 | A header time equal to the median (reject) and one second later (accept). Ancestor times out of order, so that the median differs from the time of the 6th entry. Views of 1 to 11 entries near genesis. |
 | 6 | A header time equal to the adjusted time plus 7200 (accept) and one second later (reject). A negative adjusted time. |
-| 7 | Base versions 2 and 3 at `BIP66Height − 1` and `BIP66Height`, and 3 and 4 at `BIP65Height − 1` and `BIP65Height`. A negative version. AuxPoW versions whose base version is below the threshold. |
+| 7 | Base versions 2 and 3 at `BIP66Height − 1` and `BIP66Height`, and 3 and 4 at `BIP65Height − 1` and `BIP65Height`. A negative version. AuxPoW versions whose base version is below the threshold. The pair `0x00000003` and `0x80000003` at `BIP66Height`, which differ only in the chain ID and give base versions 3 and −253. |
 | Order | Headers that fail two checks, so that the reject reason pins the first failure. |
 
 The Core comparison adds seeded mutations of `nVersion`, `nTime`, `nBits`, the adjusted time and the known checkpoints.
@@ -453,10 +471,10 @@ Each theorem states its domain and hypotheses in its doc comment.
 | `contextualCheck_eq_ok_iff` | On the domain, the function accepts exactly when all seven conditions of section 3 hold, each stated over the inputs. |
 | `contextualCheck_eq_error_iff` | For each rejection, the function returns it exactly when its condition fails and the conditions of all earlier checks hold. |
 | `contextualCheck_congr_header` | The result depends on the header only through `nVersion`, `nTime` and `nBits`. |
-| `contextualCheck_adjustedTime_mono` | If the function accepts with one adjusted time, it accepts with every greater adjusted time. |
+| `contextualCheck_adjustedTime_mono` | If the function accepts with one adjusted time, it accepts with every greater adjusted time up to `INT64_MAX − 7200`. |
 | `contextualCheck_no_checkpoint` | With `lastCheckpointHeight = none`, check 4 never rejects. |
 | `contextualCheck_congr_prefix` | Two checked views that agree on their first `max(11, d)` entries give the same result, where `d` is the depth that `nextWorkRequired` reads. |
-| `contextualCheck_complete` | On a checked view that reaches height 0, the function returns no adapter error for any network. |
+| `contextualCheck_complete` | On a checked view that reaches height 0, with an adjusted time of at most `INT64_MAX − 7200`, the function returns no adapter error for any network. |
 | `badVersion_iff` | Let `b` be the signed remainder of `nVersion` by 256. Check 7 rejects exactly when `b < 3` from `BIP66Height`, or `b < 4` from `BIP65Height`. |
 
 The record leaves the exact statement of the depth `d` to stage 3.
@@ -484,6 +502,7 @@ Each proposal below needs a maintainer decision before stage 1 starts:
 | 6 | `ContextualCheckBlock` | Exclude it from this scope (section 4.8). | Open |
 | 7 | Header sequence | Exclude a composition that checks a sequence of headers with `CheckBlockHeader`, the contextual check and the predecessor hash. A later record can propose it. | Open |
 | 8 | Rust work | Implementation refinement and Rust extraction stay outside this scope. | Open |
+| 9 | Adjusted time above `INT64_MAX − 7200` | An adapter error in the specification and a request error in the oracle, because Core's addition overflows there. The alternative is an `Int` extension outside Core's domain, which no comparison can check (item 18). | Open |
 
 ## 13. Remaining risks
 
@@ -495,7 +514,7 @@ Each proposal below needs a maintainer decision before stage 1 starts:
 | The specification selects the record at the predecessor's height. | Item 2, `allowLegacyBlocks_getConsensus`, and mutations at each activation height. |
 | The upper median for even counts becomes a lower median or a mean. | `medianTimePast_eq` with index `k / 2`, and known answers at heights 1 to 10. |
 | A checkpoint test reads the candidate's chain instead of the known set, or uses `<=`. | `lastCheckpoint_eq`, and the accept and reject mutations at the checkpoint height. |
-| Overflow of the future-time bound. | The oracle refuses adjusted times above `INT64_MAX − 7200`, and the specification uses `Int` arithmetic. |
+| Overflow of the future-time bound. | The specification returns an adapter error and the oracle refuses adjusted times above `INT64_MAX − 7200` (decision 9). |
 | The source comment on mainnet `BIP66Height` suggests that a version 2 block may occur at that height. | The specification follows the code (item 21), and the fixture at that height records the real version. |
 
 There is no pin change, trust-policy exception or fixture-format change in this record.

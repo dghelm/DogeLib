@@ -88,6 +88,22 @@ Section 12 of the record gives two stages:
 | 1 | The `Proposals` and `ProposalProofs` libraries, the import check, the activation model and the Script loop with a step parameter | Specified in `DogeLib.Proposals.Framework`, with the framework targets of section 11 except `checkBlockHeader_not_versionBitsCondition` (decision 11), and the import-check self-test |
 | 2 | The worked example `ExampleVersionVerify`, with its theorem targets and known answers | Specified in `DogeLib.Proposals.ExampleVersionVerify`, with every target of section 10.3 and known answers through the compiled code |
 
+The proposed next milestone is header-sequence validation, under [design record 0008](docs/design/0008-header-sequence-validation.md).
+The record is a proposal, and its section 13 waits for a maintainer decision.
+It proposes to specify Core's `AcceptBlockHeader` and `ProcessNewBlockHeaders` over an explicit model of the block index.
+The proposed model includes the duplicate test, the predecessor lookup, the failed-ancestor walk and the chain work of each entry.
+Section 10 of the record gives five stages, and section 11 gives their theorem targets:
+
+| Stage | Deliverable | Status |
+| --- | --- | --- |
+| 1 | The block-index model, the ancestor view and the checkpoint search over the index | Not started |
+| 2 | One step, `acceptBlockHeader`, with its characterization theorems | Not started |
+| 3 | The sequence, `processNewBlockHeaders`, with the linear theorem `process_linear` | Not started |
+| 4 | `GetBlockProof` and the chain work of each entry | Not started |
+| 5 | The oracle operation `block.header_sequence`, the Core harness and the comparison | Not started |
+
+No stage starts before the maintainer adopts the record.
+
 One other candidate is unscheduled, and it needs an approved scope before work starts:
 
 - **Arithmetic agreement with Core's verifier.** A Lean proof that `Point.mulAdd` computes Core's `secp256k1_ecmult` result ([design record 0005](docs/design/0005-signature-verifier.md), section 4.3).

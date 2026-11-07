@@ -130,7 +130,7 @@ structure Checkpoint where
 /--
 The `checkpointData` table of each network, in source order.
 Mainnet has 23 entries (D9, lines 180 to 205), testnet has 19 (lines 340 to 361), and regtest has only the genesis block (lines 461 to 464).
-`checkpoints_heights_sorted` proves that the heights increase strictly, so the list order is the key order of the `std::map`.
+`checkpointHeights_sorted` proves that the heights increase strictly, so the list order is the key order of the `std::map`.
 -/
 def checkpoints : Work.WorkNetwork → List Checkpoint
   | .mainnet => [

@@ -11,7 +11,7 @@ Known answers for `getContextualParams` and `lastCheckpoint` (design record 0006
 Each expected record comes from Dogecoin Core `e0a1c15`, `src/chainparams.cpp` (SOURCES.md, D14), with the line of each value.
 The heights on each side of each effective height select the record that Core's `GetConsensus` (lines 494 to 506) returns there.
 
-Each checkpoint hash in the table is compared with the double SHA-256 of a pure header from an independent source:
+Ten of the 43 checkpoint hashes are compared with the double SHA-256 of a pure header from an independent source:
 
 - The three genesis headers, which `KnownAnswers.Genesis` derives by hand from `CreateGenesisBlock` and checks against Core's asserted hashes.
 - The mainnet header at height 145000 of `tests/work/mainnet-headers/headers.txt`, which predecessor links connect to the other 311 recorded headers.

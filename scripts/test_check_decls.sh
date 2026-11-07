@@ -104,6 +104,20 @@ else
 fi
 rm -f "$ORPHAN"
 
+# The same holds for a leaf file under the proposal libraries (design record 0007).
+ORPHAN=$(mktemp DogeLib/Proposals/CheckDeclsUnreachableXXXXXX.lean) || exit 1
+printf '%s\n' 'module' >"$ORPHAN"
+mod=${ORPHAN%.lean}
+mod=${mod//\//.}
+if lake exe check-decls >"$WORK/unreachable-proposal" 2>&1; then
+  echo "FAIL: an unreachable proposal module passed"; FAIL=1
+elif grep -qx "unreachable-module $mod: not imported by the default production roots" "$WORK/unreachable-proposal"; then
+  echo "ok:   an unreachable proposal leaf is named and fails the check"
+else
+  echo "FAIL: the unreachable proposal module was not named"; cat "$WORK/unreachable-proposal"; FAIL=1
+fi
+rm -f "$ORPHAN"
+
 # The refinement namespace must reject local and imported trust violations.
 PLANTED=Refinement/Refinement/CheckDeclsPlanted.lean
 if [[ -e "$PLANTED" ]]; then

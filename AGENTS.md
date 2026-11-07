@@ -78,7 +78,8 @@ Report only the checks you ran, with the exact command, revision, and result ([C
 | Build | `lake build --wfail` | Yes | `ci` / `lean` |
 | Refinement | `lake -d Refinement build --wfail`: the Aeneas model of the Rust reader agrees with `decodeBounded` on every Rust-representable slice | Yes. The root Build gate also checks the packed codec refinements. | `ci` / `lean` |
 | Declaration check | `lake exe check-decls` | Yes | `ci` / `lean` |
-| Import boundaries | `lake env lean --run scripts/CheckRefinementImports.lean` | Yes | `ci` / `lean` |
+| Import boundaries | `lake env lean --run scripts/CheckRefinementImports.lean`: no baseline library imports the refinement dependencies or `DogeLib.Proposals`, and no proposal library imports the refinement dependencies | Yes | `ci` / `lean` |
+| Import boundary self-test | `bash scripts/test_import_boundaries.sh`: a planted baseline module that imports `DogeLib.Proposals` fails the import check | Yes | `ci` / `lean` |
 | Rust known answers | `cargo +nightly-2026-09-17 test --locked --manifest-path Refinement/Rust/Cargo.toml --jobs 4` | Yes | `ci` / `rust` |
 | Rust extraction freshness | `Refinement/Rust/regenerate.sh --check` | Yes, after `Refinement/Rust/setup-tools.sh` | `ci` / `rust` |
 | Declaration check self-test | `bash scripts/test_check_decls.sh` | Yes | `ci` / `lean` |

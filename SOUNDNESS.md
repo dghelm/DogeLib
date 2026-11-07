@@ -2116,6 +2116,63 @@ By `#print axioms` with Lean `v4.35.0`:
 | `propext`, `Quot.sound` | `sortedTimes_perm`, `sortedTimes_sorted`, `length_sortedTimes`, `medianTimePast_nil`, `medianTimePast_invalid` |
 | `propext`, `Classical.choice`, `Quot.sound` | `medianTimeSpan_bounds`, `medianTimePast_short`, `medianTimePast_eq`, `medianTimePast_ok`, `medianTimePast_mem`, `medianTimePast_bounds`, `medianTimePast_rank`, `medianTimePast_congr_prefix` |
 
+### Proposed revisions: the framework
+
+`DogeLib.Proposals.Framework` holds the framework of [design record 0007](docs/design/0007-proposed-revisions.md) for proposed revisions.
+It belongs to the `Proposals` and `ProposalProofs` libraries, and no baseline library imports it ([ARCHITECTURE.md](ARCHITECTURE.md#proposed-revisions)).
+No proposal exists yet, so these theorems state no property of any proposed revision.
+
+`Framework.Script` copies `evalLoop`, `evalScript` and `verifyScript` as `evalLoopWith`, `evalScriptWith` and `verifyScriptWith`.
+Each copy takes an instruction step `step` in place of `evalInstruction`.
+It also takes an error map `embed : ScriptError → ε` for the errors that the loop and `VerifyScript` produce themselves.
+`baselineStep embed checker flags` is `evalInstruction checker script flags` with its errors mapped by `embed`.
+
+The agreement theorems hold for every error map, checker, flag set, script, state and stack:
+
+- `evalLoopWith_baseline`: `evalLoopWith embed (baselineStep embed checker flags)` equals `evalLoop checker flags`, with the error mapped by `embed`.
+- `evalScriptWith_baseline`: the same for `evalScript`.
+- `verifyScriptWith_baseline`: `verifyScriptWith embed (baselineStep embed (some c) flags) flags` equals `verifyScript c flags`, with the error mapped by `embed`.
+
+`Restricts step₁ step₀` holds when every successful step of `step₁` is a successful step of `step₀` with the same state.
+For all steps with `Restricts step₁ step₀`, and all error maps of the two steps:
+
+- `evalLoopWith_restricts` and `evalScriptWith_restricts`: if the loop or the evaluation with `step₁` succeeds with the final state `t`, then the one with `step₀` succeeds with `t`.
+- `verifyScriptWith_restricts`: if `verifyScriptWith` with `step₁` accepts, then `verifyScriptWith` with `step₀` accepts, for the same flags and scripts. The P2SH evaluation is included.
+- `verifyScript_of_restricts`: if `step₁` restricts the baseline step for `c` and `flags`, and `verifyScriptWith` with `step₁` and `flags` accepts, then `verifyScript c flags` accepts.
+
+The restriction theorems are Script-local.
+The conclusion is about one call of `verifyScript`, not about a block or a chain.
+
+`opcodeFreeFrom O script pc` holds when no instruction from `pc` to the end has an opcode in `O`.
+It counts an instruction in a branch that does not execute.
+Let two steps agree at every instruction whose opcode is outside `O`:
+
+- `evalLoopWith_congr` and `evalScriptWith_congr`: the two loops, or the two evaluations, give the same result on a script part with no instruction in `O`.
+- `verifyScriptWith_congr`: the two `VerifyScript` calls give the same result when `scriptSig`, `scriptPubKey` and every possible P2SH redeem script have no instruction in `O`.
+  The theorem takes the redeem-script condition as a hypothesis about each top item of a final stack of `scriptSig`.
+
+`Framework.Activation` defines `Activation`, one optional activation height for each `WorkNetwork`, and `Activation.isActive`.
+For every activation, network and height, `Activation.isActive_lt` and `Activation.isActive_of_le` prove that it is false below the activation height and true from it.
+`Activation.isActive_mono` proves that it is monotone in the height, and `Activation.none_inactive` that a network without a height is never active.
+No proposal is active on any network, so the library defines no `Activation` value.
+
+`Framework.Compatibility` defines the shapes of design record 0007, section 8.1, for a baseline check `baseline : κ → β` and a revision `revised : Bool → κ → ρ`.
+`Verdict` classifies a result as accepted, rejected or unsupported.
+A strictness witness and a relaxation witness need a rejection, so a change to an unsupported result is not a witness.
+`inactiveEq_verifyScriptWith` and `restrictsAcceptance_verifyScriptWith` derive the inactive equality and restriction of acceptance of a `VerifyScript` revision from properties of its step.
+`LegacyProjection.identity` is the projection of a revision that keeps encodings and state effects.
+No theorem uses a projection yet, because DogeLib has no block validity.
+
+The framework adds no axiom, hypothesis or trust assumption.
+A proposal's theorems are about DogeLib's definitions, and they inherit the gaps of the baseline definitions that they reuse.
+By `#print axioms` with Lean `v4.35.0`:
+
+| Axioms | Theorems |
+| --- | --- |
+| None | `VerifyOutcome.verdict_ofBaseline` |
+| `propext` | `Activation.none_inactive`, `Activation.isActive_lt`, `Activation.isActive_of_le`, `baselineVerdict_eq_accepted`, `VerifyOutcome.verdict_eq_accepted` |
+| `propext`, `Quot.sound` | `evalLoopWith_baseline`, `evalScriptWith_baseline`, `verifyScriptWith_baseline`, `evalLoopWith_restricts`, `evalScriptWith_restricts`, `verifyScriptWith_restricts`, `verifyScript_of_restricts`, `evalLoopWith_congr`, `evalScriptWith_congr`, `verifyScriptWith_congr`, `Activation.isActive_iff`, `Activation.isActive_mono`, `inactiveEq_verifyScriptWith`, `restrictsAcceptance_verifyScriptWith` |
+
 ### What cannot be proved yet
 
 A `partial` definition, an `opaque` constant, or a definition that unfolds to one cannot be evaluated by the kernel.

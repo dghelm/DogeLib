@@ -61,6 +61,11 @@ jobs:
       - name: import boundaries
         run: lake env lean --run scripts/CheckRefinementImports.lean
 
+      # A baseline module that imports a proposed revision must fail the check.
+      - name: import boundary fixtures
+        if: ${{ !cancelled() }}
+        run: bash scripts/test_import_boundaries.sh
+
       # Every compiled declaration: its axioms, and anything the kernel cannot
       # unfold or the compiler runs differently. Only the findings listed in
       # scripts/check_decls_baseline.txt pass, and that list is empty.

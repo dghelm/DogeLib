@@ -81,11 +81,11 @@ Each stage reports its evidence in COVERAGE.md and SOUNDNESS.md when it merges.
 [Design record 0007](docs/design/0007-proposed-revisions.md) sets how DogeLib specifies proposed revisions and proves their compatibility with the baseline.
 The maintainer adopted the record on 2026-11-07.
 Decisions 1 to 10 of its section 13 are accepted, and decision 11 is deferred to a signalling record.
-Section 12 of the record gives two stages, which are not scheduled:
+Section 12 of the record gives two stages:
 
 | Stage | Deliverable | Status |
 | --- | --- | --- |
-| 1 | The `Proposals` and `ProposalProofs` libraries, the import check, the activation model and the Script loop with a step parameter | Not started |
+| 1 | The `Proposals` and `ProposalProofs` libraries, the import check, the activation model and the Script loop with a step parameter | Specified in `DogeLib.Proposals.Framework`, with the framework targets of section 11 except `checkBlockHeader_not_versionBitsCondition` (decision 11), and the import-check self-test |
 | 2 | The worked example `ExampleVersionVerify`, with its theorem targets and known answers | Not started |
 
 One other candidate is unscheduled, and it needs an approved scope before work starts:

@@ -37,6 +37,8 @@ The implementation never becomes the specification.
 | `DogeLib` | The specification | On |
 | `Proofs` | Properties, rooted at each layer's `Proofs` tree | Off |
 | `Exports` | The oracle, `dogelib-oracle`, and later binding-facing code | Off: with it on, Lake reports a build cycle, because the library contains the executable's root module |
+| `Proposals` | Proposed revisions of the baseline and the framework that states them, rooted at `DogeLib.Proposals` | Off |
+| `ProposalProofs` | Properties of the proposed revisions, rooted at `DogeLib.Proposals.Proofs` and each proof tree under `DogeLib/Proposals/` | Off |
 | `Refinement` | Extracted Rust implementation models and their refinement proofs. Imports the pinned Aeneas backend and Mathlib. | Off |
 | `check-decls` | An executable that checks the axioms and substitutions of every compiled declaration | — |
 
@@ -47,7 +49,7 @@ The oracle lives in `Exports`, so a Lean project that imports the specification 
 
 The `Refinement` library belongs to a separate Lake package under `Refinement/`, which requires DogeLib, Aeneas and Mathlib.
 The root DogeLib package has no Lake dependencies.
-The specification, `Proofs` and `Exports` import neither dependency.
+The specification, `Proofs` and `Exports` import neither dependency, and neither do `Proposals` and `ProposalProofs`.
 `scripts/CheckRefinementImports.lean` checks those transitive import boundaries.
 Heavy mathematical and probabilistic dependencies stay outside the specification.
 
@@ -65,6 +67,10 @@ tests/KnownAnswers.lean              the driver that `lake test` runs
 tests/KnownAnswers/                  known answers by topic and shared fixture readers
 harness/core/                        the Dogecoin Core harness: Core's code on the oracle's requests
 scripts/                             repository tools and checks
+DogeLib/Proposals/Framework/        the framework for proposed revisions
+DogeLib/Proposals/Framework/Proofs/ its theorems
+DogeLib/Proposals/<Name>/           the definitions of one proposed revision
+DogeLib/Proposals/<Name>/Proofs/    its theorems
 ```
 
 A new layer adds its proof root to the `Proofs` library and, if it has an adapter, its export root to `Exports`.
@@ -104,6 +110,32 @@ It composes `isValidPubKey`, `parsePubKey`, `parseDerLax` and `Ecdsa.verify` int
 `DogeLib/Script/Exports/` adapts instruction reading and one `EvalScript` call to the [oracle format](docs/oracle.md).
 
 Ledger, Rules and Models layers are added when their work begins.
+
+## Proposed revisions
+
+The baseline is the specification of Dogecoin Core at the pin in [SOURCES.md](SOURCES.md).
+A *proposed revision* is behaviour intentionally different from the baseline.
+[Design record 0007](docs/design/0007-proposed-revisions.md) sets how DogeLib states one and proves its compatibility with the baseline.
+
+Proposed revisions live in two libraries of the root package, `Proposals` and `ProposalProofs`, under `DogeLib.Proposals`.
+`Proposals` may import `DogeLib`.
+`ProposalProofs` may import `Proposals`, `DogeLib` and `Proofs`.
+No module of `DogeLib`, `Proofs` or `Exports` imports either library.
+So a consumer of the specification gets no proposal code, and no proposal can change a baseline result.
+Two checks enforce this direction:
+
+- `scripts/CheckRefinementImports.lean` rejects `DogeLib.Proposals` in the transitive imports of the baseline libraries. `scripts/test_import_boundaries.sh` plants such an import and requires the failure.
+- `lake exe check-decls` loads `DogeLib.Proposals` and `DogeLib.Proposals.Proofs` among its default roots. It checks every proposal declaration, and it reports a proposal file that the roots do not reach.
+
+`DogeLib.Proposals.Framework` holds three parts:
+
+- `Framework.Script`: copies of `evalLoop`, `evalScript` and `verifyScript` that take the instruction step as a parameter and an error type of the proposal. Agreement theorems in `ProposalProofs` prove that each copy, with the baseline step, equals its baseline definition. A change to the baseline loop that the copy does not follow fails the build.
+- `Framework.Activation`: the activation model. A revised definition takes `active : Bool`, and a block-level `Activation` gives each network one activation height or none.
+- `Framework.Compatibility`: the compatibility classes of design record 0007, section 8, and the legacy projection.
+
+A proposal lives under `DogeLib.Proposals.<Name>`, and `DogeLib/Proposals.lean` imports it.
+Its proof tree is a root of `ProposalProofs`, and `DogeLib/Proposals/Proofs.lean` imports it.
+A proposal never gets a row in the baseline tables of [COVERAGE.md](COVERAGE.md), and the oracle has no proposal operation.
 
 ## Adopted upstream code
 

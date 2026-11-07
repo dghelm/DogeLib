@@ -6,6 +6,7 @@ public import DogeLib.Work.ArithUint256Compact
 public import DogeLib.Work.ArithUint256Division
 public import DogeLib.Work.ArithUint256Words
 public import DogeLib.Work.Consensus
+public import DogeLib.Work.MedianTimePast
 public import DogeLib.Work.NextWork
 public import DogeLib.Work.ProofOfWork
 public import DogeLib.Work.Retarget

@@ -70,7 +70,7 @@ Section 10 of the record gives four stages, and section 11 gives their theorem t
 
 | Stage | Deliverable | Status |
 | --- | --- | --- |
-| 1 | Median time past on a checked view, with its depth requirement | Not started |
+| 1 | Median time past on a checked view, with its depth requirement | Specified in `Work.MedianTimePast`, with theorems and known answers |
 | 2 | Parameters by height: `fAllowLegacyBlocks`, `BIP65Height`, `BIP66Height` and the checkpoint tables | Specified in `Block.ContextualParams`, with theorems and known answers |
 | 3 | The composition `contextualCheckBlockHeader`, with its characterization theorems and known answers | Not started |
 | 4 | The oracle operation `block.contextual_check`, the Core harness and the comparison | Not started |

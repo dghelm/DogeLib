@@ -4,6 +4,7 @@ import KnownAnswers.ContextualParams
 import KnownAnswers.Genesis
 import KnownAnswers.Hash
 import KnownAnswers.HeaderPow
+import KnownAnswers.MedianTimePast
 import KnownAnswers.Script
 import KnownAnswers.Scrypt
 import KnownAnswers.ScryptPow
@@ -24,6 +25,7 @@ def KnownAnswers.checks : List (String × IO Nat) :=
     KnownAnswers.Genesis.checks,
     KnownAnswers.Hash.checks,
     KnownAnswers.HeaderPow.checks,
+    KnownAnswers.MedianTimePast.checks,
     KnownAnswers.Script.checks,
     KnownAnswers.Scrypt.checks,
     KnownAnswers.ScryptPow.checks,

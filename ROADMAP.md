@@ -62,7 +62,7 @@ Each item below is complete.
 
 Release 0.1.0 is out, as tag `v0.1.0` at commit `7510cc9`.
 
-The current milestone is contextual header validation, under [design record 0006](docs/design/0006-contextual-header-validation.md).
+The milestone before the current one was contextual header validation, under [design record 0006](docs/design/0006-contextual-header-validation.md).
 The maintainer adopted the record on 2026-11-07, with all nine decisions of its section 12.
 The milestone specifies the checks of `ContextualCheckBlockHeader` other than the version gates.
 They are `nBits` against `GetNextWorkRequired`, the checkpoints, the time checks and the rejection of outdated versions.

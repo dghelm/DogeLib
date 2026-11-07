@@ -62,13 +62,17 @@ Each item below is complete.
 
 Release 0.1.0 is out, as tag `v0.1.0` at commit `7510cc9`.
 
-The next work comes from these candidates, starting with the application spend property.
-None of them is scheduled, and each needs an approved scope before work starts:
+The next work comes from these candidates, starting with contextual header validation.
+Each candidate needs an approved scope before work starts:
 
-- **A full application spend property.** A worked property that covers a complete spend of an application template, beyond one input's Script verification.
 - **Contextual header validation.** The checks of `ContextualCheckBlockHeader` other than the version gates: `nBits` against `GetNextWorkRequired`, the checkpoints, the time checks and the rejection of outdated versions.
+  The maintainer chose this candidate on 2026-11-06.
+  [Design record 0006](docs/design/0006-contextual-header-validation.md) proposes its scope, and its open decisions need a maintainer decision.
 - **Arithmetic agreement with Core's verifier.** A Lean proof that `Point.mulAdd` computes Core's `secp256k1_ecmult` result ([design record 0005](docs/design/0005-signature-verifier.md), section 4.3).
   The proof needs Mathlib, so it requires a package proposal first.
+
+DogeLib specifies Dogecoin Core.
+A property of an application template belongs in a downstream project.
 
 ## Milestones
 

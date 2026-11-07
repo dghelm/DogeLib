@@ -591,7 +591,8 @@ So H1 supports these failure states:
 H1 cannot put the genesis entry in the failed list, and the record found no other mechanism at the pin that can.
 H2 owns its failed list, so it has no such gap, and it compares those states alone.
 A state with genesis in the failed list may not occur in a running node, but `WellFormed` allows it.
-In that state, step 6 rejects every header whose predecessor lacks `scriptsValid`.
+In that state, step 6 rejects a header whose predecessor lacks `scriptsValid` when the predecessor's chain reaches genesis.
+On a branch that ends at an anchor, the walk never meets genesis, so step 6 passes.
 
 **H2: transcribe the bodies and call Core's helpers.**
 The harness transcribes `AcceptBlockHeader` [C1] and the index part of `AddToBlockIndex` [C3], as it transcribes `ContextualCheckBlockHeader` for `block.contextual_check`.

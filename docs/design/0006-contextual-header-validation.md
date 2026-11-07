@@ -1,7 +1,8 @@
 # Contextual header validation
 
-**Status:** Proposed. The open decisions of section 12 await a maintainer decision.
-Implementation status will belong in ROADMAP.md and COVERAGE.md.
+**Status:** Adopted on 2026-11-07, with the decisions that section 12 records.
+This record is frozen.
+Implementation status belongs in ROADMAP.md and COVERAGE.md.
 
 **Date:** 2026-11-06
 **Companions:** [Coverage](../../COVERAGE.md), [soundness](../../SOUNDNESS.md), [architecture](../../ARCHITECTURE.md), [oracle contract](../oracle.md) and [design record 0004](0004-header-proof-of-work.md).
@@ -490,21 +491,22 @@ No theorem says that a caller supplies the values that a node would compute.
 Stage 3 records each of these inputs as an execution boundary in SOUNDNESS.md.
 The record adds no axiom and no trust assumption.
 
-## 12. Open decisions
+## 12. Decisions
 
-Each proposal below needs a maintainer decision before stage 1 starts:
+**Date:** 2026-11-07. **Decision maker:** Maintainer.
+The maintainer decided each proposal as its status states:
 
 | Number | Topic | Proposal | Status |
 | --- | --- | --- | --- |
-| 1 | Chain context | Option A: the existing finite view of `Work.BlockIndex`, newest first, with adapter errors for short views (section 6.1). | Open |
-| 2 | Checkpoint state | Form 2: the set of known checkpoint heights and the enabled flag, with `lastCheckpoint` over the network's table. The predicate takes the derived height (section 6.2). | Open |
-| 3 | Core harness | H2: a transcription of C1 that calls Core's helpers, with line-by-line review. H1, which links `validation.cpp`, stays a later option (section 8.2). | Open |
-| 4 | Comparison | Compare `valid` and Core's `reject_reason`, so that the comparison pins the order of the checks. Exclude the Lean diagnostic (section 8.1). | Open |
-| 5 | Fixtures | Fetch the four mainnet ranges of section 9.2 as pure headers, anchored to hashes in the pinned source. Use synthetic contexts for testnet and regtest, without real testnet headers. | Open |
-| 6 | `ContextualCheckBlock` | Exclude it from this scope (section 4.8). | Open |
-| 7 | Header sequence | Exclude a composition that checks a sequence of headers with `CheckBlockHeader`, the contextual check and the predecessor hash. A later record can propose it. | Open |
-| 8 | Rust work | Implementation refinement and Rust extraction stay outside this scope. | Open |
-| 9 | Adjusted time above `INT64_MAX − 7200` | An adapter error in the specification and a request error in the oracle, because Core's addition overflows there. The alternative is an `Int` extension outside Core's domain, which no comparison can check (item 18). | Open |
+| 1 | Chain context | Option A: the existing finite view of `Work.BlockIndex`, newest first, with adapter errors for short views (section 6.1). | Accepted |
+| 2 | Checkpoint state | Form 2: the set of known checkpoint heights and the enabled flag, with `lastCheckpoint` over the network's table. The predicate takes the derived height (section 6.2). | Accepted |
+| 3 | Core harness | H2: a transcription of C1 that calls Core's helpers, with line-by-line review. H1, which links `validation.cpp`, stays a later option (section 8.2). | Accepted |
+| 4 | Comparison | Compare `valid` and Core's `reject_reason`, so that the comparison pins the order of the checks. Exclude the Lean diagnostic (section 8.1). | Accepted |
+| 5 | Fixtures | Fetch the four mainnet ranges of section 9.2 as pure headers, anchored to hashes in the pinned source. Use synthetic contexts for testnet and regtest, without real testnet headers. | Accepted |
+| 6 | `ContextualCheckBlock` | Exclude it from this scope (section 4.8). | Accepted |
+| 7 | Header sequence | Exclude a composition that checks a sequence of headers with `CheckBlockHeader`, the contextual check and the predecessor hash. A later record can propose it. | Accepted |
+| 8 | Rust work | Implementation refinement and Rust extraction stay outside this scope. | Accepted |
+| 9 | Adjusted time above `INT64_MAX − 7200` | An adapter error in the specification and a request error in the oracle, because Core's addition overflows there. The alternative is an `Int` extension outside Core's domain, which no comparison can check (item 18). | Accepted |
 
 ## 13. Remaining risks
 

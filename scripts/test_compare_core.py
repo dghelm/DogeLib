@@ -28,6 +28,8 @@ from oracle_script import harness_refused, refused_set, refusal_precedence_set, 
 # mode: (role of the wrapper, expected failure code). The role "core" stands
 # in for the harness, "oracle" for dogelib-oracle.
 MUTATIONS = {
+    "contextual_valid": ("core", "CONTEXTUAL_HEADER"),
+    "contextual_reason": ("core", "CONTEXTUAL_HEADER"),
     "pow_reconstruction": ("core", "AUXPOW_RECONSTRUCTION"),
     "pow_mined_reconstruction": ("core", "AUXPOW_POW_RECONSTRUCTION"),
     "pow_scrypt": ("core", "SCRYPT_DIGEST"),
@@ -364,6 +366,16 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
         mutate_first(responses, is_plan("hash_bytes"), flip_last)
     elif mode == "oracle_preimage_malformed":
         mutate_first(responses, is_plan("hash_bytes"), set_ok("preimage_hex", "zz"))
+    if mode in ("contextual_valid", "contextual_reason"):
+        for request, response in zip(requests, responses):
+            if request["op"] == "block.contextual_check" and "ok" in response:
+                if mode == "contextual_valid":
+                    response["ok"]["valid"] = not response["ok"]["valid"]
+                else:
+                    response["ok"]["reject_reason"] = "wrong-order"
+                break
+        else:
+            raise SystemExit("wrapper: no contextual response to mutate")
     if mode.startswith("pow_") and mode not in ("pow_reconstruction", "pow_mined_reconstruction"):
         op, field = {"pow_scrypt": ("scrypt.hash", "digest_hex"),
                      "pow_reader": ("block.header.read", "consumed"),
@@ -421,6 +433,19 @@ def main() -> int:
     oracle = str(pathlib.Path(sys.argv[1]).resolve())
     failures = 0
     from compare_core import compare as compare_response
+    from oracle_contextual import contextual_sets
+    contextual_sets()
+    contextual = {"op": "block.contextual_check"}
+    accepted = {"id": 1, "ok": {"valid": True, "reject_reason": None}}
+    lean = {"id": 1, "ok": {"valid": True, "reject_reason": None, "diagnostic": "Lean only"}}
+    assert compare_response(contextual, lean, accepted) is None
+    for bad in [dict(valid=1, reject_reason=None), dict(valid=True),
+                dict(valid=True, reject_reason="wrong"), dict(valid=False, reject_reason=None),
+                dict(valid=True, reject_reason=None, diagnostic="stray")]:
+        assert compare_response(contextual, lean, {"id": 1, "ok": bad})[0] == "CONTEXTUAL_HEADER"
+    rejected = {"id": 1, "ok": {"valid": False, "reject_reason": "time-too-old", "diagnostic": None}}
+    assert compare_response(contextual, rejected,
+                            {"id": 1, "ok": {"valid": False, "reject_reason": "time-too-new"}})[0] == "CONTEXTUAL_HEADER"
     request = {"op": "auxpow.check"}
     assert compare_response(request, {"id": 1, "ok": {"valid": True, "diagnostic": "Lean only"}},
                             {"id": 1, "ok": {"valid": True}}) is None

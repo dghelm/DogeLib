@@ -3,7 +3,7 @@ module
 public import DogeLib.Exports.Json
 public import DogeLib.Block.Header
 public import DogeLib.Block.Merkle
-public import DogeLib.Block.ProofOfWork
+public import DogeLib.Block.ContextualCheck
 public import DogeLib.Transaction.Exports.Oracle
 public import DogeLib.Work.Exports.Oracle
 
@@ -182,20 +182,6 @@ def checkPow : Operation where
     let h ← argPowHeader fields mode bs
     return verdictJson (checkAuxPowProofOfWork (getAuxPowParams network height) h)
 
-/-- The legacy-block field of Core's parameter trees (SOURCES.md D14), with its actual search links. -/
-def legacyGateTree : Work.WorkNetwork → ParamsTree Bool
-  | .mainnet => .node 145000 true
-      (some (.node 0 true none none)) (some (.node 371337 false none none))
-  | .testnet => .node 145000 true
-      (some (.node 0 true none none))
-      (some (.node 157500 true none (some (.node 158100 false none none))))
-  | .regtest => .node 10 true
-      (some (.node 0 true none none)) (some (.node 20 false none none))
-
-/-- The activation field selected by network and height in Core's records (SOURCES.md D14). -/
-def allowLegacyAt (network : Work.WorkNetwork) (height : UInt32) : Bool :=
-  ((legacyGateTree network).getConsensus height).2
-
 /-- The two version gates on an exact pure header and a selected network record. -/
 def checkHeaderVersion : Operation where
   name := "block.check_version"
@@ -207,10 +193,43 @@ def checkHeaderVersion : Operation where
     let height := (← argInt fields "selection_height" 0 2147483647).toNat.toUInt32
     let some (h, _) := Codec.decode (α := PureBlockHeader) bs
       | throw (.request "bytes_hex must contain exactly 80 bytes")
-    return verdictJson (checkVersion ⟨allowLegacyAt network height⟩ h)
+    return verdictJson (checkVersion (getContextualParams network height).toVersionGateParams h)
+
+/-- Contextual validation on exact pure bytes and an explicit finite node context.
+Adapter errors remain separate from the seven Core rejection reasons. -/
+def contextualCheck : Operation where
+  name := "block.contextual_check"
+  args := ["bytes_hex", "network", "chain", "adjusted_time", "checkpoints_enabled", "known_checkpoints"]
+  run fields := do
+    let bs ← argHex fields "bytes_hex"
+    unless bs.length == 80 do throw (.request "bytes_hex must contain exactly 80 bytes")
+    let some (header, _) := Codec.decode (α := PureBlockHeader) bs
+      | throw (.request "bytes_hex must contain exactly 80 bytes")
+    let network ← Work.Exports.argNetwork fields
+    let view ← Work.Exports.argView fields
+    let time ← argInt fields "adjusted_time" (-9223372036854775808) maxAdjustedTime
+    let enabled ← Work.Exports.argBool fields "checkpoints_enabled"
+    let .arr entries ← arg fields "known_checkpoints"
+      | throw (.request "known_checkpoints must be an array")
+    let known ← entries.toList.mapM fun entry => do
+      let n ← argInt (Std.TreeMap.Raw.ofList [("height", entry)]) "height" 0 2147483647
+      unless (checkpointHeights network).contains n.toNat do
+        throw (.request "known checkpoint height is outside the network table")
+      return n.toNat
+    match contextualCheckBlockHeaderWithCheckpoints network header view (Int64.ofInt time) enabled known with
+    | .ok () => return Json.mkObj [("valid", .bool true), ("reject_reason", .null), ("diagnostic", .null)]
+    | .error error =>
+      if let some reason := error.rejectReason then
+        return Json.mkObj [("valid", .bool false), ("reject_reason", .str reason),
+          ("diagnostic", .str (reprStr error))]
+      else
+        match error with
+        | .invalidView e | .nextWork e => throw (.spec (Work.Exports.viewErrorJson e))
+        | _ => throw (.spec (Json.mkObj [("kind", .str "work_view"),
+            ("reason", .str (if error == .emptyView then "empty_view" else "short_view"))]))
 
 /-- The block, Merkle and header proof-of-work operations of the oracle. -/
 def operations : List Operation := [readHeader, encodeHeader, hashHeader, computeMerkle,
-  scryptHash, readBlockHeader, checkAuxPow, checkPow, checkHeaderVersion]
+  scryptHash, readBlockHeader, checkAuxPow, checkPow, checkHeaderVersion, contextualCheck]
 
 end DogeLib.Block.Exports

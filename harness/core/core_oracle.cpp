@@ -6,11 +6,12 @@
 // scripts/build_core_harness.sh builds it against Core's libraries at the
 // commit that SOURCES.md pins.
 //
-// Every result value comes from Core's code, with three exceptions that the
+// Every result value comes from Core's code, with the exceptions that the
 // documentation names: `plan` of sighash.legacy is a label computed here from
 // Core's conditions, and sighash.legacy has no `preimage_hex`, because Core
 // hashes its preimage without exposing it. The third exception is the
 // block.check_version verdict, from two transcribed branches and Core predicates.
+// block.contextual_check also transcribes D33 and calls Core helpers for compared values.
 //
 // An exception from Core that is not one of the four mapped read errors ends
 // the program with status 3, so it shows as a failed comparison.
@@ -20,6 +21,8 @@
 #include "primitives/block.h"
 #include "crypto/scrypt.h"
 #include "chain.h"
+#include "checkpoints.h"
+#include "validation.h"
 #include "chainparams.h"
 #include "consensus/merkle.h"
 #include "crypto/sha1.h"
@@ -59,6 +62,9 @@ int LogPrintStr(const std::string& message)
     std::cerr << message;
     return message.size();
 }
+
+BlockMap mapBlockIndex;
+bool fCheckpointsEnabled = true;
 
 namespace {
 
@@ -184,11 +190,16 @@ int64_t argInt(const UniValue& req, const std::string& key, int64_t lo, int64_t 
         digits.erase(digits.size() + scale);
         scale = 0;
     }
-    // Every bound is below 10^11 in magnitude.
-    if (static_cast<long long>(digits.size()) + scale > 11) throw RequestError{"argument " + key + " is out of range"};
+    // Normalize before parsing, including the asymmetric signed 64-bit endpoints.
+    if (static_cast<long long>(digits.size()) + scale > 19)
+        throw RequestError{"argument " + key + " is out of range"};
     digits.append(static_cast<size_t>(scale), '0');
-    int64_t magnitude = std::stoll(digits);
-    int64_t value = negative ? -magnitude : magnitude;
+    const std::string limit = negative ? "9223372036854775808" : "9223372036854775807";
+    if (digits.size() == 19 && digits > limit)
+        throw RequestError{"argument " + key + " is out of range"};
+    const uint64_t magnitude = std::stoull(digits);
+    const int64_t value = negative ? (magnitude == (uint64_t{1} << 63) ? INT64_MIN : -static_cast<int64_t>(magnitude))
+                                   : static_cast<int64_t>(magnitude);
     if (value < lo || value > hi) throw RequestError{"argument " + key + " is out of range"};
     return value;
 }
@@ -414,6 +425,43 @@ int availableSkipHeight(int height)
     return (height & 1) ? invert(invert(height - 1)) + 1 : invert(height);
 }
 // End of the adapted skip-height helper.
+
+// H2 transcription of Dogecoin Core e0a1c157791544e818c901bd9341896965afbf9d,
+// src/validation.cpp lines 3066-3119 (SOURCES.md D33). MIT/X11 licence.
+// Copyright (c) 2009-2010 Satoshi Nakamoto
+// Copyright (c) 2009-2016 The Bitcoin Core developers
+// Copyright (c) 2022-2023 The Dogecoin Core developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+// Return the reject reason in place of CValidationState and peer-management scores.
+// Adapter preflight establishes a non-null predecessor and safe adjusted-time sum.
+std::string contextualReject(const CBlockHeader& block, const CBlockIndex* pindexPrev, int64_t nAdjustedTime)
+{
+    const int nHeight = pindexPrev == NULL ? 0 : pindexPrev->nHeight + 1;
+    const CChainParams& params = Params();
+    const Consensus::Params& consensusParams = params.GetConsensus(nHeight);
+    if (!consensusParams.fAllowLegacyBlocks && block.IsLegacy())
+        return "late-legacy-block";
+    if (consensusParams.fAllowLegacyBlocks && block.IsAuxpow())
+        return "early-auxpow-block";
+    if (block.nBits != GetNextWorkRequired(pindexPrev, &block, consensusParams))
+        return "bad-diffbits";
+    if (fCheckpointsEnabled) {
+        CBlockIndex* pcheckpoint = Checkpoints::GetLastCheckpoint(params.Checkpoints());
+        if (pcheckpoint && nHeight < pcheckpoint->nHeight)
+            return "bad-fork-prior-to-checkpoint";
+    }
+    if (block.GetBlockTime() <= pindexPrev->GetMedianTimePast())
+        return "time-too-old";
+    if (block.GetBlockTime() > nAdjustedTime + 2 * 60 * 60)
+        return "time-too-new";
+    if ((block.GetBaseVersion() < 3 && nHeight >= consensusParams.BIP66Height) ||
+        (block.GetBaseVersion() < 4 && nHeight >= consensusParams.BIP65Height))
+        return strprintf("bad-version(0x%08x)", block.GetBaseVersion());
+    return "";
+}
+
+// End of the adapted contextual-header checks.
 
 // Reject histories outside the compared caller domain before invoking Core.
 // In particular, a truncated recovery walk must not masquerade as genesis.
@@ -746,8 +794,10 @@ UniValue run(const UniValue& req)
         last.nBits = argU32(req, "last_bits");
         const auto bits = CalculateDogecoinNextWorkRequired(&last, argU32(req, "first_time"), params);
         ok.pushKV("bits", static_cast<uint64_t>(bits));
-    } else if (op == "work.next") {
-        checkArgs(req, op, {"network", "chain", "candidate_time"});
+    } else if (op == "work.next" || op == "block.contextual_check") {
+        const bool contextual = op == "block.contextual_check";
+        if (contextual) checkArgs(req, op, {"bytes_hex", "network", "chain", "adjusted_time", "checkpoints_enabled", "known_checkpoints"});
+        else checkArgs(req, op, {"network", "chain", "candidate_time"});
         selectWorkNetwork(req);
         const auto& entries = arg(req, "chain");
         if (!entries.isArray()) throw RequestError{"chain must be an array"};
@@ -764,7 +814,31 @@ UniValue run(const UniValue& req)
             if (i && chain[i-1].nHeight != chain[i].nHeight + 1) throw RequestError{"inconsistent chain heights"};
         }
         CBlockHeader candidate;
-        candidate.nTime = argU32(req, "candidate_time");
+        int64_t adjustedTime = 0;
+        std::vector<CBlockIndex> checkpointEntries;
+        mapBlockIndex.clear();
+        if (contextual) {
+            const auto bytes = argHex(req, "bytes_hex");
+            if (bytes.size() != 80) throw RequestError{"bytes_hex must contain exactly 80 bytes"};
+            CDataStream ds(bytes, SER_NETWORK, PROTOCOL_VERSION);
+            ds >> static_cast<CPureBlockHeader&>(candidate);
+            adjustedTime = argInt(req, "adjusted_time", INT64_MIN, INT64_MAX - 7200);
+            fCheckpointsEnabled = argBool(req, "checkpoints_enabled");
+            const auto& known = arg(req, "known_checkpoints");
+            if (!known.isArray()) throw RequestError{"known_checkpoints must be an array"};
+            checkpointEntries.resize(known.size());
+            for (size_t i = 0; i < checkpointEntries.size(); ++i) {
+                UniValue field(UniValue::VOBJ);
+                field.pushKV("height", known[i]);
+                const auto height = argInt(field, "height", 0, INT32_MAX);
+                const auto& table = Params().Checkpoints().mapCheckpoints;
+                const auto found = table.find(height);
+                if (found == table.end()) throw RequestError{"known checkpoint height is outside the network table"};
+                checkpointEntries[i].nHeight = height;
+            }
+            if (chain.empty() || chain.size() < std::min(11, chain.front().nHeight + 1))
+                throw RequestError{"contextual view is empty or too short for median"};
+        } else candidate.nTime = argU32(req, "candidate_time");
         const auto& params = Params().GetConsensus(chain.empty() ? 0 : chain.front().nHeight + 1);
         checkWorkHistory(chain, candidate, params);
         // Build from oldest to newest, with stable addresses and real pprev links.
@@ -775,8 +849,17 @@ UniValue run(const UniValue& req)
                     chain[i].BuildSkip();
             }
         }
-        const auto bits = GetNextWorkRequired(chain.empty() ? nullptr : &chain.front(), &candidate, params);
-        ok.pushKV("bits", static_cast<uint64_t>(bits));
+        if (contextual) {
+            for (auto& entry : checkpointEntries)
+                mapBlockIndex[Params().Checkpoints().mapCheckpoints.at(entry.nHeight)] = &entry;
+            const auto reason = contextualReject(candidate, &chain.front(), adjustedTime);
+            ok.pushKV("valid", reason.empty());
+            ok.pushKV("reject_reason", reason.empty() ? UniValue() : UniValue(reason));
+            mapBlockIndex.clear();
+        } else {
+            const auto bits = GetNextWorkRequired(chain.empty() ? nullptr : &chain.front(), &candidate, params);
+            ok.pushKV("bits", static_cast<uint64_t>(bits));
+        }
     } else if (op == "compactsize.encode") {
         checkArgs(req, op, {"value"});
         uint64_t n = argU64(req, "value");

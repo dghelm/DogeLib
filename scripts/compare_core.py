@@ -41,6 +41,7 @@ from oracle_hash_block import header_fields, header_records, header_fixtures, me
 from oracle_script import script_sets, corpus_records, evaluation, validate_eval, adapter_limit_cases, legacy_sets, harness_refused, refused_set, tx_spend_sets, locktime_sets, refusal_precedence_set
 
 from oracle_pubkey import pubkey_sets, signature_spends
+from oracle_contextual import contextual_sets, EXPECTATIONS as CONTEXT_EXPECTATIONS, key as context_key
 from oracle_header_pow import header_pow_sets, CODES as HEADER_CODES, EXPECTATIONS as HEADER_EXPECTATIONS, key as header_key
 
 ORACLE_FORMAT = "dogelib-oracle/1"
@@ -613,7 +614,7 @@ def set_hash_boundaries(algorithm: str) -> list[dict]:
             for n in sorted(lengths)]
 
 
-QUICK_SETS = ("header PoW fixtures", "full header readers", "header version boundaries", "pubkey Core signatures", "Script signature verdict", "fixtures", "compactsize", "sighash endpoints", "witness flags and stacks",
+QUICK_SETS = ("contextual boundaries", "header PoW fixtures", "full header readers", "header version boundaries", "pubkey Core signatures", "Script signature verdict", "fixtures", "compactsize", "sighash endpoints", "witness flags and stacks",
               "work compact boundaries", "regtest legacy wrap case", "work missing skip traversal", "header field boundaries", "Merkle generated",
               "RIPEMD-160 padding boundaries", "Hash160 padding boundaries", "SHA-1 padding boundaries", "Script reader truncations", "Script resource boundaries", "Script resource boundaries base",
               "Script legacy corpus base", "Script legacy corpus transaction", "Script harness refusal domain", "Script refusal precedence",
@@ -674,6 +675,7 @@ def request_sets() -> tuple[list[tuple[str, list[dict]]], list[str]]:
         ("SHA-1 padding boundaries", set_hash_boundaries("sha1")),
     ])
     sets.extend(header_pow_sets())
+    sets.extend(contextual_sets())
     sets.extend(pubkey_sets())
     sets.append(("Script signature verdict", signature_spends()))
     sets.extend(script_sets())
@@ -752,6 +754,26 @@ def compare(req: dict, ours: dict, core: dict, peer: str = "core") -> tuple[str,
     for side, resp in (("oracle", ours), (peer, core)):
         if resp.get("error", {}).get("kind") == "request":
             return "REQUEST_ERROR", f"{side} rejected the request: {resp['error'].get('message')}"
+    if req["op"] == "block.contextual_check":
+        for side, response in (("oracle", ours), (peer, core)):
+            if "ok" not in response:
+                return "CONTEXTUAL_HEADER", f"{side} must return a verdict"
+            ok = dict(response["ok"])
+            if side == "oracle":
+                if "diagnostic" not in ok or (ok["diagnostic"] is not None and not isinstance(ok["diagnostic"], str)):
+                    return "CONTEXTUAL_HEADER", "missing or malformed Lean diagnostic"
+                ok.pop("diagnostic")
+            if (set(ok) != {"valid", "reject_reason"} or type(ok["valid"]) is not bool or
+                    (ok["valid"] and ok["reject_reason"] is not None) or
+                    (not ok["valid"] and not isinstance(ok["reject_reason"], str))):
+                return "CONTEXTUAL_HEADER", "malformed contextual verdict"
+            expected = CONTEXT_EXPECTATIONS.get(context_key(req))
+            if expected is not None and not json_equal(ok, expected):
+                return "CONTEXTUAL_HEADER", f"{side} disagrees with independent expectation"
+        projected = {**ours, "ok": {k: v for k, v in ours["ok"].items() if k != "diagnostic"}}
+        if not json_equal(projected, core):
+            return "CONTEXTUAL_HEADER", f"first difference at {first_difference(projected, core)}"
+        return None
     if req["op"] in HEADER_CODES:
         op = req["op"]
         code = HEADER_CODES[op]

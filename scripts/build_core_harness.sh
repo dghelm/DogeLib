@@ -49,6 +49,7 @@ stamp_text() {
 }
 
 libs=(
+  "$build/checkpoints.o"
   "$build/auxpow.o"
   "$build/pow.o"
   "$build/chain.o"
@@ -93,7 +94,7 @@ else
   # Compile work and parameter objects without the rest of the server.
   # The linker discards unrelated functions and their server dependencies.
   # chainparams.cpp and dogecoin.cpp require Boost headers, not Boost libraries.
-  for unit in auxpow pow chain dogecoin chainparams chainparamsbase; do
+  for unit in checkpoints auxpow pow chain dogecoin chainparams chainparamsbase; do
     "$cxx" -std=c++11 $core_cxxflags -DHAVE_CONFIG_H \
       -I"$src" -I"$src/config" -I"$src/univalue/include" \
       -c "$src/$unit.cpp" -o "$build/$unit.o"

@@ -71,6 +71,7 @@ Arguments use these types:
 | `u64` | string | Decimal digits, with no sign and no leading zero, for a value from 0 to 2^64 − 1. A string keeps a value above 2^53 exact in every JSON reader. |
 | Target magnitude | string | Exactly 64 hexadecimal digits, most significant byte first. Upper and lower case are accepted. The magnitude is a number, separate from hash byte order. |
 | Boolean | boolean | Only `true` and `false`. |
+| Signed `adjusted_time` | number | An integer from `INT64_MIN` to `INT64_MAX - 7200`, checked exactly without floating-point conversion. |
 | Network | string | `mainnet`, `testnet` or `regtest`. |
 | Hash type | number | An integer from −2^31 to 2^32 − 1, by the rule of `u32`. The oracle reduces it modulo 2^32, as Core's `int nHashType` becomes the `uint32_t` of the preimage. |
 
@@ -107,7 +108,7 @@ Results use these types:
 | `adapter` | A Script request fails an adapter bound before execution. | `reason`: `resource_limit`, `input_index_out_of_range` or `context_bounds`. An adapter error is not a Script rejection. |
 | `request` | The oracle could not interpret the request. Examples: invalid JSON, an unknown `op`, a missing or unknown argument, or a value out of range. | `message`, free text for a person. It is not part of the format. |
 | `read` | The reader of the specification rejects the bytes, as Core's stream would. | `reason`: `truncated` (the input ends early), `non_canonical` (a CompactSize value in a longer form than needed), `too_large` (a CompactSize value above `MAX_SIZE`, `0x02000000`), or `unknown_optional_data` (a transaction flag bit other than bit 0 remains after the input and output lists and any stacks). For `sighash.legacy`, `argument` names the argument that failed. |
-| `work_view` | The finite work view cannot supply a result. The view errors describe the adapter, not consensus rejection codes. | `reason`: `height_out_of_range`, `inconsistent_heights`, `missing_ancestor`, `first_height_underflow` or `zero_interval`. The last two are unreachable with these network parameters and checked views. |
+| `work_view` | The finite work view cannot supply a result. The view errors describe the adapter, not consensus rejection codes. | `reason`: `height_out_of_range`, `inconsistent_heights`, `missing_ancestor`, `first_height_underflow`, `zero_interval`, `empty_view` or `short_view`. `first_height_underflow` and `zero_interval` are unreachable with these network parameters and checked views. |
 | `trailing_bytes` | A transaction was read and bytes remain. | `count`: the number of bytes after the transaction. For `sighash.legacy`, `argument`. |
 
 `work_view` errors describe the finite-view adapter in the specification.
@@ -442,6 +443,7 @@ The latter uses Core's network stream version without `SERIALIZE_TRANSACTION_NO_
 | `block.header.read` | `bytes_hex`, `mode` | `header`, `consumed`, `rest_hex` |
 | `auxpow.check` | `bytes_hex`, `mode`, `hash_hex`, `chain_id`, `strict_chain_id` | Boolean `valid`, and Lean-only `diagnostic` |
 | `block.check_pow` | `bytes_hex`, `mode`, `network`, `selection_height` | Boolean `valid`, and Lean-only `diagnostic` |
+| `block.contextual_check` | `bytes_hex`, exactly 80 bytes, `network`, `chain`, `adjusted_time`, `checkpoints_enabled`, `known_checkpoints` | Boolean `valid`, `reject_reason` (null on acceptance), and Lean-only `diagnostic` |
 | `block.check_version` | `bytes_hex`, exactly 80 bytes, `network`, `selection_height` | Boolean `valid`, and Lean-only `diagnostic` |
 
 `scrypt.hash` fixes N = 1024, r = 1, p = 1 and a 32-byte output.
@@ -485,7 +487,7 @@ The split form exposes the existing in-memory predicate for Core's `auxpow_pow` 
 `block.check_version` checks only the two version gates of `ContextualCheckBlockHeader`.
 It uses a pure header because neither gate reads the payload.
 Its network and height select `fAllowLegacyBlocks`.
-The Lean adapter projects the field from the parameter trees recorded in D14.
+The Lean adapter uses `(getContextualParams network height).toVersionGateParams` (D14).
 The Core harness reads the field from Core's `Params().GetConsensus(selection_height)`.
 
 It transcribes the two branches from D33 and calls Core's own `IsLegacy` and `IsAuxpow` predicates.
@@ -496,6 +498,38 @@ Core returns only `valid`.
 The comparator excludes only Lean's `diagnostic`, and compares Boolean verdicts without coercion.
 Parse errors use the existing `read` categories.
 The complete-input operations report `trailing_bytes` with the remaining count.
+
+### Contextual header validation
+
+`block.contextual_check` checks the seven conditions of `ContextualCheckBlockHeader` (D33, lines 3066 to 3119).
+The pure header must contain exactly 80 bytes.
+The request supplies these fields:
+
+- `network`: `mainnet`, `testnet` or `regtest`.
+- `chain`: the `work.next` entries, newest first, starting at the predecessor.
+- `adjusted_time`: an integer from `INT64_MIN` to `INT64_MAX - 7200`.
+- `checkpoints_enabled`: a Boolean.
+- `known_checkpoints`: an array of heights from the network's checkpoint table (D67, D14).
+  Repeated heights have no additional effect.
+
+A height outside that table is a request error, even with checkpoints disabled.
+An adjusted time outside the stated range is a request error.
+The caller supplies the link from the header to the view, the adjusted time and the known checkpoint state.
+The operation cannot check that these inputs match a node's state.
+It excludes genesis and does not check proof of work or an AuxPoW payload.
+
+The view must contain `min(11, predecessor height + 1)` entries for the median, plus any ancestors that next-work selection needs.
+An empty view returns `work_view` / `empty_view`.
+A view too short for the median returns `work_view` / `short_view`.
+Other view failures use the `work.next` error reasons, including `missing_ancestor`.
+These adapter errors are separate from consensus rejections.
+The harness refuses inputs outside its comparison domain before it calls Core's helpers.
+
+Acceptance returns `valid: true`, `reject_reason: null` and `diagnostic: null`.
+Rejection returns `valid: false`, Core's first reject reason and a Lean diagnostic string.
+The comparator checks `valid` and `reject_reason`, including signed base-version formatting such as `bad-version(0xffffff03)`.
+It excludes only the Lean diagnostic.
+The oracle format stays `dogelib-oracle/1` under the 0.x development policy.
 
 ## The Core harness
 
@@ -522,7 +556,7 @@ It builds Core's consensus, cryptography and secp256k1 libraries, and compiles C
 It needs autoconf, automake, libtool, pkg-config, OpenSSL's development files and Boost headers (`libboost-dev` on Ubuntu).
 It links no Boost library.
 
-The work functions and parameter constructors require five additional Core objects: `pow.cpp`, `chain.cpp`, `dogecoin.cpp`, `chainparams.cpp` and `chainparamsbase.cpp`.
+The work functions and parameter constructors use these Core objects: `pow.cpp`, `chain.cpp`, `dogecoin.cpp`, `chainparams.cpp` and `chainparamsbase.cpp`, plus `auxpow.cpp` and `checkpoints.cpp` for the header checks.
 Function and data sections, with linker garbage collection, discard unrelated server functions and their dependencies.
 The build assumes GNU ld for `--gc-sections`, as Linux CI does.
 These pinned sources supply the additional objects:
@@ -533,12 +567,14 @@ These pinned sources supply the additional objects:
 | [D35, `src/chain.cpp`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/chain.cpp) | `BuildSkip`, `GetAncestor` and the skip-height guard |
 | [D6, `src/dogecoin.cpp`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/dogecoin.cpp) | `CalculateDogecoinNextWorkRequired` and minimum-difficulty permission |
 | [D14, `src/chainparams.cpp`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/chainparams.cpp) | Network parameter records, `SelectParams` and `GetConsensus` |
+| [D67, `src/checkpoints.cpp`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/checkpoints.cpp) | `Checkpoints::GetLastCheckpoint` |
 | [D39, `src/chainparamsbase.cpp`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/chainparamsbase.cpp) | `SelectBaseParams`, called by `SelectParams` |
 
 ### What the harness runs
 
 | `op` | Core's code |
 | --- | --- |
+| `block.contextual_check` | H2 transcription of `ContextualCheckBlockHeader`, with Core helpers for every compared value |
 | `compactsize.encode` | `WriteCompactSize` into a `CDataStream` |
 | `compactsize.read` | `ReadCompactSize` from a `CDataStream` |
 | `tx.read_base` | `CMutableTransaction` read from a `CDataStream` whose version has `SERIALIZE_TRANSACTION_NO_WITNESS`, so `UnserializeTransaction` reads base mode |
@@ -876,3 +912,34 @@ The [fixture notes](../tests/block/README.md#core-header-proof-of-work-report) g
 A mined-byte self-test mutation must fail with `AUXPOW_POW_RECONSTRUCTION`.
 A separate verdict mutation targets the `payload_hex` path and must fail with `HEADER_POW`.
 An extra diagnostic field on a full-header reader response must fail with `FULL_HEADER`.
+
+### Contextual header comparison evidence
+
+The harness uses H2 of [design record 0006](design/0006-contextual-header-validation.md#82-the-core-side).
+`contextualReject` transcribes D33, lines 3066 to 3119, replacing validation-state returns with reject-reason strings.
+Core computes each compared value through `GetConsensus`, `IsLegacy`, `IsAuxpow`, `GetNextWorkRequired`, `GetMedianTimePast`, `GetBaseVersion` and `Checkpoints::GetLastCheckpoint`.
+
+The harness owns `mapBlockIndex` and `fCheckpointsEnabled` and links `checkpoints.cpp`.
+Each known height adds the corresponding table hash with that height to the block index.
+The comparison uses a transcription, rather than the function in `validation.cpp`.
+A source review must compare the transcription line by line with D33.
+
+The contextual stream contains these requests:
+
+| Stream | Requests | Compared result |
+| --- | ---: | --- |
+| Contextual fixtures | 2231 | Verdict and first reject reason |
+| Contextual boundaries | 172 | Verdict and first reject reason, checked against hand derivations |
+| Contextual mutations, seed `20261109` | 500 | Verdict and first reject reason |
+
+The fixture stream uses real mainnet candidates from five header ranges.
+Chain acceptance supplies their expected verdicts with adjusted time equal to the candidate time and no known checkpoints.
+The 172 boundary expectations follow D33 and the hand derivations in `KnownAnswers.ContextualCheck`.
+They cover all seven checks, first-failure order, medians near genesis and out of order, equivalent-target compact encodings, checkpoint equality and disabled checkpoints.
+They also cover signed versions, the future-time bounds, AuxPoW and BIP heights on all networks, and testnet delay boundaries at candidates 100001, 157500 and 157501.
+A further 500 requests mutate version, time, bits, adjusted time or known checkpoints with seed `20261109`.
+
+The comparator self-test corrupts `valid` and `reject_reason` independently.
+Both mutations must fail with `CONTEXTUAL_HEADER`.
+It also checks Boolean types, result fields, acceptance reasons, rejection reasons and the exclusion of Lean diagnostics.
+These runs give finite evidence, not an all-input equivalence theorem with compiled Core.

@@ -316,13 +316,50 @@ def check_header_pow(oracle):
     return failures
 
 
+def check_contextual(oracle):
+    from oracle_contextual import contextual_sets, EXPECTATIONS, key, change
+    contextual_sets()
+    requests = []
+    expected = []
+    for stream, cases in contextual_sets()[:2]:
+        for req in cases:
+            requests.append({**req, "id": len(requests)})
+            expected.append({"ok": EXPECTATIONS[key(req)]})
+    sample = requests[0]
+    for req, error in [
+        (change(sample, known_checkpoints=[1]), {"kind":"request"}),
+        (change(sample, known_checkpoints=[1], checkpoints_enabled=False), {"kind":"request"}),
+        (change(sample, adjusted_time=2**63-7200), {"kind":"request"}),
+        (change(sample, bytes_hex="00"), {"kind":"request"}),
+        (change(sample, chain=[]), {"kind":"work_view","reason":"empty_view"}),
+        (change(sample, chain=[dict(height=100,time=0,bits=0)]), {"kind":"work_view","reason":"short_view"}),
+        (change(sample, chain=[dict(height=2,time=0,bits=0),dict(height=0,time=0,bits=0)]),
+         {"kind":"work_view","reason":"inconsistent_heights"}),
+    ]:
+        requests.append({**req,"id":len(requests)})
+        expected.append({"error":error})
+    got = run_requests(oracle, "contextual", requests)
+    if got is None:
+        return 1
+    failures = 0
+    for req, response, want in zip(requests, got, expected):
+        response = {k:v for k,v in response.items() if k != "id"}
+        if "ok" in response:
+            response["ok"].pop("diagnostic", None)
+        if not matches(response, want):
+            failures += 1
+            print(f"FAIL contextual {req['id']}: {response} != {want}")
+    print(f"contextual oracle: {len(requests)} cases, {failures} failures")
+    return failures
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print(__doc__)
         return 2
     oracle = sys.argv[1]
     failures = (check_fixtures(oracle) + check_sighash_corpus(oracle) + check_tx_corpus(oracle)
-                + check_header_pow(oracle) + check_witness_corpus(oracle) + check_hash_block_fixtures(oracle) + check_process(oracle) + check_script_adapter_limits(oracle))
+                + check_contextual(oracle) + check_header_pow(oracle) + check_witness_corpus(oracle) + check_hash_block_fixtures(oracle) + check_process(oracle) + check_script_adapter_limits(oracle))
     print("PASS" if failures == 0 else f"FAIL: {failures} failures")
     return 0 if failures == 0 else 1
 

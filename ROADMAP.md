@@ -62,7 +62,7 @@ Each item below is complete.
 
 Release 0.1.0 is out, as tag `v0.1.0` at commit `7510cc9`.
 
-The current milestone is contextual header validation, under [design record 0006](docs/design/0006-contextual-header-validation.md).
+The milestone before the current one was contextual header validation, under [design record 0006](docs/design/0006-contextual-header-validation.md).
 The maintainer adopted the record on 2026-11-07, with all nine decisions of its section 12.
 The milestone specifies the checks of `ContextualCheckBlockHeader` other than the version gates.
 They are `nBits` against `GetNextWorkRequired`, the checkpoints, the time checks and the rejection of outdated versions.
@@ -87,6 +87,20 @@ Section 12 of the record gives two stages:
 | --- | --- | --- |
 | 1 | The `Proposals` and `ProposalProofs` libraries, the import check, the activation model and the Script loop with a step parameter | Specified in `DogeLib.Proposals.Framework`, with the framework targets of section 11 except `checkBlockHeader_not_versionBitsCondition` (decision 11), and the import-check self-test |
 | 2 | The worked example `ExampleVersionVerify`, with its theorem targets and known answers | Specified in `DogeLib.Proposals.ExampleVersionVerify`, with every target of section 10.3 and known answers through the compiled code |
+
+The current milestone is header-sequence validation, under [design record 0008](docs/design/0008-header-sequence-validation.md).
+The maintainer adopted the record on 2026-11-07, with every decision of its section 13.
+It specifies Core's `AcceptBlockHeader` and `ProcessNewBlockHeaders` over an explicit model of the block index.
+The model includes the duplicate test, the predecessor lookup, the failed-ancestor walk and the chain work of each entry.
+Section 10 of the record gives five stages, and section 11 gives their theorem targets:
+
+| Stage | Deliverable | Status |
+| --- | --- | --- |
+| 1 | The block-index model, the ancestor view and the checkpoint search over the index | Not started |
+| 2 | One step, `acceptBlockHeader`, with its characterization theorems | Not started |
+| 3 | The sequence, `processNewBlockHeaders`, with the linear theorem `process_linear` | Not started |
+| 4 | `GetBlockProof` and the chain work of each entry | Not started |
+| 5 | The oracle operation `block.header_sequence`, the Core harness and the comparison | Not started |
 
 One other candidate is unscheduled, and it needs an approved scope before work starts:
 

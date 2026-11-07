@@ -197,6 +197,10 @@ class Reports(unittest.TestCase):
                               '(cd tests/block/mainnet-auxpow-activation-headers && sha256sum -c SHA256SUMS) && '
                               '(cd tests/block/mainnet-bip65-headers && sha256sum -c SHA256SUMS) && '
                               '(cd tests/block/mainnet-bip66-headers && sha256sum -c SHA256SUMS) && '
+                              '(cd tests/block/mainnet-auxpow-activation-full-headers && sha256sum -c SHA256SUMS) && '
+                              '(cd tests/block/mainnet-bip65-full-headers && sha256sum -c SHA256SUMS) && '
+                              '(cd tests/block/mainnet-bip66-full-headers && sha256sum -c SHA256SUMS) && '
+                              '(cd tests/block/regtest-header-sequences && sha256sum -c SHA256SUMS) && '
                               '(cd tests/script/corpus && sha256sum -c SHA256SUMS) && '
                               '(cd tests/script/signed-spends && sha256sum -c SHA256SUMS)',
             'refinement': 'lake -d Refinement build --wfail',
@@ -213,6 +217,8 @@ class Reports(unittest.TestCase):
             'writing-checker-tests': 'uv run --no-project --python 3.12 python -m unittest scripts/test_check_writing.py',
             'script-corpus-freshness': 'python3 -I scripts/convert_script_tests.py --check',
             'script-corpus-converter-tests': 'python3 -I scripts/test_convert_script_tests.py',
+            'full-header-fixture-check': 'python3 -I scripts/check_full_headers.py',
+            'header-sequence-regeneration': 'python3 -I scripts/generate_header_sequences.py --check',
             'validation-report-tests': 'python3 -I scripts/test_validation_report.py',
             'lane-tool': 'bash scripts/test_lane.sh',
         }

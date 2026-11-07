@@ -1,0 +1,2721 @@
+{
+  "reference_revision": "e0a1c157791544e818c901bd9341896965afbf9d",
+  "seed": "dogelib-header-sequences-0008-20261107-v1",
+  "headers": {
+    "genesis": {
+      "header_hex": "010000000000000000000000000000000000000000000000000000000000000000000000696ad20e2dd4365c7459b4a4a5af743d5e92c6da3229e6532cd605f6533f2a5bdae5494dffff7f2002000000",
+      "hash": "3d2160a3b5dc4a9d62e7e66a295f70313ac808440ef7400d6c0772171ce973a5",
+      "scrypt_hex": "6a68a6d1d50b88dadbdecdf20e34c66ed8ce8bada7845173a5a8c314ae7a7b66"
+    },
+    "a": {
+      "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d4bafdaa0d60c9ea9f3db71e837145b31b49b50952d11481af7d83afe0ecffad5dde5494dffff7f2002000000",
+      "hash": "ff9e78fae77b17ad3cff2b6cb53d7efe3e4402bbdf9d3ce6ba9847693f6cbb60",
+      "scrypt_hex": "d40c110b8b15326b420b203cdb345f85d7e9c9875d131bf025e376e9a4e21339"
+    },
+    "b": {
+      "header_hex": "0400620060bb6c3f694798bae63c9ddfbb02443efe7e3db56c2bff3cad177be7fa789eff290ef0c1119acb5d808d0c9dd5485c7c68ea4a42f732715c53b61f80e4ad76d8e0e5494dffff7f2000000000",
+      "hash": "ba33d8bef9c3ddbb069a66e5890434d91d311fff3c7125e56c758beb0f45724d",
+      "scrypt_hex": "7a368345e08deaebed8fd559c13ee72093eca9af334014dd8bf1d5753c9bc277"
+    },
+    "c": {
+      "header_hex": "040062004d72450feb8b756ce525713cff1f311dd9340489e5669a06bbddc3f9bed833badf29d8fdc4ab9ff7189b4188bdf6a465cb92cea6b2554ce95f05a9dbeb8ccdede3e5494dffff7f2005000000",
+      "hash": "872f14373ed5b82201e29b1914ccc65b6666b835cec5ae2c6d1b1cccf28d6e14",
+      "scrypt_hex": "ca1a50de342d2eb90369ed96b511303b70ca5ff1b30f6d48066f2a30f503ef6f"
+    },
+    "branch": {
+      "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213de683f64502d9e9da55ecfa78979a3a34777243c58e82d0564368dde5ee04db43dee5494dffff7f2002000000",
+      "hash": "62f84d927803cfbf19e81e3eae1ddff8ac0d9042b71fa4d1d84b9d8f7b7d58ad",
+      "scrypt_hex": "38708346d35aa8d0f863edab59cc10f07ef53229f0d7fc7cbfc0dc9d8c828f58"
+    },
+    "branch_child": {
+      "header_hex": "04006200ad587d7b8f9d4bd8d1a41fb742900dacf8df1dae3e1ee819bfcf0378924df862bd72635d9c9cc33a521980f529fb19a25ecd00b76f4f77c0661ac7a0128038b2e1e5494dffff7f2004000000",
+      "hash": "1220ee8d93604f0c9959bef6e4f171c6399ab0b37e837a619913b183de392fd7",
+      "scrypt_hex": "57fb4e283097c7d3ba31469e078d5b0775ce6bf7f5de2f1abaecef20ac29ba1d"
+    },
+    "unknown": {
+      "header_hex": "040062001111111111111111111111111111111111111111111111111111111111111111852dcdbbc2bfa0f0fc93b12dc9d619124094c65d99bc63a86a34c8a50c97cb30e6e5494dffff7f2000000000",
+      "hash": "88d91d088f12aa0fa27b512edf7e018dbc86bf12a561d63295377bea4587d48e",
+      "scrypt_hex": "40ab326060a666d02e75ddcb646f37d7836d4c214e2e4b216585a280ccc70f34"
+    },
+    "bad_nonce": {
+      "header_hex": "0400620060bb6c3f694798bae63c9ddfbb02443efe7e3db56c2bff3cad177be7fa789eff290ef0c1119acb5d808d0c9dd5485c7c68ea4a42f732715c53b61f80e4ad76d8e0e5494dffff7f2001000000",
+      "hash": "d69248c811dfa75445ef67bd206c9b2fe556d97d553e8ef7269872a3b3c944f6",
+      "scrypt_hex": "9f8c1c29711f93d2690b8804192067987058af57ec8059ed18843ba447af27b2"
+    },
+    "wrong_bits": {
+      "header_hex": "0400620060bb6c3f694798bae63c9ddfbb02443efe7e3db56c2bff3cad177be7fa789eff859ec47e720eef2d37c33ea02a4b633580899be601351507611f12afc5bcd950e0e5494dfeff7f2001000000",
+      "hash": "3b5b5f2e64e12563433464715a2d5ea81e8fc388911db720434e8bb6827e7179",
+      "scrypt_hex": "7012fa887019ea513a42506f83c80422972a2fb4022dcd591943816df4dea85a"
+    },
+    "over_limit": {
+      "header_hex": "0400620060bb6c3f694798bae63c9ddfbb02443efe7e3db56c2bff3cad177be7fa789eff0f347e94d62ed0dcc5d694aa5e0f6bec2dc4ef0907d87b9bf7593386368a6455e0e5494d0000802000000000",
+      "hash": "23f52c064d2ff772b36753c5aacdfc1d34092fd39c2474f156b43b87d55cbeaa",
+      "scrypt_hex": "90ea85edcbdc3d0135eba90ec448a82bb108d546f18e277b13c967bd764aab29"
+    },
+    "hard_anchor": {
+      "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213dec22afcbdc5a2d7e1fbc61cc7a6bf3e9236182ea1560ebf2ac891d91f0e1deb9dbe5494dfeff7f2000000000",
+      "hash": "b7cf6a9b10621e2788c7af240dcb70486a423d632d8085ab2f4f0b74a77fa576",
+      "scrypt_hex": "febcb06327bf61f30b1f9244700f037995d3a4fdefaadc365a0b49b1efd17211"
+    },
+    "hard_prefix": {
+      "header_hex": "0400620076a57fa7740b4f2fab85802d633d426a4870cb0d24afc788271e62109b6acfb7c40393b33122d89746207da196fd0701771e1ab97156bb6fa5bdedcc9581a9badce5494dfeff7f2002000000",
+      "hash": "cabc45fd6e1910ac273ee19c3f5c9a8a645297410ab4ba7da2a5001d398cd0ed",
+      "scrypt_hex": "60f972c57f675b60b8c7b6561f5e44c8e8b4cd5fccff34e908df5b667cc7384c"
+    },
+    "bits_plus_one": {
+      "header_hex": "04006200edd08c391d00a5a27dbab40a419752648a9a5c3f9ce13e27ac10196efd45bcca65f8601207443c0086b2135939de57f02781f3402bb0adb5d0565276d88f3d34dde5494dffff7f2000000000",
+      "hash": "3be803c03036d40fc246fd9692e7c033092617e320834c42a13e7ed95664e8ba",
+      "scrypt_hex": "a19af1ea151410b21b59b775173a93d72ff022465de489759756a3d14c958875"
+    },
+    "old_time": {
+      "header_hex": "040062004d72450feb8b756ce525713cff1f311dd9340489e5669a06bbddc3f9bed833ba263fcdd3d12d0b65283671f491a20bd80f9db6d2400421c76276fdd445f6c350dde5494dffff7f2003000000",
+      "hash": "8088cf8056407283536ef297506ada21979182874196d66f1326e2f0dbb7da91",
+      "scrypt_hex": "3250af4deeaf3c9521fbcd9c04b0abc477aebea94a3e03489b064769d30bcb59"
+    },
+    "future_time": {
+      "header_hex": "040062004d72450feb8b756ce525713cff1f311dd9340489e5669a06bbddc3f9bed833ba4c806259c4e4a93d4fb31367cbaf1d94bae6d8e50c6a35c3b806e0c4dac7c445fa334a4dffff7f2001000000",
+      "hash": "b80db036430513026e6e08f522b759a3e817dcb8996ebfeaa024282079775850",
+      "scrypt_hex": "dde7d6c42031fc06d6089afade84f76f8c1f2ad3a32c6cc793ea1729694d8205"
+    },
+    "anchor_child": {
+      "header_hex": "040062004d72450feb8b756ce525713cff1f311dd9340489e5669a06bbddc3f9bed833bac176ef3d90ebb27a8daaace6ac43e99c3c865fd0cc385c3d3a3c419fbdb3770ae3e5494dffff7f2002000000",
+      "hash": "fc822db64a26d7944fe9876a2d58ed52edf86a0fca40d3a0cfe667cb2c3f12bc",
+      "scrypt_hex": "38e672ded3e74bb24fa32a9b21f75513222728c59274493df9f05a230c389e12"
+    },
+    "known_aux": {
+      "header_hex": "04016200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213dffafdf99b4bb2b2a9573e630eb689da92981e89dd32f7f5299302b9d11b074c9dde5494dffff7f200400000001000000010000000000000000000000000000000000000000000000000000000000000000ffffffff0100ffffffff0100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000000000696ad20e2dd4365c7459b4a4a5af743d5e92c6da3229e6532cd605f6533f2a5bdae5494dffff7f2002000000",
+      "hash": "3983bac6a622bad75639d0582733d29b46ca82159767f011a341b462fbf38275",
+      "scrypt_hex": "4e222a0f5ffa61e9b13183875b0d6136524d5d3d9d7d119f5f1cccc2acafc96a"
+    },
+    "known_aux_changed": {
+      "header_hex": "04016200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213dffafdf99b4bb2b2a9573e630eb689da92981e89dd32f7f5299302b9d11b074c9dde5494dffff7f200400000001000000010000000000000000000000000000000000000000000000000000000000000000ffffffff0100ffffffff0100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000000000696ad20e2dd4365c7459b4a4a5af743d5e92c6da3229e6532cd605f6533f2a5bdae5494dffff7f2002000001",
+      "hash": "3983bac6a622bad75639d0582733d29b46ca82159767f011a341b462fbf38275",
+      "scrypt_hex": "4e222a0f5ffa61e9b13183875b0d6136524d5d3d9d7d119f5f1cccc2acafc96a"
+    },
+    "height_1": {
+      "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d1ff126ee3b062a6c46a2f71c266d2c8a20733e977d017a12058e77a190eac586dde5494dffff7f2000000000",
+      "hash": "819f8b810db4d44124091b2237abddb70b31fc58349f2c4b343a6915a8189b6b",
+      "scrypt_hex": "394820bf06e945a81f7eda35c59a8ff1d42b45835a72b30d8d0546ca95e3a456"
+    },
+    "height_2": {
+      "header_hex": "040062006b9b18a815693a344b2c9f3458fc310bb7ddab37221b092441d4b40d818b9f81b9af3fc6c4cb9d56b8a792fb96e8086fa26c4465bdf7a72f7771fcf84e78e317e0e5494dffff7f2005000000",
+      "hash": "7ddd13a6e6e271d756dbd2419738e3b3929c1615ae56d23249cdf3a6208ed3b8",
+      "scrypt_hex": "3ccd7e17dac19b6e855066de03804df5d25b59ad38115a459a737a5399de844a"
+    },
+    "height_3": {
+      "header_hex": "04006200b8d38e20a6f3cd4932d256ae15169c92b3e3389741d2db56d771e2e6a613dd7d6743e6ba3d0b48426a815fc0cb3ab1c4ad0dc317331cdfc0aa46a326ac54cdcae3e5494dffff7f2000000000",
+      "hash": "123b90ceb409febaf00c188524eb4558319a510011a57f801cb9f9c05a0072d1",
+      "scrypt_hex": "e6f58e917b98731e7cdc70c978bc3899e08139ec01a9de2dbead612c528d3a50"
+    },
+    "height_4": {
+      "header_hex": "04006200d172005ac0f9b91c807fa51100519a315845eb2485180cf0bafe09b4ce903b1206ace7bf8ebafcfb9dcb459d7549346923830070a3910d0ade28325f2eeed174e6e5494dffff7f2001000000",
+      "hash": "58f59ea1dd961eadeef1ccf2056fa26ce158485417a870559cf571eb879fe06d",
+      "scrypt_hex": "b6184adc0d068c95c7b0a2807e180eb00675982591c4422cfe15c4d14640527a"
+    },
+    "height_5": {
+      "header_hex": "040062006de09f87eb71f59c5570a817544858e16ca26f05f2ccf1eead1e96dda19ef558d13c4c8a1bc9c2c41202a545c49a0c47116a173df4b9da041a56db77a82ad81de9e5494dffff7f2000000000",
+      "hash": "a0608e88f335b06537a3d268c79bcde0edf3b7f59a9e908f5251efce013bde00",
+      "scrypt_hex": "3fc9ae703b79d7c50d69d4cbb459961502b3c88a85b3218c0dd5e36c08e43f4f"
+    },
+    "height_6": {
+      "header_hex": "0400620000de3b01ceef51528f909e9af5b7f3ede0cd9bc768d2a33765b035f3888e60a0dfbbb99edb33305f79e4fedde743c50c9642635bade5c6c7702a314d2e726a52ece5494dffff7f2001000000",
+      "hash": "41b53291578afb9871738c3246fc1e6560aaea1966d7644e78c6ff2f15b2079f",
+      "scrypt_hex": "f2173c3db4f8147d6112fa1b38f83fbf6bda7119834e2cc8197d994028a23448"
+    },
+    "height_7": {
+      "header_hex": "040062009f07b2152fffc6784e64d76619eaaa60651efc46328c737198fb8a579132b54171e7b185c757b6dc31c18e46c3ebf76a7c41e5ee7815c7f14f2764eff2ec278defe5494dffff7f2001000000",
+      "hash": "6f7e083a517f5e134459e0a9aab52159eb1f8a58383f0f2bb3f6468c110720a1",
+      "scrypt_hex": "6873a801147c709561aafce560dd23d7ac82023da755d9ea76bb1199eec67915"
+    },
+    "height_8": {
+      "header_hex": "04006200a12007118c46f6b32b0f3f38588a1feb5921b5aaa9e05944135e7f513a087e6fc3bfed40ffb356a7c6949a1a7f720a2b54849484c18c3e380c27dddb4b71ed20f2e5494dffff7f2000000000",
+      "hash": "3bc2dfa753d60646d833ae0f19204c3c7aff08342fb237998331a7b41f5d022c",
+      "scrypt_hex": "79685f2727c0d848c209f35361c4bc481a649469480f25d8416598f56c2c0f74"
+    },
+    "height_9": {
+      "header_hex": "040062002c025d1fb4a731839937b22f3408ff7a3c4c20190fae33d84606d653a7dfc23b5aac131f6f74ee84c736b3ed4c2fdd57ac944677a020e014f291a4591efddf41f5e5494dffff7f2003000000",
+      "hash": "c42ccdd1e50dd3d4b92d1c4614383aba29e4ec3a490e6ab9c9b5cbd6624bf6ba",
+      "scrypt_hex": "9fcf468021b945f196062f39902297b33c2925ee47308535b403b51912bbc446"
+    },
+    "height_10": {
+      "header_hex": "04006200baf64b62d6cbb5c9b96a0e493aece429ba3a3814461c2db9d4d30de5d1cd2cc4ec19114214505c1735f73b79f1bb4248b296ee83887e731661f26ccef49cd03ef8e5494dffff7f2002000000",
+      "hash": "42a74e147bea42812eddafd91bd02695a4ddcf30b983330ad95e7cb9a8c187f6",
+      "scrypt_hex": "9ed11912054160a1b7c6346d18376475f41e9520b457d811300e317af8c2573d"
+    },
+    "height_11": {
+      "header_hex": "04006200f687c1a8b97c5ed90a3383b930cfdda49526d01bd9afdd2e8142ea7b144ea7423aa639a87fdcb1a3394dfd540b2368d7087ae54159982d5c1bd4c70652368226fbe5494dffff7f2001000000",
+      "hash": "332338ef31313e4a6940671657c567629f18aeeeb872060d94a284dfbc71805d",
+      "scrypt_hex": "7daa27cb00a5371001912386e2e389c06c82f453c07eabd0dbfb19688d806141"
+    },
+    "height_12": {
+      "header_hex": "040062005d8071bcdf84a2940d0672b8eeae189f6267c557166740694a3e3131ef3823336f480ab8b58adbd74711eef1323cf979aa3a60aff0ff7f8287724ba798692536fee5494dffff7f2000000000",
+      "hash": "eea083310a5e198691b814a26c98604022505413665a725d2d80c75af1aa33e2",
+      "scrypt_hex": "8bc2f51af18633b821a8a896a8e0abb9cc3feeadec80d4ece61e910fc04bd75c"
+    },
+    "height_13": {
+      "header_hex": "04006200e233aaf15ac7802d5d725a66135450224060986ca214b89186195e0a3183a0ee18908ca85bb83b40e1ee2bd47354c6f322330d0c72d355f50f501a1911eafedf01e6494dffff7f2000000000",
+      "hash": "1f6189c17f0f7c4e8f56f3b529ac44ce1c359793e73d9db2fbd00410b22d959c",
+      "scrypt_hex": "f0efd48b37c07a1881969bea430ab1a1fafcc0f70eded38970eb85a60ddb9a46"
+    },
+    "height_14": {
+      "header_hex": "040062009c952db21004d0fbb29d3de79397351cce44ac29b5f3568f4e7c0f7fc189611fb5c07e8e986c42ec31cfcccc7e4f5301c80b15165a2f47b4cc1f5935a86c89a804e6494dffff7f2002000000",
+      "hash": "a8cab66ff6334c7c504103807928580274c75dcdf5b96622207ea1da4abd96f7",
+      "scrypt_hex": "dec5e9e43b1c17b64c849052127064079061a94083b5e052946d7ef411a5f827"
+    },
+    "height_15": {
+      "header_hex": "04006200f796bd4adaa17e202266b9f5cd5dc77402582879800341507c4c33f66fb6caa81a1411fe75058e0225e0f6046b10f773d379c8b293c573ddeb72962048ddb2ca07e6494dffff7f2000000000",
+      "hash": "1054d7e83f9b689f25a253c7529791fa1d0d6bef83dd630481555a52d3334d42",
+      "scrypt_hex": "a7ffa670c1a7f01b75170eb921866d15431318eb432f1690cda9a09d02ecd738"
+    },
+    "height_16": {
+      "header_hex": "04006200424d33d3525a55810463dd83ef6b0d1dfa919752c753a2259f689b3fe8d75410be7338b7a2ddeed4d0379034ed910328da6c9fb1e58eb767bb84cbb7047370320ae6494dffff7f2001000000",
+      "hash": "e43f96c7907010cd35a44a2eaf2923446eea7bff31434dc53bb8a7a85d95c041",
+      "scrypt_hex": "543a6bf7b67574c309cdf4362bb2226a371693aa6ec91560e208b01b5c03c41f"
+    },
+    "height_17": {
+      "header_hex": "0400620041c0955da8a7b83bc54d4331ff7bea6e442329af2e4aa435cd107090c7963fe41b1a73efca07a93bd9daef31311076eb71668cb322c028430e7336f7e684367d0de6494dffff7f2000000000",
+      "hash": "89520f21c3fff1eb332a238b3895d9de78d963e5a8e70e2c58eaa85631a36c37",
+      "scrypt_hex": "a0fcb8798a43cdfcefdf276e94086cd8b10160859e4bff3b3ddee05115d66e56"
+    },
+    "height_18": {
+      "header_hex": "04006200376ca33156a8ea582c0ee7a8e563d978ded995388b232a33ebf1ffc3210f5289ca259f7c1bfdfdd20dd9679fa656e2ea2ce09173d0b4cc05a1193a6049075fae10e6494dffff7f2001000000",
+      "hash": "4d4acf952abe7700b908dc78ab8d18c137f38307e5810da5800916ade57de860",
+      "scrypt_hex": "30be2830b5f8046b435f30062378103b373d0f254d535cf2ab41e3d72da2601d"
+    },
+    "height_19": {
+      "header_hex": "0400620060e87de5ad160980a50d81e50783f337c1188dab78dc08b90077be2a95cf4a4df995cb220be94769e6ec4fd4a3d5cf6f23c13289c202377b1b3c49b73e9d03dd13e6494dffff7f2006000000",
+      "hash": "bb4467cafedab4443543159e79ce98ec7b39d2019ff111a19552ac737dff708a",
+      "scrypt_hex": "92fa7ae5063ff4652ea5be2a937b594af533ec5c4f1e8889c9a757743200076d"
+    },
+    "height_20": {
+      "header_hex": "040062008a70ff7d73ac5295a111f19f01d2397bec98ce799e15433544b4dafeca6744bbe48cbe919ce70cfde5e44958941ecb39e10da23a3d5d717f43f2098106b7b32a16e6494dffff7f2000000000",
+      "hash": "af801791ea5e6bf1b1aa8b9415772347491657081e2c5916066c96aba390c91d",
+      "scrypt_hex": "b360e7a62c975892eb302f0092c9aa1cad67597d3133181d9688ec996a42a02a"
+    },
+    "height_21": {
+      "header_hex": "040062001dc990a3ab966c0616592c1e0857164947237715948baab1f16b5eea911780af3abf477fa56e100e1e2978679a3a8aa38854a51a58fb9ac7ea71605f969726f419e6494dffff7f2000000000",
+      "hash": "31c6d608bae101ad43716e7779b4e16c7ba71d331e87c7a89a5ba74deb37500d",
+      "scrypt_hex": "cb9221de8a2a35b4222531d66cb972271e88b8d60f9bf3555e486a6329df1902"
+    },
+    "height_22": {
+      "header_hex": "040062000d5037eb4da75b9aa8c7871e331da77b6ce1b479776e7143ad01e1ba08d6c6319b2b81fc70d5857283f46469c9ce76a62f7caba5028b763424f80bf460a948961ce6494dffff7f2001000000",
+      "hash": "508a2d92e7440eb5b3c9c71139535a4a6451eba09848cae2af83ff3b6456ac76",
+      "scrypt_hex": "68b8e54e2d8ea8265b6dbe6389ec7d36d70489b89f0c9c36aca9ba518bc3a32c"
+    },
+    "legacy_19": {
+      "header_hex": "0100000060e87de5ad160980a50d81e50783f337c1188dab78dc08b90077be2a95cf4a4dda87db62f1f4f9dd95e77755eb9c1467b9327e0d969dde06463bb9ce1aa85fdb13e6494dffff7f2001000000",
+      "hash": "8e309fe3f7cd1fdf29322db888e9eaaa4a3bc527a2f72c0048da7f636513bbe2",
+      "scrypt_hex": "1ec4690f68dc882f32369dc9175bb2b4a088f522ddeba253f18d7621eda89025"
+    },
+    "legacy_20": {
+      "header_hex": "010000008a70ff7d73ac5295a111f19f01d2397bec98ce799e15433544b4dafeca6744bbcdf5cac4e0199dee62b0abc327de0f490d5c214752a32702f1a8eef41b97e14e16e6494dffff7f2000000000",
+      "hash": "eb6a2b2276ead3a0fd172249958b8b61edeec9a5ccf4ef911a3b8a14ba050833",
+      "scrypt_hex": "0410acaf6cf9224c4f0323a66d1c7525d36efb31cfc61af38b1e488a6a1de470"
+    },
+    "context_1239": {
+      "header_hex": "040062002222222222222222222222222222222222222222222222222222222222222222bbec2d2a06ab16df9331a9a52306460cb27f163401226d2c4b4cdbe44fc5d5f55ff4494dffff7f2000000000",
+      "hash": "8da3b3b56152af891e7164b43fe423ee275ca094c8ce0c2da70ff7f316007d5e",
+      "scrypt_hex": "e5951d654ccfee6bcb0a0bd69072b994acb6e9a1d6089ea33908fbf92bb62061"
+    },
+    "context_1240": {
+      "header_hex": "040062005e7d0016f3f70fa72d0ccec894a05c27ee23e43fb464711e89af5261b5b3a38dc7677db88d0a7f8d251ca1d79769ac1113c529cbf7ae47cdc7903aa6e16eb41262f4494dffff7f2000000000",
+      "hash": "d2c916f263aa76d59e747195d185c8d66439b2bd1d8d18c283710add3bdf33d3",
+      "scrypt_hex": "d9be23d4c810750c6730aaf519bcb92ede050b2383c3055e1730c27ef4ab6c5f"
+    },
+    "context_1241": {
+      "header_hex": "04006200d333df3bdd0a7183c2188d1dbdb23964d6c885d19571749ed576aa63f216c9d211f60689f73e8938361229db41c7e2742552bd0431ea203ce6e7a47c97d2cd2c65f4494dffff7f2008000000",
+      "hash": "bf2ec17ae83aec626abbc47a2d83127dd1a19cc25648cff6fb2baa9cc5fe626f",
+      "scrypt_hex": "d418cd1755422f2c9bf4895647d6ded5eed0952a583684b29868f6878069e27c"
+    },
+    "context_1242": {
+      "header_hex": "040062006f62fec59caa2bfbf6cf4856c29ca1d17d12832d7ac4bb6a62ec3ae87ac12ebf1a1131c9a35a0312c901fab675126a44b6bee081e0ba79ef0e5142815f3b4fc168f4494dffff7f2001000000",
+      "hash": "359ccdc703a1775e4a78df34be544c599d1cc4dba5166913b8084f30f394136c",
+      "scrypt_hex": "df6efe200beb9016678048b7cc2c3f7b96fa31d6a399e0825f31999abe3aa347"
+    },
+    "context_1243": {
+      "header_hex": "040062006c1394f3304f08b8136916a5dbc41c9d594c54be34df784a5e77a103c7cd9c3514f30f548f29c7c58b5e2172523eddd4c20a1a5334e47ee3da982681b44fd19e6bf4494dffff7f2000000000",
+      "hash": "8003b4428cce1ac4c1279f9283bad6e7da3e81b958a47fab2bdaf7a8ea832a5d",
+      "scrypt_hex": "cc3669e3511409fc54ba56b40f441eaaba6fd0d53e67382ab7f6e09a6678dc0a"
+    },
+    "context_1244": {
+      "header_hex": "040062005d2a83eaa8f7da2bab7fa458b9813edae7d6ba83929f27c1c41ace8c42b40380c2771d2d97ea3b0e3f4c08f042fa9df9683b84afc65384658975e5fa0c986d046ef4494dffff7f2000000000",
+      "hash": "3c17bf5481bafdccc40c7445996b38c89e6f6dbc25f6ba4b9fb3c9d0839a92e0",
+      "scrypt_hex": "3a262d6033c36367532f2ef4f932c304d49de42a0682fe45df6b18e1fabb333d"
+    },
+    "context_1245": {
+      "header_hex": "04006200e0929a83d0c9b39f4bbaf625bc6d6f9ec8386b9945740cc4ccfdba8154bf173c121b44cd81280e2f0387ba4f17684134bf79b1877b095b6083bd816e055d7ddb71f4494dffff7f2001000000",
+      "hash": "58b49854394f4762ea7b0a8b190a4f342cb19768c6ec3cff56c38d06e57d2233",
+      "scrypt_hex": "2edc54f5dfd98e5fbed6e61da29d85ebcd2d93fcc8d7587219fe508c7951257c"
+    },
+    "context_1246": {
+      "header_hex": "0400620033227de5068dc356ff3cecc66897b12c344f0a198b0a7bea62474f395498b458289c40be6968a86b602926897485da502fe6f3507b15433facf035fcb24f2ba574f4494dffff7f2000000000",
+      "hash": "dba221867217b2a461ba1bc03c3cc1f815b0d7285eb68666a335f6d0e6689a80",
+      "scrypt_hex": "dfe4a879ca7b7a3a748227a11eda71127406dabfcd832503c63624a130c4b77c"
+    },
+    "context_1247": {
+      "header_hex": "04006200809a68e6d0f635a36686b65e28d7b015f8c13c3cc01bba61a4b217728621a2db4f453c0f49bb33532f7c2ec0fea1f3fbf29447e95ee20be340db5e5101cd0dfb77f4494dffff7f2006000000",
+      "hash": "1eb2bfa0c9ca6c5fc100f3a5a1a33748fefb4a442c32347939e930a561749955",
+      "scrypt_hex": "1190143498b17b08df668181000f751129e7f759a9b316dd2aea09489a31a171"
+    },
+    "context_1248": {
+      "header_hex": "0400620055997461a530e9397934322c444afbfe4837a3a1a5f300c15f6ccac9a0bfb21e86e68bbe36150e17aec390e36b97db150a9e5b0680e16d337b1b3c4cb0c906b67af4494dffff7f2002000000",
+      "hash": "9ed1527ec9afcb3844be2e9647aace1763036cb9e855f7513867ddb3596644d1",
+      "scrypt_hex": "580fb03c567a8467f6ac337277db38acb8e0851b4cc86656e5dd14f041534215"
+    },
+    "context_1249": {
+      "header_hex": "04006200d1446659b3dd673851f755e8b96c036317ceaa47962ebe4438cbafc97e52d19ef363f4c6df0b4736f1585faf5bba609c26802f59970a39cb7732de8a2a087bc87df4494dffff7f2000000000",
+      "hash": "3ee97fd941bf45f7a7d1065e1713815bacd7077a51f416015c6a45e6f7741e3f",
+      "scrypt_hex": "b7f33550c6759073d54911ae448b509d9015647c71bd879eb8c4e7af01b5b35e"
+    },
+    "old_before_1251": {
+      "header_hex": "020062003f1e74f7e6456a5c0116f4517a07d7ac5b8113175e06d1a7f745bf41d97fe93e2480c29e925db7b2380512a8857aac6e3760538f9e9ad1b004f90b3d3e29dddb80f4494dffff7f2004000000",
+      "hash": "f3c047bc0c4888aeec346bde9a2c5473daf267b4711526cde050ee02038f4917",
+      "scrypt_hex": "9232ee0a84ae8bdc0e9761e64897e8e7d8fa66bf775140c316d22901b96ea023"
+    },
+    "old_at_1251": {
+      "header_hex": "0200620017498f0302ee50e0cd261571b467f2da73542c9ade6b34ecae88480cbc47c0f3916b094bdaa35688d3da8e63c20236418ed6fac91a0cdb6a21be067e14d8e00083f4494dffff7f2003000000",
+      "hash": "8a0cc21c4fcda5cb9daf4fd68adf2dd2d18bb1f20b4bb3dc5637b95b8c547196",
+      "scrypt_hex": "430ca217d28b4aecae803f3eeb2a2c194dd289e28f0547ba79e5b02e64b69e1e"
+    },
+    "upgraded_at_1251": {
+      "header_hex": "0400620017498f0302ee50e0cd261571b467f2da73542c9ade6b34ecae88480cbc47c0f3143ed3971cec6ef78bfff050ab1a7a9ed7d19203c361b1aeb152825b443d8b0e83f4494dffff7f2000000000",
+      "hash": "6af24e9d68c8f64426d7b71ac6b15247024a6a24a9309cb3a509470974d1fae9",
+      "scrypt_hex": "d9dc3ce16d4438eef3f7df953684e59e1e955bead1ebea318a6a7151dc324b74"
+    },
+    "context_1339": {
+      "header_hex": "040062002222222222222222222222222222222222222222222222222222222222222222291aea2b3ff44a8c0dcdbbfe64e5ef651b6e5325b706d923f22294935a7cdb8d8bf5494dffff7f2003000000",
+      "hash": "f02bfc2668306582141819c1161c0cbceb60fdb8e766d07f9d26a289c6c958f7",
+      "scrypt_hex": "e379efbf596a2a69cab3b06bba1ed52bf5019cc3caa5442996764c6214bef703"
+    },
+    "context_1340": {
+      "header_hex": "04006200f758c9c689a2269d7fd066e7b8fd60ebbc0c1c16c11918148265306826fc2bf0ffe3dd757dcce81f31db17d9776fd6fb48a0d4c3294c3e3760391188c57982a58ef5494dffff7f2000000000",
+      "hash": "e372188dcb09b428ac82d03c6e72d1037074751d66c1fe429e325857b1561c27",
+      "scrypt_hex": "5fe675670af5f56439d02febf4adcd1253d6c71b8ded81fee4d62dfe23fbed21"
+    },
+    "context_1341": {
+      "header_hex": "04006200271c56b15758329e42fec1661d75747003d1726e3cd082ac28b409cb8d1872e3701b54a994cdaa87876d610391257f65eec24044558dcf2f965aceef3ef67e5c91f5494dffff7f2000000000",
+      "hash": "1e87bab55c5c7a250149a28213820aa1a113cb56dd6c385e379f829147abe8f1",
+      "scrypt_hex": "60deaaa1b0539d2ee76fb850af429fb4f247a22c6d5e15ef2a2a569c07badc19"
+    },
+    "context_1342": {
+      "header_hex": "04006200f1e8ab4791829f375e386cdd56cb13a1a10a821382a24901257a5c5cb5ba871e00b5ac50b4baba639358379138f22b15f7e41314fb42dcf4129099e3c8e67ea594f5494dffff7f2002000000",
+      "hash": "3bda2eea2b0c7fc28abca96f6c8b997c2022c666d2078257f56057269a87dbff",
+      "scrypt_hex": "89cd1be934aa706b9bbdff6280ea0399ad354d842d0b65d27b15327fcc093726"
+    },
+    "context_1343": {
+      "header_hex": "04006200ffdb879a265760f5578207d266c622207c998b6c6fa9bc8ac27f0c2bea2eda3bde80d8fb709c9c589d602f40ed1ff3e6bb737db7c3514bbf2ba5372cacac3d5797f5494dffff7f2001000000",
+      "hash": "22011a278d9c99ee89d4b96490d907a3fa06e098298d56581db94f17ebabdd27",
+      "scrypt_hex": "39ccdb7f57286673632984fedbe11934af4b0ae02b7578a1ac3fcd08afa9ce64"
+    },
+    "context_1344": {
+      "header_hex": "0400620027ddabeb174fb91d58568d2998e006faa307d99064b9d489ee999c8d271a0122bf64dc9ef266d4e04e404b9b964be24ab65329417dc4a906d1fe648eca929ee19af5494dffff7f2000000000",
+      "hash": "ad46d2829cb2e237d8b5da2f0576dd7a26d317d0f7cae98a5032235355c0712a",
+      "scrypt_hex": "b597196c17231902e1259f1a3e59bd2ae880c146a236b5c6297bf83b284a3a55"
+    },
+    "context_1345": {
+      "header_hex": "040062002a71c055532332508ae9caf7d017d3267add76052fdab5d837e2b29c82d246addb536329270c8a74a25959992a81c0350012333b76a04e9a6908b0d08166aa5c9df5494dffff7f2001000000",
+      "hash": "feed65200a39c0585e2ffaa2041764d8a6eeb8021d891b62488add047b598432",
+      "scrypt_hex": "79c07008551cf9fbcdf077689f0a93a6b2d3dfa03b8f8a8255ec1aec82b2d84c"
+    },
+    "context_1346": {
+      "header_hex": "040062003284597b04dd8a48621b891d02b8eea6d8641704a2fa2f5e58c0390a2065edfeacd2f60c82e3e178aee9c24b406eab1a6e5e30b98debbcc2f7f9dc165012bc56a0f5494dffff7f2002000000",
+      "hash": "f955be02418b0f09581ea3e45bd9b77498f8213eabcd73448b0910a042ddb92c",
+      "scrypt_hex": "dac44f77fd2b921ebaeba73709b6f8a78e070fb6b64d211f05ebc21b3319420a"
+    },
+    "context_1347": {
+      "header_hex": "040062002cb9dd42a010098b4473cdab3e21f89874b7d95be4a31e58090f8b4102be55f9916dfe53fcfec5a5feb16d45ac267baea2f5c7771a724e1ef9547f9c825589c2a3f5494dffff7f2002000000",
+      "hash": "0b875f32ad826f604f05b70dbca15187fe4f170c11755288394c2165efe9653d",
+      "scrypt_hex": "91afc606070486285efc2b01e6b6937609c315b8c08d8dd0a9da3df72eab9150"
+    },
+    "context_1348": {
+      "header_hex": "040062003d65e9ef65214c39885275110c174ffe8751a1bc0db7054f606f82ad325f870b13260b6ac0d6522d7d5dba77b47ee811dbbcbc09ab99dbf5df547a3d1af0d40ea6f5494dffff7f2001000000",
+      "hash": "8b35ee99b32f04655585c3945ecf82194bb8710e382cca7bac68929898bc3a12",
+      "scrypt_hex": "ea37a9e745048d7bcaf804605d553abe150cb2dbaa68c570c70d103f959c2e2c"
+    },
+    "context_1349": {
+      "header_hex": "04006200123abc98989268ac7bca2c380e71b84b1982cf5e94c3855565042fb399ee358b4b6d7ce212f72f3140279b40f24cd96565468948c8afffb616db5fb3d31cc1f9a9f5494dffff7f2000000000",
+      "hash": "b1f9a18445810f66f942af7f2b4f0ebdf15e1f2fc84bd8f620201c8f234de87c",
+      "scrypt_hex": "dd32ed7ce6c5474580a92cb024c5e25b79bf8c5181805d4f56b4518cd8dddc67"
+    },
+    "old_before_1351": {
+      "header_hex": "030062007ce84d238f1c2020f6d84bc82f1f5ef1bd0e4f2b7faf42f9660f814584a1f9b10ea5b17b9da3a780bc6754a488da5cf16ae0d7abe3a7494ab0fe9a32325f654bacf5494dffff7f2000000000",
+      "hash": "ffe0d366e7515714915c8931fdaabf1658ecd4cbdcac6574774cac8027e3102c",
+      "scrypt_hex": "a447b8cb5ab3f9b3b9611ec57892f65615b0f682e3fe6d81bf1da37e00404011"
+    },
+    "old_at_1351": {
+      "header_hex": "030062002c10e32780ac4c777465acdccbd4ec5816bfaafd31895c91145751e766d3e0ff77f4acad22d893e532f2a7db327214965c96fa0209c1e32f37d6b18db48a6bf3aff5494dffff7f2005000000",
+      "hash": "9e9ca16b5a1bba0e0e3c1d7787fc1bf6ca2a01cb27b7a1be841b915a62d2f2fa",
+      "scrypt_hex": "2fa567acaca380367d61ec5d135bcdf91b5d578ced3bd2a31fc8b34897e62e20"
+    },
+    "upgraded_at_1351": {
+      "header_hex": "040062002c10e32780ac4c777465acdccbd4ec5816bfaafd31895c91145751e766d3e0ff296d531b2e84ee27251bb40cf98f4b3c85b829f8c5ca763229927c8e08ae44c3aff5494dffff7f2001000000",
+      "hash": "08b58069f038245d9c8a2baed423c06b7964eef8ac6804239b6cabda108ed44b",
+      "scrypt_hex": "5352631ed460d35db469add18fefe1feb2901eada140731325a29db2f3d8300d"
+    }
+  },
+  "cases": [
+    {
+      "name": "linear-extension",
+      "request": {
+        "network": "regtest",
+        "mode": "base",
+        "adjusted_time": 1296688702,
+        "checkpoints_enabled": false,
+        "index": [
+          {
+            "header_hex": "010000000000000000000000000000000000000000000000000000000000000000000000696ad20e2dd4365c7459b4a4a5af743d5e92c6da3229e6532cd605f6533f2a5bdae5494dffff7f2002000000",
+            "height": 0,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          }
+        ],
+        "failed_blocks": [],
+        "headers": [
+          "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d4bafdaa0d60c9ea9f3db71e837145b31b49b50952d11481af7d83afe0ecffad5dde5494dffff7f2002000000",
+          "0400620060bb6c3f694798bae63c9ddfbb02443efe7e3db56c2bff3cad177be7fa789eff290ef0c1119acb5d808d0c9dd5485c7c68ea4a42f732715c53b61f80e4ad76d8e0e5494dffff7f2000000000",
+          "040062004d72450feb8b756ce525713cff1f311dd9340489e5669a06bbddc3f9bed833badf29d8fdc4ab9ff7189b4188bdf6a465cb92cea6b2554ce95f05a9dbeb8ccdede3e5494dffff7f2005000000"
+        ]
+      },
+      "expected": {
+        "valid": true,
+        "failed_at": null,
+        "reject_reason": null,
+        "dos": null,
+        "reject_code": null,
+        "last_hash": "872f14373ed5b82201e29b1914ccc65b6666b835cec5ae2c6d1b1cccf28d6e14",
+        "added": [
+          {
+            "hash": "ff9e78fae77b17ad3cff2b6cb53d7efe3e4402bbdf9d3ce6ba9847693f6cbb60",
+            "height": 1
+          },
+          {
+            "hash": "ba33d8bef9c3ddbb069a66e5890434d91d311fff3c7125e56c758beb0f45724d",
+            "height": 2
+          },
+          {
+            "hash": "872f14373ed5b82201e29b1914ccc65b6666b835cec5ae2c6d1b1cccf28d6e14",
+            "height": 3
+          }
+        ],
+        "marked_failed_child": []
+      },
+      "compare_marked_failed_child": true,
+      "derivation": "src/validation.cpp:3224-3259,3274-3282: mined work, known unflagged predecessor, required bits, increasing median and bounded time pass; each unknown header enters the index."
+    },
+    {
+      "name": "empty",
+      "request": {
+        "network": "regtest",
+        "mode": "base",
+        "adjusted_time": 1296688702,
+        "checkpoints_enabled": false,
+        "index": [
+          {
+            "header_hex": "010000000000000000000000000000000000000000000000000000000000000000000000696ad20e2dd4365c7459b4a4a5af743d5e92c6da3229e6532cd605f6533f2a5bdae5494dffff7f2002000000",
+            "height": 0,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          }
+        ],
+        "failed_blocks": [],
+        "headers": []
+      },
+      "expected": {
+        "valid": true,
+        "failed_at": null,
+        "reject_reason": null,
+        "dos": null,
+        "reject_code": null,
+        "last_hash": null,
+        "added": [],
+        "marked_failed_child": []
+      },
+      "compare_marked_failed_child": true,
+      "derivation": "src/validation.cpp:3274-3284: the empty loop accepts and adds nothing; the fixture represents the unchanged output pointer as null."
+    },
+    {
+      "name": "unknown-first",
+      "request": {
+        "network": "regtest",
+        "mode": "base",
+        "adjusted_time": 1296688702,
+        "checkpoints_enabled": false,
+        "index": [
+          {
+            "header_hex": "010000000000000000000000000000000000000000000000000000000000000000000000696ad20e2dd4365c7459b4a4a5af743d5e92c6da3229e6532cd605f6533f2a5bdae5494dffff7f2002000000",
+            "height": 0,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          }
+        ],
+        "failed_blocks": [],
+        "headers": [
+          "040062001111111111111111111111111111111111111111111111111111111111111111852dcdbbc2bfa0f0fc93b12dc9d619124094c65d99bc63a86a34c8a50c97cb30e6e5494dffff7f2000000000"
+        ]
+      },
+      "expected": {
+        "valid": false,
+        "failed_at": 0,
+        "reject_reason": "bad-prevblk",
+        "dos": 10,
+        "reject_code": 0,
+        "last_hash": null,
+        "added": [],
+        "marked_failed_child": []
+      },
+      "compare_marked_failed_child": true,
+      "derivation": "src/validation.cpp:3224-3231: work passes, then predecessor lookup misses."
+    },
+    {
+      "name": "unknown-middle",
+      "request": {
+        "network": "regtest",
+        "mode": "base",
+        "adjusted_time": 1296688702,
+        "checkpoints_enabled": false,
+        "index": [
+          {
+            "header_hex": "010000000000000000000000000000000000000000000000000000000000000000000000696ad20e2dd4365c7459b4a4a5af743d5e92c6da3229e6532cd605f6533f2a5bdae5494dffff7f2002000000",
+            "height": 0,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          }
+        ],
+        "failed_blocks": [],
+        "headers": [
+          "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d4bafdaa0d60c9ea9f3db71e837145b31b49b50952d11481af7d83afe0ecffad5dde5494dffff7f2002000000",
+          "040062001111111111111111111111111111111111111111111111111111111111111111852dcdbbc2bfa0f0fc93b12dc9d619124094c65d99bc63a86a34c8a50c97cb30e6e5494dffff7f2000000000",
+          "0400620060bb6c3f694798bae63c9ddfbb02443efe7e3db56c2bff3cad177be7fa789eff290ef0c1119acb5d808d0c9dd5485c7c68ea4a42f732715c53b61f80e4ad76d8e0e5494dffff7f2000000000"
+        ]
+      },
+      "expected": {
+        "valid": false,
+        "failed_at": 1,
+        "reject_reason": "bad-prevblk",
+        "dos": 10,
+        "reject_code": 0,
+        "last_hash": null,
+        "added": [
+          {
+            "hash": "ff9e78fae77b17ad3cff2b6cb53d7efe3e4402bbdf9d3ce6ba9847693f6cbb60",
+            "height": 1
+          }
+        ],
+        "marked_failed_child": []
+      },
+      "compare_marked_failed_child": true,
+      "derivation": "src/validation.cpp:3229-3231,3274-3277: a remains inserted, lookup fails at position 1 and b never runs."
+    },
+    {
+      "name": "nonce-failure",
+      "request": {
+        "network": "regtest",
+        "mode": "base",
+        "adjusted_time": 1296688702,
+        "checkpoints_enabled": false,
+        "index": [
+          {
+            "header_hex": "010000000000000000000000000000000000000000000000000000000000000000000000696ad20e2dd4365c7459b4a4a5af743d5e92c6da3229e6532cd605f6533f2a5bdae5494dffff7f2002000000",
+            "height": 0,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d4bafdaa0d60c9ea9f3db71e837145b31b49b50952d11481af7d83afe0ecffad5dde5494dffff7f2002000000",
+            "height": 1,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          }
+        ],
+        "failed_blocks": [],
+        "headers": [
+          "0400620060bb6c3f694798bae63c9ddfbb02443efe7e3db56c2bff3cad177be7fa789eff290ef0c1119acb5d808d0c9dd5485c7c68ea4a42f732715c53b61f80e4ad76d8e0e5494dffff7f2001000000",
+          "040062004d72450feb8b756ce525713cff1f311dd9340489e5669a06bbddc3f9bed833badf29d8fdc4ab9ff7189b4188bdf6a465cb92cea6b2554ce95f05a9dbeb8ccdede3e5494dffff7f2005000000"
+        ]
+      },
+      "expected": {
+        "valid": false,
+        "failed_at": 0,
+        "reject_reason": "high-hash",
+        "dos": 50,
+        "reject_code": 16,
+        "last_hash": null,
+        "added": [],
+        "marked_failed_child": []
+      },
+      "compare_marked_failed_child": true,
+      "derivation": "src/dogecoin.cpp:101-108; src/pow.cpp:127-129; src/validation.cpp:2927-2934,3274-3277: the changed nonce exceeds the target; c never runs."
+    },
+    {
+      "name": "wrong-bits-middle",
+      "request": {
+        "network": "regtest",
+        "mode": "base",
+        "adjusted_time": 1296688702,
+        "checkpoints_enabled": false,
+        "index": [
+          {
+            "header_hex": "010000000000000000000000000000000000000000000000000000000000000000000000696ad20e2dd4365c7459b4a4a5af743d5e92c6da3229e6532cd605f6533f2a5bdae5494dffff7f2002000000",
+            "height": 0,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          }
+        ],
+        "failed_blocks": [],
+        "headers": [
+          "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d4bafdaa0d60c9ea9f3db71e837145b31b49b50952d11481af7d83afe0ecffad5dde5494dffff7f2002000000",
+          "0400620060bb6c3f694798bae63c9ddfbb02443efe7e3db56c2bff3cad177be7fa789eff859ec47e720eef2d37c33ea02a4b633580899be601351507611f12afc5bcd950e0e5494dfeff7f2001000000",
+          "040062004d72450feb8b756ce525713cff1f311dd9340489e5669a06bbddc3f9bed833badf29d8fdc4ab9ff7189b4188bdf6a465cb92cea6b2554ce95f05a9dbeb8ccdede3e5494dffff7f2005000000"
+        ]
+      },
+      "expected": {
+        "valid": false,
+        "failed_at": 1,
+        "reject_reason": "bad-diffbits",
+        "dos": 100,
+        "reject_code": 16,
+        "last_hash": null,
+        "added": [
+          {
+            "hash": "ff9e78fae77b17ad3cff2b6cb53d7efe3e4402bbdf9d3ce6ba9847693f6cbb60",
+            "height": 1
+          }
+        ],
+        "marked_failed_child": []
+      },
+      "compare_marked_failed_child": true,
+      "derivation": "src/pow.cpp:54-62; src/validation.cpp:3088-3090,3274-3277: the three-second delay requires limit bits, but the mined candidate uses limit minus one; c never runs."
+    },
+    {
+      "name": "bits-plus-one-middle",
+      "request": {
+        "network": "regtest",
+        "mode": "base",
+        "adjusted_time": 1296688702,
+        "checkpoints_enabled": false,
+        "index": [
+          {
+            "header_hex": "010000000000000000000000000000000000000000000000000000000000000000000000696ad20e2dd4365c7459b4a4a5af743d5e92c6da3229e6532cd605f6533f2a5bdae5494dffff7f2002000000",
+            "height": 0,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213dec22afcbdc5a2d7e1fbc61cc7a6bf3e9236182ea1560ebf2ac891d91f0e1deb9dbe5494dfeff7f2000000000",
+            "height": 1,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          }
+        ],
+        "failed_blocks": [],
+        "headers": [
+          "0400620076a57fa7740b4f2fab85802d633d426a4870cb0d24afc788271e62109b6acfb7c40393b33122d89746207da196fd0701771e1ab97156bb6fa5bdedcc9581a9badce5494dfeff7f2002000000",
+          "04006200edd08c391d00a5a27dbab40a419752648a9a5c3f9ce13e27ac10196efd45bcca65f8601207443c0086b2135939de57f02781f3402bb0adb5d0565276d88f3d34dde5494dffff7f2000000000",
+          "040062004d72450feb8b756ce525713cff1f311dd9340489e5669a06bbddc3f9bed833badf29d8fdc4ab9ff7189b4188bdf6a465cb92cea6b2554ce95f05a9dbeb8ccdede3e5494dffff7f2005000000"
+        ]
+      },
+      "expected": {
+        "valid": false,
+        "failed_at": 1,
+        "reject_reason": "bad-diffbits",
+        "dos": 100,
+        "reject_code": 16,
+        "last_hash": null,
+        "added": [
+          {
+            "hash": "cabc45fd6e1910ac273ee19c3f5c9a8a645297410ab4ba7da2a5001d398cd0ed",
+            "height": 2
+          }
+        ],
+        "marked_failed_child": []
+      },
+      "compare_marked_failed_child": true,
+      "derivation": "src/pow.cpp:54-69; src/validation.cpp:3088-3090: one-second gaps return the preceding non-limit bits, 0x207ffffe; plus one passes work but fails the raw bits comparison."
+    },
+    {
+      "name": "limit-plus-one",
+      "request": {
+        "network": "regtest",
+        "mode": "base",
+        "adjusted_time": 1296688702,
+        "checkpoints_enabled": false,
+        "index": [
+          {
+            "header_hex": "010000000000000000000000000000000000000000000000000000000000000000000000696ad20e2dd4365c7459b4a4a5af743d5e92c6da3229e6532cd605f6533f2a5bdae5494dffff7f2002000000",
+            "height": 0,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          }
+        ],
+        "failed_blocks": [],
+        "headers": [
+          "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d4bafdaa0d60c9ea9f3db71e837145b31b49b50952d11481af7d83afe0ecffad5dde5494dffff7f2002000000",
+          "0400620060bb6c3f694798bae63c9ddfbb02443efe7e3db56c2bff3cad177be7fa789eff0f347e94d62ed0dcc5d694aa5e0f6bec2dc4ef0907d87b9bf7593386368a6455e0e5494d0000802000000000"
+        ]
+      },
+      "expected": {
+        "valid": false,
+        "failed_at": 1,
+        "reject_reason": "high-hash",
+        "dos": 50,
+        "reject_code": 16,
+        "last_hash": null,
+        "added": [
+          {
+            "hash": "ff9e78fae77b17ad3cff2b6cb53d7efe3e4402bbdf9d3ce6ba9847693f6cbb60",
+            "height": 1
+          }
+        ],
+        "marked_failed_child": []
+      },
+      "compare_marked_failed_child": true,
+      "derivation": "src/pow.cpp:121-125; src/validation.cpp:2934,3224: 0x20800000 has its sign bit set and zero mantissa, so work fails before contextual checking."
+    },
+    {
+      "name": "duplicate-in-call",
+      "request": {
+        "network": "regtest",
+        "mode": "base",
+        "adjusted_time": 1296688702,
+        "checkpoints_enabled": false,
+        "index": [
+          {
+            "header_hex": "010000000000000000000000000000000000000000000000000000000000000000000000696ad20e2dd4365c7459b4a4a5af743d5e92c6da3229e6532cd605f6533f2a5bdae5494dffff7f2002000000",
+            "height": 0,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          }
+        ],
+        "failed_blocks": [],
+        "headers": [
+          "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d4bafdaa0d60c9ea9f3db71e837145b31b49b50952d11481af7d83afe0ecffad5dde5494dffff7f2002000000",
+          "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d4bafdaa0d60c9ea9f3db71e837145b31b49b50952d11481af7d83afe0ecffad5dde5494dffff7f2002000000",
+          "0400620060bb6c3f694798bae63c9ddfbb02443efe7e3db56c2bff3cad177be7fa789eff290ef0c1119acb5d808d0c9dd5485c7c68ea4a42f732715c53b61f80e4ad76d8e0e5494dffff7f2000000000"
+        ]
+      },
+      "expected": {
+        "valid": true,
+        "failed_at": null,
+        "reject_reason": null,
+        "dos": null,
+        "reject_code": null,
+        "last_hash": "ba33d8bef9c3ddbb069a66e5890434d91d311fff3c7125e56c758beb0f45724d",
+        "added": [
+          {
+            "hash": "ff9e78fae77b17ad3cff2b6cb53d7efe3e4402bbdf9d3ce6ba9847693f6cbb60",
+            "height": 1
+          },
+          {
+            "hash": "ba33d8bef9c3ddbb069a66e5890434d91d311fff3c7125e56c758beb0f45724d",
+            "height": 2
+          }
+        ],
+        "marked_failed_child": []
+      },
+      "compare_marked_failed_child": true,
+      "derivation": "src/validation.cpp:3214-3221: the second a returns its existing entry without checks or insertion; b extends it."
+    },
+    {
+      "name": "duplicate-failed_valid",
+      "request": {
+        "network": "regtest",
+        "mode": "base",
+        "adjusted_time": 1296688702,
+        "checkpoints_enabled": false,
+        "index": [
+          {
+            "header_hex": "010000000000000000000000000000000000000000000000000000000000000000000000696ad20e2dd4365c7459b4a4a5af743d5e92c6da3229e6532cd605f6533f2a5bdae5494dffff7f2002000000",
+            "height": 0,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d4bafdaa0d60c9ea9f3db71e837145b31b49b50952d11481af7d83afe0ecffad5dde5494dffff7f2002000000",
+            "height": 1,
+            "anchor": false,
+            "failed_valid": true,
+            "failed_child": false,
+            "scripts_valid": false
+          }
+        ],
+        "failed_blocks": [],
+        "headers": [
+          "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d4bafdaa0d60c9ea9f3db71e837145b31b49b50952d11481af7d83afe0ecffad5dde5494dffff7f2002000000"
+        ]
+      },
+      "expected": {
+        "valid": false,
+        "failed_at": 0,
+        "reject_reason": "duplicate",
+        "dos": 0,
+        "reject_code": 0,
+        "last_hash": null,
+        "added": [],
+        "marked_failed_child": []
+      },
+      "compare_marked_failed_child": true,
+      "derivation": "src/validation.cpp:3214-3220; src/consensus/validation.h:50-53: either failure flag rejects a known hash with Invalid, zero score and zero code."
+    },
+    {
+      "name": "predecessor-failed_valid",
+      "request": {
+        "network": "regtest",
+        "mode": "base",
+        "adjusted_time": 1296688702,
+        "checkpoints_enabled": false,
+        "index": [
+          {
+            "header_hex": "010000000000000000000000000000000000000000000000000000000000000000000000696ad20e2dd4365c7459b4a4a5af743d5e92c6da3229e6532cd605f6533f2a5bdae5494dffff7f2002000000",
+            "height": 0,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d4bafdaa0d60c9ea9f3db71e837145b31b49b50952d11481af7d83afe0ecffad5dde5494dffff7f2002000000",
+            "height": 1,
+            "anchor": false,
+            "failed_valid": true,
+            "failed_child": false,
+            "scripts_valid": false
+          }
+        ],
+        "failed_blocks": [],
+        "headers": [
+          "0400620060bb6c3f694798bae63c9ddfbb02443efe7e3db56c2bff3cad177be7fa789eff290ef0c1119acb5d808d0c9dd5485c7c68ea4a42f732715c53b61f80e4ad76d8e0e5494dffff7f2000000000"
+        ]
+      },
+      "expected": {
+        "valid": false,
+        "failed_at": 0,
+        "reject_reason": "bad-prevblk",
+        "dos": 100,
+        "reject_code": 16,
+        "last_hash": null,
+        "added": [],
+        "marked_failed_child": []
+      },
+      "compare_marked_failed_child": true,
+      "derivation": "src/validation.cpp:3233-3234: either predecessor failure flag rejects after work, before the contextual check."
+    },
+    {
+      "name": "duplicate-failed_child",
+      "request": {
+        "network": "regtest",
+        "mode": "base",
+        "adjusted_time": 1296688702,
+        "checkpoints_enabled": false,
+        "index": [
+          {
+            "header_hex": "010000000000000000000000000000000000000000000000000000000000000000000000696ad20e2dd4365c7459b4a4a5af743d5e92c6da3229e6532cd605f6533f2a5bdae5494dffff7f2002000000",
+            "height": 0,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d4bafdaa0d60c9ea9f3db71e837145b31b49b50952d11481af7d83afe0ecffad5dde5494dffff7f2002000000",
+            "height": 1,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": true,
+            "scripts_valid": false
+          }
+        ],
+        "failed_blocks": [],
+        "headers": [
+          "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d4bafdaa0d60c9ea9f3db71e837145b31b49b50952d11481af7d83afe0ecffad5dde5494dffff7f2002000000"
+        ]
+      },
+      "expected": {
+        "valid": false,
+        "failed_at": 0,
+        "reject_reason": "duplicate",
+        "dos": 0,
+        "reject_code": 0,
+        "last_hash": null,
+        "added": [],
+        "marked_failed_child": []
+      },
+      "compare_marked_failed_child": true,
+      "derivation": "src/validation.cpp:3214-3220; src/consensus/validation.h:50-53: either failure flag rejects a known hash with Invalid, zero score and zero code."
+    },
+    {
+      "name": "predecessor-failed_child",
+      "request": {
+        "network": "regtest",
+        "mode": "base",
+        "adjusted_time": 1296688702,
+        "checkpoints_enabled": false,
+        "index": [
+          {
+            "header_hex": "010000000000000000000000000000000000000000000000000000000000000000000000696ad20e2dd4365c7459b4a4a5af743d5e92c6da3229e6532cd605f6533f2a5bdae5494dffff7f2002000000",
+            "height": 0,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d4bafdaa0d60c9ea9f3db71e837145b31b49b50952d11481af7d83afe0ecffad5dde5494dffff7f2002000000",
+            "height": 1,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": true,
+            "scripts_valid": false
+          }
+        ],
+        "failed_blocks": [],
+        "headers": [
+          "0400620060bb6c3f694798bae63c9ddfbb02443efe7e3db56c2bff3cad177be7fa789eff290ef0c1119acb5d808d0c9dd5485c7c68ea4a42f732715c53b61f80e4ad76d8e0e5494dffff7f2000000000"
+        ]
+      },
+      "expected": {
+        "valid": false,
+        "failed_at": 0,
+        "reject_reason": "bad-prevblk",
+        "dos": 100,
+        "reject_code": 16,
+        "last_hash": null,
+        "added": [],
+        "marked_failed_child": []
+      },
+      "compare_marked_failed_child": true,
+      "derivation": "src/validation.cpp:3233-3234: either predecessor failure flag rejects after work, before the contextual check."
+    },
+    {
+      "name": "flagged-genesis",
+      "request": {
+        "network": "regtest",
+        "mode": "base",
+        "adjusted_time": 1296688702,
+        "checkpoints_enabled": false,
+        "index": [
+          {
+            "header_hex": "010000000000000000000000000000000000000000000000000000000000000000000000696ad20e2dd4365c7459b4a4a5af743d5e92c6da3229e6532cd605f6533f2a5bdae5494dffff7f2002000000",
+            "height": 0,
+            "anchor": false,
+            "failed_valid": true,
+            "failed_child": true,
+            "scripts_valid": false
+          }
+        ],
+        "failed_blocks": [],
+        "headers": [
+          "010000000000000000000000000000000000000000000000000000000000000000000000696ad20e2dd4365c7459b4a4a5af743d5e92c6da3229e6532cd605f6533f2a5bdae5494dffff7f2002000000"
+        ]
+      },
+      "expected": {
+        "valid": true,
+        "failed_at": null,
+        "reject_reason": null,
+        "dos": null,
+        "reject_code": null,
+        "last_hash": "3d2160a3b5dc4a9d62e7e66a295f70313ac808440ef7400d6c0772171ce973a5",
+        "added": [],
+        "marked_failed_child": []
+      },
+      "compare_marked_failed_child": true,
+      "derivation": "src/validation.cpp:3212,3258-3259,2757-2761: genesis skips duplicate and validation checks; insertion returns the existing flagged entry."
+    },
+    {
+      "name": "genesis-insertion",
+      "request": {
+        "network": "regtest",
+        "mode": "base",
+        "adjusted_time": 1296688702,
+        "checkpoints_enabled": false,
+        "index": [],
+        "failed_blocks": [],
+        "headers": [
+          "010000000000000000000000000000000000000000000000000000000000000000000000696ad20e2dd4365c7459b4a4a5af743d5e92c6da3229e6532cd605f6533f2a5bdae5494dffff7f2002000000"
+        ]
+      },
+      "expected": {
+        "valid": true,
+        "failed_at": null,
+        "reject_reason": null,
+        "dos": null,
+        "reject_code": null,
+        "last_hash": "3d2160a3b5dc4a9d62e7e66a295f70313ac808440ef7400d6c0772171ce973a5",
+        "added": [
+          {
+            "hash": "3d2160a3b5dc4a9d62e7e66a295f70313ac808440ef7400d6c0772171ce973a5",
+            "height": 0
+          }
+        ],
+        "marked_failed_child": []
+      },
+      "compare_marked_failed_child": true,
+      "derivation": "src/validation.cpp:3212,3258-3259,2772-2781: genesis bypasses validation and enters at height zero without a predecessor."
+    },
+    {
+      "name": "known-invalid-work",
+      "request": {
+        "network": "regtest",
+        "mode": "base",
+        "adjusted_time": 1296688702,
+        "checkpoints_enabled": false,
+        "index": [
+          {
+            "header_hex": "010000000000000000000000000000000000000000000000000000000000000000000000696ad20e2dd4365c7459b4a4a5af743d5e92c6da3229e6532cd605f6533f2a5bdae5494dffff7f2002000000",
+            "height": 0,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d4bafdaa0d60c9ea9f3db71e837145b31b49b50952d11481af7d83afe0ecffad5dde5494dffff7f2002000000",
+            "height": 1,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "0400620060bb6c3f694798bae63c9ddfbb02443efe7e3db56c2bff3cad177be7fa789eff290ef0c1119acb5d808d0c9dd5485c7c68ea4a42f732715c53b61f80e4ad76d8e0e5494dffff7f2001000000",
+            "height": 2,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          }
+        ],
+        "failed_blocks": [],
+        "headers": [
+          "0400620060bb6c3f694798bae63c9ddfbb02443efe7e3db56c2bff3cad177be7fa789eff290ef0c1119acb5d808d0c9dd5485c7c68ea4a42f732715c53b61f80e4ad76d8e0e5494dffff7f2001000000"
+        ]
+      },
+      "expected": {
+        "valid": true,
+        "failed_at": null,
+        "reject_reason": null,
+        "dos": null,
+        "reject_code": null,
+        "last_hash": "d69248c811dfa75445ef67bd206c9b2fe556d97d553e8ef7269872a3b3c944f6",
+        "added": [],
+        "marked_failed_child": []
+      },
+      "compare_marked_failed_child": true,
+      "derivation": "src/validation.cpp:3214-3221: the known unflagged hash returns before its failing work is checked."
+    },
+    {
+      "name": "known-changed-auxpow",
+      "request": {
+        "network": "regtest",
+        "mode": "base",
+        "adjusted_time": 1296688702,
+        "checkpoints_enabled": false,
+        "index": [
+          {
+            "header_hex": "010000000000000000000000000000000000000000000000000000000000000000000000696ad20e2dd4365c7459b4a4a5af743d5e92c6da3229e6532cd605f6533f2a5bdae5494dffff7f2002000000",
+            "height": 0,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04016200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213dffafdf99b4bb2b2a9573e630eb689da92981e89dd32f7f5299302b9d11b074c9dde5494dffff7f2004000000",
+            "height": 1,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          }
+        ],
+        "failed_blocks": [],
+        "headers": [
+          "04016200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213dffafdf99b4bb2b2a9573e630eb689da92981e89dd32f7f5299302b9d11b074c9dde5494dffff7f200400000001000000010000000000000000000000000000000000000000000000000000000000000000ffffffff0100ffffffff0100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000000000696ad20e2dd4365c7459b4a4a5af743d5e92c6da3229e6532cd605f6533f2a5bdae5494dffff7f2002000001"
+        ]
+      },
+      "expected": {
+        "valid": true,
+        "failed_at": null,
+        "reject_reason": null,
+        "dos": null,
+        "reject_code": null,
+        "last_hash": "3983bac6a622bad75639d0582733d29b46ca82159767f011a341b462fbf38275",
+        "added": [],
+        "marked_failed_child": []
+      },
+      "compare_marked_failed_child": true,
+      "derivation": "src/validation.cpp:3209-3221: identical pure bytes give the known key despite a changed parent nonce in the AuxPoW payload; step 2 is skipped."
+    },
+    {
+      "name": "failed-grandparent",
+      "request": {
+        "network": "regtest",
+        "mode": "base",
+        "adjusted_time": 1296688702,
+        "checkpoints_enabled": false,
+        "index": [
+          {
+            "header_hex": "010000000000000000000000000000000000000000000000000000000000000000000000696ad20e2dd4365c7459b4a4a5af743d5e92c6da3229e6532cd605f6533f2a5bdae5494dffff7f2002000000",
+            "height": 0,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d4bafdaa0d60c9ea9f3db71e837145b31b49b50952d11481af7d83afe0ecffad5dde5494dffff7f2002000000",
+            "height": 1,
+            "anchor": false,
+            "failed_valid": true,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "0400620060bb6c3f694798bae63c9ddfbb02443efe7e3db56c2bff3cad177be7fa789eff290ef0c1119acb5d808d0c9dd5485c7c68ea4a42f732715c53b61f80e4ad76d8e0e5494dffff7f2000000000",
+            "height": 2,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          }
+        ],
+        "failed_blocks": [
+          "ff9e78fae77b17ad3cff2b6cb53d7efe3e4402bbdf9d3ce6ba9847693f6cbb60"
+        ],
+        "headers": [
+          "040062004d72450feb8b756ce525713cff1f311dd9340489e5669a06bbddc3f9bed833badf29d8fdc4ab9ff7189b4188bdf6a465cb92cea6b2554ce95f05a9dbeb8ccdede3e5494dffff7f2005000000"
+        ]
+      },
+      "expected": {
+        "valid": false,
+        "failed_at": 0,
+        "reject_reason": "bad-prevblk",
+        "dos": 100,
+        "reject_code": 16,
+        "last_hash": null,
+        "added": [],
+        "marked_failed_child": [
+          "ba33d8bef9c3ddbb069a66e5890434d91d311fff3c7125e56c758beb0f45724d"
+        ]
+      },
+      "compare_marked_failed_child": true,
+      "derivation": "src/validation.cpp:3238-3253: contextual checks pass, a is an ancestor in the failed list, and the walk marks b but excludes a."
+    },
+    {
+      "name": "scripts-valid-bypass",
+      "request": {
+        "network": "regtest",
+        "mode": "base",
+        "adjusted_time": 1296688702,
+        "checkpoints_enabled": false,
+        "index": [
+          {
+            "header_hex": "010000000000000000000000000000000000000000000000000000000000000000000000696ad20e2dd4365c7459b4a4a5af743d5e92c6da3229e6532cd605f6533f2a5bdae5494dffff7f2002000000",
+            "height": 0,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d4bafdaa0d60c9ea9f3db71e837145b31b49b50952d11481af7d83afe0ecffad5dde5494dffff7f2002000000",
+            "height": 1,
+            "anchor": false,
+            "failed_valid": true,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "0400620060bb6c3f694798bae63c9ddfbb02443efe7e3db56c2bff3cad177be7fa789eff290ef0c1119acb5d808d0c9dd5485c7c68ea4a42f732715c53b61f80e4ad76d8e0e5494dffff7f2000000000",
+            "height": 2,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": true
+          }
+        ],
+        "failed_blocks": [
+          "ff9e78fae77b17ad3cff2b6cb53d7efe3e4402bbdf9d3ce6ba9847693f6cbb60"
+        ],
+        "headers": [
+          "040062004d72450feb8b756ce525713cff1f311dd9340489e5669a06bbddc3f9bed833badf29d8fdc4ab9ff7189b4188bdf6a465cb92cea6b2554ce95f05a9dbeb8ccdede3e5494dffff7f2005000000"
+        ]
+      },
+      "expected": {
+        "valid": true,
+        "failed_at": null,
+        "reject_reason": null,
+        "dos": null,
+        "reject_code": null,
+        "last_hash": "872f14373ed5b82201e29b1914ccc65b6666b835cec5ae2c6d1b1cccf28d6e14",
+        "added": [
+          {
+            "hash": "872f14373ed5b82201e29b1914ccc65b6666b835cec5ae2c6d1b1cccf28d6e14",
+            "height": 3
+          }
+        ],
+        "marked_failed_child": []
+      },
+      "compare_marked_failed_child": true,
+      "derivation": "src/validation.cpp:3241-3256: scripts-valid b skips the failed-list walk, even with a in the list."
+    },
+    {
+      "name": "failed-flag-outside-list",
+      "request": {
+        "network": "regtest",
+        "mode": "base",
+        "adjusted_time": 1296688702,
+        "checkpoints_enabled": false,
+        "index": [
+          {
+            "header_hex": "010000000000000000000000000000000000000000000000000000000000000000000000696ad20e2dd4365c7459b4a4a5af743d5e92c6da3229e6532cd605f6533f2a5bdae5494dffff7f2002000000",
+            "height": 0,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d4bafdaa0d60c9ea9f3db71e837145b31b49b50952d11481af7d83afe0ecffad5dde5494dffff7f2002000000",
+            "height": 1,
+            "anchor": false,
+            "failed_valid": true,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "0400620060bb6c3f694798bae63c9ddfbb02443efe7e3db56c2bff3cad177be7fa789eff290ef0c1119acb5d808d0c9dd5485c7c68ea4a42f732715c53b61f80e4ad76d8e0e5494dffff7f2000000000",
+            "height": 2,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          }
+        ],
+        "failed_blocks": [],
+        "headers": [
+          "040062004d72450feb8b756ce525713cff1f311dd9340489e5669a06bbddc3f9bed833badf29d8fdc4ab9ff7189b4188bdf6a465cb92cea6b2554ce95f05a9dbeb8ccdede3e5494dffff7f2005000000"
+        ]
+      },
+      "expected": {
+        "valid": true,
+        "failed_at": null,
+        "reject_reason": null,
+        "dos": null,
+        "reject_code": null,
+        "last_hash": "872f14373ed5b82201e29b1914ccc65b6666b835cec5ae2c6d1b1cccf28d6e14",
+        "added": [
+          {
+            "hash": "872f14373ed5b82201e29b1914ccc65b6666b835cec5ae2c6d1b1cccf28d6e14",
+            "height": 3
+          }
+        ],
+        "marked_failed_child": []
+      },
+      "compare_marked_failed_child": true,
+      "derivation": "src/validation.cpp:3233-3234,3241-3256: b has no failure flag and the list is empty; the flag on a alone does not reject c."
+    },
+    {
+      "name": "context-before-failed-ancestor",
+      "request": {
+        "network": "regtest",
+        "mode": "base",
+        "adjusted_time": 1296688702,
+        "checkpoints_enabled": false,
+        "index": [
+          {
+            "header_hex": "010000000000000000000000000000000000000000000000000000000000000000000000696ad20e2dd4365c7459b4a4a5af743d5e92c6da3229e6532cd605f6533f2a5bdae5494dffff7f2002000000",
+            "height": 0,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d4bafdaa0d60c9ea9f3db71e837145b31b49b50952d11481af7d83afe0ecffad5dde5494dffff7f2002000000",
+            "height": 1,
+            "anchor": false,
+            "failed_valid": true,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "0400620060bb6c3f694798bae63c9ddfbb02443efe7e3db56c2bff3cad177be7fa789eff290ef0c1119acb5d808d0c9dd5485c7c68ea4a42f732715c53b61f80e4ad76d8e0e5494dffff7f2000000000",
+            "height": 2,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          }
+        ],
+        "failed_blocks": [
+          "ff9e78fae77b17ad3cff2b6cb53d7efe3e4402bbdf9d3ce6ba9847693f6cbb60"
+        ],
+        "headers": [
+          "040062004d72450feb8b756ce525713cff1f311dd9340489e5669a06bbddc3f9bed833ba263fcdd3d12d0b65283671f491a20bd80f9db6d2400421c76276fdd445f6c350dde5494dffff7f2003000000"
+        ]
+      },
+      "expected": {
+        "valid": false,
+        "failed_at": 0,
+        "reject_reason": "time-too-old",
+        "dos": 0,
+        "reject_code": 16,
+        "last_hash": null,
+        "added": [],
+        "marked_failed_child": []
+      },
+      "compare_marked_failed_child": true,
+      "derivation": "src/validation.cpp:3102-3104,3238-3241: median(genesis,a,b) is genesis time plus 3; equality fails before the failed-list walk and leaves all marks unchanged."
+    },
+    {
+      "name": "two-failed-genesis-a",
+      "request": {
+        "network": "regtest",
+        "mode": "base",
+        "adjusted_time": 1296688702,
+        "checkpoints_enabled": false,
+        "index": [
+          {
+            "header_hex": "010000000000000000000000000000000000000000000000000000000000000000000000696ad20e2dd4365c7459b4a4a5af743d5e92c6da3229e6532cd605f6533f2a5bdae5494dffff7f2002000000",
+            "height": 0,
+            "anchor": false,
+            "failed_valid": true,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d4bafdaa0d60c9ea9f3db71e837145b31b49b50952d11481af7d83afe0ecffad5dde5494dffff7f2002000000",
+            "height": 1,
+            "anchor": false,
+            "failed_valid": true,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "0400620060bb6c3f694798bae63c9ddfbb02443efe7e3db56c2bff3cad177be7fa789eff290ef0c1119acb5d808d0c9dd5485c7c68ea4a42f732715c53b61f80e4ad76d8e0e5494dffff7f2000000000",
+            "height": 2,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          }
+        ],
+        "failed_blocks": [
+          "3d2160a3b5dc4a9d62e7e66a295f70313ac808440ef7400d6c0772171ce973a5",
+          "ff9e78fae77b17ad3cff2b6cb53d7efe3e4402bbdf9d3ce6ba9847693f6cbb60"
+        ],
+        "headers": [
+          "040062004d72450feb8b756ce525713cff1f311dd9340489e5669a06bbddc3f9bed833badf29d8fdc4ab9ff7189b4188bdf6a465cb92cea6b2554ce95f05a9dbeb8ccdede3e5494dffff7f2005000000"
+        ]
+      },
+      "expected": {
+        "valid": false,
+        "failed_at": 0,
+        "reject_reason": "bad-prevblk",
+        "dos": 100,
+        "reject_code": 16,
+        "last_hash": null,
+        "added": [],
+        "marked_failed_child": [
+          "ba33d8bef9c3ddbb069a66e5890434d91d311fff3c7125e56c758beb0f45724d",
+          "ff9e78fae77b17ad3cff2b6cb53d7efe3e4402bbdf9d3ce6ba9847693f6cbb60"
+        ]
+      },
+      "compare_marked_failed_child": false,
+      "derivation": "src/validation.cpp:3242-3253: the first failed ancestor terminates the walk; the listed marks follow fixture visit order. Design 0008 section 8.3 excludes marks from the Core comparison for both orders."
+    },
+    {
+      "name": "two-failed-a-genesis",
+      "request": {
+        "network": "regtest",
+        "mode": "base",
+        "adjusted_time": 1296688702,
+        "checkpoints_enabled": false,
+        "index": [
+          {
+            "header_hex": "010000000000000000000000000000000000000000000000000000000000000000000000696ad20e2dd4365c7459b4a4a5af743d5e92c6da3229e6532cd605f6533f2a5bdae5494dffff7f2002000000",
+            "height": 0,
+            "anchor": false,
+            "failed_valid": true,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d4bafdaa0d60c9ea9f3db71e837145b31b49b50952d11481af7d83afe0ecffad5dde5494dffff7f2002000000",
+            "height": 1,
+            "anchor": false,
+            "failed_valid": true,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "0400620060bb6c3f694798bae63c9ddfbb02443efe7e3db56c2bff3cad177be7fa789eff290ef0c1119acb5d808d0c9dd5485c7c68ea4a42f732715c53b61f80e4ad76d8e0e5494dffff7f2000000000",
+            "height": 2,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          }
+        ],
+        "failed_blocks": [
+          "ff9e78fae77b17ad3cff2b6cb53d7efe3e4402bbdf9d3ce6ba9847693f6cbb60",
+          "3d2160a3b5dc4a9d62e7e66a295f70313ac808440ef7400d6c0772171ce973a5"
+        ],
+        "headers": [
+          "040062004d72450feb8b756ce525713cff1f311dd9340489e5669a06bbddc3f9bed833badf29d8fdc4ab9ff7189b4188bdf6a465cb92cea6b2554ce95f05a9dbeb8ccdede3e5494dffff7f2005000000"
+        ]
+      },
+      "expected": {
+        "valid": false,
+        "failed_at": 0,
+        "reject_reason": "bad-prevblk",
+        "dos": 100,
+        "reject_code": 16,
+        "last_hash": null,
+        "added": [],
+        "marked_failed_child": [
+          "ba33d8bef9c3ddbb069a66e5890434d91d311fff3c7125e56c758beb0f45724d"
+        ]
+      },
+      "compare_marked_failed_child": false,
+      "derivation": "src/validation.cpp:3242-3253: the first failed ancestor terminates the walk; the listed marks follow fixture visit order. Design 0008 section 8.3 excludes marks from the Core comparison for both orders."
+    },
+    {
+      "name": "two-branches",
+      "request": {
+        "network": "regtest",
+        "mode": "base",
+        "adjusted_time": 1296688702,
+        "checkpoints_enabled": false,
+        "index": [
+          {
+            "header_hex": "010000000000000000000000000000000000000000000000000000000000000000000000696ad20e2dd4365c7459b4a4a5af743d5e92c6da3229e6532cd605f6533f2a5bdae5494dffff7f2002000000",
+            "height": 0,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          }
+        ],
+        "failed_blocks": [],
+        "headers": [
+          "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d4bafdaa0d60c9ea9f3db71e837145b31b49b50952d11481af7d83afe0ecffad5dde5494dffff7f2002000000",
+          "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213de683f64502d9e9da55ecfa78979a3a34777243c58e82d0564368dde5ee04db43dee5494dffff7f2002000000",
+          "04006200ad587d7b8f9d4bd8d1a41fb742900dacf8df1dae3e1ee819bfcf0378924df862bd72635d9c9cc33a521980f529fb19a25ecd00b76f4f77c0661ac7a0128038b2e1e5494dffff7f2004000000",
+          "0400620060bb6c3f694798bae63c9ddfbb02443efe7e3db56c2bff3cad177be7fa789eff290ef0c1119acb5d808d0c9dd5485c7c68ea4a42f732715c53b61f80e4ad76d8e0e5494dffff7f2000000000"
+        ]
+      },
+      "expected": {
+        "valid": true,
+        "failed_at": null,
+        "reject_reason": null,
+        "dos": null,
+        "reject_code": null,
+        "last_hash": "ba33d8bef9c3ddbb069a66e5890434d91d311fff3c7125e56c758beb0f45724d",
+        "added": [
+          {
+            "hash": "ff9e78fae77b17ad3cff2b6cb53d7efe3e4402bbdf9d3ce6ba9847693f6cbb60",
+            "height": 1
+          },
+          {
+            "hash": "62f84d927803cfbf19e81e3eae1ddff8ac0d9042b71fa4d1d84b9d8f7b7d58ad",
+            "height": 1
+          },
+          {
+            "hash": "1220ee8d93604f0c9959bef6e4f171c6399ab0b37e837a619913b183de392fd7",
+            "height": 2
+          },
+          {
+            "hash": "ba33d8bef9c3ddbb069a66e5890434d91d311fff3c7125e56c758beb0f45724d",
+            "height": 2
+          }
+        ],
+        "marked_failed_child": []
+      },
+      "compare_marked_failed_child": true,
+      "derivation": "src/validation.cpp:3229,3274-3282: each lookup uses the whole index; branch_child extends branch and b extends the earlier a, not the preceding header."
+    },
+    {
+      "name": "future-time",
+      "request": {
+        "network": "regtest",
+        "mode": "base",
+        "adjusted_time": 1296688702,
+        "checkpoints_enabled": false,
+        "index": [
+          {
+            "header_hex": "010000000000000000000000000000000000000000000000000000000000000000000000696ad20e2dd4365c7459b4a4a5af743d5e92c6da3229e6532cd605f6533f2a5bdae5494dffff7f2002000000",
+            "height": 0,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d4bafdaa0d60c9ea9f3db71e837145b31b49b50952d11481af7d83afe0ecffad5dde5494dffff7f2002000000",
+            "height": 1,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "0400620060bb6c3f694798bae63c9ddfbb02443efe7e3db56c2bff3cad177be7fa789eff290ef0c1119acb5d808d0c9dd5485c7c68ea4a42f732715c53b61f80e4ad76d8e0e5494dffff7f2000000000",
+            "height": 2,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          }
+        ],
+        "failed_blocks": [],
+        "headers": [
+          "040062004d72450feb8b756ce525713cff1f311dd9340489e5669a06bbddc3f9bed833ba4c806259c4e4a93d4fb31367cbaf1d94bae6d8e50c6a35c3b806e0c4dac7c445fa334a4dffff7f2001000000"
+        ]
+      },
+      "expected": {
+        "valid": false,
+        "failed_at": 0,
+        "reject_reason": "time-too-new",
+        "dos": 0,
+        "reject_code": 16,
+        "last_hash": null,
+        "added": [],
+        "marked_failed_child": []
+      },
+      "compare_marked_failed_child": true,
+      "derivation": "src/validation.cpp:3106-3108: candidate time exceeds adjusted_time plus 7200, with passing work, bits and median."
+    },
+    {
+      "name": "short-anchor-view",
+      "request": {
+        "network": "regtest",
+        "mode": "base",
+        "adjusted_time": 1296688702,
+        "checkpoints_enabled": false,
+        "index": [
+          {
+            "header_hex": "0400620060bb6c3f694798bae63c9ddfbb02443efe7e3db56c2bff3cad177be7fa789eff290ef0c1119acb5d808d0c9dd5485c7c68ea4a42f732715c53b61f80e4ad76d8e0e5494dffff7f2000000000",
+            "height": 5,
+            "anchor": true,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          }
+        ],
+        "failed_blocks": [],
+        "headers": [
+          "040062004d72450feb8b756ce525713cff1f311dd9340489e5669a06bbddc3f9bed833bac176ef3d90ebb27a8daaace6ac43e99c3c865fd0cc385c3d3a3c419fbdb3770ae3e5494dffff7f2002000000"
+        ]
+      },
+      "expected": {
+        "valid": false,
+        "failed_at": 0,
+        "reject_reason": null,
+        "dos": null,
+        "reject_code": null,
+        "last_hash": null,
+        "added": [],
+        "marked_failed_child": [],
+        "adapter_error": "shortView"
+      },
+      "compare_marked_failed_child": true,
+      "derivation": "Design 0008 sections 5.3 and 7.1; design 0006 section 4, item 16: the height-6 candidate has only one of six required median predecessors. Core has no truncated-chain state. Expected adapter error shortView, not a Core reject."
+    },
+    {
+      "name": "digishield-transition",
+      "request": {
+        "network": "regtest",
+        "mode": "base",
+        "adjusted_time": 1296688702,
+        "checkpoints_enabled": false,
+        "index": [
+          {
+            "header_hex": "010000000000000000000000000000000000000000000000000000000000000000000000696ad20e2dd4365c7459b4a4a5af743d5e92c6da3229e6532cd605f6533f2a5bdae5494dffff7f2002000000",
+            "height": 0,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d1ff126ee3b062a6c46a2f71c266d2c8a20733e977d017a12058e77a190eac586dde5494dffff7f2000000000",
+            "height": 1,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "040062006b9b18a815693a344b2c9f3458fc310bb7ddab37221b092441d4b40d818b9f81b9af3fc6c4cb9d56b8a792fb96e8086fa26c4465bdf7a72f7771fcf84e78e317e0e5494dffff7f2005000000",
+            "height": 2,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200b8d38e20a6f3cd4932d256ae15169c92b3e3389741d2db56d771e2e6a613dd7d6743e6ba3d0b48426a815fc0cb3ab1c4ad0dc317331cdfc0aa46a326ac54cdcae3e5494dffff7f2000000000",
+            "height": 3,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200d172005ac0f9b91c807fa51100519a315845eb2485180cf0bafe09b4ce903b1206ace7bf8ebafcfb9dcb459d7549346923830070a3910d0ade28325f2eeed174e6e5494dffff7f2001000000",
+            "height": 4,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "040062006de09f87eb71f59c5570a817544858e16ca26f05f2ccf1eead1e96dda19ef558d13c4c8a1bc9c2c41202a545c49a0c47116a173df4b9da041a56db77a82ad81de9e5494dffff7f2000000000",
+            "height": 5,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "0400620000de3b01ceef51528f909e9af5b7f3ede0cd9bc768d2a33765b035f3888e60a0dfbbb99edb33305f79e4fedde743c50c9642635bade5c6c7702a314d2e726a52ece5494dffff7f2001000000",
+            "height": 6,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "040062009f07b2152fffc6784e64d76619eaaa60651efc46328c737198fb8a579132b54171e7b185c757b6dc31c18e46c3ebf76a7c41e5ee7815c7f14f2764eff2ec278defe5494dffff7f2001000000",
+            "height": 7,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200a12007118c46f6b32b0f3f38588a1feb5921b5aaa9e05944135e7f513a087e6fc3bfed40ffb356a7c6949a1a7f720a2b54849484c18c3e380c27dddb4b71ed20f2e5494dffff7f2000000000",
+            "height": 8,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          }
+        ],
+        "failed_blocks": [],
+        "headers": [
+          "040062002c025d1fb4a731839937b22f3408ff7a3c4c20190fae33d84606d653a7dfc23b5aac131f6f74ee84c736b3ed4c2fdd57ac944677a020e014f291a4591efddf41f5e5494dffff7f2003000000",
+          "04006200baf64b62d6cbb5c9b96a0e493aece429ba3a3814461c2db9d4d30de5d1cd2cc4ec19114214505c1735f73b79f1bb4248b296ee83887e731661f26ccef49cd03ef8e5494dffff7f2002000000",
+          "04006200f687c1a8b97c5ed90a3383b930cfdda49526d01bd9afdd2e8142ea7b144ea7423aa639a87fdcb1a3394dfd540b2368d7087ae54159982d5c1bd4c70652368226fbe5494dffff7f2001000000"
+        ]
+      },
+      "expected": {
+        "valid": true,
+        "failed_at": null,
+        "reject_reason": null,
+        "dos": null,
+        "reject_code": null,
+        "last_hash": "332338ef31313e4a6940671657c567629f18aeeeb872060d94a284dfbc71805d",
+        "added": [
+          {
+            "hash": "c42ccdd1e50dd3d4b92d1c4614383aba29e4ec3a490e6ab9c9b5cbd6624bf6ba",
+            "height": 9
+          },
+          {
+            "hash": "42a74e147bea42812eddafd91bd02695a4ddcf30b983330ad95e7cb9a8c187f6",
+            "height": 10
+          },
+          {
+            "hash": "332338ef31313e4a6940671657c567629f18aeeeb872060d94a284dfbc71805d",
+            "height": 11
+          }
+        ],
+        "marked_failed_child": []
+      },
+      "compare_marked_failed_child": true,
+      "derivation": "src/chainparams.cpp:425-428; src/pow.cpp:49-87; src/dogecoin.cpp:50-86: candidate 10 selects interval one. The three-second spacing gives 1 + trunc((3 - 1)/8) = 1, so target and required bits stay at the limit."
+    },
+    {
+      "name": "auxpow-transition-nonlegacy",
+      "request": {
+        "network": "regtest",
+        "mode": "base",
+        "adjusted_time": 1296688702,
+        "checkpoints_enabled": false,
+        "index": [
+          {
+            "header_hex": "010000000000000000000000000000000000000000000000000000000000000000000000696ad20e2dd4365c7459b4a4a5af743d5e92c6da3229e6532cd605f6533f2a5bdae5494dffff7f2002000000",
+            "height": 0,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d1ff126ee3b062a6c46a2f71c266d2c8a20733e977d017a12058e77a190eac586dde5494dffff7f2000000000",
+            "height": 1,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "040062006b9b18a815693a344b2c9f3458fc310bb7ddab37221b092441d4b40d818b9f81b9af3fc6c4cb9d56b8a792fb96e8086fa26c4465bdf7a72f7771fcf84e78e317e0e5494dffff7f2005000000",
+            "height": 2,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200b8d38e20a6f3cd4932d256ae15169c92b3e3389741d2db56d771e2e6a613dd7d6743e6ba3d0b48426a815fc0cb3ab1c4ad0dc317331cdfc0aa46a326ac54cdcae3e5494dffff7f2000000000",
+            "height": 3,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200d172005ac0f9b91c807fa51100519a315845eb2485180cf0bafe09b4ce903b1206ace7bf8ebafcfb9dcb459d7549346923830070a3910d0ade28325f2eeed174e6e5494dffff7f2001000000",
+            "height": 4,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "040062006de09f87eb71f59c5570a817544858e16ca26f05f2ccf1eead1e96dda19ef558d13c4c8a1bc9c2c41202a545c49a0c47116a173df4b9da041a56db77a82ad81de9e5494dffff7f2000000000",
+            "height": 5,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "0400620000de3b01ceef51528f909e9af5b7f3ede0cd9bc768d2a33765b035f3888e60a0dfbbb99edb33305f79e4fedde743c50c9642635bade5c6c7702a314d2e726a52ece5494dffff7f2001000000",
+            "height": 6,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "040062009f07b2152fffc6784e64d76619eaaa60651efc46328c737198fb8a579132b54171e7b185c757b6dc31c18e46c3ebf76a7c41e5ee7815c7f14f2764eff2ec278defe5494dffff7f2001000000",
+            "height": 7,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200a12007118c46f6b32b0f3f38588a1feb5921b5aaa9e05944135e7f513a087e6fc3bfed40ffb356a7c6949a1a7f720a2b54849484c18c3e380c27dddb4b71ed20f2e5494dffff7f2000000000",
+            "height": 8,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "040062002c025d1fb4a731839937b22f3408ff7a3c4c20190fae33d84606d653a7dfc23b5aac131f6f74ee84c736b3ed4c2fdd57ac944677a020e014f291a4591efddf41f5e5494dffff7f2003000000",
+            "height": 9,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200baf64b62d6cbb5c9b96a0e493aece429ba3a3814461c2db9d4d30de5d1cd2cc4ec19114214505c1735f73b79f1bb4248b296ee83887e731661f26ccef49cd03ef8e5494dffff7f2002000000",
+            "height": 10,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200f687c1a8b97c5ed90a3383b930cfdda49526d01bd9afdd2e8142ea7b144ea7423aa639a87fdcb1a3394dfd540b2368d7087ae54159982d5c1bd4c70652368226fbe5494dffff7f2001000000",
+            "height": 11,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "040062005d8071bcdf84a2940d0672b8eeae189f6267c557166740694a3e3131ef3823336f480ab8b58adbd74711eef1323cf979aa3a60aff0ff7f8287724ba798692536fee5494dffff7f2000000000",
+            "height": 12,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200e233aaf15ac7802d5d725a66135450224060986ca214b89186195e0a3183a0ee18908ca85bb83b40e1ee2bd47354c6f322330d0c72d355f50f501a1911eafedf01e6494dffff7f2000000000",
+            "height": 13,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "040062009c952db21004d0fbb29d3de79397351cce44ac29b5f3568f4e7c0f7fc189611fb5c07e8e986c42ec31cfcccc7e4f5301c80b15165a2f47b4cc1f5935a86c89a804e6494dffff7f2002000000",
+            "height": 14,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200f796bd4adaa17e202266b9f5cd5dc77402582879800341507c4c33f66fb6caa81a1411fe75058e0225e0f6046b10f773d379c8b293c573ddeb72962048ddb2ca07e6494dffff7f2000000000",
+            "height": 15,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200424d33d3525a55810463dd83ef6b0d1dfa919752c753a2259f689b3fe8d75410be7338b7a2ddeed4d0379034ed910328da6c9fb1e58eb767bb84cbb7047370320ae6494dffff7f2001000000",
+            "height": 16,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "0400620041c0955da8a7b83bc54d4331ff7bea6e442329af2e4aa435cd107090c7963fe41b1a73efca07a93bd9daef31311076eb71668cb322c028430e7336f7e684367d0de6494dffff7f2000000000",
+            "height": 17,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200376ca33156a8ea582c0ee7a8e563d978ded995388b232a33ebf1ffc3210f5289ca259f7c1bfdfdd20dd9679fa656e2ea2ce09173d0b4cc05a1193a6049075fae10e6494dffff7f2001000000",
+            "height": 18,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          }
+        ],
+        "failed_blocks": [],
+        "headers": [
+          "0400620060e87de5ad160980a50d81e50783f337c1188dab78dc08b90077be2a95cf4a4df995cb220be94769e6ec4fd4a3d5cf6f23c13289c202377b1b3c49b73e9d03dd13e6494dffff7f2006000000",
+          "040062008a70ff7d73ac5295a111f19f01d2397bec98ce799e15433544b4dafeca6744bbe48cbe919ce70cfde5e44958941ecb39e10da23a3d5d717f43f2098106b7b32a16e6494dffff7f2000000000",
+          "040062001dc990a3ab966c0616592c1e0857164947237715948baab1f16b5eea911780af3abf477fa56e100e1e2978679a3a8aa38854a51a58fb9ac7ea71605f969726f419e6494dffff7f2000000000"
+        ]
+      },
+      "expected": {
+        "valid": true,
+        "failed_at": null,
+        "reject_reason": null,
+        "dos": null,
+        "reject_code": null,
+        "last_hash": "31c6d608bae101ad43716e7779b4e16c7ba71d331e87c7a89a5ba74deb37500d",
+        "added": [
+          {
+            "hash": "bb4467cafedab4443543159e79ce98ec7b39d2019ff111a19552ac737dff708a",
+            "height": 19
+          },
+          {
+            "hash": "af801791ea5e6bf1b1aa8b9415772347491657081e2c5916066c96aba390c91d",
+            "height": 20
+          },
+          {
+            "hash": "31c6d608bae101ad43716e7779b4e16c7ba71d331e87c7a89a5ba74deb37500d",
+            "height": 21
+          }
+        ],
+        "marked_failed_child": []
+      },
+      "compare_marked_failed_child": true,
+      "derivation": "src/chainparams.cpp:430-432; src/validation.cpp:3072-3086: nonlegacy chain-ID version without the AuxPoW flag remains allowed across height 20. Required work remains at the limit with three-second spacing."
+    },
+    {
+      "name": "legacy_19",
+      "request": {
+        "network": "regtest",
+        "mode": "base",
+        "adjusted_time": 1296688702,
+        "checkpoints_enabled": false,
+        "index": [
+          {
+            "header_hex": "010000000000000000000000000000000000000000000000000000000000000000000000696ad20e2dd4365c7459b4a4a5af743d5e92c6da3229e6532cd605f6533f2a5bdae5494dffff7f2002000000",
+            "height": 0,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d1ff126ee3b062a6c46a2f71c266d2c8a20733e977d017a12058e77a190eac586dde5494dffff7f2000000000",
+            "height": 1,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "040062006b9b18a815693a344b2c9f3458fc310bb7ddab37221b092441d4b40d818b9f81b9af3fc6c4cb9d56b8a792fb96e8086fa26c4465bdf7a72f7771fcf84e78e317e0e5494dffff7f2005000000",
+            "height": 2,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200b8d38e20a6f3cd4932d256ae15169c92b3e3389741d2db56d771e2e6a613dd7d6743e6ba3d0b48426a815fc0cb3ab1c4ad0dc317331cdfc0aa46a326ac54cdcae3e5494dffff7f2000000000",
+            "height": 3,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200d172005ac0f9b91c807fa51100519a315845eb2485180cf0bafe09b4ce903b1206ace7bf8ebafcfb9dcb459d7549346923830070a3910d0ade28325f2eeed174e6e5494dffff7f2001000000",
+            "height": 4,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "040062006de09f87eb71f59c5570a817544858e16ca26f05f2ccf1eead1e96dda19ef558d13c4c8a1bc9c2c41202a545c49a0c47116a173df4b9da041a56db77a82ad81de9e5494dffff7f2000000000",
+            "height": 5,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "0400620000de3b01ceef51528f909e9af5b7f3ede0cd9bc768d2a33765b035f3888e60a0dfbbb99edb33305f79e4fedde743c50c9642635bade5c6c7702a314d2e726a52ece5494dffff7f2001000000",
+            "height": 6,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "040062009f07b2152fffc6784e64d76619eaaa60651efc46328c737198fb8a579132b54171e7b185c757b6dc31c18e46c3ebf76a7c41e5ee7815c7f14f2764eff2ec278defe5494dffff7f2001000000",
+            "height": 7,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200a12007118c46f6b32b0f3f38588a1feb5921b5aaa9e05944135e7f513a087e6fc3bfed40ffb356a7c6949a1a7f720a2b54849484c18c3e380c27dddb4b71ed20f2e5494dffff7f2000000000",
+            "height": 8,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "040062002c025d1fb4a731839937b22f3408ff7a3c4c20190fae33d84606d653a7dfc23b5aac131f6f74ee84c736b3ed4c2fdd57ac944677a020e014f291a4591efddf41f5e5494dffff7f2003000000",
+            "height": 9,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200baf64b62d6cbb5c9b96a0e493aece429ba3a3814461c2db9d4d30de5d1cd2cc4ec19114214505c1735f73b79f1bb4248b296ee83887e731661f26ccef49cd03ef8e5494dffff7f2002000000",
+            "height": 10,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200f687c1a8b97c5ed90a3383b930cfdda49526d01bd9afdd2e8142ea7b144ea7423aa639a87fdcb1a3394dfd540b2368d7087ae54159982d5c1bd4c70652368226fbe5494dffff7f2001000000",
+            "height": 11,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "040062005d8071bcdf84a2940d0672b8eeae189f6267c557166740694a3e3131ef3823336f480ab8b58adbd74711eef1323cf979aa3a60aff0ff7f8287724ba798692536fee5494dffff7f2000000000",
+            "height": 12,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200e233aaf15ac7802d5d725a66135450224060986ca214b89186195e0a3183a0ee18908ca85bb83b40e1ee2bd47354c6f322330d0c72d355f50f501a1911eafedf01e6494dffff7f2000000000",
+            "height": 13,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "040062009c952db21004d0fbb29d3de79397351cce44ac29b5f3568f4e7c0f7fc189611fb5c07e8e986c42ec31cfcccc7e4f5301c80b15165a2f47b4cc1f5935a86c89a804e6494dffff7f2002000000",
+            "height": 14,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200f796bd4adaa17e202266b9f5cd5dc77402582879800341507c4c33f66fb6caa81a1411fe75058e0225e0f6046b10f773d379c8b293c573ddeb72962048ddb2ca07e6494dffff7f2000000000",
+            "height": 15,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200424d33d3525a55810463dd83ef6b0d1dfa919752c753a2259f689b3fe8d75410be7338b7a2ddeed4d0379034ed910328da6c9fb1e58eb767bb84cbb7047370320ae6494dffff7f2001000000",
+            "height": 16,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "0400620041c0955da8a7b83bc54d4331ff7bea6e442329af2e4aa435cd107090c7963fe41b1a73efca07a93bd9daef31311076eb71668cb322c028430e7336f7e684367d0de6494dffff7f2000000000",
+            "height": 17,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200376ca33156a8ea582c0ee7a8e563d978ded995388b232a33ebf1ffc3210f5289ca259f7c1bfdfdd20dd9679fa656e2ea2ce09173d0b4cc05a1193a6049075fae10e6494dffff7f2001000000",
+            "height": 18,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          }
+        ],
+        "failed_blocks": [],
+        "headers": [
+          "0100000060e87de5ad160980a50d81e50783f337c1188dab78dc08b90077be2a95cf4a4dda87db62f1f4f9dd95e77755eb9c1467b9327e0d969dde06463bb9ce1aa85fdb13e6494dffff7f2001000000"
+        ]
+      },
+      "expected": {
+        "valid": true,
+        "failed_at": null,
+        "reject_reason": null,
+        "dos": null,
+        "reject_code": null,
+        "last_hash": "8e309fe3f7cd1fdf29322db888e9eaaa4a3bc527a2f72c0048da7f636513bbe2",
+        "added": [
+          {
+            "hash": "8e309fe3f7cd1fdf29322db888e9eaaa4a3bc527a2f72c0048da7f636513bbe2",
+            "height": 19
+          }
+        ],
+        "marked_failed_child": []
+      },
+      "compare_marked_failed_child": true,
+      "derivation": "src/chainparams.cpp:430-432; src/validation.cpp:3072-3077: legacy version 1 passes at height 19 and fails at the activation height 20."
+    },
+    {
+      "name": "legacy_20",
+      "request": {
+        "network": "regtest",
+        "mode": "base",
+        "adjusted_time": 1296688702,
+        "checkpoints_enabled": false,
+        "index": [
+          {
+            "header_hex": "010000000000000000000000000000000000000000000000000000000000000000000000696ad20e2dd4365c7459b4a4a5af743d5e92c6da3229e6532cd605f6533f2a5bdae5494dffff7f2002000000",
+            "height": 0,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d1ff126ee3b062a6c46a2f71c266d2c8a20733e977d017a12058e77a190eac586dde5494dffff7f2000000000",
+            "height": 1,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "040062006b9b18a815693a344b2c9f3458fc310bb7ddab37221b092441d4b40d818b9f81b9af3fc6c4cb9d56b8a792fb96e8086fa26c4465bdf7a72f7771fcf84e78e317e0e5494dffff7f2005000000",
+            "height": 2,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200b8d38e20a6f3cd4932d256ae15169c92b3e3389741d2db56d771e2e6a613dd7d6743e6ba3d0b48426a815fc0cb3ab1c4ad0dc317331cdfc0aa46a326ac54cdcae3e5494dffff7f2000000000",
+            "height": 3,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200d172005ac0f9b91c807fa51100519a315845eb2485180cf0bafe09b4ce903b1206ace7bf8ebafcfb9dcb459d7549346923830070a3910d0ade28325f2eeed174e6e5494dffff7f2001000000",
+            "height": 4,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "040062006de09f87eb71f59c5570a817544858e16ca26f05f2ccf1eead1e96dda19ef558d13c4c8a1bc9c2c41202a545c49a0c47116a173df4b9da041a56db77a82ad81de9e5494dffff7f2000000000",
+            "height": 5,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "0400620000de3b01ceef51528f909e9af5b7f3ede0cd9bc768d2a33765b035f3888e60a0dfbbb99edb33305f79e4fedde743c50c9642635bade5c6c7702a314d2e726a52ece5494dffff7f2001000000",
+            "height": 6,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "040062009f07b2152fffc6784e64d76619eaaa60651efc46328c737198fb8a579132b54171e7b185c757b6dc31c18e46c3ebf76a7c41e5ee7815c7f14f2764eff2ec278defe5494dffff7f2001000000",
+            "height": 7,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200a12007118c46f6b32b0f3f38588a1feb5921b5aaa9e05944135e7f513a087e6fc3bfed40ffb356a7c6949a1a7f720a2b54849484c18c3e380c27dddb4b71ed20f2e5494dffff7f2000000000",
+            "height": 8,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "040062002c025d1fb4a731839937b22f3408ff7a3c4c20190fae33d84606d653a7dfc23b5aac131f6f74ee84c736b3ed4c2fdd57ac944677a020e014f291a4591efddf41f5e5494dffff7f2003000000",
+            "height": 9,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200baf64b62d6cbb5c9b96a0e493aece429ba3a3814461c2db9d4d30de5d1cd2cc4ec19114214505c1735f73b79f1bb4248b296ee83887e731661f26ccef49cd03ef8e5494dffff7f2002000000",
+            "height": 10,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200f687c1a8b97c5ed90a3383b930cfdda49526d01bd9afdd2e8142ea7b144ea7423aa639a87fdcb1a3394dfd540b2368d7087ae54159982d5c1bd4c70652368226fbe5494dffff7f2001000000",
+            "height": 11,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "040062005d8071bcdf84a2940d0672b8eeae189f6267c557166740694a3e3131ef3823336f480ab8b58adbd74711eef1323cf979aa3a60aff0ff7f8287724ba798692536fee5494dffff7f2000000000",
+            "height": 12,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200e233aaf15ac7802d5d725a66135450224060986ca214b89186195e0a3183a0ee18908ca85bb83b40e1ee2bd47354c6f322330d0c72d355f50f501a1911eafedf01e6494dffff7f2000000000",
+            "height": 13,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "040062009c952db21004d0fbb29d3de79397351cce44ac29b5f3568f4e7c0f7fc189611fb5c07e8e986c42ec31cfcccc7e4f5301c80b15165a2f47b4cc1f5935a86c89a804e6494dffff7f2002000000",
+            "height": 14,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200f796bd4adaa17e202266b9f5cd5dc77402582879800341507c4c33f66fb6caa81a1411fe75058e0225e0f6046b10f773d379c8b293c573ddeb72962048ddb2ca07e6494dffff7f2000000000",
+            "height": 15,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200424d33d3525a55810463dd83ef6b0d1dfa919752c753a2259f689b3fe8d75410be7338b7a2ddeed4d0379034ed910328da6c9fb1e58eb767bb84cbb7047370320ae6494dffff7f2001000000",
+            "height": 16,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "0400620041c0955da8a7b83bc54d4331ff7bea6e442329af2e4aa435cd107090c7963fe41b1a73efca07a93bd9daef31311076eb71668cb322c028430e7336f7e684367d0de6494dffff7f2000000000",
+            "height": 17,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200376ca33156a8ea582c0ee7a8e563d978ded995388b232a33ebf1ffc3210f5289ca259f7c1bfdfdd20dd9679fa656e2ea2ce09173d0b4cc05a1193a6049075fae10e6494dffff7f2001000000",
+            "height": 18,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "0400620060e87de5ad160980a50d81e50783f337c1188dab78dc08b90077be2a95cf4a4df995cb220be94769e6ec4fd4a3d5cf6f23c13289c202377b1b3c49b73e9d03dd13e6494dffff7f2006000000",
+            "height": 19,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          }
+        ],
+        "failed_blocks": [],
+        "headers": [
+          "010000008a70ff7d73ac5295a111f19f01d2397bec98ce799e15433544b4dafeca6744bbcdf5cac4e0199dee62b0abc327de0f490d5c214752a32702f1a8eef41b97e14e16e6494dffff7f2000000000"
+        ]
+      },
+      "expected": {
+        "valid": false,
+        "failed_at": 0,
+        "reject_reason": "late-legacy-block",
+        "dos": 100,
+        "reject_code": 16,
+        "last_hash": null,
+        "added": [],
+        "marked_failed_child": []
+      },
+      "compare_marked_failed_child": true,
+      "derivation": "src/chainparams.cpp:430-432; src/validation.cpp:3072-3077: legacy version 1 passes at height 19 and fails at the activation height 20."
+    },
+    {
+      "name": "version-boundary-1251",
+      "request": {
+        "network": "regtest",
+        "mode": "base",
+        "adjusted_time": 1296688702,
+        "checkpoints_enabled": false,
+        "index": [
+          {
+            "header_hex": "040062002222222222222222222222222222222222222222222222222222222222222222bbec2d2a06ab16df9331a9a52306460cb27f163401226d2c4b4cdbe44fc5d5f55ff4494dffff7f2000000000",
+            "height": 1239,
+            "anchor": true,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "040062005e7d0016f3f70fa72d0ccec894a05c27ee23e43fb464711e89af5261b5b3a38dc7677db88d0a7f8d251ca1d79769ac1113c529cbf7ae47cdc7903aa6e16eb41262f4494dffff7f2000000000",
+            "height": 1240,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200d333df3bdd0a7183c2188d1dbdb23964d6c885d19571749ed576aa63f216c9d211f60689f73e8938361229db41c7e2742552bd0431ea203ce6e7a47c97d2cd2c65f4494dffff7f2008000000",
+            "height": 1241,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "040062006f62fec59caa2bfbf6cf4856c29ca1d17d12832d7ac4bb6a62ec3ae87ac12ebf1a1131c9a35a0312c901fab675126a44b6bee081e0ba79ef0e5142815f3b4fc168f4494dffff7f2001000000",
+            "height": 1242,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "040062006c1394f3304f08b8136916a5dbc41c9d594c54be34df784a5e77a103c7cd9c3514f30f548f29c7c58b5e2172523eddd4c20a1a5334e47ee3da982681b44fd19e6bf4494dffff7f2000000000",
+            "height": 1243,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "040062005d2a83eaa8f7da2bab7fa458b9813edae7d6ba83929f27c1c41ace8c42b40380c2771d2d97ea3b0e3f4c08f042fa9df9683b84afc65384658975e5fa0c986d046ef4494dffff7f2000000000",
+            "height": 1244,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200e0929a83d0c9b39f4bbaf625bc6d6f9ec8386b9945740cc4ccfdba8154bf173c121b44cd81280e2f0387ba4f17684134bf79b1877b095b6083bd816e055d7ddb71f4494dffff7f2001000000",
+            "height": 1245,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "0400620033227de5068dc356ff3cecc66897b12c344f0a198b0a7bea62474f395498b458289c40be6968a86b602926897485da502fe6f3507b15433facf035fcb24f2ba574f4494dffff7f2000000000",
+            "height": 1246,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200809a68e6d0f635a36686b65e28d7b015f8c13c3cc01bba61a4b217728621a2db4f453c0f49bb33532f7c2ec0fea1f3fbf29447e95ee20be340db5e5101cd0dfb77f4494dffff7f2006000000",
+            "height": 1247,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "0400620055997461a530e9397934322c444afbfe4837a3a1a5f300c15f6ccac9a0bfb21e86e68bbe36150e17aec390e36b97db150a9e5b0680e16d337b1b3c4cb0c906b67af4494dffff7f2002000000",
+            "height": 1248,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200d1446659b3dd673851f755e8b96c036317ceaa47962ebe4438cbafc97e52d19ef363f4c6df0b4736f1585faf5bba609c26802f59970a39cb7732de8a2a087bc87df4494dffff7f2000000000",
+            "height": 1249,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          }
+        ],
+        "failed_blocks": [],
+        "headers": [
+          "020062003f1e74f7e6456a5c0116f4517a07d7ac5b8113175e06d1a7f745bf41d97fe93e2480c29e925db7b2380512a8857aac6e3760538f9e9ad1b004f90b3d3e29dddb80f4494dffff7f2004000000",
+          "0200620017498f0302ee50e0cd261571b467f2da73542c9ade6b34ecae88480cbc47c0f3916b094bdaa35688d3da8e63c20236418ed6fac91a0cdb6a21be067e14d8e00083f4494dffff7f2003000000"
+        ]
+      },
+      "expected": {
+        "valid": false,
+        "failed_at": 1,
+        "reject_reason": "bad-version(0x00000002)",
+        "dos": 0,
+        "reject_code": 17,
+        "last_hash": null,
+        "added": [
+          {
+            "hash": "f3c047bc0c4888aeec346bde9a2c5473daf267b4711526cde050ee02038f4917",
+            "height": 1250
+          }
+        ],
+        "marked_failed_child": []
+      },
+      "compare_marked_failed_child": true,
+      "derivation": "src/chainparams.cpp:390-391; src/validation.cpp:3113-3116: base version 2 passes immediately below the threshold, then fails at it. Eleven predecessors supply the median and retarget context; three-second spacing keeps limit bits."
+    },
+    {
+      "name": "version-upgraded-1251",
+      "request": {
+        "network": "regtest",
+        "mode": "base",
+        "adjusted_time": 1296688702,
+        "checkpoints_enabled": false,
+        "index": [
+          {
+            "header_hex": "040062002222222222222222222222222222222222222222222222222222222222222222bbec2d2a06ab16df9331a9a52306460cb27f163401226d2c4b4cdbe44fc5d5f55ff4494dffff7f2000000000",
+            "height": 1239,
+            "anchor": true,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "040062005e7d0016f3f70fa72d0ccec894a05c27ee23e43fb464711e89af5261b5b3a38dc7677db88d0a7f8d251ca1d79769ac1113c529cbf7ae47cdc7903aa6e16eb41262f4494dffff7f2000000000",
+            "height": 1240,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200d333df3bdd0a7183c2188d1dbdb23964d6c885d19571749ed576aa63f216c9d211f60689f73e8938361229db41c7e2742552bd0431ea203ce6e7a47c97d2cd2c65f4494dffff7f2008000000",
+            "height": 1241,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "040062006f62fec59caa2bfbf6cf4856c29ca1d17d12832d7ac4bb6a62ec3ae87ac12ebf1a1131c9a35a0312c901fab675126a44b6bee081e0ba79ef0e5142815f3b4fc168f4494dffff7f2001000000",
+            "height": 1242,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "040062006c1394f3304f08b8136916a5dbc41c9d594c54be34df784a5e77a103c7cd9c3514f30f548f29c7c58b5e2172523eddd4c20a1a5334e47ee3da982681b44fd19e6bf4494dffff7f2000000000",
+            "height": 1243,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "040062005d2a83eaa8f7da2bab7fa458b9813edae7d6ba83929f27c1c41ace8c42b40380c2771d2d97ea3b0e3f4c08f042fa9df9683b84afc65384658975e5fa0c986d046ef4494dffff7f2000000000",
+            "height": 1244,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200e0929a83d0c9b39f4bbaf625bc6d6f9ec8386b9945740cc4ccfdba8154bf173c121b44cd81280e2f0387ba4f17684134bf79b1877b095b6083bd816e055d7ddb71f4494dffff7f2001000000",
+            "height": 1245,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "0400620033227de5068dc356ff3cecc66897b12c344f0a198b0a7bea62474f395498b458289c40be6968a86b602926897485da502fe6f3507b15433facf035fcb24f2ba574f4494dffff7f2000000000",
+            "height": 1246,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200809a68e6d0f635a36686b65e28d7b015f8c13c3cc01bba61a4b217728621a2db4f453c0f49bb33532f7c2ec0fea1f3fbf29447e95ee20be340db5e5101cd0dfb77f4494dffff7f2006000000",
+            "height": 1247,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "0400620055997461a530e9397934322c444afbfe4837a3a1a5f300c15f6ccac9a0bfb21e86e68bbe36150e17aec390e36b97db150a9e5b0680e16d337b1b3c4cb0c906b67af4494dffff7f2002000000",
+            "height": 1248,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200d1446659b3dd673851f755e8b96c036317ceaa47962ebe4438cbafc97e52d19ef363f4c6df0b4736f1585faf5bba609c26802f59970a39cb7732de8a2a087bc87df4494dffff7f2000000000",
+            "height": 1249,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          }
+        ],
+        "failed_blocks": [],
+        "headers": [
+          "020062003f1e74f7e6456a5c0116f4517a07d7ac5b8113175e06d1a7f745bf41d97fe93e2480c29e925db7b2380512a8857aac6e3760538f9e9ad1b004f90b3d3e29dddb80f4494dffff7f2004000000",
+          "0400620017498f0302ee50e0cd261571b467f2da73542c9ade6b34ecae88480cbc47c0f3143ed3971cec6ef78bfff050ab1a7a9ed7d19203c361b1aeb152825b443d8b0e83f4494dffff7f2000000000"
+        ]
+      },
+      "expected": {
+        "valid": true,
+        "failed_at": null,
+        "reject_reason": null,
+        "dos": null,
+        "reject_code": null,
+        "last_hash": "6af24e9d68c8f64426d7b71ac6b15247024a6a24a9309cb3a509470974d1fae9",
+        "added": [
+          {
+            "hash": "f3c047bc0c4888aeec346bde9a2c5473daf267b4711526cde050ee02038f4917",
+            "height": 1250
+          },
+          {
+            "hash": "6af24e9d68c8f64426d7b71ac6b15247024a6a24a9309cb3a509470974d1fae9",
+            "height": 1251
+          }
+        ],
+        "marked_failed_child": []
+      },
+      "compare_marked_failed_child": true,
+      "derivation": "src/chainparams.cpp:390-391; src/validation.cpp:3113-3116: base version 2 passes immediately below the threshold, then fails at it. Eleven predecessors supply the median and retarget context; three-second spacing keeps limit bits."
+    },
+    {
+      "name": "version-boundary-1351",
+      "request": {
+        "network": "regtest",
+        "mode": "base",
+        "adjusted_time": 1296688702,
+        "checkpoints_enabled": false,
+        "index": [
+          {
+            "header_hex": "040062002222222222222222222222222222222222222222222222222222222222222222291aea2b3ff44a8c0dcdbbfe64e5ef651b6e5325b706d923f22294935a7cdb8d8bf5494dffff7f2003000000",
+            "height": 1339,
+            "anchor": true,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200f758c9c689a2269d7fd066e7b8fd60ebbc0c1c16c11918148265306826fc2bf0ffe3dd757dcce81f31db17d9776fd6fb48a0d4c3294c3e3760391188c57982a58ef5494dffff7f2000000000",
+            "height": 1340,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200271c56b15758329e42fec1661d75747003d1726e3cd082ac28b409cb8d1872e3701b54a994cdaa87876d610391257f65eec24044558dcf2f965aceef3ef67e5c91f5494dffff7f2000000000",
+            "height": 1341,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200f1e8ab4791829f375e386cdd56cb13a1a10a821382a24901257a5c5cb5ba871e00b5ac50b4baba639358379138f22b15f7e41314fb42dcf4129099e3c8e67ea594f5494dffff7f2002000000",
+            "height": 1342,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200ffdb879a265760f5578207d266c622207c998b6c6fa9bc8ac27f0c2bea2eda3bde80d8fb709c9c589d602f40ed1ff3e6bb737db7c3514bbf2ba5372cacac3d5797f5494dffff7f2001000000",
+            "height": 1343,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "0400620027ddabeb174fb91d58568d2998e006faa307d99064b9d489ee999c8d271a0122bf64dc9ef266d4e04e404b9b964be24ab65329417dc4a906d1fe648eca929ee19af5494dffff7f2000000000",
+            "height": 1344,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "040062002a71c055532332508ae9caf7d017d3267add76052fdab5d837e2b29c82d246addb536329270c8a74a25959992a81c0350012333b76a04e9a6908b0d08166aa5c9df5494dffff7f2001000000",
+            "height": 1345,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "040062003284597b04dd8a48621b891d02b8eea6d8641704a2fa2f5e58c0390a2065edfeacd2f60c82e3e178aee9c24b406eab1a6e5e30b98debbcc2f7f9dc165012bc56a0f5494dffff7f2002000000",
+            "height": 1346,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "040062002cb9dd42a010098b4473cdab3e21f89874b7d95be4a31e58090f8b4102be55f9916dfe53fcfec5a5feb16d45ac267baea2f5c7771a724e1ef9547f9c825589c2a3f5494dffff7f2002000000",
+            "height": 1347,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "040062003d65e9ef65214c39885275110c174ffe8751a1bc0db7054f606f82ad325f870b13260b6ac0d6522d7d5dba77b47ee811dbbcbc09ab99dbf5df547a3d1af0d40ea6f5494dffff7f2001000000",
+            "height": 1348,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200123abc98989268ac7bca2c380e71b84b1982cf5e94c3855565042fb399ee358b4b6d7ce212f72f3140279b40f24cd96565468948c8afffb616db5fb3d31cc1f9a9f5494dffff7f2000000000",
+            "height": 1349,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          }
+        ],
+        "failed_blocks": [],
+        "headers": [
+          "030062007ce84d238f1c2020f6d84bc82f1f5ef1bd0e4f2b7faf42f9660f814584a1f9b10ea5b17b9da3a780bc6754a488da5cf16ae0d7abe3a7494ab0fe9a32325f654bacf5494dffff7f2000000000",
+          "030062002c10e32780ac4c777465acdccbd4ec5816bfaafd31895c91145751e766d3e0ff77f4acad22d893e532f2a7db327214965c96fa0209c1e32f37d6b18db48a6bf3aff5494dffff7f2005000000"
+        ]
+      },
+      "expected": {
+        "valid": false,
+        "failed_at": 1,
+        "reject_reason": "bad-version(0x00000003)",
+        "dos": 0,
+        "reject_code": 17,
+        "last_hash": null,
+        "added": [
+          {
+            "hash": "ffe0d366e7515714915c8931fdaabf1658ecd4cbdcac6574774cac8027e3102c",
+            "height": 1350
+          }
+        ],
+        "marked_failed_child": []
+      },
+      "compare_marked_failed_child": true,
+      "derivation": "src/chainparams.cpp:390-391; src/validation.cpp:3113-3116: base version 3 passes immediately below the threshold, then fails at it. Eleven predecessors supply the median and retarget context; three-second spacing keeps limit bits."
+    },
+    {
+      "name": "version-upgraded-1351",
+      "request": {
+        "network": "regtest",
+        "mode": "base",
+        "adjusted_time": 1296688702,
+        "checkpoints_enabled": false,
+        "index": [
+          {
+            "header_hex": "040062002222222222222222222222222222222222222222222222222222222222222222291aea2b3ff44a8c0dcdbbfe64e5ef651b6e5325b706d923f22294935a7cdb8d8bf5494dffff7f2003000000",
+            "height": 1339,
+            "anchor": true,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200f758c9c689a2269d7fd066e7b8fd60ebbc0c1c16c11918148265306826fc2bf0ffe3dd757dcce81f31db17d9776fd6fb48a0d4c3294c3e3760391188c57982a58ef5494dffff7f2000000000",
+            "height": 1340,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200271c56b15758329e42fec1661d75747003d1726e3cd082ac28b409cb8d1872e3701b54a994cdaa87876d610391257f65eec24044558dcf2f965aceef3ef67e5c91f5494dffff7f2000000000",
+            "height": 1341,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200f1e8ab4791829f375e386cdd56cb13a1a10a821382a24901257a5c5cb5ba871e00b5ac50b4baba639358379138f22b15f7e41314fb42dcf4129099e3c8e67ea594f5494dffff7f2002000000",
+            "height": 1342,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200ffdb879a265760f5578207d266c622207c998b6c6fa9bc8ac27f0c2bea2eda3bde80d8fb709c9c589d602f40ed1ff3e6bb737db7c3514bbf2ba5372cacac3d5797f5494dffff7f2001000000",
+            "height": 1343,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "0400620027ddabeb174fb91d58568d2998e006faa307d99064b9d489ee999c8d271a0122bf64dc9ef266d4e04e404b9b964be24ab65329417dc4a906d1fe648eca929ee19af5494dffff7f2000000000",
+            "height": 1344,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "040062002a71c055532332508ae9caf7d017d3267add76052fdab5d837e2b29c82d246addb536329270c8a74a25959992a81c0350012333b76a04e9a6908b0d08166aa5c9df5494dffff7f2001000000",
+            "height": 1345,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "040062003284597b04dd8a48621b891d02b8eea6d8641704a2fa2f5e58c0390a2065edfeacd2f60c82e3e178aee9c24b406eab1a6e5e30b98debbcc2f7f9dc165012bc56a0f5494dffff7f2002000000",
+            "height": 1346,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "040062002cb9dd42a010098b4473cdab3e21f89874b7d95be4a31e58090f8b4102be55f9916dfe53fcfec5a5feb16d45ac267baea2f5c7771a724e1ef9547f9c825589c2a3f5494dffff7f2002000000",
+            "height": 1347,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "040062003d65e9ef65214c39885275110c174ffe8751a1bc0db7054f606f82ad325f870b13260b6ac0d6522d7d5dba77b47ee811dbbcbc09ab99dbf5df547a3d1af0d40ea6f5494dffff7f2001000000",
+            "height": 1348,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          },
+          {
+            "header_hex": "04006200123abc98989268ac7bca2c380e71b84b1982cf5e94c3855565042fb399ee358b4b6d7ce212f72f3140279b40f24cd96565468948c8afffb616db5fb3d31cc1f9a9f5494dffff7f2000000000",
+            "height": 1349,
+            "anchor": false,
+            "failed_valid": false,
+            "failed_child": false,
+            "scripts_valid": false
+          }
+        ],
+        "failed_blocks": [],
+        "headers": [
+          "030062007ce84d238f1c2020f6d84bc82f1f5ef1bd0e4f2b7faf42f9660f814584a1f9b10ea5b17b9da3a780bc6754a488da5cf16ae0d7abe3a7494ab0fe9a32325f654bacf5494dffff7f2000000000",
+          "040062002c10e32780ac4c777465acdccbd4ec5816bfaafd31895c91145751e766d3e0ff296d531b2e84ee27251bb40cf98f4b3c85b829f8c5ca763229927c8e08ae44c3aff5494dffff7f2001000000"
+        ]
+      },
+      "expected": {
+        "valid": true,
+        "failed_at": null,
+        "reject_reason": null,
+        "dos": null,
+        "reject_code": null,
+        "last_hash": "08b58069f038245d9c8a2baed423c06b7964eef8ac6804239b6cabda108ed44b",
+        "added": [
+          {
+            "hash": "ffe0d366e7515714915c8931fdaabf1658ecd4cbdcac6574774cac8027e3102c",
+            "height": 1350
+          },
+          {
+            "hash": "08b58069f038245d9c8a2baed423c06b7964eef8ac6804239b6cabda108ed44b",
+            "height": 1351
+          }
+        ],
+        "marked_failed_child": []
+      },
+      "compare_marked_failed_child": true,
+      "derivation": "src/chainparams.cpp:390-391; src/validation.cpp:3113-3116: base version 3 passes immediately below the threshold, then fails at it. Eleven predecessors supply the median and retarget context; three-second spacing keeps limit bits."
+    }
+  ]
+}

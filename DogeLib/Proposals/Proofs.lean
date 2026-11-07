@@ -1,5 +1,6 @@
 module
 
+public import DogeLib.Proposals.ExampleVersionVerify.Proofs
 public import DogeLib.Proposals.Framework.Proofs
 
 /-!

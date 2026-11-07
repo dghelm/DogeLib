@@ -6,6 +6,7 @@ import KnownAnswers.Genesis
 import KnownAnswers.Hash
 import KnownAnswers.HeaderPow
 import KnownAnswers.MedianTimePast
+import KnownAnswers.Proposals.ExampleVersionVerify
 import KnownAnswers.Script
 import KnownAnswers.Scrypt
 import KnownAnswers.ScryptPow
@@ -28,6 +29,7 @@ def KnownAnswers.checks : List (String × IO Nat) :=
     KnownAnswers.Hash.checks,
     KnownAnswers.HeaderPow.checks,
     KnownAnswers.MedianTimePast.checks,
+    KnownAnswers.Proposals.checks,
     KnownAnswers.Script.checks,
     KnownAnswers.Scrypt.checks,
     KnownAnswers.ScryptPow.checks,

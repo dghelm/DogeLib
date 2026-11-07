@@ -49,7 +49,9 @@ One maps each message of the revised protocol to the message that a baseline nod
 The other maps the chain state of a revised node to that of a baseline node.
 A revision that changes no encoding and no state effect has `LegacyProjection.identity`.
 A non-identity projection waits for the first proposal that needs one, and that proposal's design record defines it.
-DogeLib has no block validity yet, so no theorem uses a projection now.
+
+DogeLib has no block validity yet, so no block-level or chain-level theorem uses a projection.
+The worked example `ExampleVersionVerify` states Script-local theorems with the identity projection.
 -/
 
 @[expose] public section

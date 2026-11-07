@@ -190,6 +190,7 @@ class Reports(unittest.TestCase):
                               '(cd tests/cryptography/sha256/cavp && sha256sum -c SHA256SUMS) && '
                               '(cd tests/transaction/sighash && sha256sum -c SHA256SUMS) && '
                               '(cd tests/transaction/corpus && sha256sum -c SHA256SUMS) && '
+                              '(cd tests/work/mainnet-genesis-headers && sha256sum -c SHA256SUMS) && '
                               '(cd tests/work/mainnet-headers && sha256sum -c SHA256SUMS) && '
                               '(cd tests/block && sha256sum -c SHA256SUMS) && '
                               '(cd tests/script/corpus && sha256sum -c SHA256SUMS) && '

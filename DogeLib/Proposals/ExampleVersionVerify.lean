@@ -25,7 +25,9 @@ With `active` true and the opcode in an executing branch, it checks in this orde
 
 The record lists the missing context as its fifth item.
 The context check must come before the comparison that reads the context, so the definition puts it fourth.
-`OP_CHECKLOCKTIMEVERIFY` has the same order: its checker returns `none` only after the negative check (`DogeLib.Script.checkLockTimeStep`).
+The order matches `DogeLib.Script.checkLockTimeStep` with a checker whose `checkLockTime` returns `none`: that result comes only after the negative check.
+It differs from the baseline `OP_CHECKLOCKTIMEVERIFY` without a checker (`checker = none`), which reports unsupported before it reads the stack.
+The example has no such case, because it reads the context, not the checker.
 
 The opcode never pops its operand.
 With `active` false, or in a branch that does not execute, `OP_NOP10` stays a NOP.
@@ -44,8 +46,11 @@ The difference changes an error, never acceptance.
 ## Errors and the unsupported reason
 
 The errors are `ScriptError ⊕ ExampleError`, with the baseline errors under `Sum.inl` (decision 10).
+
 The framework's unsupported reasons are the baseline type `DogeLib.Script.Unsupported`, which the example cannot extend.
 So a missing transaction context reports `noContext`, which is `Unsupported.signatureOpcode 0xb9`.
+That constructor's documentation describes an unavailable signature check, so the label is a stand-in.
+Issue #122 proposes a framework type of unsupported reasons that a proposal can extend.
 A baseline step reports `signatureOpcode op` only for the signature opcodes `0xac` to `0xaf`, so the opcode `0xb9` identifies the example.
 The reason is a label for a missing capability. It is not a rejection, and it makes no claim about any verdict.
 
@@ -103,7 +108,11 @@ def ExampleContext.ofInput (ctx : InputContext) : ExampleContext := ⟨ctx.tx⟩
 /--
 The unsupported reason of an executed `OP_NOP10` without a transaction context.
 The framework reuses the baseline reasons, so the example labels this case `signatureOpcode 0xb9`.
+That constructor's documentation describes an unavailable signature check, so the label is a stand-in, not a description.
 No baseline step gives that reason, because the baseline reports `signatureOpcode op` only for `0xac` to `0xaf`.
+
+A missing context stays an unsupported result. It is never a rejection.
+Issue #122 proposes a framework type of unsupported reasons that a proposal can extend.
 -/
 def noContext : Unsupported := .signatureOpcode nop10
 

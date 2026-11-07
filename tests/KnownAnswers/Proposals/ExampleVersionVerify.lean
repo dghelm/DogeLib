@@ -21,7 +21,8 @@ Every case also checks that the revision with `active` false gives the baseline 
 The cases cover each step of the rule and both sides of the version comparison.
 They also cover a negative operand, negative zero, a six-byte operand and an unsigned version above 2^31.
 Other cases put the operand in a branch that does not execute or in a P2SH redeem script.
-Every case runs with `active` true and with `active` false.
+Each of the 20 `verifyScript` cases runs with `active` true and with `active` false.
+The 6 other cases run with `active` true, and the spend cases also run the baseline.
 One case shows the error order of design record 0007, section 10.2: a caller's stack of 1,001 items gives `STACK_SIZE` before the example's own error.
 -/
 

@@ -2255,7 +2255,9 @@ No proposal is active on any network, so the library defines no `Activation` val
 A strictness witness and a relaxation witness need a rejection, so a change to an unsupported result is not a witness.
 `inactiveEq_verifyScriptWith` and `restrictsAcceptance_verifyScriptWith` derive the inactive equality and restriction of acceptance of a `VerifyScript` revision from properties of its step.
 `LegacyProjection.identity` is the projection of a revision that keeps encodings and state effects.
-No theorem uses a projection yet, because DogeLib has no block validity.
+
+No block-level or chain-level theorem uses a projection yet, because DogeLib has no block validity.
+The worked example states Script-local theorems with the identity projection.
 
 The framework adds no axiom, hypothesis or trust assumption.
 A proposal's theorems are about DogeLib's definitions, and they inherit the gaps of the baseline definitions that they reuse.
@@ -2296,8 +2298,8 @@ The example adds no axiom and no trust assumption.
 It inherits the gaps of the baseline definitions that it reuses: the `SignatureVerifier` hypothesis of `transactionChecker` and the unsupported flag set of `verifyScript`.
 It has these boundaries:
 
-- **Unsupported reason.** The framework's unsupported reasons are the baseline type `Unsupported`, which the example cannot extend. A missing context reports `noContext`, which is `Unsupported.signatureOpcode 0xb9`. The baseline reports `signatureOpcode op` only for `0xac` to `0xaf`, but no theorem states that, so a consumer that reads the reason relies on the documentation.
-- **Order of the context check.** Section 10.1 lists the missing context fifth. The definition checks it after the negative operand and before the version comparison, which reads the context, as `OP_CHECKLOCKTIMEVERIFY` does.
+- **Unsupported reason.** The framework's unsupported reasons are the baseline type `Unsupported`, which the example cannot extend. A missing context reports `noContext`, which is `Unsupported.signatureOpcode 0xb9`. That constructor's documentation describes an unavailable signature check, so the label is a stand-in. The baseline reports `signatureOpcode op` only for `0xac` to `0xaf`, but no theorem states that, so a consumer that reads the reason relies on the documentation. A missing context stays unsupported, never a rejection. Issue #122 proposes a framework type of unsupported reasons that a proposal can extend.
+- **Order of the context check.** Section 10.1 lists the missing context fifth. The definition checks it after the negative operand and before the version comparison, which reads the context. That order matches `checkLockTimeStep` with a checker whose `checkLockTime` returns `none`. The baseline `OP_CHECKLOCKTIMEVERIFY` without a checker differs: it reports unsupported before it reads the stack.
 - **Error order.** The baseline step checks the stack size before `versionCheck` runs. A caller's initial stack of more than 1,000 items gives `STACK_SIZE` before the example's own error (section 10.2). A known answer checks that case. The order changes an error, never acceptance.
 - **Characterization domain.** `example_accepted_iff` covers an operand pushed by `OP_0` or a direct push of one to five bytes. It does not cover `OP_1NEGATE`, `OP_1` to `OP_16`, the `OP_PUSHDATA` forms or a longer operand. It also excludes a second `OP_NOP10`, even in a branch that does not execute.
 - **Witnesses.** `example_strict` and `example_use` are computed by the kernel with `decide +kernel`. The spends contain no signature opcode, so no digest is computed.

@@ -62,6 +62,7 @@ The line ranges identify the inspected source:
 | C13 | [validation.cpp, lines 3980–4010](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.cpp#L3980-L4010) | `InitBlockIndex`, which adds the genesis block. |
 | C14 | [pow.cpp, lines 32–88](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/pow.cpp#L32-L88), [dogecoin.cpp, lines 26–87](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/dogecoin.cpp#L26-L87) | `GetNextWorkRequired`, `AllowDigishieldMinDifficultyForBlock` and `CalculateDogecoinNextWorkRequired`. |
 | C15 | [validation.h, lines 170 and 199](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.h#L170-L199), [validation.cpp, line 3299](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.cpp#L3299), [utiltime.cpp, lines 38–41](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/utiltime.cpp#L38-L41), [timedata.cpp, lines 34–37](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/timedata.cpp#L34-L37) | The exported `mapBlockIndex` and `pindexBestHeader`, the call of `AcceptBlockHeader` in `AcceptBlock`, `SetMockTime` and `GetAdjustedTime`. |
+| C16 | [validation.cpp, lines 1630–1645 and 2238–2250](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.cpp#L1630-L2250) | `DisconnectBlock` and its check of undo data, and the call in `DisconnectTip`. |
 
 The registry already records `validation.cpp` (D33), `chain.h` (D18), `chain.cpp` (D35), `dogecoin.cpp` (D6), `pow.cpp` (D17), `chainparams.cpp` (D14), `validation.h` (D69) and `timedata.cpp` (D72).
 An implementation lane adds an identifier for each other file that it uses, from D74 on, without a change to any pin.
@@ -572,12 +573,25 @@ It must prepare this global state:
 
 `gFailedBlocks` is in the anonymous namespace (item 17), so the harness fills it through `InvalidateBlock`.
 That function disconnects the entry only while `chainActive` contains it [C6, line 2672].
-Then it sets `BLOCK_FAILED_VALID` and inserts the entry in every case, so a header-only entry works too [C6, lines 2698–2701].
+After that loop, it sets `BLOCK_FAILED_VALID` and inserts the entry [C6, lines 2698–2701].
+So a header-only entry, which is never active, works.
 It needs an active tip, because `InvalidChainFound` asserts one [C6, line 1349], and it needs `pcoinsTip` for its mempool update.
 A scratch chainstate with the genesis block active supplies both.
 
-The harness can set the flags of item 15 without set membership directly in `nStatus`.
-So H1 can prepare every failure state of section 6.2, at the cost of its build.
+The disconnect loop limits this route.
+`DisconnectTip` calls `DisconnectBlock`, which returns an error when the block has no undo data [C16, lines 1639–1642].
+The genesis block has no undo data, so `InvalidateBlock` on the active genesis entry returns before the insertion.
+A direct write of `nStatus` sets flags, but it cannot reach the set in the anonymous namespace.
+
+So H1 supports these failure states:
+
+- Any failure flags, including those of item 15 without set membership, through direct writes of `nStatus`.
+- Members of the failed list that are not in `chainActive`, through `InvalidateBlock`.
+
+H1 cannot put the genesis entry in the failed list, and the record found no other mechanism at the pin that can.
+H2 owns its failed list, so it has no such gap, and it compares those states alone.
+A state with genesis in the failed list may not occur in a running node, but `WellFormed` allows it.
+In that state, step 6 rejects every header whose predecessor lacks `scriptsValid`.
 
 **H2: transcribe the bodies and call Core's helpers.**
 The harness transcribes `AcceptBlockHeader` [C1] and the index part of `AddToBlockIndex` [C3], as it transcribes `ContextualCheckBlockHeader` for `block.contextual_check`.
@@ -739,10 +753,10 @@ A *new lemmas* target needs lemmas about the map, the walk or `ArithUint256`.
 | `lastCheckpointInIndex_eq` | Suppose that each table hash in the index belongs to an entry at its table height. Then `lastCheckpointInIndex` equals `lastCheckpoint` of design record 0006, applied to the table heights whose hashes the index has. | New lemmas |
 | `accept_genesis` | For the genesis hash, the step accepts, even when its entry has a failure flag (item 1). If the index has no genesis entry, the step inserts one with no predecessor, height 0, no flags and chain work `blockProof` of its `nBits`. Otherwise the index does not change. | Cheap |
 | `accept_known` | For a known hash other than genesis, with no failure flag, the step accepts and returns the input index. With a flag, it returns `duplicate` and the input index. | Cheap |
-| `accept_eq_ok_iff` | Take an unknown hash other than genesis. The step accepts exactly when four conditions hold. Step 2 passes. The predecessor exists without a flag. The contextual check accepts on the view and checkpoint of section 5.4. The predecessor has `scriptsValid`, or no member of the failed list is its ancestor. | New lemmas |
-| `accept_eq_error_iff` | Take a hash other than genesis. For each rejection of section 3.1, the step returns it exactly when its condition fails and the conditions of all earlier steps hold. | New lemmas |
+| `accept_eq_ok_iff` | Take an unknown hash other than genesis. The step accepts exactly when five conditions hold. Step 2 passes. The predecessor exists without a flag. The predecessor's height is below 2147483646. The contextual check accepts on the view and checkpoint of section 5.4. The predecessor has `scriptsValid`, or no member of the failed list is its ancestor. | New lemmas |
+| `accept_eq_error_iff` | Take a hash other than genesis. For each rejection of section 3.1, the step returns it exactly when its condition fails and the conditions of all earlier steps hold. For steps 5 and 6, the earlier conditions include the height bound of `heightOutOfRange`. A companion statement gives `heightOutOfRange` exactly when steps 1 to 4 pass and the predecessor is at height 2147483646. | New lemmas |
 | `accept_ok_insert` | On acceptance of an unknown hash other than genesis, the result index is the input index with one inserted entry. The entry has the predecessor hash, the predecessor's height plus one and no flags. The failed list does not change. | Cheap |
-| `accept_error_index` | On a rejection other than `failedAncestor`, the result index is the input index. On `failedAncestor`, only `failedChild` changes, on the entries from the predecessor down to the found member. | New lemmas |
+| `accept_error_index` | On an adapter error, and on a rejection other than `failedAncestor`, the result index is the input index. On `failedAncestor`, only `failedChild` changes, on the entries from the predecessor down to the found member. | New lemmas |
 | `wellFormed_preserved` | Each step maps a well-formed index to a well-formed index. | New lemmas |
 | `accept_link` | Take the acceptance of an unknown hash other than genesis. The added entry's predecessor hash is the header's `hashPrevBlock`, and its height is the predecessor's height plus one. | Cheap |
 | `process_append` | Processing `xs ++ ys` from an index gives `composeSequence xs.length` of the result of `xs` and the result of `ys` from the index after `xs`. | Cheap |

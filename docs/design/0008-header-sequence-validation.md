@@ -37,7 +37,7 @@ The record excludes these subjects:
 - Peer management: the denial-of-service score as a peer penalty, `Misbehaving`, and the checks of the `headers` message in `net_processing.cpp` (section 4.8).
 - The sources of time and the option `-checkpoints`. As in design record 0006, the specification takes both as explicit inputs.
 - The debug check `CheckBlockIndex` (item 26).
-- The operations that set failure flags: block validation, `InvalidateBlock`, `ResetBlockFailureFlags` and the load of the index from disk. The specification takes their result as input state.
+- The operations that set or clear failure state [C6]. They are `AcceptBlock`, `InvalidBlockFound`, `FindMostWorkChain`, `InvalidateBlock`, `ResetBlockFailureFlags`, and the load and unload of the index. The specification takes their result as input state.
 - Implementation refinement and Rust extraction.
 
 ## 2. Reference software revision
@@ -52,7 +52,7 @@ The line ranges identify the inspected source:
 | C3 | [validation.cpp, lines 2755–2788](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.cpp#L2755-L2788) | `AddToBlockIndex`. |
 | C4 | [validation.cpp, lines 2927–2937](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.cpp#L2927-L2937), [validation.h, line 496](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.h#L496), [dogecoin.cpp, lines 89–125](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/dogecoin.cpp#L89-L125) | `CheckBlockHeader`, its default `fCheckPOW = true`, and `CheckAuxPowProofOfWork`. |
 | C5 | [validation.cpp, lines 3066–3119](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.cpp#L3066-L3119) | `ContextualCheckBlockHeader`. |
-| C6 | [validation.cpp, lines 105–187](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.cpp#L105-L187), [lines 1356–1364](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.cpp#L1356-L1364), [lines 2659–2716](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.cpp#L2659-L2716), [lines 3329–3335](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.cpp#L3329-L3335), [lines 3674–3678](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.cpp#L3674-L3678), [line 3958](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.cpp#L3958) | The anonymous namespace with `gFailedBlocks`, and every write of `BLOCK_FAILED_VALID`, `BLOCK_FAILED_CHILD` and `gFailedBlocks` outside C1. |
+| C6 | [validation.cpp, lines 105–187](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.cpp#L105-L187), [lines 1339–1364](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.cpp#L1339-L1364), [lines 2385–2410](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.cpp#L2385-L2410), [lines 2659–2716](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.cpp#L2659-L2716), [lines 2722–2752](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.cpp#L2722-L2752), [lines 3329–3335](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.cpp#L3329-L3335), [lines 3674–3678](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.cpp#L3674-L3678), [line 3958](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.cpp#L3958) | The anonymous namespace with `gFailedBlocks`, and every write of `BLOCK_FAILED_VALID`, `BLOCK_FAILED_CHILD` and `gFailedBlocks` outside C1: `InvalidBlockFound`, `FindMostWorkChain`, `InvalidateBlock`, `ResetBlockFailureFlags`, `AcceptBlock`, `LoadBlockIndexDB` and `UnloadBlockIndex`. |
 | C7 | [chain.h, lines 113–148](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/chain.h#L113-L148), [lines 308–329](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/chain.h#L308-L329) | `BlockStatus`, `IsValid` and `RaiseValidity`. |
 | C8 | [chain.cpp, lines 113–162](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/chain.cpp#L113-L162) | `GetAncestor`, `BuildSkip` and `GetBlockProof`. |
 | C9 | [consensus/validation.h, lines 12–19 and 29–62](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/consensus/validation.h#L12-L62) | The reject codes, and `CValidationState::DoS` and `Invalid`. |
@@ -172,6 +172,9 @@ The specification must keep each behaviour, and a theorem or a known answer must
     A header that fails the contextual check and has a failed ancestor gets the contextual reason.
 15. Step 6 reads `gFailedBlocks`, not the status flags.
     Only `InvalidBlockFound` and `InvalidateBlock` insert into the set [C6, lines 1359 and 2701].
+    `FindMostWorkChain` marks a candidate chain above a failed entry with `BLOCK_FAILED_CHILD` [C6, line 2400].
+    It does not change the set.
+    `ResetBlockFailureFlags` clears both flags on an entry, its descendants and its ancestors [C6, lines 2731 and 2747].
     `AcceptBlock` sets `BLOCK_FAILED_VALID` on a block that fails `CheckBlock` or `ContextualCheckBlock`, and does not insert it [C6, lines 3329–3335].
     The set is empty after a restart [C6, line 3958].
     Instead, the load of the index marks descendants with `BLOCK_FAILED_CHILD` [C6, lines 3674–3678].
@@ -277,11 +280,13 @@ A fixture or a downstream consumer often has only a recent part of the chain.
 The model therefore lets an entry have no predecessor above height 0.
 The record calls such an entry an *anchor*.
 
-An anchor is outside Core's state.
-The view below an anchor ends early, as the finite view of design record 0006 can end early.
+An anchor is outside Core's state, and the view below it ends early, as the finite view of design record 0006 can end early.
 `contextualCheckBlockHeader` then returns its existing adapter errors, `shortView` or `nextWork missingAncestor`, when it needs an entry below the anchor.
-Step 6 also needs a convention: a member of `gFailedBlocks` below an anchor is not an ancestor, because the walk cannot reach it.
-The specification states this convention as part of the domain.
+
+Step 6 also needs a convention.
+Suppose that the walk from the predecessor reaches an anchor above the height of a member of `gFailedBlocks`.
+Core's `GetAncestor` would then fail its assertion on `pprev` [C8, line 131].
+The specification treats that member as no ancestor, and states this convention as part of the domain.
 The oracle refuses a request in which a member of `failed_blocks` is not in the index.
 
 The alternative is to require an index that reaches height 0.
@@ -320,6 +325,7 @@ The record proposes a predicate `WellFormed network index` with these conditions
   The entry's height is then the predecessor's height plus one.
 - An entry without a predecessor has height 0 and the genesis hash, or it is an anchor.
 - Each height is below 2147483647, as `validateWorkView` requires.
+  A step keeps this bound with the adapter error `heightOutOfRange` (section 7.1).
 - Each member of the failed list is in the index and has `BLOCK_FAILED_VALID`, as Core asserts [C1, line 3244].
 
 The specification checks this predicate as an adapter error before the first header.
@@ -446,6 +452,12 @@ They are observables for the comparison, not a model of peer management.
 - An index that `WellFormed` rejects.
 - An adapter error of `contextualCheckBlockHeader` at an anchor: `shortView`, `nextWork` or `invalidView`.
 - An adjusted time above `INT64_MAX − 7200` (design record 0006, decision 9).
+- `heightOutOfRange`: a predecessor at height 2147483646, so that the candidate height would be 2147483647.
+
+The step checks `heightOutOfRange` after step 4 and before step 5, where Core computes the candidate height [C5, line 3068].
+Core accepts a candidate at `INT_MAX`, but the next height would overflow `int`, which is undefined behaviour.
+The specification excludes that last height, so that every entry stays in the domain of `validateWorkView`.
+At one block each minute, no Dogecoin chain reaches that height for about 4000 years.
 
 ### 7.2 Functions
 
@@ -468,6 +480,13 @@ On every other error, it is the input index.
 `processNewBlockHeaders` folds `acceptBlockHeader` over the list, and stops at the first error.
 It returns the index after the last step that ran, and the hash of the last header on success.
 For an empty list, the result is `none`, as Core leaves `ppindex` unchanged.
+
+`composeSequence n first second` combines two results, where `n` is the length of the first list:
+
+- If `first` is an error, the result is `first`.
+- Otherwise the index is the index of `second`.
+  An error of `second` has its position increased by `n`.
+  A success of `second` with `none` keeps the last hash of `first`.
 
 ### 7.3 Composition of existing definitions
 
@@ -528,7 +547,8 @@ The response has these fields:
 - `marked_failed_child`: the hashes that step 6 marked.
 - A Lean-only `diagnostic`.
 
-The comparator compares every field except `diagnostic` (item 8).
+The comparator compares every field except `diagnostic` (item 8), with one exception.
+If two members of `failed_blocks` are ancestors of one predecessor, it also excludes `marked_failed_child` (section 8.3).
 Under the [development policy](../oracle.md#format-stability), the stage 5 pull request settles the field names under ordinary review.
 
 ### 8.2 The Core side
@@ -550,15 +570,33 @@ It must prepare this global state:
   An index with anchors fails that assertion.
 - The adjusted time through `SetMockTime`, with a peer offset of zero [C15].
 
-`gFailedBlocks` is in the anonymous namespace (item 17).
-The harness can fill it only through `InvalidateBlock`, which needs the block in `chainActive`, or through a block that fails validation.
-So H1 can compare step 6 only on states that the harness builds with full blocks.
+`gFailedBlocks` is in the anonymous namespace (item 17), so the harness fills it through `InvalidateBlock`.
+That function disconnects the entry only while `chainActive` contains it [C6, line 2672].
+Then it sets `BLOCK_FAILED_VALID` and inserts the entry in every case, so a header-only entry works too [C6, lines 2698–2701].
+It needs an active tip, because `InvalidChainFound` asserts one [C6, line 1349], and it needs `pcoinsTip` for its mempool update.
+A scratch chainstate with the genesis block active supplies both.
+
+The harness can set the flags of item 15 without set membership directly in `nStatus`.
+So H1 can prepare every failure state of section 6.2, at the cost of its build.
 
 **H2: transcribe the bodies and call Core's helpers.**
 The harness transcribes `AcceptBlockHeader` [C1] and the index part of `AddToBlockIndex` [C3], as it transcribes `ContextualCheckBlockHeader` for `block.contextual_check`.
 Each step calls Core's code: `CheckAuxPowProofOfWork`, the existing transcription of `ContextualCheckBlockHeader` with Core's helpers, `CBlockIndex::GetAncestor`, `BuildSkip`, `GetBlockProof` and `Checkpoints::GetLastCheckpoint`.
 The harness owns `mapBlockIndex`, `fCheckpointsEnabled` and a failed list.
 The existing operation inserts each known checkpoint under its table hash, but this operation keys the map by the hash of each header.
+
+Anchors need two guards, because Core's `GetAncestor` asserts `pprev` when a walk passes below an anchor [C8, line 131]:
+
+- `BuildSkip` calls `GetAncestor` at the skip height [C8, line 147].
+  For example, the skip height of 144720 is 144704, below an anchor at 144719.
+  The harness calls `BuildSkip` only when the skip height is at least the height of the branch's anchor, and leaves `pskip` null otherwise.
+  The existing work and contextual operations use the same guard with Core's skip-height formula ([core_oracle.cpp](../../harness/core/core_oracle.cpp), `availableSkipHeight` and its use in the chain build).
+- Step 6 calls `GetAncestor` for each failed member.
+  The harness replaces that call with an adapter that walks `pprev`, and returns null when it reaches an anchor above the member's height.
+  The adapter follows the convention of section 5.3, and review checks it against C8, lines 113–137.
+
+The contextual check also reads ancestors through `GetAncestor` at a retarget [C14, pow.cpp line 84].
+So the harness refuses a step whose view is too short before it calls the transcription, as the existing operation does.
 
 The build links no additional object: `auxpow.o`, `chain.o`, `checkpoints.o`, `dogecoin.o` and `pow.o` are already in it.
 This record does not test that build.
@@ -567,7 +605,7 @@ This record does not test that build.
 As in design record 0006, H2 keeps the current build, and Core's code computes every value that a step compares.
 Its risk is a transcription mistake.
 Line-by-line review, and known answers with hand-derived expectations, limit that risk.
-H1 stays a later option, mainly for linear sequences without failure state.
+H1 stays a later option, when the maintainer wants Core's own `AcceptBlockHeader` in the loop.
 
 ### 8.3 Order of the failed list
 
@@ -688,7 +726,9 @@ The documentation in [docs/oracle.md](../oracle.md), COVERAGE.md and SOUNDNESS.m
 
 The names below are proposals.
 Each theorem states its domain and hypotheses in its doc comment.
+
 Every theorem except `wellFormed_preserved` assumes `WellFormed` of the input index.
+The theorems on sequences state their height budget: the greatest height in the index plus the length of the list stays below 2147483647.
 The last column estimates the proof cost.
 A *cheap* target follows from the definitions and existing theorems.
 A *new lemmas* target needs lemmas about the map, the walk or `ArithUint256`.
@@ -697,23 +737,23 @@ A *new lemmas* target needs lemmas about the map, the walk or `ArithUint256`.
 | --- | --- | --- |
 | `ancestorView_congr` | For a predecessor whose chain reaches height 0, `contextualCheckBlockHeader` gives the same result on `ancestorView` as on the whole chain of predecessors. | Cheap, from `contextualCheck_congr_prefix` |
 | `lastCheckpointInIndex_eq` | Suppose that each table hash in the index belongs to an entry at its table height. Then `lastCheckpointInIndex` equals `lastCheckpoint` of design record 0006, applied to the table heights whose hashes the index has. | New lemmas |
-| `accept_genesis` | For the genesis hash, the step accepts, and adds an entry at height 0 only if the index has none. | Cheap |
-| `accept_known` | For a known hash with no failure flag, the step accepts and returns the input index. With a flag, it returns `duplicate` and the input index. | Cheap |
+| `accept_genesis` | For the genesis hash, the step accepts, even when its entry has a failure flag (item 1). If the index has no genesis entry, the step inserts one with no predecessor, height 0, no flags and chain work `blockProof` of its `nBits`. Otherwise the index does not change. | Cheap |
+| `accept_known` | For a known hash other than genesis, with no failure flag, the step accepts and returns the input index. With a flag, it returns `duplicate` and the input index. | Cheap |
 | `accept_eq_ok_iff` | Take an unknown hash other than genesis. The step accepts exactly when four conditions hold. Step 2 passes. The predecessor exists without a flag. The contextual check accepts on the view and checkpoint of section 5.4. The predecessor has `scriptsValid`, or no member of the failed list is its ancestor. | New lemmas |
-| `accept_eq_error_iff` | For each rejection of section 3.1, the step returns it exactly when its condition fails and the conditions of all earlier steps hold. | New lemmas |
-| `accept_ok_insert` | On acceptance of an unknown hash, the result index is the input index with one inserted entry. The entry has the predecessor hash, the predecessor's height plus one and no flags. The failed list does not change. | Cheap |
+| `accept_eq_error_iff` | Take a hash other than genesis. For each rejection of section 3.1, the step returns it exactly when its condition fails and the conditions of all earlier steps hold. | New lemmas |
+| `accept_ok_insert` | On acceptance of an unknown hash other than genesis, the result index is the input index with one inserted entry. The entry has the predecessor hash, the predecessor's height plus one and no flags. The failed list does not change. | Cheap |
 | `accept_error_index` | On a rejection other than `failedAncestor`, the result index is the input index. On `failedAncestor`, only `failedChild` changes, on the entries from the predecessor down to the found member. | New lemmas |
 | `wellFormed_preserved` | Each step maps a well-formed index to a well-formed index. | New lemmas |
 | `accept_link` | Take the acceptance of an unknown hash other than genesis. The added entry's predecessor hash is the header's `hashPrevBlock`, and its height is the predecessor's height plus one. | Cheap |
-| `process_append` | The result of `xs ++ ys` is the result of `xs` if `xs` fails. Otherwise it is the result of `ys` from the index after `xs`. | Cheap |
+| `process_append` | Processing `xs ++ ys` from an index gives `composeSequence xs.length` of the result of `xs` and the result of `ys` from the index after `xs`. | Cheap |
 | `process_error_suffix` | If processing `xs` fails at position `i`, processing `xs ++ ys` fails at `i` with the same rejection and the same index. | Cheap, from `process_append` |
 | `process_prefix_ok` | If processing `xs ++ ys` succeeds, processing `xs` succeeds. | Cheap |
-| `process_linear` | Let the index have an entry `t`, and let `h₁ … hₙ` link from `t` in order. Their hashes are unknown, and the path has no failure state. The sequence succeeds exactly when each `hᵢ` passes step 2 and the contextual check. That check uses the view of `hᵢ₋₁ … h₁` followed by the view of `t`, and the last checkpoint of the index after `hᵢ₋₁`. | New lemmas |
+| `process_linear` | Let the index have an entry `t` with `t.height + n < 2147483647`, and let `h₁ … hₙ` link from `t` in order. Their hashes are unknown and differ from the genesis hash, and the path has no failure state. The sequence succeeds exactly when each `hᵢ` passes step 2 and the contextual check. That check uses the view of `hᵢ₋₁ … h₁` followed by the view of `t`, and the last checkpoint of the index after `hᵢ₋₁`. | New lemmas |
 | `process_height` | In the setting of `process_linear`, on success the entry of `hᵢ` has height `t.height + i`. | Cheap, from `accept_link` |
 | `process_no_failure` | Start from an index without failure flags and with an empty failed list. No step returns `duplicate`, `prevBlockInvalid` or `failedAncestor`, and no step sets a flag (item 19). | New lemmas |
 | `failedAncestor_verdict_perm` | The verdict and reason of a step do not depend on the order of the failed list. | New lemmas |
 | `process_adjustedTime_mono` | If processing accepts with one adjusted time, it accepts with every greater adjusted time up to `INT64_MAX − 7200`, and gives the same index. | New lemmas, from `contextualCheck_adjustedTime_mono` |
-| `process_complete` | On an index without anchors, with an adjusted time in the domain, processing returns no adapter error. | Cheap, from `contextualCheck_complete` |
+| `process_complete` | Take an index without anchors, an adjusted time in the domain, and a list of `n` headers. If every height in the index is below `2147483647 − n`, processing returns no adapter error. | Cheap, from `contextualCheck_complete` |
 | `blockProof_eq` | For a compact value whose `setCompact` result is not negative, does not overflow and is not zero, `blockProof` is `⌊2^256 / (t + 1)⌋` for its target `t`. Otherwise it is 0. | New lemmas |
 | `chainWork_add` | The chain work of an added entry is the predecessor's chain work plus `blockProof` of its `nBits`, modulo 2^256. | Cheap |
 
@@ -759,18 +799,19 @@ These proposals wait for a maintainer decision:
 | 2 | Anchors | Entries without a predecessor above height 0, with the adapter errors of `contextualCheckBlockHeader` below them (section 5.3). | An index that must reach height 0. | Proposed |
 | 3 | Map representation | M1: an association list behind one lookup and insertion interface (section 6.1). | M2 `Std.HashMap`, or M3 a function. | Proposed |
 | 4 | Failure state | Keep both flags, `scriptsValid` and the failed list apart, and specify step 6 with its marks (section 6.2). | Omit step 6, because only block validation fills the failed list. | Proposed |
-| 5 | Order of the failed list | List order in the specification and the harness. A theorem shows that the verdict does not depend on the order. The comparison excludes marks when two failed ancestors are on one path (section 8.3). | Model address order, which is not observable from a request. | Proposed |
+| 5 | Order of the failed list | List order in the specification and the harness. A theorem shows that the verdict does not depend on the order. The comparison excludes `marked_failed_child` when two members of `failed_blocks` are ancestors of one predecessor (section 8.3). | Model address order, which is not observable from a request. | Proposed |
 | 6 | Adjusted time | T1: one value for the call (section 6.3). | T2: one value for each header. | Proposed |
 | 7 | Checkpoints | Derive the last checkpoint from the index and the enabled flag, with the entry height (section 5.4). | Take known checkpoint heights from the caller for each step, as in design record 0006. | Proposed |
 | 8 | Chain work | W2: `GetBlockProof` and `nChainWork` for each entry, in stage 4. No best header (section 6.4). | W1: no chain work. W3: also `pindexBestHeader`. | Proposed |
 | 9 | Proof of work | Call `checkBlockHeader` directly on full headers (section 6.5). | A header-check parameter. | Proposed |
 | 10 | Peer layer | Exclude the checks of the `headers` message (section 6.6). | Add a wrapper for the message. | Proposed |
 | 11 | Core harness | H2: a transcription of C1 and the index part of C3 that calls Core's helpers (section 8.2). | H1: link `validation.cpp` and call `ProcessNewBlockHeaders` on a scratch chainstate. | Proposed |
-| 12 | Comparison | Compare `valid`, `failed_at`, the reason, DoS score and reject code, `last_hash`, `added` and `marked_failed_child`. Exclude the Lean diagnostic (section 8.1). | Compare only `valid` and the reason, which cannot separate the three `bad-prevblk` steps. | Proposed |
+| 12 | Comparison | Compare `valid`, `failed_at`, the reason, DoS score and reject code, `last_hash`, `added` and `marked_failed_child`. Exclude the Lean diagnostic. Exclude `marked_failed_child` when two members of `failed_blocks` are ancestors of one predecessor (sections 8.1 and 8.3). | Compare only `valid` and the reason, which cannot separate the three `bad-prevblk` steps. | Proposed |
 | 13 | Fixtures | Full-header copies of the three ranges after AuxPoW activation, in additional directories. Synthetic regtest sequences mined by an independent script. No testnet sequence fixture (section 9.2). | Real testnet headers, or synthetic testnet sequences mined at the minimum difficulty. | Proposed |
 | 14 | Block bodies | Exclude `CheckBlock`, `ContextualCheckBlock`, `AcceptBlock` and `ConnectBlock` (section 1). | None in this scope. | Proposed |
 | 15 | `CheckBlockIndex` | Exclude it, because it never changes a verdict (item 26). | Model its assertions as an adapter error. | Proposed |
 | 16 | Rust work | Implementation refinement and Rust extraction stay outside this scope. | None in this scope. | Proposed |
+| 17 | Height bound | The adapter error `heightOutOfRange` for a candidate at height 2147483647, so that every entry stays below that height (section 7.1). | Allow that one height in the index, and let later steps return `invalidView`. | Proposed |
 
 ## 14. Remaining risks
 

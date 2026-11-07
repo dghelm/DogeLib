@@ -120,7 +120,7 @@ bash scripts/test_check_decls.sh
 It builds the fixtures in `scripts/CheckDeclsTest`, which contain `sorry` and every other finding on purpose.
 The check must report each planted finding and nothing else, pass with a baseline that lists them, and fail on a stale baseline entry.
 An isolated fixture requires rejection of an imported unfinished proof.
-The self-test also plants an unimported production file and requires a failure that names its module.
+The self-test also plants an unimported production file, and one under `DogeLib/Proposals/`, and requires a failure that names each module.
 
 ## Rust refinement
 
@@ -138,6 +138,14 @@ lake env lean --run scripts/CheckRefinementImports.lean
 ```
 
 The last command rejects Aeneas, Mathlib or `Refinement` in the specification, proof and oracle libraries' transitive imports.
+It also rejects `DogeLib.Proposals` in those imports, and the refinement dependencies in the imports of the `Proposals` and `ProposalProofs` libraries.
+After a change to the check, run its self-test:
+
+```bash
+bash scripts/test_import_boundaries.sh
+```
+
+The self-test plants a module under `DogeLib/` that imports `DogeLib.Proposals`, and requires a failure that names the proposal modules.
 [Refinement/Rust/README.md](Refinement/Rust/README.md) records the contract, fixtures, pins and regeneration steps.
 
 ## Module boundaries

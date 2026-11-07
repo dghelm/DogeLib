@@ -50,6 +50,26 @@ lean_lib «Exports» where
     `DogeLib.Work.Exports, `DogeLib.Block.Exports, `DogeLib.Cryptography.Exports, `DogeLib.Script.Exports]
   precompileModules := false
 
+/-- Proposed revisions of the baseline, and the framework that states them
+(design record 0007). Rooted at `DogeLib/Proposals.lean`. It may import
+`DogeLib`. No baseline library imports it, and
+`scripts/CheckRefinementImports.lean` checks that boundary.
+`precompileModules` is off, as for `Proofs`. -/
+@[default_target]
+lean_lib «Proposals» where
+  requiresModuleSystem := true
+  roots := #[`DogeLib.Proposals]
+  precompileModules := false
+
+/-- Theorems about the proposed revisions, rooted at
+`DogeLib/Proposals/Proofs.lean` and at each proof tree under
+`DogeLib/Proposals`. It may import `Proposals`, `DogeLib` and `Proofs`. -/
+@[default_target]
+lean_lib «ProposalProofs» where
+  requiresModuleSystem := true
+  roots := #[`DogeLib.Proposals.Proofs, `DogeLib.Proposals.Framework.Proofs]
+  precompileModules := false
+
 /-- The oracle: answers requests in the record format of `docs/oracle.md`,
 one JSON object per line on standard input and output. -/
 lean_exe «dogelib-oracle» where

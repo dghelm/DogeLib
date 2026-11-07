@@ -130,6 +130,11 @@ Design records and module documentation cite these identifiers.
 | D71 | [Dogecoin string formatting: `tinyformat::detail::streamStateFromFormat` and `formatValue`, for the `%08x` of the `bad-version` reason](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/tinyformat.h) |
 | D72 | [Dogecoin adjusted time: `GetAdjustedTime` and `GetTimeOffset`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/timedata.cpp) |
 | D73 | [Dogecoin adjusted time bound: `DEFAULT_MAX_TIME_ADJUSTMENT`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/timedata.h) |
+| D80 | [Full mainnet AuxPoW-activation headers](tests/block/mainnet-auxpow-activation-full-headers/README.md), heights 371320–371340. Two Electrum servers, exact requests and fetch date 2026-11-07 in the README. `SHA256SUMS` pins the bytes. |
+| D81 | [Full mainnet BIP66 headers](tests/block/mainnet-bip66-full-headers/README.md), heights 1032483–1034390. Two Electrum servers, exact requests and fetch date 2026-11-07 in the README. `SHA256SUMS` pins the bytes. |
+| D82 | [Full mainnet BIP65 headers](tests/block/mainnet-bip65-full-headers/README.md), heights 3464739–3464760. Two Electrum servers, exact requests and fetch date 2026-11-07 in the README. `SHA256SUMS` pins the bytes. |
+| D83 | [Synthetic regtest header sequences](tests/block/regtest-header-sequences/README.md). Original standard-library generator and committed seed. Each expected verdict cites hand-inspected Core branches at the compatibility pin. `SHA256SUMS` pins the seed and fixture. |
+| D84 | [Dogecoin validation state and reject codes](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/consensus/validation.h), lines 12–19 and 35–53. `DoS` and `Invalid`, used for D83's expected scores and reject codes. |
 | E1 | [EthLib build definition](https://github.com/ethereum/EthLib/blob/bb6dfe55198243682bc2eaf94611af2dbce1be6f/lakefile.lean) |
 | E2 | [EthLib architecture](https://github.com/ethereum/EthLib/blob/bb6dfe55198243682bc2eaf94611af2dbce1be6f/ARCHITECTURE.md) |
 | E3 | [EthLib contribution policy](https://github.com/ethereum/EthLib/blob/bb6dfe55198243682bc2eaf94611af2dbce1be6f/CONTRIBUTING.md) |
@@ -197,6 +202,27 @@ No definition reads the hash, so the difference changes no behaviour.
 [`mainnet-bip65-headers`](tests/block/mainnet-bip65-headers/README.md) holds heights 3464739–3464760, anchored by the hash in the comment on `BIP65Height` (D14, line 86), the block at 3464751.
 The tests check every predecessor link and each anchor after double SHA-256 and display-order reversal.
 The fixtures do not change any reference pin.
+
+## Header-sequence fixture evidence
+
+D80–D82 retain the full serialization of the existing pure ranges, including AuxPoW payloads.
+Their READMEs give two-server provenance and link to the existing pinned anchors.
+`scripts/check_full_headers.py` independently checks record boundaries, exact pure-header agreement, predecessor links, anchors and scrypt work.
+D10 and D54 supply the layout, and D6 and D17 supply the work-bearing header and target comparison.
+This check does not establish AuxPoW commitments or sequence acceptance.
+
+D83 supplies synthetic regtest requests and expected verdicts for design record 0008, section 9.4.
+`scripts/generate_header_sequences.py --check` reproduces the committed bytes from `seed.txt` and explicit hand-derived expectation declarations.
+D33 (`src/validation.cpp:3205-3286`) supplies acceptance order, rejection and index effects.
+
+D84 supplies reject constants and the zero score of `Invalid`.
+D14 (`src/chainparams.cpp:390-432,446-451`) supplies regtest constants and activation heights.
+D17 (`src/pow.cpp:32-87,115-129`) and D6 (`src/dogecoin.cpp:41-124`) supply work checks and required bits.
+D18 (`src/chain.h:284-301,308-314`) supplies median time and scripts-valid semantics.
+
+The short-anchor expectation follows design record 0008, sections 5.3 and 7.1, outside Core's complete-chain state.
+The fixture READMEs state the limits of this evidence.
+No Lean test, oracle or comparator consumes D80–D83 yet, and no source pin changes.
 
 ## Operation-to-source mapping
 

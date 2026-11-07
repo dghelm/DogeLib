@@ -147,8 +147,20 @@ jobs:
           (cd tests/block/mainnet-auxpow-activation-headers && sha256sum -c SHA256SUMS)
           (cd tests/block/mainnet-bip65-headers && sha256sum -c SHA256SUMS)
           (cd tests/block/mainnet-bip66-headers && sha256sum -c SHA256SUMS)
+          (cd tests/block/mainnet-auxpow-activation-full-headers && sha256sum -c SHA256SUMS)
+          (cd tests/block/mainnet-bip65-full-headers && sha256sum -c SHA256SUMS)
+          (cd tests/block/mainnet-bip66-full-headers && sha256sum -c SHA256SUMS)
+          (cd tests/block/regtest-header-sequences && sha256sum -c SHA256SUMS)
           (cd tests/script/corpus && sha256sum -c SHA256SUMS)
           (cd tests/script/signed-spends && sha256sum -c SHA256SUMS)
+
+      - name: full-header fixture check
+        if: ${{ !cancelled() }}
+        run: python3 -I scripts/check_full_headers.py
+
+      - name: header-sequence regeneration
+        if: ${{ !cancelled() }}
+        run: python3 -I scripts/generate_header_sequences.py --check
 
       - name: script corpus freshness
         if: ${{ !cancelled() }}

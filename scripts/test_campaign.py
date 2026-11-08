@@ -287,6 +287,9 @@ def main():
     checks += stage2(args, wrapper, check)
     from test_campaign_reducer import stage3
     checks += stage3(args, check, wrapper)
+    # Stage 4 at L1. scripts/test_campaign_production.py --node adds L3.
+    from test_campaign_production import stage4
+    checks += stage4(args, check, wrapper)
     print(f'{checks} cases, 0 failures')
     return 0
 

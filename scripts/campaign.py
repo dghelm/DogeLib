@@ -3,6 +3,7 @@
 import argparse
 import copy
 import hashlib
+import http.client
 import json
 import itertools
 import math
@@ -464,6 +465,9 @@ def run_campaign(args, cases=None, revisions=None):
 
 def replay(args):
     """Resend saved requests unchanged and compare their class and failing side."""
+    if getattr(args, 'level', None):
+        from campaign_production import replay as production_replay
+        return production_replay(args)
     record = json.loads(pathlib.Path(args.failure).read_text())
     if record['format'] != FORMAT:
         raise ValueError('unsupported saved-failure format')
@@ -487,9 +491,19 @@ def replay(args):
                                      for s, e in zip(run['responses'], entries)) for run in probes)
         print(json.dumps(dict(reproduced=reproduced, **{'class': record['class']}, failing_side='signer')))
         return 0 if reproduced else 1
+    runs, results = resend(record, args.oracle, args.harness)
+    reproduced = any(result[0] == record['class'] and result[1] == record['failing_side']
+                     for _, result in results)
+    print(json.dumps(dict(reproduced=reproduced, **{'class': record['class']},
+                          failing_side=record['failing_side'])))
+    return 0 if reproduced else 1
+
+
+def resend(record, oracle, harness):
+    """Send the stored requests unchanged to both programs and classify their responses again."""
     requests = record['requests']
     runs = {side: execute(program, requests, record['timeout'], record.get('program_arguments', {}).get(side, ()))
-            for side, program in (('lean', args.oracle), ('core', args.harness))}
+            for side, program in (('lean', oracle), ('core', harness))}
     if record.get('plan', {}).get('mode') == 'proposal':
         from campaign_proposal import assess as assess_proposal
         results = assess_proposal([dict(item, requests=[request]) for item, request in
@@ -506,11 +520,7 @@ def replay(args):
         results = assess_cases(cases, runs)
     else:
         results = assess(requests, runs)
-    reproduced = any(result[0] == record['class'] and result[1] == record['failing_side']
-                     for _, result in results)
-    print(json.dumps(dict(reproduced=reproduced, **{'class': record['class']},
-                          failing_side=record['failing_side'])))
-    return 0 if reproduced else 1
+    return runs, results
 
 
 def positive(text):
@@ -548,7 +558,13 @@ def main():
     run.add_argument('--inputs', nargs='+', choices=INPUTS, default=list(INPUTS[:3]))
     run.add_argument('--output', required=True, help='parent directory for fresh runs under build/campaign/')
     again = commands.add_parser('replay')
-    again.add_argument('--signer', help='replay signing requests for a signer failure')
+    again.add_argument('--signer', help='replay signing requests for a signer failure, or re-sign at L3')
+    again.add_argument('--level', choices=('L1', 'L3'),
+                       help='replay through the production path of design record 0009, section 9.1, and record it')
+    again.add_argument('--target', choices=('pin', 'upstream'), default='pin',
+                       help='with --level: label the Core revision as the pin or as current upstream')
+    again.add_argument('--revision', help='with --level: the full Core commit that the builds must name')
+    again.add_argument('--node', help='with --level L3: a scripts/build_core_node.sh build directory')
     again.add_argument('failure')
     shrink = commands.add_parser('reduce')
     shrink.add_argument('--max-candidates', type=positive_int, default=2000)
@@ -584,7 +600,7 @@ def main():
         # Flags 0 make every case of the section 8.1 space supported, so an unsupported result means that the search checked nothing.
         unchecked = args.campaign == 'proposal' and summary['counts']['unsupported']
         return 1 if summary['failures'] or summary['exhausted'] or unchecked else 0
-    except (OSError, ValueError, KeyError) as error:
+    except (OSError, ValueError, KeyError, subprocess.SubprocessError, http.client.HTTPException) as error:
         print(f'campaign: {error}', file=sys.stderr)
         return 2
 

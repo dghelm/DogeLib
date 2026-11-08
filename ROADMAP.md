@@ -99,7 +99,7 @@ Section 10 of the record gives five stages, and section 11 gives their theorem t
 | 1 | The block-index model, the ancestor view and the checkpoint search over the index | Specified in `Block.HeaderSequence`, with the targets `ancestorView_congr` and `lastCheckpointInIndex_eq` and known answers from five mainnet ranges |
 | 2 | One step, `acceptBlockHeader`, with its characterization theorems | Specified in `Block.HeaderSequence`, with every step target of section 11. Section 13.1 of the record replaces `accept_genesis` with `accept_genesis_known`, `accept_genesis_insert` and `accept_genesis_parent`. Known answers from the regtest fixture and from mainnet full headers |
 | 3 | The sequence, `processNewBlockHeaders`, with the linear theorem `process_linear` | Specified in `Block.HeaderSequence`, with every sequence target of section 11. `process_complete` also takes `n ≤ 2147483647` for an index without entries (section 13.2 of the record). Known answers from all 34 regtest cases in full and from 14 mainnet sequences |
-| 4 | `GetBlockProof` and the chain work of each entry | Not started |
+| 4 | `GetBlockProof` and the chain work of each entry | Specified as `Work.blockProof` in `Work.ChainWork` and `IndexEntry.chainWork` in `Block.HeaderSequence`, with the targets `blockProof_eq` and `chainWork_add` and the chain work of `accept_genesis_insert` (section 13.1). Known answers of `GetBlockProof` for 11 compact values, the chain work of every added regtest entry, and two mainnet sequences |
 | 5 | The oracle operation `block.header_sequence`, the Core harness and the comparison | Not started |
 
 One other candidate is unscheduled, and it needs an approved scope before work starts:

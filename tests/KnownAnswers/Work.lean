@@ -466,6 +466,50 @@ def checkProofOfWorkCases : IO Nat := do
   return failures
 
 /-!
+### Block proof
+
+`GetBlockProof` (D75, `src/chain.cpp` lines 150 to 163) through the compiled `blockProof`.
+Core's tests at the pin have no `GetBlockProof` case, so each expected value below is derived by hand.
+For a target `t` without sign or overflow, the value is `⌊2^256 / (t + 1)⌋`, and `SetCompact` gives `t = m * 256^(nSize - 3)`.
+Each derivation was also checked with Python integers, as `2**256 // (t + 1)` for the target that the comment gives.
+
+- `0x1e0fffff`, the compact form of the mainnet and testnet `powLimit` `~uint256(0) >> 20` (D14).
+  `t = (2^20 - 1) * 2^216`.
+  `(2^20 + 1)(t + 1) = 2^256 - 2^216 + 2^20 + 1 ≤ 2^256`, and `(2^20 + 2)(t + 1) > 2^256`.
+  So the value is `2^20 + 1 = 0x100001`.
+- `0x207fffff`, the compact form of the regtest `powLimit` `~uint256(0) >> 1` (D14).
+  `t = (2^23 - 1) * 2^232`, and `2(t + 1) < 2^256 < 3(t + 1)`, so the value is 2.
+- `0x1e0ffff0`, the `nBits` of the mainnet genesis header (D9).
+  `t = (2^20 - 16) * 2^216`.
+  `(2^20 + 16)(t + 1) = 2^256 - 2^224 + 2^20 + 16 ≤ 2^256`, and `(2^20 + 17)(t + 1) > 2^256`.
+  So the value is `2^20 + 16 = 0x100010`.
+- `0x03000001`, the smallest nonzero target 1: `2^256 / 2 = 2^255`.
+- `0x22000001`, the target `2^248` with `nSize` 34 and no overflow: `⌊2^256 / (2^248 + 1)⌋ = 255`.
+- `0x2100ffff`, the target `(2^16 - 1) * 2^240`: `⌊2^16 / (2^16 - 1 + 2^-240)⌋ = 1`.
+- `0x04923456`, a negative value of D16 (`arith_uint256_tests.cpp` line 517): `fNegative`, so 0.
+- `0xff123456`, an overflow of D16 (line 535): `fOverflow`, so 0.
+- `0x00000000`, `0x01003456` and `0x20800000`: the target is zero without a flag, so 0.
+  `0x01003456` shifts its mantissa out, and `0x20800000` is the sign bit with a zero mantissa.
+-/
+
+/-- The hand-derived block proofs of the list above, as compact value and expected value. -/
+def blockProofCases : List (UInt32 × Nat) :=
+  [(0x1e0fffff, 0x100001), (0x207fffff, 2), (0x1e0ffff0, 0x100010), (0x03000001, 2 ^ 255),
+   (0x22000001, 255), (0x2100ffff, 1), (0x04923456, 0), (0xff123456, 0), (0x00000000, 0),
+   (0x01003456, 0), (0x20800000, 0)]
+
+/-- Runs `blockProof` on the hand-derived cases and returns the failure count. -/
+def checkBlockProof : IO Nat := do
+  let mut failures := 0
+  for (nBits, expected) in blockProofCases do
+    let got := (blockProof nBits).val
+    if got != expected then
+      IO.eprintln s!"FAIL block proof {hex32 nBits}: {got}, expected {expected}"
+      failures := failures + 1
+  IO.println s!"block proof: {blockProofCases.length} cases, {failures} failures"
+  return failures
+
+/-!
 ### Mainnet headers
 
 The raw fixture and its Electrum provenance are in `tests/work/mainnet-headers/README.md`.
@@ -662,6 +706,7 @@ end KnownAnswers.Work
 
 /-- Named checks for Work known answers, in alphabetical order. -/
 def KnownAnswers.Work.checks : List (String × IO Nat) := [
+  ("blockProof", KnownAnswers.Work.checkBlockProof),
   ("compact", KnownAnswers.Work.checkCompact),
   ("mainnetHeaders", KnownAnswers.Work.MainnetHeaders.check),
   ("nextWork", KnownAnswers.Work.checkNextWork),

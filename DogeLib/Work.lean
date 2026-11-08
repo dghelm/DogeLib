@@ -5,6 +5,7 @@ public import DogeLib.Work.ArithUint256Bytes
 public import DogeLib.Work.ArithUint256Compact
 public import DogeLib.Work.ArithUint256Division
 public import DogeLib.Work.ArithUint256Words
+public import DogeLib.Work.ChainWork
 public import DogeLib.Work.Consensus
 public import DogeLib.Work.MedianTimePast
 public import DogeLib.Work.NextWork
@@ -15,5 +16,5 @@ public import DogeLib.Work.RetargetWords
 /-!
 # `DogeLib.Work`
 
-Proof of work: the 256-bit arithmetic of targets, their compact encoding, and the difficulty retarget.
+Proof of work: the 256-bit arithmetic of targets, their compact encoding, the difficulty retarget, and the work of one block.
 -/

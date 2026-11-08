@@ -627,6 +627,8 @@ By `#print axioms` with Lean `v4.35.0`:
 `HeaderIndex` holds the entries of `mapBlockIndex` (D69, lines 169 and 170) as an association list, and the members of `gFailedBlocks` (D33, line 180) as a list.
 Each `IndexEntry` holds the pure header, the height and the hash of its predecessor (D18, lines 164 to 171).
 It also holds the two failure flags and a flag for the validity level `BLOCK_VALID_SCRIPTS` (D18, lines 136, 146 and 147).
+Stage 4 adds `chainWork`, Core's `nChainWork` (D18, line 183), which [chain work](#chain-work) describes.
+
 The other definitions read the list only through `HeaderIndex.lookup`, so a later lane can change the representation behind that interface.
 Source review, not a theorem, connects the model to Core's `CBlockIndex`.
 
@@ -708,7 +710,8 @@ For any other hash, it runs the steps of the record's section 3.1 in Core's orde
 5. `contextualCheckBlockHeader` on `ancestorView` of the predecessor and on `lastCheckpointInIndex` (lines 3238 and 3239).
 6. Unless the predecessor has `scriptsValid`, no member of the failed list may be an ancestor of the predecessor (lines 3241 to 3256).
    A failure marks the entries from the predecessor down to that member with `failedChild`, without the member, and then rejects.
-7. `addToBlockIndex`, the index part of `AddToBlockIndex` (lines 2755 to 2788), without chain work, `nTimeMax`, `pindexBestHeader` and the dirty set.
+7. `addToBlockIndex`, the index part of `AddToBlockIndex` (lines 2755 to 2788), without `nTimeMax`, `pindexBestHeader` and the dirty set.
+   Stage 4 adds the chain work of the new entry (line 2780), which [chain work](#chain-work) describes.
 
 `HeaderRejection` has one constructor for each rejection, and `rejectReason`, `dosScore` and `rejectCode` give Core's reason, score and code.
 The scores and codes come from `state.DoS` and `state.Invalid` at each line (D84, lines 12 to 19 and 35 to 53).
@@ -745,6 +748,7 @@ Each target of the record's section 11 takes an index that satisfies `WellFormed
   No proof-of-work check runs (item 6).
 - `accept_genesis_known`: with an entry under the genesis hash, the step accepts and returns the input index, even when the entry has a failure flag (item 1).
 - `accept_genesis_insert`: without that entry, and without an entry under the header's `hashPrevBlock`, the step inserts an entry with no predecessor, height 0 and no flags.
+  Its chain work is `blockProof` of its `nBits` (stage 4, as section 13.1 of the record says).
 - `accept_genesis_parent`: without that entry, but with an entry under `hashPrevBlock`, the step links the new entry to it or returns `heightOutOfRange`.
 - `accept_eq_ok_iff`: an unknown hash other than genesis is accepted exactly when five conditions hold.
   Step 2 passes, and the predecessor exists without a flag below `maxPrevHeight`.
@@ -754,6 +758,7 @@ Each target of the record's section 11 takes an index that satisfies `WellFormed
   `accept_eq_heightOutOfRange_iff` is its companion: `heightOutOfRange` occurs exactly when steps 1 to 4 pass and the predecessor is at height 2147483646.
 - `accept_ok_insert` and `accept_link`: an acceptance of an unknown hash other than genesis inserts one entry.
   The entry has the predecessor `hashPrevBlock`, the predecessor's height plus one and no flags.
+  `accept_ok_insert` also gives its chain work, the predecessor's chain work plus `blockProof` of its `nBits`.
   The failed list does not change.
 - `accept_error_index`: an adapter error, or a rejection other than `failedAncestor`, returns the input index.
   `failedAncestor` changes only `failedChild`, on the keys of `failedChildPath`, and keeps the failed list.
@@ -837,8 +842,9 @@ No theorem says that a caller supplies the values that a node holds:
 - **The checkpoint option.** `checkpointsEnabled` stands for `fCheckpointsEnabled` (D69), as in [contextual header validation](#contextual-header-validation).
   The last checkpoint itself comes from the index at each step.
   So a checkpoint block that an earlier header of the call adds counts for the later headers.
-- **The initial index.** Its anchors, failure flags, validity flags and failed list are inputs.
+- **The initial index.** Its anchors, failure flags, validity flags, failed list and the chain work of each supplied entry are inputs.
   `checkWellFormed` checks the conditions of `WellFormed`, but no theorem says that the index is the state that a node holds.
+  `WellFormed` does not constrain chain work, so a supplied entry can carry any value.
 
 The theorems in `Block.Proofs.HeaderSequence` hold for every network and context.
 Each target takes an index that satisfies `WellFormed`, as section 11 of the record requires, even when its proof does not use it:
@@ -881,6 +887,7 @@ The specification does not use them.
 - The regtest fixture (D83): all 34 cases in full, each with the request's index, failed list, adjusted time, checkpoint option and headers.
   The fixture derives every expected field by hand.
   The fields are the outcome, failure position, reason, DoS score, reject code, adapter error, marks, added entries in insertion order and last hash.
+  Stage 4 adds the chain work of each added entry.
 - 14 mainnet sequences with real headers, from the pure fixtures and from the full fixtures D80–D82.
   Each call uses the latest header time of its list as the adjusted time.
   The expected acceptances come from chain acceptance, and each other result comes from hand derivation from D33 and the record.
@@ -906,6 +913,60 @@ By `#print axioms` with Lean `v4.35.0`:
 | `propext` | `composeSequence_of_error` |
 | `propext`, `Quot.sound` | `lookup_addToBlockIndex_of_some`, `lookup_addHeaders_of_some`, `contextualViewDepth_antitone` |
 | `propext`, `Classical.choice`, `Quot.sound` | `processSteps_eq_compose`, `processSteps_append`, `wellFormed_processSteps`, `processNewBlockHeaders_of_wellFormed`, `processNewBlockHeaders_of_not_wellFormed`, `process_append`, `process_error_suffix`, `process_prefix_ok`, `accept_ok_index`, `processSteps_ok_index`, `linearView_cons`, `ancestorView_congr_walk`, `ancestorWalk_insert_fresh`, `ancestorHashAt_insert_fresh`, `isAncestorInIndex_linked`, the `LinearSetting` theorems `foundPrev`, `unknownHead`, `addToBlockIndex_eq`, `next`, `accept_ok_iff`, `ancestorWalk_linked`, `steps_ok_iff`, `walk` and `lookup_addHeaders`, `process_linear`, `process_height`, `lookup_addToBlockIndex`, `accept_no_failure`, `process_no_failure`, `accept_adjustedTime_mono`, `processSteps_adjustedTime_mono`, `process_adjustedTime_mono`, `ancestorWalk_last_zero`, `accept_complete`, `processSteps_complete`, `process_complete` |
+
+### Chain work
+
+`blockProof` in `DogeLib.Work.ChainWork` specifies Core's `GetBlockProof` (D75, `src/chain.cpp` lines 150 to 163), design record 0008, stage 4.
+It decodes `nBits` with `ArithUint256.setCompact`, and returns 0 when `SetCompact` reports a negative value or an overflow, or when the target is zero.
+Otherwise it returns `(~t / (t + 1)) + 1`, with both additions modulo 2^256 (line 162).
+`ArithUint256.complement` states `operator~` (D12, lines 69 to 75) as `2^256 - 1 - t`.
+The model states each operation by its arithmetic result, as [compact encoding and difficulty retarget](#compact-encoding-and-difficulty-retarget) does, and has no word model.
+Source review, not a theorem, connects these results to Core's word loops.
+
+Core's division throws for a zero divisor, and `t + 1` is zero modulo 2^256 only for `t = 2^256 - 1`.
+`blockProof` returns 0 in that branch.
+`setCompact_value_ne_max` proves that no compact value decodes to `2^256 - 1`, so the branch is unreachable.
+
+`IndexEntry.chainWork` holds Core's `nChainWork` (D18, line 183).
+`addToBlockIndex` sets the chain work of a new entry to the predecessor's chain work plus `blockProof` of its `nBits`, modulo 2^256 (D33, line 2780).
+Without a predecessor, it is `blockProof` alone, as Core adds the proof to 0.
+An anchor holds a chain work that the caller supplies, and `WellFormed` does not constrain it.
+So the chain work of an entry above an anchor counts only the headers above the anchor, plus the supplied value.
+The model omits `pindexBestHeader` and its comparison of chain work (lines 2782 and 2783), design record 0008, decision 8.
+
+The theorems hold for every compact value, network and context:
+
+- `blockProof_eq` (`Work.Proofs.ChainWork`): if `SetCompact` reports no sign and no overflow and the target `t` is not zero, `blockProof` is `⌊2^256 / (t + 1)⌋`.
+  Otherwise it is 0.
+- `chainWork_add` (`Block.Proofs.HeaderSequence`): take a well-formed index, and let the step accept a hash that the index lacks, genesis or not.
+  If the index has an entry under the header's `hashPrevBlock`, the new entry links to it.
+  Its chain work is then that entry's chain work plus `blockProof` of `nBits`, modulo 2^256.
+  Otherwise the new entry has no predecessor, and its chain work is `blockProof` of `nBits`.
+- `accept_ok_addToBlockIndex`: an acceptance of a hash that the index lacks returns `addToBlockIndex` of the input index.
+- `accept_genesis_insert`, `accept_genesis_parent`, `accept_ok_insert` and `addToBlockIndex_of_unknown` state the chain work of the inserted entry with its other fields.
+
+These theorems establish the behaviour of DogeLib's definitions.
+No theorem says that a supplied chain work is the value that a node holds.
+
+`lake test` runs the compiled code:
+
+- `blockProof` on 11 compact values with hand-derived expectations.
+  They include the limits `0x1e0fffff` of mainnet and testnet and `0x207fffff` of regtest, and the mainnet genesis `nBits` `0x1e0ffff0`.
+  They also include three other targets, a negative value and an overflow from D16, and three zero targets.
+  `tests/KnownAnswers/Work.lean` records each derivation.
+- The chain work of every added entry of the 34 regtest cases (D83).
+  Each added entry has a block proof of 2, which the README derives.
+  The version cases start from supplied anchor work, and in `version-upgraded-1351` the last entry wraps from 2^256 − 1 to 1.
+- The genesis range from an empty index: the entry at height `h` has chain work `0x100010 * (h + 1)`.
+- 300 mainnet headers from 144730: five sums of block proofs, computed with Python integers from the fixture's `nBits` fields.
+
+These checks do not run Core, and the Core comparison is stage 5 of the record.
+
+By `#print axioms` with Lean `v4.35.0`:
+
+| Axioms | Theorems |
+| --- | --- |
+| `propext`, `Classical.choice`, `Quot.sound` | `setCompact_value_ne_max` and `blockProof_eq` in `Work.Proofs.ChainWork`. `chainWork_add` and `accept_ok_addToBlockIndex` in `Block.Proofs.HeaderSequence` |
 
 ### RIPEMD-160 and Hash160
 

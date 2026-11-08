@@ -6,9 +6,10 @@
 #
 # --revision builds against another Core commit for a labelled replay
 # (design record 0009, section 9.2). It needs a build directory other than
-# build/core-harness. core.stamp then names that commit on its first line,
-# <build-dir>/core.revision holds it, and both programs report it as
-# `core_revision` in their --version output. Without --revision the build and
+# build/core-harness. The first line of core.stamp is then
+# `revision <commit>` instead of `pin <commit>`, <build-dir>/core.revision
+# holds the commit, and both programs report it as `core_revision` in their
+# --version output. Without --revision the build and
 # its output are unchanged. The option never changes the pin.
 #
 # The script exports the pinned tree with `git archive`, so the build never
@@ -60,7 +61,7 @@ core_cxxflags="-O2 -ffunction-sections -fdata-sections"
 core_cflags="-O2"
 
 stamp_text() {
-  echo "pin $PIN"
+  if [ -n "$revision" ]; then echo "revision $PIN"; else echo "pin $PIN"; fi
   echo "script $(sha256sum "$here/scripts/build_core_harness.sh" | cut -d' ' -f1)"
   echo "cc $("$cc" --version | head -n1)"
   echo "cxx $("$cxx" --version | head -n1)"

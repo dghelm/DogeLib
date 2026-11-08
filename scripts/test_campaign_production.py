@@ -191,6 +191,17 @@ def stage4(args, check, wrapper, node=None, upstream=None):
                   f"{wrapped['responses'][-1]['ok']['result']} on the same bytes, and the candidate is a "
                   f"harness fault ({time.monotonic() - started:.1f} s)")
             checks += 1
+            node_revision = (pathlib.Path(node) / 'node.revision').read_text().strip()
+            if upstream and (pathlib.Path(upstream).parent / 'core.revision').read_text().strip() == node_revision:
+                status, output, error = command('replay', '--level', 'L3', '--target', 'upstream', '--signer',
+                                                str(pathlib.Path(upstream).with_name('core-signer')), '--node', node,
+                                                str(target), args.oracle, upstream)
+                check(status == 1 and output['outcome'] == 'not-reproduced', f'L3 upstream: {status} {output} {error}')
+                check(output['classification'] == 'harness-fault', output)
+                print(f"ok L3 upstream {output['revision']}: the node does not reproduce the candidate")
+                checks += 1
+            elif upstream:
+                print('skip L3 upstream: the node build and the upstream harness name different commits')
             checks += l3_positives(args, check, signer, node)
     return checks
 

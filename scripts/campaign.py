@@ -70,12 +70,12 @@ def run_captured(program, args, data, timeout, capture):
     return capture['stdout']
 
 
-def execute(program, requests, timeout):
+def execute(program, requests, timeout, arguments=()):
     """Retain raw output and status, including responses before a stream failure."""
     capture = {}
     try:
         data = ''.join(canonical(request) + '\n' for request in requests)
-        lines = run_captured(program, [], data, timeout, capture).splitlines()
+        lines = run_captured(program, arguments, data, timeout, capture).splitlines()
         if len(lines) != len(requests):
             raise RunError('COUNT', f'{program}: {len(lines)} responses to {len(requests)} requests', capture)
         responses = []
@@ -145,10 +145,71 @@ def metadata(oracle, harness, timeout):
                 versions=versions, CORE_SIGNER_BLOB=None)
 
 
+def case_requests(case):
+    """Keep stage-1 single requests and generated request groups in send order."""
+    return case.get('requests', [case['request']] if 'request' in case else [])
+
+
+def assess_cases(cases, runs):
+    """Apply Q6 to requests, then the independently stated generated property."""
+    requests = [r for case in cases for r in case_requests(case)]
+    results = assess(requests, runs)
+    if results and results[0][0] is None:
+        return results
+    grouped, offset = [], 0
+    for index, case in enumerate(cases):
+        size = len(case_requests(case))
+        local = {side: dict(run, responses=run['responses'][offset:offset + size]) for side, run in runs.items()}
+        q6 = [result for i, result in results if offset <= i < offset + size]
+        prop = None
+        if 'expected' in case:
+            from campaign_generator import property_result
+            prop = property_result(case, local)
+        if prop or q6:
+            grouped.append((index, prop or q6[0]))
+        offset += size
+    return grouped
+
+
+def prepare_generated(args, plans, timeout):
+    """Sign a batch and check every signing digest before constructing spends."""
+    from campaign_generator import signing_requests, materialize
+    signing = [signing_requests(case['plan'], f"generated-{case['case_index']}") for case in plans]
+    flat = [r for group in signing for r in group]
+    signed = execute(args.signer, flat, timeout, ['--sign'])
+    if 'error' in signed:
+        entries = [dict(request=r, process=signed) for r in flat]
+    else:
+        entries = [dict(request=r, response=s) for r, s in zip(flat, signed['responses'])]
+    checks = [dict({k: v for k, v in r.items() if k != 'key_ids'}, op='sighash.legacy') for r in flat]
+    # A structured signer refusal has no digest and never reaches either oracle.
+    if 'error' in signed or any('error' in e['response'] for e in entries):
+        return None, entries, signed
+    runs = {side: execute(program, checks, timeout) for side, program in (('lean', args.oracle), ('core', args.harness))}
+    if assess(checks, runs):
+        return None, entries, dict(preflight_requests=checks, oracle_runs=runs)
+    if any(run['responses'][i].get('ok', {}).get('digest_hex') != e['response']['ok']['digest_hex']
+           for run in runs.values() for i, e in enumerate(entries)):
+        return None, entries, dict(preflight_requests=checks, oracle_runs=runs, signer_digest=True)
+    offset, cases = 0, []
+    for case, requests in zip(plans, signing):
+        size = len(requests)
+        built = materialize(case['plan'], f"generated-{case['case_index']}", entries[offset:offset + size])
+        built['case_index'] = case['case_index']
+        cases.append(built)
+        offset += size
+    return cases, entries, runs
+
+
 def run_campaign(args, cases=None):
     """Run bounded batches, isolate stream failures and save complete evidence locally."""
     started = time.monotonic()
     deadline = started + args.seconds
+    generated = args.campaign == 'generated'
+    if cases is None and generated:
+        from campaign_generator import plans
+        seeds = selected_cases(['signed-spends'], args.seed)
+        cases = seeds + [dict(plan=p) for p in plans(args.seed, max(0, args.cases - len(seeds)))]
     cases = selected_cases(args.inputs, args.seed) if cases is None else cases
     cases = cases[:args.cases]
     # Probe the programs first, so that an invocation error leaves no empty run directory.
@@ -162,22 +223,33 @@ def run_campaign(args, cases=None):
     counts.update(pass_count=0, known=0)
     batch_counts = dict(crash=0, timeout=0)
     saved, completed, attempts = [], 0, 0
+    coverage = {key: {} for key in ('branches', 'hash_types', 'errors', 'mutations', 'properties', 'modes',
+                                   'input_positions', 'input_counts', 'output_counts', 'selectors', 'flags')}
+
+    def reach(key, value):
+        name = str(value)
+        coverage[key][name] = coverage[key].get(name, 0) + 1
 
     def save(batch, result, runs, history):
         kind, side, message, code = result
-        requests = [case['request'] for case in batch]
-        text = canonical(requests[0]) if len(requests) == 1 else canonical(requests)
+        requests = [r for case in batch for r in case_requests(case)]
+        signer = [entry for case in batch for entry in case.get('signer', [])]
+        text = canonical(requests[0]) if len(requests) == 1 else canonical(requests or signer)
         digest = hashlib.sha256(text.encode()).hexdigest()
         path = output / 'failures' / f'{digest}.json'
         replay = shlex.join([sys.executable, '-I', str(ROOT / 'scripts/campaign.py'), 'replay',
                              str(path.resolve()), args.oracle, args.harness])
+        if side == 'signer':
+            replay += ' --signer ' + shlex.quote(args.signer)
         record = dict(format=FORMAT, campaign=args.campaign, seed=args.seed,
                       case_index=batch[0]['case_index'], budget=dict(cases=args.cases, seconds=args.seconds),
-                      property='Q6', **{'class': kind}, failing_side=side,
-                      plan=dict(mode='existing', inputs=[{k: v for k, v in case.items() if k != 'request'} for case in batch]),
-                      requests=requests, signer=[], responses=runs,
-                      expected=dict(relation='compare_core.compare agreement',
+                      property=batch[0].get('expected', {}).get('property', 'Q6'), **{'class': kind}, failing_side=side,
+                      plan=dict(mode='generated' if generated else 'existing', inputs=[{k: v for k, v in case.items()
+                                                                                       if k not in ('request', 'requests', 'signer')} for case in batch]),
+                      requests=requests, signer=signer, responses=runs,
+                      expected=batch[0].get('expected', dict(relation='compare_core.compare agreement',
                                     text='Design record 0009, section 11, Q6. No independent verdict is asserted.'),
+                      ),
                       revisions=revisions, build=build, replay=replay, reduced_from=None,
                       detail=dict(message=message, code=code), timeout=args.timeout,
                       batch_failures=history)
@@ -188,7 +260,38 @@ def run_campaign(args, cases=None):
         nonlocal completed, attempts
         if time.monotonic() >= deadline:
             return False
-        requests = [case['request'] for case in batch]
+        pending = [case for case in batch if 'plan' in case and 'requests' not in case]
+        if generated and pending:
+            if len(pending) != len(batch):
+                return visit([case for case in batch if case not in pending], history) and visit(pending, history)
+            built, entries, evidence = prepare_generated(args, batch, min(args.timeout, max(0.001, deadline - time.monotonic())))
+            if time.monotonic() >= deadline:
+                return False
+            if built is None:
+                if len(batch) > 1:
+                    middle = len(batch) // 2
+                    return visit(batch[:middle], history) and visit(batch[middle:], history)
+                batch[0]['signer'] = entries
+                result = ('digest', 'signer', 'signing digest preflight failed', 'SIGNER_DIGEST')
+                if 'oracle_runs' in evidence:
+                    batch[0]['requests'] = evidence['preflight_requests']
+                    if not evidence.get('signer_digest'):
+                        result = assess(batch[0]['requests'], evidence['oracle_runs'])[0][1]
+                    evidence = evidence['oracle_runs']
+                elif 'error' in evidence:
+                    result = ('timeout' if evidence['error']['code'] == 'TIMEOUT' else 'crash', 'signer',
+                              'signer process failed', evidence['error']['code'])
+                elif any('error' in e.get('response', {}) for e in entries):
+                    result = ('refusal', 'signer', 'signer refused request', 'SIGNER_REFUSAL')
+                counts[result[0]] += 1
+                completed += 1
+                save(batch, result, evidence, history)
+                return True
+            batch = built
+            for entry in entries:
+                revisions['CORE_SIGNER_BLOB'] = entry['response']['ok']['CORE_SIGNER_BLOB']
+                revisions['signer_request_blob'] = entry['response']['ok']['request_source_blob']
+        requests = [r for case in batch for r in case_requests(case)]
         runs = {}
         for side, program in (('lean', args.oracle), ('core', args.harness)):
             # Do not impose an artificial timeout after the campaign budget expires.
@@ -206,7 +309,7 @@ def run_campaign(args, cases=None):
                     break
                 return False
         attempts += 1
-        results = assess(requests, runs)
+        results = assess_cases(batch, runs)
         if results and results[0][0] is None and len(batch) > 1:
             evidence = history + [dict(requests=requests, responses=runs)]
             middle = len(batch) // 2
@@ -224,13 +327,37 @@ def run_campaign(args, cases=None):
             return left and right
         completed += len(batch)
         counts['pass_count'] += len(batch) - len(results)
+        failed = {index for index, _ in results}
+        offset = 0
+        for index, case in enumerate(batch):
+            size = len(case_requests(case))
+            if 'expected' in case:
+                p = case['plan']
+                for key, value in (('branches', p['branch']), ('modes', p['mode']),
+                                   ('properties', case['expected']['property']), ('input_positions', p['n']),
+                                   ('input_counts', len(p['tx']['inputs'])), ('output_counts', len(p['tx']['outputs'])),
+                                   ('selectors', p['selector']), ('flags', p['flags'])):
+                    reach(key, value)
+                for h in p['hash_types']:
+                    reach('hash_types', h)
+                for m in p['mutations']:
+                    reach('mutations', m['field'])
+                reach('mutations', p['signature_mutation'])
+                if 'error' not in runs['core']:
+                    reach('errors', runs['core']['responses'][offset + size - 1].get('ok', {}).get('script_error', 'OK'))
+                if index not in failed and case['expected'].get('known'):
+                    counts['pass_count'] -= 1
+                    counts['known'] += 1
+            offset += size
         for index, result in results:
             counts[result[0]] += 1
             selected = batch if index is None else [batch[index]]
             if index is None:
                 evidence = runs
             else:
-                evidence = {side: dict(run, responses=[run['responses'][index]], stdout_requests=requests)
+                start = sum(len(case_requests(c)) for c in batch[:index])
+                end = start + len(case_requests(batch[index]))
+                evidence = {side: dict(run, responses=run['responses'][start:end], stdout_requests=requests)
                             for side, run in runs.items()}
             save(selected, result, evidence, history)
         return True
@@ -242,7 +369,7 @@ def run_campaign(args, cases=None):
             break
     failures = sum(counts[k] for k in ('verdict', 'digest', 'crash', 'timeout')) + sum(batch_counts.values())
     summary = dict(output=str(output), campaign=args.campaign, seed=args.seed, budget=dict(cases=args.cases, seconds=args.seconds),
-                   inputs=args.inputs, selection=[{k: v for k, v in case.items() if k != 'request'} for case in cases],
+                   inputs=args.inputs, selection=[{k: v for k, v in case.items() if k != 'request'} for case in cases], coverage=coverage,
                    selected=len(cases), completed=completed,
                    exhausted=completed < len(cases), counts=counts, batch_counts=batch_counts, failures=failures,
                    saved=saved, revisions=revisions, batch_size=args.batch_size,
@@ -256,12 +383,41 @@ def replay(args):
     record = json.loads(pathlib.Path(args.failure).read_text())
     if record['format'] != FORMAT:
         raise ValueError('unsupported saved-failure format')
-    if record['signer']:
-        raise ValueError('signer replay belongs to stage 2')
+    if record['signer'] and record['failing_side'] == 'signer':
+        if not getattr(args, 'signer', None):
+            raise ValueError('signer failures require replay --signer PATH')
+        entries = record['signer']
+        rerun = execute(args.signer, [e['request'] for e in entries], record['timeout'], ['--sign'])
+        if 'process' in entries[0]:
+            stored = entries[0]['process']
+            reproduced = (rerun.get('error', {}).get('code') == stored.get('error', {}).get('code') and
+                          rerun.get('returncode') == stored.get('returncode') and
+                          rerun.get('stdout') == stored.get('stdout') and rerun.get('stderr') == stored.get('stderr'))
+        else:
+            reproduced = rerun.get('responses') == [e['response'] for e in entries]
+            if record['class'] == 'digest' and reproduced:
+                checks = [dict({k: v for k, v in e['request'].items() if k != 'key_ids'}, op='sighash.legacy') for e in entries]
+                probes = [execute(p, checks, record['timeout']) for p in (args.oracle, args.harness)]
+                reproduced = any('error' not in run and
+                                 any(s.get('ok', {}).get('digest_hex') != e['response']['ok']['digest_hex']
+                                     for s, e in zip(run['responses'], entries)) for run in probes)
+        print(json.dumps(dict(reproduced=reproduced, **{'class': record['class']}, failing_side='signer')))
+        return 0 if reproduced else 1
     requests = record['requests']
     runs = {side: execute(program, requests, record['timeout'])
             for side, program in (('lean', args.oracle), ('core', args.harness))}
-    results = assess(requests, runs)
+    if record.get('plan', {}).get('mode') == 'generated' and record.get('property') != 'Q6':
+        cases, offset, signer_offset = [], 0, 0
+        for item in record['plan']['inputs']:
+            size = 2 * len(item['plan']['key_ids']) + 1
+            nsign = len(item['plan']['key_ids'])
+            cases.append(dict(item, requests=requests[offset:offset + size],
+                              signer=record['signer'][signer_offset:signer_offset + nsign]))
+            offset += size
+            signer_offset += nsign
+        results = assess_cases(cases, runs)
+    else:
+        results = assess(requests, runs)
     reproduced = any(result[0] == record['class'] and result[1] == record['failing_side']
                      for _, result in results)
     print(json.dumps(dict(reproduced=reproduced, **{'class': record['class']},
@@ -290,6 +446,7 @@ def main():
     commands = parser.add_subparsers(dest='command', required=True)
     run = commands.add_parser('run')
     run.add_argument('--campaign', default='existing')
+    run.add_argument('--signer', help='core-signer executable, required for --campaign generated')
     run.add_argument('--seed', type=int, required=True)
     run.add_argument('--cases', type=positive_int, default=10000)
     run.add_argument('--seconds', type=positive, default=600)
@@ -298,6 +455,7 @@ def main():
     run.add_argument('--inputs', nargs='+', choices=INPUTS, default=list(INPUTS[:3]))
     run.add_argument('--output', required=True, help='parent directory for fresh runs under build/campaign/')
     again = commands.add_parser('replay')
+    again.add_argument('--signer', help='replay signing requests for a signer failure')
     again.add_argument('failure')
     for command in (run, again):
         command.add_argument('oracle')
@@ -305,8 +463,12 @@ def main():
     args = parser.parse_args()
     args.oracle = str(pathlib.Path(args.oracle).resolve())
     args.harness = str(pathlib.Path(args.harness).resolve())
+    if args.signer:
+        args.signer = str(pathlib.Path(args.signer).resolve())
     try:
-        for program in (args.oracle, args.harness):
+        if args.command == 'run' and args.campaign == 'generated' and not args.signer:
+            parser.error('--campaign generated requires --signer')
+        for program in (args.oracle, args.harness, *([args.signer] if args.signer else [])):
             if not pathlib.Path(program).is_file() or not os.access(program, os.X_OK):
                 raise OSError(f'program is absent or not executable: {program}')
         if args.command == 'replay':

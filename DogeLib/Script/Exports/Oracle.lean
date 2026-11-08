@@ -94,8 +94,10 @@ def verifyJson : VerifyResult → Json
   | .rejected e => Json.mkObj [("result", .str "rejected"), ("script_error", .str e.name)]
   | .unsupported u => Json.mkObj (("result", .str "unsupported") :: unsupportedFields u)
 
-/-- One legacy input, after complete base decoding and explicit context and script bounds. -/
-def verifyLegacy : Operation where
+/-- Decode one legacy input and apply the supplied spend and base-checker predicates. -/
+def verifyLegacyWith
+    (spend : InputContext → Transaction.Script → UInt32 → VerifyResult)
+    (base : UInt32 → List UInt8 → List UInt8 → VerifyResult) : Operation where
   name := "script.verify_legacy"
   args := ["tx_hex", "input_index", "prevout_script_hex", "flags", "checker"]
   run args := do
@@ -114,11 +116,16 @@ def verifyLegacy : Operation where
           if ctx.input.scriptSig.bytes.val.length > 1048576 then throw resourceLimit
           let some counted := Serialization.CountedList.ofList? script | throw resourceLimit
           return if checker == "base" then
-            verifyJson (verifyScript baseChecker flags ctx.input.scriptSig.bytes.val script)
-          else verifyJson (verifyLegacySpend ctx ⟨counted⟩ flags coreVerifier)
+            verifyJson (base flags ctx.input.scriptSig.bytes.val script)
+          else verifyJson (spend ctx ⟨counted⟩ flags)
         else throw (adapterFailure "context_bounds")
       else throw (adapterFailure "context_bounds")
     else throw (adapterFailure "input_index_out_of_range")
+
+/-- One legacy input with the baseline spend predicate and base checker. -/
+def verifyLegacy : Operation :=
+  verifyLegacyWith (fun ctx script flags => verifyLegacySpend ctx script flags coreVerifier)
+    (verifyScript baseChecker)
 
 /-- Script and single-signature operations in the oracle format. -/
 def operations : List Operation := [

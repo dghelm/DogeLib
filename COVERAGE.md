@@ -139,7 +139,7 @@ Add rows in sorted order by operation name. Change only the cells your evidence 
 
 ## Campaign infrastructure
 
-`scripts/campaign.py` implements stages 1 to 3 of [design record 0009](docs/design/0009-bug-finding-campaign.md#13-stages-and-exit-conditions).
+`scripts/campaign.py` implements stages 1 to 4 of [design record 0009](docs/design/0009-bug-finding-campaign.md#13-stages-and-exit-conditions).
 It runs Q6 agreement on existing signed spends, targeted CLTV and CSV requests, and optional digest requests from the recovery records.
 It saves complete failure records and bisects stream failures for replay.
 The six outcome classes keep unsupported results and harness refusals apart from disagreements.
@@ -153,7 +153,7 @@ The generated campaign checks Q1 to Q5 and Q7 against expectations from plans an
 It keeps Q6 agreement separate and checks every signing digest against both programs before constructing the spend.
 `core-signer --sign` accepts all hash-type bytes and test scalars 1 to 4, with several inputs and outputs.
 The preserve mode signs after mutation, and the commitment mode retains signatures while changing the spend.
-Production-path replay belongs to a later stage.
+[Production replay](#production-replay-of-campaign-candidates) checks a candidate through Core's production path.
 
 At seed `20261108`, the default campaign compares 1,897 requests with Core at `e0a1c15`, with zero in all six outcome classes.
 The optional signed-digest group compares 25 requests at the same seed, also with zero in all six classes.
@@ -188,3 +188,33 @@ The reducer takes `51 52 b3 51 87`, at lock time 2 and sequence `0xfffffffe`, to
 Against the active corrected rule, all 374,480 cases give no violation, as `corrected_restrictsAcceptance` requires.
 A response without a Script verdict is a failure, so a stand-in replay that answers with errors fails the search.
 Every case of this space is supported, so an `unsupported` result also makes the search exit with status 1.
+
+### Production replay of campaign candidates
+
+`campaign.py replay --level L1` or `--level L3` replays a saved failure of one generated signed-spend case, as design record 0009, section 9, requires.
+L1 resends the stored requests to a harness build whose stamp names a Core commit.
+L3 funds real outputs on an isolated regtest `dogecoind`, signs the same plan again and submits the spend.
+The mempool checks it with the plan's flags, and an AuxPoW block checks it with the consensus flags of its height, P2SH, DERSIG and CHECKLOCKTIMEVERIFY.
+Each replay appends evidence to an additive `production` field of the saved failure and labels the candidate `reproduced`, `harness-fault` or `undetermined`.
+[Commands and limits](docs/oracle.md#production-replay) describe the levels, the flags and the classification.
+
+`scripts/test_campaign_production.py` runs the exit check of stage 4 with the planted harness fault M3.
+The generated campaign at seed `20261108` detects M3 at case 1,907 as a Q3 `verdict` failure on the Core side.
+The reducer reduces it with the label `minimal` to one input, no outputs, lock time 500,000,000 and flags 513.
+
+The unchanged harness at `e0a1c15` does not reproduce it at L1.
+L3 adds one zero-value output, because Core rejects a transaction without outputs.
+The node at `e0a1c15` then rejects the re-signed spend with `UNSATISFIED_LOCKTIME` in its mempool and in a block.
+The planted harness accepts the same bytes.
+The classification is `harness-fault`.
+
+The same check shows three production verdicts at L3 that agree with their properties.
+The node accepts an ordinary 2-of-3 spend (Q1). It rejects an early recovery spend at lock time 1,000 with `UNSATISFIED_LOCKTIME` (Q3).
+A high-S signature fails LOW_S in the mempool and passes in a block, so the replay reports the rejection as policy only.
+
+On 2026-11-08, the branch `1.14-maint` of `dogecoin/dogecoin` was at the pin `e0a1c15`, so the upstream check used builds of that commit.
+A separate harness build with `--revision` gave the same L1 result for the planted candidate, and the same L3 result with `--target upstream`.
+It also gave the same responses as the pin harness to all 2,046 requests of 500 generated cases.
+L3 cannot make a valid recovery spend (Q2), because the template's operand is height 1,000,000.
+The node reports `non-final`, and the replay labels the case `not-comparable`.
+These results test the replay procedure, and they add no theorem.

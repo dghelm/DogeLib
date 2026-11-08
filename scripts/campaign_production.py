@@ -49,7 +49,7 @@ BLOCK_FLAGS = 1 | 4 | 512
 UNFUNDABLE = ('own_outpoint', 'other_outpoint', 'input_count')
 # At the pin, the functional test framework uses ports 11000 to 20999
 # (qa/rpc-tests/test_framework/util.py, lines 36 to 105), and the default RPC
-# ports are 22555, 44555 and 18332 (src/chainparamsbase.cpp). The node's P2P
+# ports are 22555, 44555 and 18332 (D39, src/chainparamsbase.cpp). The node's P2P
 # port is its RPC port plus 100, and the node does not listen on it.
 RPC_PORTS = range(24440, 24480)
 
@@ -339,7 +339,7 @@ def candidate_block(node, spend_hex):
     tip = node.rpc('getblock', node.rpc('getbestblockhash'))
     height = tip['height'] + 1
     # Regtest DigiShield retargets every block with a timespan of one second
-    # and clamps the change to a factor of one (D14, and src/dogecoin.cpp,
+    # and clamps the change to a factor of one (D14, and D6, src/dogecoin.cpp,
     # CalculateDogecoinNextWorkRequired), so the next block keeps the tip's bits.
     bits = int(tip['bits'], 16)
     # Later than the median time past, and well before the two-hour future limit.

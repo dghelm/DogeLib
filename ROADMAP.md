@@ -64,7 +64,7 @@ Each item below is complete.
 
 Release 0.1.0 is out, as tag `v0.1.0` at commit `7510cc9`.
 
-The milestone before the current one was contextual header validation, under [design record 0006](docs/design/0006-contextual-header-validation.md).
+An earlier milestone was contextual header validation, under [design record 0006](docs/design/0006-contextual-header-validation.md).
 The maintainer adopted the record on 2026-11-07, with all nine decisions of its section 12.
 The milestone specifies the checks of `ContextualCheckBlockHeader` other than the version gates.
 They are `nBits` against `GetNextWorkRequired`, the checkpoints, the time checks and the rejection of outdated versions.
@@ -90,7 +90,7 @@ Section 12 of the record gives two stages:
 | 1 | The `Proposals` and `ProposalProofs` libraries, the import check, the activation model and the Script loop with a step parameter | Specified in `DogeLib.Proposals.Framework`, with the framework targets of section 11 except `checkBlockHeader_not_versionBitsCondition` (decision 11), and the import-check self-test |
 | 2 | The worked example `ExampleVersionVerify`, with its theorem targets and known answers | Specified in `DogeLib.Proposals.ExampleVersionVerify`, with every target of section 10.3 and known answers through the compiled code |
 
-Header-sequence validation is implemented through stage 5, under [design record 0008](docs/design/0008-header-sequence-validation.md).
+Header-sequence validation, the milestone before the current one, is implemented through stage 5, under [design record 0008](docs/design/0008-header-sequence-validation.md).
 The maintainer adopted the record on 2026-11-07, with every decision of its section 13.
 It specifies Core's `AcceptBlockHeader` and `ProcessNewBlockHeaders` over an explicit model of the block index.
 The model includes the duplicate test, the predecessor lookup, the failed-ancestor walk and the chain work of each entry.
@@ -104,9 +104,9 @@ Section 10 of the record gives five stages, and section 11 gives their theorem t
 | 4 | `GetBlockProof` and the chain work of each entry | Specified as `Work.blockProof` in `Work.ChainWork` and `IndexEntry.chainWork` in `Block.HeaderSequence`, with the targets `blockProof_eq` and `chainWork_add` and the chain work of `accept_genesis_insert` (section 13.1). Known answers of `GetBlockProof` for 11 compact values, the chain work of every added regtest entry, and two mainnet sequences |
 | 5 | The oracle operation `block.header_sequence`, the Core harness and the comparison | Implemented with H2, anchor guards, fixture expectations, seeded mutations and comparator self-tests. [Comparison boundary and streams](docs/oracle.md#header-sequence-comparison-evidence) |
 
-The proposed next milestone is a property-driven bug-finding campaign, under [design record 0009](docs/design/0009-bug-finding-campaign.md).
-The record is a proposal, and its section 14 waits for a maintainer decision.
-It proposes to search for counterexamples to stated properties of the multisig-with-recovery template, in signed spends that Core signs.
+The current milestone is a property-driven bug-finding campaign, under [design record 0009](docs/design/0009-bug-finding-campaign.md).
+The maintainer adopted the record on 2026-11-08, with every decision of its section 14.
+It searches for counterexamples to stated properties of the multisig-with-recovery template, in signed spends that Core signs.
 Each failure gets a saved record, a replay command, a reducer and a replay through Core's production path before it counts as a finding.
 The planted fault of `ExampleFaultyLocktime` tests the campaign itself.
 Section 13 of the record gives five stages, and section 11 gives the properties and theorem targets:
@@ -118,8 +118,6 @@ Section 13 of the record gives five stages, and section 11 gives the properties 
 | 3 | The reducer, and the search for the planted fault through a test executable | Not started |
 | 4 | Replay through Core's production path, and the check against current upstream Core | Not started |
 | 5 | Regression fixtures and theorem targets for understood counterexamples | Not started |
-
-No stage starts before the maintainer adopts the record.
 
 One other candidate is unscheduled, and it needs an approved scope before work starts:
 

@@ -1,7 +1,7 @@
 # A property-driven bug-finding campaign
 
-**Status:** Proposed.
-Section 14 lists the proposals that wait for a maintainer decision.
+**Status:** Adopted on 2026-11-08, with the decisions that section 14 records.
+This record is frozen.
 Implementation status belongs in ROADMAP.md and COVERAGE.md.
 
 **Date:** 2026-11-08
@@ -484,7 +484,7 @@ The record proposes this handling:
 
 CI runs only fixed seeds whose results a person has already reviewed, so a public CI log never shows a first finding.
 A campaign with a fresh seed runs on a contributor's machine.
-The record recommends a `SECURITY.md` for DogeLib in a separate pull request, with a contact that the maintainer chooses (decision 15).
+The record recommends a `SECURITY.md` for DogeLib in a separate pull request, with the contacts that section 14 records (decision 15).
 
 These rules take precedence over the rule of CONTRIBUTING.md that records a minimal reproducer in SOURCES.md ([sources of truth](../../CONTRIBUTING.md#sources-of-truth)), until the report is resolved.
 
@@ -608,38 +608,35 @@ COVERAGE.md, SOUNDNESS.md and [docs/oracle.md](../oracle.md) change in the same 
 
 ## 14. Decisions
 
-These proposals wait for a maintainer decision:
+**Date:** 2026-11-08. **Decision maker:** Maintainer.
+The maintainer decided each proposal as its status states:
 
 | Number | Topic | Proposal | Alternative | Status |
 | --- | --- | --- | --- | --- |
-| 1 | Family | The 2-of-3 instance of the multisig-with-recovery template with keys 1 to 4, under P2SH in base mode. Cases have several inputs and outputs and every hash type (section 3.1). | Several templates, or other `k` and `n`. | Proposed |
-| 2 | Properties | Q1 to Q7 of section 11, with agreement Q6 kept apart from the properties. | Agreement alone. | Proposed |
-| 3 | Signer | S1: `core-signer --sign`, with a check of its digest against both programs (section 5.1). | S2: an independent Python signer. | Proposed |
-| 4 | Expected values | From the property, the plan and the hand-derived table of section 6.3. Never from either implementation or the signer's verdict (section 6.5). | Core's verdict, as in `recovery.jsonl`. | Proposed |
-| 5 | Driver | C2: a separate `scripts/campaign.py` that reuses `compare`. The CI stream does not change (section 5.2). | C1: options in `compare_core.py`. | Proposed |
-| 6 | Saved failures | `dogelib-campaign-failure/1`, one file for each failure under `build/campaign/`, never committed (section 7.3). | One appended log for each run. | Proposed |
-| 7 | Outcome classes | The six classes and the side table of section 7.2, with known behaviours counted apart (section 7.5). | Pass and fail only. | Proposed |
-| 8 | Isolation | Batches with bisection on a stream-level failure (section 7.1). | One process for each request. | Proposed |
-| 9 | Reducer | Changes to the plan in the order of section 7.4, aware of the signing mode and deterministic. It claims 1-minimality only after a complete final pass, and labels other output `budget`. | Byte-level delta debugging alone. | Proposed |
-| 10 | Oracle format | No change to `dogelib-oracle/1`. The signer's request mode is a change to a harness tool under the 0.x policy (section 7.6). | A campaign operation in the oracle. | Proposed |
-| 11 | Planted fault | E1: the test executable `proposal-replay`, outside `Exports`, and the exit results of section 8.1. | E2: a search and reducer in Lean. | Proposed |
-| 12 | Reach | Semantic wrapper mutants M1 to M6 with a detection record (section 8.2). Source mutants stay a review practice. | Source mutants built for each run. | Proposed |
-| 13 | Production replay | Levels L1 to L3. A candidate counts as a finding only after L1 for Script, and after L2 or L3 for an operation with a transcription (section 9.1). | Report on the harness result alone. | Proposed |
-| 14 | Upstream check | Replay at the current upstream revision of the pin's branch, from a separate build with a revision argument, labelled with its commit (section 9.2). No change to the pin. | Check by source inspection only. | Proposed |
-| 15 | Disclosure | The rules of section 9.4, fixed seeds only in CI, and a DogeLib `SECURITY.md` in a separate pull request. | Public issues for all candidates. | Proposed |
-| 16 | Regression | Fixtures in `tests/script/campaign/` with `SHA256SUMS`, a named comparison set and theorem targets of section 11 (section 10). | Saved failures without fixtures. | Proposed |
-| 17 | Exclusions | Transaction validation and the UTXO set, resource bounds, native fuzzing, Plausible and header targets stay outside this scope (sections 1 and 12). | None in this scope. | Proposed |
+| 1 | Family | The 2-of-3 instance of the multisig-with-recovery template with keys 1 to 4, under P2SH in base mode. Cases have several inputs and outputs and every hash type (section 3.1). | Several templates, or other `k` and `n`. | Accepted |
+| 2 | Properties | Q1 to Q7 of section 11, with agreement Q6 kept apart from the properties. | Agreement alone. | Accepted |
+| 3 | Signer | S1: `core-signer --sign`, with a check of its digest against both programs (section 5.1). | S2: an independent Python signer. | Accepted |
+| 4 | Expected values | From the property, the plan and the hand-derived table of section 6.3. Never from either implementation or the signer's verdict (section 6.5). | Core's verdict, as in `recovery.jsonl`. | Accepted |
+| 5 | Driver | C2: a separate `scripts/campaign.py` that reuses `compare`. The CI stream does not change (section 5.2). | C1: options in `compare_core.py`. | Accepted |
+| 6 | Saved failures | `dogelib-campaign-failure/1`, one file for each failure under `build/campaign/`, never committed (section 7.3). | One appended log for each run. | Accepted |
+| 7 | Outcome classes | The six classes and the side table of section 7.2, with known behaviours counted apart (section 7.5). | Pass and fail only. | Accepted |
+| 8 | Isolation | Batches with bisection on a stream-level failure (section 7.1). | One process for each request. | Accepted |
+| 9 | Reducer | Changes to the plan in the order of section 7.4, aware of the signing mode and deterministic. It claims 1-minimality only after a complete final pass, and labels other output `budget`. | Byte-level delta debugging alone. | Accepted |
+| 10 | Oracle format | No change to `dogelib-oracle/1`. The signer's request mode is a change to a harness tool under the 0.x policy (section 7.6). | A campaign operation in the oracle. | Accepted |
+| 11 | Planted fault | E1: the test executable `proposal-replay`, outside `Exports`, and the exit results of section 8.1. | E2: a search and reducer in Lean. | Accepted |
+| 12 | Reach | Semantic wrapper mutants M1 to M6 with a detection record (section 8.2). Source mutants stay a review practice. | Source mutants built for each run. | Accepted |
+| 13 | Production replay | Levels L1 to L3. A candidate counts as a finding only after L1 for Script, and after L2 or L3 for an operation with a transcription (section 9.1). | Report on the harness result alone. | Accepted |
+| 14 | Upstream check | Replay at the current upstream revision of the pin's branch, from a separate build with a revision argument, labelled with its commit (section 9.2). No change to the pin. | Check by source inspection only. | Accepted |
+| 15 | Disclosure | The rules of section 9.4, fixed seeds only in CI, and a DogeLib `SECURITY.md` in a separate pull request. | Public issues for all candidates. | Accepted |
+| 16 | Regression | Fixtures in `tests/script/campaign/` with `SHA256SUMS`, a named comparison set and theorem targets of section 11 (section 10). | Saved failures without fixtures. | Accepted |
+| 17 | Exclusions | Transaction validation and the UTXO set, resource bounds, native fuzzing, Plausible and header targets stay outside this scope (sections 1 and 12). | None in this scope. | Accepted |
 
-The maintainer answered three questions of the proposal on 2026-11-08.
-The decisions stay Proposed until adoption:
+The maintainer also settled four questions of the proposal:
 
 - Decision 11: a test-only `proposal-replay` outside `Exports` is consistent with decision 8 of design record 0007, because that decision concerns oracle operations.
 - Decision 14: the harness build may take a revision argument for labelled upstream replay builds. The pin in SOURCES.md and in the CI comparison stays `e0a1c15`.
+- Decision 15: a DogeLib `SECURITY.md` gives GitHub private vulnerability reporting on the repository as the first contact, and `daniel@dogeos.com` as the fallback.
 - Section 8.1: the exit condition is a three-instruction violation, not the five-instruction case.
-
-One question stays open:
-
-- Decision 15: which contact does a DogeLib `SECURITY.md` give? The two options are GitHub private vulnerability reporting and an email address.
 
 ## 15. Remaining risks
 

@@ -131,8 +131,9 @@ cat "$build/core.stamp"
 "$cxx" -std=c++11 $core_cxxflags -Wl,--gc-sections -DHAVE_CONFIG_H \
   -I"$src" -I"$src/config" -I"$src/univalue/include" -I"$src/secp256k1/include" \
   "-DCORE_SIGNER_BLOB=\"$(git hash-object "$here/harness/core/core_signer.cpp")\"" \
+  "-DCORE_SIGNER_REQUEST_BLOB=\"$(git hash-object "$here/harness/core/core_signer_main.cpp")\"" \
   -o "$build/core-signer" \
-  "$here/harness/core/core_signer.cpp" "$src/key.cpp" "$src/random.cpp" \
+  "$here/harness/core/core_signer_main.cpp" "$src/key.cpp" "$src/random.cpp" \
   "$src/support/lockedpool.cpp" "$src/support/cleanse.cpp" "${univalue_paths[@]}" \
   "${libs[@]}" -lcrypto -pthread
 echo "built $build/core-signer"

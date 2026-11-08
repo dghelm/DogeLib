@@ -1052,3 +1052,54 @@ These finite comparisons do not prove agreement on all inputs.
 The self-test plants disagreements in every response field and each added-entry field.
 It checks both failed-list orders, keeps the other fields comparable when marks are excluded, and rejects duplicate-member over-exclusion.
 The oracle tests compare fixture expectations, exact adapter errors, malformed requests and resource-limit refusals.
+
+## Campaign runs and replay
+
+`scripts/campaign.py` checks Q6 agreement from [design record 0009](design/0009-bug-finding-campaign.md#11-properties).
+It reuses `compare` from `scripts/compare_core.py` without changing the CI comparison stream.
+The driver shuffles existing requests with the selected seed and sends fixed-size batches.
+It constructs no mutations and signs nothing.
+
+Build the oracle and harness as described above, then run these commands:
+
+```bash
+python3 -I scripts/campaign.py run --seed 20261108 --cases 10000 --seconds 600 --output build/campaign/check .lake/build/bin/dogelib-oracle build/core-harness/core-oracle
+python3 -I scripts/campaign.py replay build/campaign/check/<run>/failures/<digest>.json .lake/build/bin/dogelib-oracle build/core-harness/core-oracle
+python3 -I scripts/test_campaign.py .lake/build/bin/dogelib-oracle build/core-harness/core-oracle
+```
+
+`--inputs` selects `signed-spends`, `cltv`, `csv` or `signed-digests`.
+The default selects the first three groups.
+The digest group uses the existing recovery transactions, redeem scripts and hash types.
+The timelock groups retain their original construction seed `20261107`.
+The campaign seed selects the order, and `--cases` limits the prefix without repeating inputs.
+`--campaign` records a name and does not select a generator.
+
+`--batch-size` defaults to 2,000 requests and `--timeout` to 60 seconds per program invocation.
+`--seconds` limits scheduling and each invocation's remaining time.
+The driver bisects a failed stream until it isolates individual requests, while time remains.
+Bisection assumes that responses depend only on their requests.
+
+A failure that disappears in smaller batches retains its original batch for replay.
+A budget that interrupts isolation also retains the failed batch and marks the run incomplete.
+Exit status 1 means a disagreement, a process failure or an incomplete run.
+
+Each run creates a fresh directory below `--output` and prints its path and counts.
+Its `summary.json` records revisions, versions, seed, budgets, input selection and counts for all six outcome classes.
+`unsupported` and harness `refusal` count apart from disagreements, and each gets a saved record.
+`known` stays zero because this stage checks agreement alone, without the properties that classify known baseline behaviours.
+A Q6 disagreement has failing side `undetermined`: agreement alone cannot establish which implementation violates an independent property.
+
+Saved records use `dogelib-campaign-failure/1`, with the fields of [section 7.3](design/0009-bug-finding-campaign.md#73-the-saved-failure).
+A file name hashes the canonical request text with SHA-256, or the request array for a batch-only failure.
+Records contain exact requests, full responses, process status, standard error and the raw output of failed batches before bisection.
+The `signer` array is empty and `CORE_SIGNER_BLOB` is null because the driver never invokes a signer.
+The adjacent `core.stamp` records the harness build provenance, or null for a wrapper without a stamp.
+
+Replay uses each side's recorded invocation timeout and reports whether the class and failing side reproduce.
+It exits with status 0 for reproduction, 1 otherwise, or 2 for an invalid invocation or saved record.
+
+Keep saved candidates private under `build/campaign/`, as [SECURITY.md](../SECURITY.md) requires.
+Console output contains counts, without candidate requests or responses.
+The self-test checks six outcome classes, crash attribution within a batch, malformed output, response counts and response identifiers.
+The campaign commands do not run in CI at this stage.

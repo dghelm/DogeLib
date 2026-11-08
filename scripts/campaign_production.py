@@ -35,7 +35,7 @@ import tempfile
 import time
 
 import campaign
-from campaign_generator import materialize, mutated, scripts, signing_requests, transaction
+from campaign_generator import materialize, mutated, scripts, signing_requests, spend_flags, transaction
 from campaign_reduce import stored_plan
 from oracle_script import push
 
@@ -168,7 +168,15 @@ def replay_l1(record, args):
     identity = harness_identity(args.harness, args.revision)
     revision = target_revision(args, identity)
     runs, results = campaign.resend(record, args.oracle, args.harness)
+    # An L1 non-reproduction says something about the harness only if L1 ran a different program.
+    try:
+        candidate = candidate_harness(record, args)
+        candidate = dict(program=candidate, sha256=hashlib.sha256(pathlib.Path(candidate).read_bytes()).hexdigest())
+    except ValueError:
+        candidate = None
     return dict(level='L1', target=args.target, revision=revision, harness=identity,
+                candidate_harness=candidate,
+                distinct_from_candidate=candidate is not None and candidate['sha256'] != identity['sha256'],
                 responses=runs, results=[list(r) for _, r in results], core_spend=spend_result(runs),
                 outcome=l1_outcome(record, runs, results))
 
@@ -319,7 +327,8 @@ def l3_plan(plan):
 
     The flags must include P2SH and exclude CLEANSTACK (see P2SH, CLEANSTACK).
     """
-    if not plan['flags'] & P2SH or plan['flags'] & CLEANSTACK:
+    flags = spend_flags(plan)
+    if not flags & P2SH or flags & CLEANSTACK:
         raise ValueError('L3 needs flags with P2SH and without CLEANSTACK, so that the mempool checks only input n')
     if plan['mode'] == 'preserve':
         result = mutated(plan)
@@ -467,11 +476,14 @@ def run_l3(plan, expected, programs, timeout, trigger=None):
     that class and side on the rebuilt bytes too.
     """
     plan, changes = l3_plan(plan)
+    # The node checks the spend with the flags of the spend request, which can
+    # differ from the plan's flags (campaign_generator.spend_flags).
+    flags = spend_flags(plan)
     base = campaign.ROOT / 'build/campaign'
     base.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
     with tempfile.TemporaryDirectory(prefix='regtest-', dir=base) as directory:
-        with Node(programs['node'], directory, plan['flags'], timeout) as regtest:
+        with Node(programs['node'], directory, flags, timeout) as regtest:
             rebased, funding = fund(regtest, plan)
             requests = signing_requests(rebased, 'production-0')
             signed = campaign.execute_signer(programs['signer'], requests, timeout)
@@ -505,12 +517,13 @@ def run_l3(plan, expected, programs, timeout, trigger=None):
                 expected=case['expected'], responses=runs, property_failures=property_failures,
                 trigger=dict(harness=trigger[2], responses=trigger_runs, failures=trigger_failures,
                              kept=trigger_kept) if trigger else None,
-                harness_spend=harness_spend, mempool_flags=plan['flags'], mempool=mempool, block=block,
+                harness_spend=harness_spend, mempool_flags=flags, mempool=mempool, block=block,
                 policy_only=mempool['result'] == 'rejected' and block['result'] == 'accepted',
                 chain=dict(height=chain.get('blocks'), softforks=chain.get('softforks'),
                            bip9_softforks=chain.get('bip9_softforks')),
                 node_log_tail=log, seconds=round(time.monotonic() - started, 2),
-                outcome=outcome(mempool, expected, case['expected'], trigger_kept))
+                outcome=('not-comparable' if case['requests'][-1]['flags'] != flags else
+                         outcome(mempool, expected, case['expected'], trigger_kept)))
 
 
 def candidate_harness(record, args):
@@ -561,7 +574,10 @@ def label(record, outcomes):
 
     For a Core-side `digest` candidate, L1 decides, because `sighash.legacy`
     calls `SignatureHash` itself and L3 checks only verdicts: L1 `reproduced`
-    gives `reproduced`, and L1 `not-reproduced` gives `harness-fault`.
+    gives `reproduced`. L1 `not-reproduced` gives `harness-fault` only when the
+    L1 harness differs, by SHA-256, from the harness that found the candidate
+    (`outcomes['L1_distinct']`). The same deterministic program cannot be the
+    fault, so a non-reproduction there is `undetermined`.
 
     For any other candidate, any reproduction gives `reproduced`. Every other
     combination, including an L1 `error`, gives `undetermined`.
@@ -575,18 +591,26 @@ def label(record, outcomes):
             return 'harness-fault'
         return 'reproduced-at-l1' if l1 == 'reproduced' else 'undetermined'
     if core_side and record['class'] == 'digest':
-        return {'reproduced': 'reproduced', 'not-reproduced': 'harness-fault'}.get(l1, 'undetermined')
+        if l1 == 'reproduced':
+            return 'reproduced'
+        return 'harness-fault' if l1 == 'not-reproduced' and outcomes.get('L1_distinct') else 'undetermined'
     return 'reproduced' if 'reproduced' in (l1, l3) else 'undetermined'
 
 
 def classification(record):
     """Label the candidate from the replays at the pin, and separately from those at upstream."""
     evidence = record['production']['replays']
-    rows = [dict(level=e['level'], target=e['target'], revision=e['revision'], outcome=e['outcome'])
+    rows = [dict(level=e['level'], target=e['target'], revision=e['revision'], outcome=e['outcome'],
+                 **({'distinct_from_candidate': e.get('distinct_from_candidate')} if e['level'] == 'L1' else {}))
             for e in evidence]
     labels = {}
     for target in ('pin', 'upstream'):
-        latest = {r['level']: r['outcome'] for r in rows if r['target'] == target}
+        latest = {}
+        for r in rows:
+            if r['target'] == target:
+                latest[r['level']] = r['outcome']
+                if r['level'] == 'L1':
+                    latest['L1_distinct'] = r['distinct_from_candidate']
         labels[target] = label(record, latest) if latest else None
     return dict(label=labels['pin'] or 'undetermined', upstream=labels['upstream'], replays=rows)
 
@@ -633,7 +657,8 @@ def replay_once(args):
     temporary.write_text(json.dumps(record, indent=2) + '\n')
     os.replace(temporary, path)
     summary = dict(level=evidence['level'], target=evidence['target'], revision=evidence['revision'],
-                   outcome=evidence['outcome'], classification=production['classification']['label'])
+                   outcome=evidence['outcome'], classification=production['classification']['label'],
+                   upstream=production['classification']['upstream'])
     if evidence['level'] == 'L3':
         summary.update(mempool=evidence['mempool']['result'], block=evidence['block']['result'],
                        policy_only=evidence['policy_only'])

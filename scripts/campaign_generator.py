@@ -325,9 +325,16 @@ def expectation(plan, spend):
     return result
 
 
+def spend_flags(plan):
+    """The flags of the spend request: a hash_type mutation and a hash_byte signature clear STRICTENC."""
+    flags = mutated(plan)['flags']
+    return flags & ~2 if plan['signature_mutation'] == 'hash_byte' else flags
+
+
 def materialize(plan, prefix, signer):
     """Build exact replay requests after independently checked signing digests."""
     spend = mutated(plan)
+    spend['flags'] = spend_flags(plan)
     signing = mutated(plan) if plan['mode'] == 'preserve' else plan
     code, spk = scripts(spend)
     signatures = [bytes.fromhex(item['response']['ok']['signatures_hex'][0]) for item in signer]
@@ -338,7 +345,6 @@ def materialize(plan, prefix, signer):
         signatures[0] = high_s(signatures[0])
     elif change == 'hash_byte':
         signatures[0] = signatures[0][:-1] + bytes([signatures[0][-1] ^ 32])
-        spend['flags'] &= ~2
     elif change == 'reverse':
         signatures.reverse()
     elif change == 'padding':

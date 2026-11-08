@@ -95,6 +95,7 @@ Report only the checks you ran, with the exact command, revision, and result ([C
 | Signed-spend regeneration | `python3 -I scripts/check_signed_spends.py build/core-harness/core-signer` | Yes, after the harness build | `core` / `compare` |
 | Campaign self-test | `python3 -I scripts/test_campaign.py .lake/build/bin/dogelib-oracle build/core-harness/core-oracle` | Yes, after the oracle and harness build | No |
 | Campaign existing requests | `python3 -I scripts/campaign.py run --seed 20261108 --cases 10000 --seconds 600 --output build/campaign/check .lake/build/bin/dogelib-oracle build/core-harness/core-oracle` | Yes, after the oracle and harness build | No |
+| Campaign generated requests | `python3 -I scripts/campaign.py run --campaign generated --signer build/core-harness/core-signer --seed 20261108 --cases 3000 --seconds 600 --batch-size 64 --output build/campaign/generated .lake/build/bin/dogelib-oracle build/core-harness/core-oracle` | Yes, after the oracle and harness build | No |
 | Comparator self-test | `python3 -I scripts/test_compare_core.py .lake/build/bin/dogelib-oracle` | Yes | `core` / `compare` |
 | Writing checker tests | `uv run --no-project --python 3.12 python -m unittest scripts/test_check_writing.py` | Yes | `writing` |
 | Script corpus freshness | `python3 -I scripts/convert_script_tests.py --check` | Yes | `ci` / `tools` |

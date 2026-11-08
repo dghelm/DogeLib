@@ -860,17 +860,17 @@ Each target takes an index that satisfies `WellFormed`, as section 11 of the rec
   The result index has no failure flag and an empty failed list (item 19).
 - `process_adjustedTime_mono`: if the sequence accepts with one adjusted time, it gives the same result with every later adjusted time up to `maxAdjustedTime`.
 - `process_complete`: take an index without anchors, an adjusted time of at most `maxAdjustedTime`, and `n` headers.
-  If every height in the index plus `n` is below 2147483647, and `n` is below 2147483647, the sequence returns no adapter error.
+  If every height in the index plus `n` is below 2147483647, and `n` is at most 2147483647, the sequence returns no adapter error.
 
 Two hypotheses read the record's wording in a specific way:
 
 - `process_linear` reads "their hashes are unknown" as unknown when each step runs: the input index lacks them, and they are distinct.
   A later header with the hash of an earlier header would be a known header, accepted without its checks.
   Such a list needs a fixed point or a cycle of double SHA-256, and no theorem excludes it without a cryptographic assumption.
-- `process_complete` also takes `n < 2147483647`.
+- `process_complete` also takes `n ≤ 2147483647`.
   The record states its budget as every height in the index below `2147483647 − n`, which holds for every `n` when the index has no entry.
-  From the empty index, a genesis header and 2147483647 more headers would reach `heightOutOfRange`.
-  The preamble of section 11 states the budget as the greatest height plus `n`, and `n < 2147483647` is that budget for an index without entries.
+  From the empty index, the header at position `k` after genesis gets height `k`, so the header at position 2147483647 is the first that can get `heightOutOfRange`.
+  A list of 2147483648 or more valid headers reaches it, and `n ≤ 2147483647` excludes exactly those lists (design record 0008, section 13.2).
 
 The proof module defines `LinksFrom`, `linearView`, `addHeaders`, `linkedEntry` and `LinearSetting` for these statements.
 The specification does not use them.

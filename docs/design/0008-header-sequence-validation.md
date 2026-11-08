@@ -862,10 +862,11 @@ A self-link would break `WellFormed`, because an entry's height cannot be its ow
 The definitions do not change.
 Two statements of section 11 need a hypothesis, and one is read as follows:
 
-- `process_complete` also assumes `n < 2147483647`.
+- `process_complete` also assumes `n ≤ 2147483647`.
   For an empty index, "every height in the index is below `2147483647 − n`" holds for every `n`.
-  A list of 2147483647 or more valid headers from genesis then reaches `heightOutOfRange`, so the statement as written is false.
-  The added bound is the budget that the preamble of section 11 gives an index without entries.
+  From genesis, the header at position `k` gets height `k`, and the header at position 2147483647 is the first whose predecessor is at 2147483646.
+  So a list of 2147483648 or more valid headers from genesis reaches `heightOutOfRange`, and the statement as written is false.
+  The added bound excludes exactly those lists.
 - In `process_linear`, "their hashes are unknown" means that no hash is in the index and that the hashes are pairwise distinct.
   A repeated hash would make its second step a known duplicate that skips its checks.
   Excluding that case needs a cycle of double SHA-256, which no target assumes impossible.

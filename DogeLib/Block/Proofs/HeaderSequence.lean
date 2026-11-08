@@ -1937,7 +1937,7 @@ theorem processSteps_complete (ctx : HeaderContext) (bounded : ctx.adjustedTime.
     (wf : WellFormed ctx.network index)
     (noAnchor : ∀ key entry, index.lookup key = some entry → entry.prev = none → entry.height = 0)
     (budget : ∀ key entry, index.lookup key = some entry → entry.height + headers.length < 2147483647)
-    (short : headers.length < 2147483647) :
+    (short : headers.length ≤ 2147483647) :
     ∀ error, (processSteps ctx p index last headers).2 = .error error → ∀ adapter, error.error ≠ .adapter adapter := by
   induction headers generalizing p index last with
   | nil => intro error err; simp [processSteps] at err
@@ -1983,7 +1983,8 @@ The target `process_complete` of design record 0008, section 11.
 Let the index be well formed and without anchors: every entry without a predecessor is at height 0, the genesis entry.
 Let the adjusted time be in the domain, at most `maxAdjustedTime`.
 Let `headers` have `n` headers, with the height budget of section 11: the greatest height in the index plus `n` is below 2147483647.
-The theorem states the budget for each entry, and as `n < 2147483647`, which is the budget of an index without entries.
+The theorem states the budget for each entry, and also takes `n ≤ 2147483647` for an index without entries (design record 0008, section 13.2).
+From an empty index, the genesis header and the headers after it reach `heightOutOfRange` only at position 2147483647, so only a list of 2147483648 or more headers can reach it.
 Then the sequence returns no adapter error.
 -/
 theorem process_complete (ctx : HeaderContext) (index : HeaderIndex) (wf : WellFormed ctx.network index)
@@ -1991,7 +1992,7 @@ theorem process_complete (ctx : HeaderContext) (index : HeaderIndex) (wf : WellF
     (noAnchor : ∀ key entry, index.lookup key = some entry → entry.prev = none → entry.height = 0)
     (bounded : ctx.adjustedTime.toInt ≤ maxAdjustedTime)
     (budget : ∀ key entry, index.lookup key = some entry → entry.height + headers.length < 2147483647)
-    (short : headers.length < 2147483647) :
+    (short : headers.length ≤ 2147483647) :
     ∀ error, (processNewBlockHeaders ctx index headers).2 = .error error →
       ∀ adapter, error.error ≠ .adapter adapter := by
   rw [processNewBlockHeaders_of_wellFormed ctx index wf]

@@ -41,6 +41,7 @@ The implementation never becomes the specification.
 | `ProposalProofs` | Properties of the proposed revisions, rooted at `DogeLib.Proposals.Proofs` and each proof tree under `DogeLib/Proposals/` | Off |
 | `Refinement` | Extracted Rust implementation models and their refinement proofs. Imports the pinned Aeneas backend and Mathlib. | Off |
 | `check-decls` | An executable that checks the axioms and substitutions of every compiled declaration | — |
+| `proposal-replay` | A test executable that answers `script.verify_legacy` requests with a proposed revision, for the campaign's planted-fault search. It imports `Exports` and `Proposals`, and no library imports it. | — |
 
 Each library uses the Lean module system (`requiresModuleSystem := true`), as EthLib does.
 Proofs live in their own library, so the specification builds and links without them.
@@ -66,6 +67,7 @@ tests/<layer>/                       fixtures with recorded provenance
 tests/KnownAnswers.lean              the driver that `lake test` runs
 tests/KnownAnswers/                  known answers by topic and shared fixture readers
 tests/KnownAnswers/Proposals/        known answers of the proposed-revisions library
+tests/ProposalReplay.lean            the test executable proposal-replay
 harness/core/                        the Dogecoin Core harness: Core's code on the oracle's requests
 scripts/                             repository tools and checks
 DogeLib/Proposals/Framework/        the framework for proposed revisions

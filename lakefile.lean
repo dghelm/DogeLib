@@ -113,3 +113,9 @@ lean_exe «bench-transaction-reader» where
   srcDir := "scripts"
   root := `BenchTransactionReader
   allowNonModules := true
+
+/-- Test-only replay of named proposals on oracle-shaped legacy spend requests. -/
+@[default_target]
+lean_exe «proposal-replay» where
+  srcDir := "tests"
+  root := `ProposalReplay

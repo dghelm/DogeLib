@@ -48,25 +48,31 @@ def failureJson : Failure → Json
   | .spec e => e
 
 /-- The `ok` object for the fields of a request object, or the failure. -/
-def runRequest (fields : Args) : Except Failure Json := do
+def runRequestWith (ops : List Operation) (fields : Args) : Except Failure Json := do
   let .str name ← arg fields "op" | throw (.request "argument op must be a string")
-  let some op := operations.find? (·.name == name) | throw (.request s!"unknown operation {name}")
+  let some op := ops.find? (·.name == name) | throw (.request s!"unknown operation {name}")
   for (key, _) in fields do
     unless key == "id" || key == "op" || op.args.contains key do
       throw (.request s!"unknown argument {key} for operation {name}")
   op.run fields
 
 /-- The response to one line of input, or `none` for a blank line. -/
-def respond (line : String) : Option Json :=
+def respondWith (ops : List Operation) (line : String) : Option Json :=
   let line := line.trimAscii.copy
   if line.isEmpty then none
   else
     let (id, result) : Json × Except Failure Json := match Json.parse line with
       | .error e => (.null, .error (.request s!"invalid JSON: {e}"))
-      | .ok (.obj fields) => ((fields.get? "id").getD .null, runRequest fields)
+      | .ok (.obj fields) => ((fields.get? "id").getD .null, runRequestWith ops fields)
       | .ok _ => (.null, .error (.request "the request must be a JSON object"))
     some <| match result with
       | .ok j => Json.mkObj [("id", id), ("ok", j)]
       | .error f => Json.mkObj [("id", id), ("error", failureJson f)]
+
+/-- Run a request with the baseline oracle operations. -/
+def runRequest (fields : Args) : Except Failure Json := runRequestWith operations fields
+
+/-- Answer a line with the baseline oracle operations. -/
+def respond (line : String) : Option Json := respondWith operations line
 
 end DogeLib.Exports

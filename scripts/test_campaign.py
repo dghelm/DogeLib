@@ -1,6 +1,6 @@
 """Check campaign capture, bisection and replay with process wrappers.
 
-Usage: python3 -I scripts/test_campaign.py <dogelib-oracle> <core-oracle>
+Usage: python3 -I scripts/test_campaign.py <dogelib-oracle> <core-oracle> [--signer PATH] [--proposal-replay PATH]
 """
 
 import argparse
@@ -28,6 +28,14 @@ def check(condition, detail='campaign self-test check failed'):
 
 def wrap(mode, program, args):
     """Mutate one exact request's response, or fail after flushing its predecessors."""
+    if mode in ('error-all', 'unsupported-all'):
+        # A stand-in that ignores its arguments and answers every request with an error or an unsupported result.
+        for line in sys.stdin:
+            request = json.loads(line)
+            answer = (dict(error=dict(kind='request', message='stand-in')) if mode == 'error-all' else
+                      dict(ok=dict(result='unsupported', reason='flags', bits=64)))
+            print(json.dumps(dict(id=request['id'], **answer)), flush=True)
+        return 0
     if mode == 'signer-shape' and args == ['--sign']:
         for line in sys.stdin:
             request = json.loads(line)
@@ -100,9 +108,11 @@ def main():
     parser.add_argument('oracle')
     parser.add_argument('harness')
     parser.add_argument('--signer', help='defaults to core-signer beside the harness')
+    parser.add_argument('--proposal-replay', help='defaults to proposal-replay beside the oracle')
     args = parser.parse_args()
     args.oracle = str(pathlib.Path(args.oracle).resolve())
     args.harness = str(pathlib.Path(args.harness).resolve())
+    args.proposal_replay = args.proposal_replay or str(pathlib.Path(args.oracle).with_name('proposal-replay'))
     base = ROOT / 'build/campaign'
     base.mkdir(parents=True, exist_ok=True)
     checks = 0
@@ -275,6 +285,8 @@ def main():
         checks += 1
     from test_campaign_generator import stage2
     checks += stage2(args, wrapper, check)
+    from test_campaign_reducer import stage3
+    checks += stage3(args, check, wrapper)
     print(f'{checks} cases, 0 failures')
     return 0
 

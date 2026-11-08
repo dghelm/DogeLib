@@ -1,8 +1,10 @@
 """Run fixed-input agreement campaigns and replay complete saved failures."""
 
 import argparse
+import copy
 import hashlib
 import json
+import itertools
 import math
 import os
 import pathlib
@@ -152,6 +154,9 @@ def case_requests(case):
 
 def assess_cases(cases, runs):
     """Apply Q6 to requests, then the independently stated generated property."""
+    if cases and cases[0].get('input') == 'proposal':
+        from campaign_proposal import assess as assess_proposal
+        return assess_proposal(cases, runs)
     requests = [r for case in cases for r in case_requests(case)]
     results = [(i, (*result, 'Q6')) for i, result in assess(requests, runs)]
     if results and results[0][0] is None:
@@ -227,20 +232,32 @@ def prepare_generated(args, plans, timeout):
     return cases, entries, runs
 
 
-def run_campaign(args, cases=None):
-    """Run bounded batches, isolate stream failures and save complete evidence locally."""
+def run_campaign(args, cases=None, revisions=None):
+    """Run bounded batches, isolate stream failures and save complete evidence locally.
+
+    The reducer passes the revisions that it probed once, so that each candidate skips the version probes.
+    """
     started = time.monotonic()
     deadline = started + args.seconds
     generated = args.campaign == 'generated'
+    proposal = args.campaign == 'proposal'
+    if proposal and cases is None and getattr(args, 'script', None):
+        from campaign_proposal import parse_script, script_case, script_plan
+        cases = [script_case(script_plan(parse_script(args.script), args.lock_time, args.sequence), 0)]
+    elif proposal and cases is None:
+        from campaign_proposal import cases as proposal_cases
+        cases = itertools.islice(proposal_cases(), args.cases)
     if cases is None and generated:
         from campaign_generator import plans
         seeds = selected_cases(['signed-spends', 'cltv'], args.seed)
         cases = seeds + [dict(plan=p) for p in plans(args.seed, max(0, args.cases - len(seeds)))]
     cases = selected_cases(args.inputs, args.seed) if cases is None else cases
-    cases = cases[:args.cases]
+    cases = cases if proposal else cases[:args.cases]
     # Probe the programs first, so that an invocation error leaves no empty run directory.
-    revisions = metadata(args.oracle, args.harness, 0.25)
-    if generated:
+    proposal_arguments = ['ExampleFaultyLocktime', getattr(args, 'variant', 'faulty'), '--active']
+    probed = revisions is None
+    revisions = metadata(args.oracle, args.harness, 0.25) if probed else copy.deepcopy(revisions)
+    if generated and probed:
         capture = {}
         try:
             raw = run_captured(args.signer, ['--version'], '', 0.25, capture)
@@ -283,7 +300,7 @@ def run_campaign(args, cases=None):
         record = dict(format=FORMAT, campaign=args.campaign, seed=args.seed,
                       case_index=batch[0]['case_index'], budget=dict(cases=args.cases, seconds=args.seconds),
                       property=property_name, **{'class': kind}, failing_side=side,
-                      plan=dict(mode='generated' if generated else 'existing', inputs=[{k: v for k, v in case.items()
+                      plan=dict(mode='proposal' if proposal else 'generated' if generated else 'existing', inputs=[{k: v for k, v in case.items()
                                                                                        if k not in ('request', 'requests', 'signer')} for case in batch]),
                       requests=requests, signer=signer, responses=runs,
                       expected=(dict(relation='compare_core.compare agreement',
@@ -291,7 +308,7 @@ def run_campaign(args, cases=None):
                                 if property_name == 'Q6' else batch[0]['expected']),
                       revisions=revisions, build=build, replay=replay, reduced_from=None,
                       detail=dict(message=message, code=code), timeout=args.timeout,
-                      batch_failures=history)
+                      batch_failures=history, program_arguments={'core': proposal_arguments} if proposal else {})
         path.write_text(json.dumps(record, indent=2) + '\n')
         saved.append(str(path))
 
@@ -340,7 +357,9 @@ def run_campaign(args, cases=None):
                     runs[side] = dict(not_run='campaign time budget expired')
                     break
                 return False
-            runs[side] = execute(program, requests, min(args.timeout, remaining))
+            # In a proposal run, the harness slot runs proposal-replay with its proposal arguments.
+            extra = [proposal_arguments] if proposal and side == 'core' else []
+            runs[side] = execute(program, requests, min(args.timeout, remaining), *extra)
             if remaining < args.timeout and runs[side].get('error', {}).get('code') == 'TIMEOUT':
                 # The campaign deadline does not establish a program timeout.
                 if any('error' in run for name, run in runs.items() if name != side):
@@ -371,7 +390,7 @@ def run_campaign(args, cases=None):
         offset = 0
         for index, case in enumerate(batch):
             size = len(case_requests(case))
-            if 'expected' in case:
+            if 'expected' in case and case.get('input') != 'proposal':
                 p = case['plan']
                 for key, value in (('branches', p['branch']), ('modes', p['mode']),
                                    ('properties', case['expected']['property']), ('input_positions', p['n']),
@@ -418,19 +437,25 @@ def run_campaign(args, cases=None):
             save(selected, result, evidence, history)
         return True
 
-    for index, case in enumerate(cases):
-        case['case_index'] = index
-    for offset in range(0, len(cases), args.batch_size):
-        if not visit(cases[offset:offset + args.batch_size], []):
+    if proposal and not isinstance(cases, list):
+        from campaign_proposal import SPACE_SIZE
+        selected = min(args.cases, SPACE_SIZE)
+    else:
+        selected = len(cases)
+        for index, case in enumerate(cases):
+            case['case_index'] = index
+    stream = iter(cases)
+    while batch := list(itertools.islice(stream, args.batch_size)):
+        if not visit(batch, []):
             break
         if getattr(args, 'stop_after_failure', False) and any(counts[k] for k in ('verdict', 'digest', 'crash', 'timeout')):
             break
     failures = sum(counts[k] for k in ('verdict', 'digest', 'crash', 'timeout')) + sum(batch_counts.values())
     summary = dict(output=str(output), campaign=args.campaign, seed=args.seed, budget=dict(cases=args.cases, seconds=args.seconds),
-                   inputs=args.inputs, selection=[{k: v for k, v in case.items() if k != 'request'} for case in cases],
+                   inputs=args.inputs, selection=[] if proposal else [{k: v for k, v in case.items() if k != 'request'} for case in cases],
                    coverage=coverage, q6_requests=q6_requests,
-                   selected=len(cases), completed=completed,
-                   exhausted=completed < len(cases), counts=counts, batch_counts=batch_counts, failures=failures,
+                   selected=selected, completed=completed,
+                   exhausted=completed < selected, counts=counts, batch_counts=batch_counts, failures=failures,
                    saved=saved, revisions=revisions, batch_size=args.batch_size,
                    timeout=args.timeout, batches_executed=attempts, elapsed_seconds=time.monotonic() - started)
     (output / 'summary.json').write_text(json.dumps(summary, indent=2) + '\n')
@@ -463,9 +488,13 @@ def replay(args):
         print(json.dumps(dict(reproduced=reproduced, **{'class': record['class']}, failing_side='signer')))
         return 0 if reproduced else 1
     requests = record['requests']
-    runs = {side: execute(program, requests, record['timeout'])
+    runs = {side: execute(program, requests, record['timeout'], record.get('program_arguments', {}).get(side, ()))
             for side, program in (('lean', args.oracle), ('core', args.harness))}
-    if record.get('plan', {}).get('mode') == 'generated' and record.get('property') != 'Q6':
+    if record.get('plan', {}).get('mode') == 'proposal':
+        from campaign_proposal import assess as assess_proposal
+        results = assess_proposal([dict(item, requests=[request]) for item, request in
+                                   zip(record['plan']['inputs'], requests)], runs)
+    elif record.get('plan', {}).get('mode') == 'generated' and record.get('property') != 'Q6':
         cases, offset, signer_offset = [], 0, 0
         for item in record['plan']['inputs']:
             size = 2 * len(item['plan']['key_ids']) + 1
@@ -504,7 +533,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
     run = commands.add_parser('run')
-    run.add_argument('--campaign', default='existing')
+    run.add_argument('--campaign', choices=('existing', 'generated', 'proposal'), default='existing')
+    run.add_argument('--variant', choices=('faulty', 'corrected'), default='faulty',
+                     help='variant of ExampleFaultyLocktime for --campaign proposal')
+    run.add_argument('--script', help='with --campaign proposal: run this one script instead of the enumeration')
+    run.add_argument('--lock-time', type=int, default=2, help='lock time of --script')
+    run.add_argument('--sequence', type=lambda s: int(s, 0), default=0xfffffffe, help='sequence of --script')
     run.add_argument('--signer', help='core-signer executable, required for --campaign generated')
     run.add_argument('--seed', type=int, required=True)
     run.add_argument('--cases', type=positive_int, default=10000)
@@ -516,15 +550,21 @@ def main():
     again = commands.add_parser('replay')
     again.add_argument('--signer', help='replay signing requests for a signer failure')
     again.add_argument('failure')
-    for command in (run, again):
+    shrink = commands.add_parser('reduce')
+    shrink.add_argument('--max-candidates', type=positive_int, default=2000)
+    shrink.add_argument('failure')
+    for command in (run, again, shrink):
         command.add_argument('oracle')
         command.add_argument('harness')
+    shrink.add_argument('signer', nargs='?', help='core-signer executable, required for a generated failure')
     args = parser.parse_args()
     args.oracle = str(pathlib.Path(args.oracle).resolve())
     args.harness = str(pathlib.Path(args.harness).resolve())
     if args.signer:
         args.signer = str(pathlib.Path(args.signer).resolve())
     try:
+        if args.command == 'run' and args.script and args.campaign != 'proposal':
+            parser.error('--script requires --campaign proposal')
         if args.command == 'run' and args.campaign == 'generated' and not args.signer:
             parser.error('--campaign generated requires --signer')
         for program in (args.oracle, args.harness, *([args.signer] if args.signer else [])):
@@ -532,13 +572,18 @@ def main():
                 raise OSError(f'program is absent or not executable: {program}')
         if args.command == 'replay':
             return replay(args)
+        if args.command == 'reduce':
+            from campaign_reduce import reduce_command
+            return reduce_command(args)
         output = pathlib.Path(args.output).resolve()
         if not output.is_relative_to(ROOT / 'build/campaign'):
             parser.error('--output must be under this worktree\'s build/campaign/')
         summary = run_campaign(args)
         # Public logs contain counts, never candidate requests or responses.
         print(json.dumps({k: summary[k] for k in ('output', 'completed', 'counts', 'batch_counts', 'failures', 'exhausted')}))
-        return 1 if summary['failures'] or summary['exhausted'] else 0
+        # Flags 0 make every case of the section 8.1 space supported, so an unsupported result means that the search checked nothing.
+        unchecked = args.campaign == 'proposal' and summary['counts']['unsupported']
+        return 1 if summary['failures'] or summary['exhausted'] or unchecked else 0
     except (OSError, ValueError, KeyError) as error:
         print(f'campaign: {error}', file=sys.stderr)
         return 2

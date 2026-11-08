@@ -1162,5 +1162,106 @@ The self-test checks six outcome classes, crash attribution within a batch, malf
 It also requires semantic mutants M1 to M6 to be detected and replayed within fixed budgets.
 It writes their seed, first detected case, class and timing to `build/campaign/mutant-detection.json`.
 Signer checks cover repeated-request determinism, refusal replay and malformed-response replay.
-Reduction and production-path replay remain later stages of design record 0009.
+Production-path replay remains a later stage of design record 0009.
 The campaign commands do not run in CI at this stage.
+
+### The planted proposal search
+
+`--campaign proposal` searches for a violation of `RestrictsAcceptance` by the planted fault of [design record 0009, section 8.1](design/0009-bug-finding-campaign.md#81-the-planted-proposal-fault).
+In this campaign, the harness argument is `proposal-replay`, a test executable under `tests/`.
+It is not part of `Exports`, and `dogelib-oracle` gets no proposal operation.
+
+```bash
+lake build dogelib-oracle proposal-replay
+python3 -I scripts/campaign.py run --campaign proposal --variant corrected --seed 0 --cases 374480 --output build/campaign/proposal .lake/build/bin/dogelib-oracle .lake/build/bin/proposal-replay
+```
+
+`proposal-replay ExampleFaultyLocktime (faulty|corrected) [--active]` reads `script.verify_legacy` requests in this format.
+It answers each request with the revised spend predicate of the named variant, through the oracle's own request decoding and response encoding.
+Without `--active`, the revised step equals the baseline step.
+It answers every other operation with an unknown-operation error, and `--version` prints the format with `"program": "proposal-replay"`.
+
+The driver enumerates every script of one to five instructions from the alphabet of section 8.1, shortest first, with no seed.
+Each of the 37,448 scripts runs with five lock times and two sequences, so the space has 374,480 cases.
+The spending transaction has version 1, one input with a null outpoint and an empty `scriptSig`, no outputs and flags 0.
+`--variant` selects the variant, and `--cases` limits the prefix of the enumeration.
+
+A violation is a request that `proposal-replay` accepts and `dogelib-oracle` rejects.
+Its saved failure names the property `RestrictsAcceptance`, the class `verdict` and the failing side `revised`.
+The record keeps the replay's arguments in `program_arguments`, so `replay` runs the same variant.
+Process failures, `unsupported` results and refusals keep the classes of section 7.2.
+
+A failure of `proposal-replay` names the side `revised`.
+A response that is not an `ok` object with the result `accepted`, `rejected` or `unsupported` checks nothing.
+On either side, it is a `crash` with the code `RESULT`, so a search cannot pass without verdicts.
+Flags 0 make every case of the space supported, so a proposal run also exits with status 1 when its `unsupported` count is above zero.
+Other differences between two verdicts are not violations of this property.
+
+`--script` runs one script instead of the enumeration, with `--lock-time` (default 2) and `--sequence` (default `0xfffffffe`).
+It accepts hex bytes, and it splits them into instructions at push boundaries.
+
+### Reduction
+
+`campaign.py reduce <failure> <oracle> <harness> [<signer>]` reduces a saved failure of one generated or proposal case.
+A generated failure needs the signer.
+The reducer refuses a record of existing requests, and a batch of several cases, because they have no single construction plan.
+It exits with status 0 when it writes an output.
+It exits with status 2 for such a record, or when the stored plan no longer reproduces its failure condition.
+
+```bash
+python3 -I scripts/campaign.py run --campaign proposal --script '51 52 b3 51 87' --seed 0 --cases 1 --output build/campaign/seed .lake/build/bin/dogelib-oracle .lake/build/bin/proposal-replay
+python3 -I scripts/campaign.py reduce build/campaign/seed/<run>/failures/<digest>.json .lake/build/bin/dogelib-oracle .lake/build/bin/proposal-replay
+```
+
+The reducer changes the plan, not the bytes.
+It runs each candidate plan alone through the same run path as `run`, with the record's seed and timeout.
+So a preserve plan is signed again after its mutations, and a commitment plan is signed before them and keeps its signatures.
+A candidate replaces the plan when that run saves a failure with the same property, class and failing side.
+A candidate that the plan's construction cannot build, such as a mutation of an input that the candidate removed, is skipped.
+
+It tries the changes of [section 7.4](design/0009-bug-finding-campaign.md#74-replay-and-the-reducer) in this order:
+
+1. Remove one element, then two adjacent elements, then each half of four or more elements. An element is a mutation, the signature-encoding mutation or a script instruction.
+2. Remove each other input and each output, then move input `n` to position 0 or one position towards it.
+3. Replace the value of each push in a script with 0. Then set the version to 1, each nonfinal sequence to 0 and each output value to 0. Replace the lock time with the least value of its class.
+4. Clear each flag that is not P2SH in a generated plan. Keep each result inside the assertion domain of C7.
+5. Set every hash type to ALL, then each one. Then replace a true selector with `01` and a false selector with the empty push.
+6. Remove one byte of each other script.
+
+The lock-time classes are the values below 1,000,000, the values from 1,000,000 to 499,999,999, and the values from 500,000,000.
+The classes are specific to the 2-of-3 recovery template of decision 1.
+Its CLTV operand is 1,000,000, and 500,000,000 separates heights from times (C4).
+The template has no `OP_CHECKSEQUENCEVERIFY`, so 0 represents every nonfinal sequence.
+A plan for another template needs its own classes.
+
+A candidate must also stay in the domain of its property (section 7.4).
+Every property of section 11 assumes a P2SH spend, so a generated candidate keeps the P2SH flag.
+The ordinary branch (Q1) needs a true selector, and the recovery branch (Q2 and Q3) needs a false one.
+The reducer skips a candidate that leaves this domain, when the stored plan is inside it.
+
+After each accepted change, the reducer starts its current step again on the new plan.
+It repeats the six steps until a complete pass accepts no change, and then it gives the label `minimal`.
+The output is then 1-minimal for these changes only.
+`--max-candidates` (default 2,000) limits the candidates that the reducer runs.
+If the limit stops the reduction before such a pass, the label is `budget`, and the output still keeps the failure condition.
+
+The reducer caches each result by its canonical plan, so a candidate runs once.
+It writes the output to `reduced/<digest>.json` beside the run's `failures/` directory.
+The output is a complete saved failure with `reduced_from` set to the original file name.
+Its `reduction` field records the label, the number of candidates, the limit and each accepted change with its step.
+The console shows the output path, the label and the counts, without requests.
+
+The campaign self-test needs `proposal-replay` beside the oracle, or `--proposal-replay PATH`.
+
+It runs the faulty search over all scripts of up to three instructions and requires violations of exactly three instructions.
+It runs the corrected search over the whole space and requires no violation.
+It reduces `51 52 b3 51 87` and requires three instructions with the label `minimal`.
+It also reduces the first saved detection of each mutant M1 to M6.
+Each reduction must keep the failure condition and the mutant's trigger, and its output must replay.
+Each reduced generated plan must keep the P2SH flag and a selector of its branch's truth value.
+
+A planted Core fault flips the verdict of each spend with a hash type `0x82` signature.
+The self-test reduces its first three detections, and each reduced plan must keep a `0x82` signature.
+The unmodified harness must also give the expected verdict on the reduced spend, so the template runs.
+A stand-in replay that answers every request with an error must fail all 200 cases of a corrected search.
+It writes the labels, candidate counts and plan sizes to `build/campaign/mutant-reduction.json`.

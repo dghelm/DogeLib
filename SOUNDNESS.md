@@ -685,7 +685,8 @@ The expected last checkpoint is the table height of D9 in the range of each fixt
 The expected verdict of the contextual check comes from chain acceptance and D33.
 A candidate with fewer than 11 entries above an anchor gives `shortView`, and a candidate below the last checkpoint gives `bad-fork-prior-to-checkpoint`.
 An anchor at 144720 gives `nextWork missingAncestor` at the retarget 144960.
-These checks do not run Core, and the Core comparison is stage 5 of the record.
+These known-answer checks do not run Core.
+The [header-sequence comparison](docs/oracle.md#header-sequence-comparison-evidence) supplies separate finite evidence through H2.
 
 By `#print axioms` with Lean `v4.35.0`:
 
@@ -798,7 +799,8 @@ No theorem says that they are the state and the context that a node holds.
 - Two synthetic steps with the mined regtest headers: a predecessor at 2147483646 gives `heightOutOfRange`, and one at 2147483645 gives `shortView`.
   Five cases of `checkWellFormed` accept and reject small indexes.
 
-These checks do not run Core, and the Core comparison is stage 5 of the record.
+These known-answer checks do not run Core.
+The [header-sequence comparison](docs/oracle.md#header-sequence-comparison-evidence) supplies separate finite evidence through H2.
 
 By `#print axioms` with Lean `v4.35.0`:
 
@@ -904,7 +906,8 @@ The specification does not use them.
   - The headers across 371337, `BIP66Height` and `BIP65Height` are accepted, and the checkpoint 371337 enters during its call.
     A version change at each activation height gives `high-hash` at its position: step 2 runs before the contextual check.
 
-These checks do not run Core, and the Core comparison is stage 5 of the record.
+These known-answer checks do not run Core.
+The [header-sequence comparison](docs/oracle.md#header-sequence-comparison-evidence) supplies separate finite evidence through H2.
 
 By `#print axioms` with Lean `v4.35.0`:
 
@@ -913,6 +916,32 @@ By `#print axioms` with Lean `v4.35.0`:
 | `propext` | `composeSequence_of_error` |
 | `propext`, `Quot.sound` | `lookup_addToBlockIndex_of_some`, `lookup_addHeaders_of_some`, `contextualViewDepth_antitone` |
 | `propext`, `Classical.choice`, `Quot.sound` | `processSteps_eq_compose`, `processSteps_append`, `wellFormed_processSteps`, `processNewBlockHeaders_of_wellFormed`, `processNewBlockHeaders_of_not_wellFormed`, `process_append`, `process_error_suffix`, `process_prefix_ok`, `accept_ok_index`, `processSteps_ok_index`, `linearView_cons`, `ancestorView_congr_walk`, `ancestorWalk_insert_fresh`, `ancestorHashAt_insert_fresh`, `isAncestorInIndex_linked`, the `LinearSetting` theorems `foundPrev`, `unknownHead`, `addToBlockIndex_eq`, `next`, `accept_ok_iff`, `ancestorWalk_linked`, `steps_ok_iff`, `walk` and `lookup_addHeaders`, `process_linear`, `process_height`, `lookup_addToBlockIndex`, `accept_no_failure`, `process_no_failure`, `accept_adjustedTime_mono`, `processSteps_adjustedTime_mono`, `process_adjustedTime_mono`, `ancestorWalk_last_zero`, `accept_complete`, `processSteps_complete`, `process_complete` |
+
+### Header-sequence oracle and comparison
+
+`Block.Exports.headerSequence` converts JSON to the existing sequence specification.
+It checks initial keys and `checkWellFormed` before processing, and reports adapter limits as request errors.
+The adapter has no refinement theorem.
+It reports final prefix insertions with chain work and the marking loop's visited hashes, including flags already set and entries added in the call.
+It supplies no node-state authentication.
+
+The H2 harness transcribes D33's header-acceptance loop and index insertion.
+Core helpers compute proof of work, contextual values, ancestors, skip pointers and block proofs.
+The harness owns the map, checkpoint option and failed-list visit order.
+Users trust the transcription, JSON conversion, anchor guards and preflight refusal of short histories (A1, B4).
+Neither a build nor agreement on the tested inputs proves the transcription equivalent to `validation.cpp` on all inputs.
+The [comparison streams](docs/oracle.md#header-sequence-comparison-evidence) record the finite evidence and seeds.
+
+The comparison excludes Lean diagnostics.
+All other fields must agree before the comparator decides whether to exclude child marks.
+It excludes them only for a step-6 failed-ancestor rejection at the agreed failure position.
+At least two distinct failed members must be ancestors of that header's predecessor, including entries added in the accepted prefix.
+
+Other rejection steps and accepted calls retain the mark comparison.
+The verdict, failure position, reason, score, code, last hash and every added entry remain compared.
+`failedAncestor_verdict_perm` proves verdict independence from failed-list order for the Lean definition, rather than for the C++ transcription.
+Initial state, adjusted time and the checkpoint option remain execution boundaries.
+The adapter adds no axiom or compiler substitution.
 
 ### Chain work
 
@@ -960,7 +989,8 @@ No theorem says that a supplied chain work is the value that a node holds.
 - The genesis range from an empty index: the entry at height `h` has chain work `0x100010 * (h + 1)`.
 - 300 mainnet headers from 144730: five sums of block proofs, computed with Python integers from the fixture's `nBits` fields.
 
-These checks do not run Core, and the Core comparison is stage 5 of the record.
+These known-answer checks do not run Core.
+The [header-sequence comparison](docs/oracle.md#header-sequence-comparison-evidence) supplies separate finite evidence through H2.
 
 By `#print axioms` with Lean `v4.35.0`:
 
@@ -2957,8 +2987,8 @@ A user of the comparison trusts these parts of it:
   Any other exception from Core stops the harness, so it cannot pass as a result.
 - The `plan` label of `sighash.legacy`. The harness computes it from Core's conditions instead of observing it. It stops if the label is `fixed_digest` and Core's digest is not the value one.
 - The comparator, `scripts/compare_core.py`.
-  Its self-test, `scripts/test_compare_core.py`, counts 102 cases: two passing controls and 100 negative checks that each fail with the code they target.
-  The negative checks are 91 stream mutations, eight Rust-side mutations and one acceptance-count gap.
+  Its self-test, `scripts/test_compare_core.py`, counts 113 cases: two passing controls and 111 negative checks that each fail with the code they target.
+  The negative checks are 102 stream mutations, eight Rust-side mutations and one acceptance-count gap.
   Assertions about its refusal and timelock constructions run outside that count.
 - For `sighash.legacy`, the oracle's preimage is checked by hashing it, not byte by byte: Core does not expose its preimage.
 
@@ -2993,7 +3023,8 @@ The build disables SSE2, and its stamp records the generic scrypt variant and co
 The comparison still assumes Core's little-endian header memory layout and arithmetic shift of signed versions.
 The contextual operation checks `ContextualCheckBlockHeader` on the stated input domain.
 The caller supplies the predecessor view, adjusted time and known checkpoint state.
-Neither program checks the node-state conditions in `AcceptBlockHeader` or full-block validity.
+The contextual operation checks no node-state condition in `AcceptBlockHeader` or full-block validity.
+The sequence operation adds the header-acceptance state transitions, with the H2 transcription and anchor guards described [above](#header-sequence-oracle-and-comparison).
 
 Any later foreign boundary, such as a C or Rust binding, is listed here with its size and its error handling.
 

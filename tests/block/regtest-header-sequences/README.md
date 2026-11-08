@@ -3,8 +3,9 @@
 `sequences.json` supplies exact requests and hand-derived expectations for design record 0008, section 9.4.
 `lake test` runs the first header of each case through `acceptBlockHeader` (`tests/KnownAnswers/HeaderSequence.lean`, `checkRegtestSteps`).
 It also runs every case in full through `processNewBlockHeaders` (`checkRegtestSequences`), and compares every expected field.
-The oracle and the Core comparator do not consume the fixture yet.
-Its record shape is local to the fixture and does not settle the stage 5 oracle interface.
+The oracle tests and the Core comparator consume every case through `block.header_sequence`.
+The oracle response follows these field names, with sorted child marks.
+The `short-anchor-view` case gives `work_view/short_view` instead of a consensus verdict.
 
 ## Reproduction (D83)
 

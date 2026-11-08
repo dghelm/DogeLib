@@ -38,7 +38,10 @@ The step runs the seven steps of design record 0008, section 3.1, in Core's orde
 
 The genesis hash skips steps 1 to 6.
 Between steps 4 and 5, the adapter error `heightOutOfRange` excludes a candidate at height 2147483647 (decision 17).
-The sequence, `processNewBlockHeaders`, is stage 3 of the record.
+
+Stage 3 adds the sequence, `processNewBlockHeaders`: Core's `ProcessNewBlockHeaders` (D33, lines 3270 to 3286) on the model.
+It tests `checkWellFormed`, then runs the step on each header in order and stops at the first error.
+`composeSequence` combines the results of two lists (section 7.2).
 The fields for chain work enter in stage 4.
 The theorems are in `DogeLib.Block.Proofs.HeaderSequence`.
 
@@ -502,5 +505,73 @@ def acceptBlockHeader (ctx : HeaderContext) (index : HeaderIndex) (header : Bloc
                     (failedChildPath index (prev.height + 1) header.pure.hashPrevBlock prev failed),
                   .error (.rejection (.failedAncestor failed)))
               | none => (addToBlockIndex index header.pure, .ok hash)
+
+/-! ## The sequence: `ProcessNewBlockHeaders` -/
+
+/--
+The error of a sequence (design record 0008, section 7.2): the error of one step, with the position of its header in the list.
+Positions start at 0.
+The adapter error `notWellFormed` comes before the first header, at position 0, also for an empty list.
+-/
+structure HeaderSequenceError where
+  /-- The position of the failing header in the list, or 0 for `notWellFormed`. -/
+  position : Nat
+  /-- The error of the step at that position, or the adapter error `notWellFormed`. -/
+  error : HeaderStepError
+  deriving DecidableEq, Repr
+
+/--
+The result of a sequence: the index after the last step that ran, and the outcome.
+On success, the outcome is the hash of the last header, or `none` for an empty list, where Core leaves `ppindex` unchanged.
+-/
+abbrev HeaderSequenceResult := HeaderIndex × Except HeaderSequenceError (Option Hash256)
+
+/--
+The loop of Core's `ProcessNewBlockHeaders` (D33, lines 3274 to 3282): `acceptBlockHeader` on each header in order.
+`position` is the position of the first header of `headers` in the whole list, and `last` is the result so far.
+The loop stops at the first error, and returns the index of that step with the error at its position.
+-/
+def processSteps (ctx : HeaderContext) :
+    Nat → HeaderIndex → Option Hash256 → List BlockHeader → HeaderSequenceResult
+  | _, index, last, [] => (index, .ok last)
+  | position, index, _, header :: rest =>
+    match acceptBlockHeader ctx index header with
+    | (index', .error error) => (index', .error ⟨position, error⟩)
+    | (index', .ok hash) => processSteps ctx (position + 1) index' (some hash) rest
+
+/--
+Core's `ProcessNewBlockHeaders` (D33, lines 3270 to 3286) on the block-index model, design record 0008, section 3.3.
+The function first tests `checkWellFormed`, and returns the adapter error `notWellFormed` at position 0 when the index fails it (section 5.5).
+It then calls `acceptBlockHeader` on each header in order, with one context for the whole call (decision 6), and stops at the first error.
+The result holds the index after the last step that ran.
+So the entries that earlier headers added stay in the index, and a rejection of step 6 keeps its marks.
+On success, the result holds the hash of the last header, or `none` for an empty list.
+
+The function does not require that a header links to the header before it.
+Each header needs only a predecessor in the index, which an earlier header of the call can supply, so one call can extend several branches.
+The peer checks of the `headers` message, such as its limit of 2000 headers and its test of continuity, are outside the function (D74, decision 10).
+`NotifyHeaderTip` (line 3284) changes no state that the model holds.
+-/
+def processNewBlockHeaders (ctx : HeaderContext) (index : HeaderIndex) (headers : List BlockHeader) :
+    HeaderSequenceResult :=
+  if checkWellFormed ctx.network index then processSteps ctx 0 index none headers
+  else (index, .error ⟨0, .adapter .notWellFormed⟩)
+
+/--
+The composition of two sequence results, design record 0008, section 7.2.
+`n` is the length of the list of the first result, and `second` is the result of the next list from the index of `first`.
+If `first` is an error, the composition is `first`.
+Otherwise the index is the index of `second`, and an error of `second` has its position increased by `n`.
+A success of `second` with `none`, from an empty list, keeps the last hash of `first`.
+`process_append` shows that processing `xs ++ ys` gives the composition of the results of `xs` and `ys`.
+-/
+def composeSequence (n : Nat) (first second : HeaderSequenceResult) : HeaderSequenceResult :=
+  match first.2 with
+  | .error _ => first
+  | .ok last =>
+    (second.1, match second.2 with
+      | .error error => .error { error with position := error.position + n }
+      | .ok none => .ok last
+      | .ok (some hash) => .ok (some hash))
 
 end DogeLib.Block

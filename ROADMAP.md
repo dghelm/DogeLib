@@ -98,7 +98,7 @@ Section 10 of the record gives five stages, and section 11 gives their theorem t
 | --- | --- | --- |
 | 1 | The block-index model, the ancestor view and the checkpoint search over the index | Specified in `Block.HeaderSequence`, with the targets `ancestorView_congr` and `lastCheckpointInIndex_eq` and known answers from five mainnet ranges |
 | 2 | One step, `acceptBlockHeader`, with its characterization theorems | Specified in `Block.HeaderSequence`, with every step target of section 11. Section 13.1 of the record replaces `accept_genesis` with `accept_genesis_known`, `accept_genesis_insert` and `accept_genesis_parent`. Known answers from the regtest fixture and from mainnet full headers |
-| 3 | The sequence, `processNewBlockHeaders`, with the linear theorem `process_linear` | Not started |
+| 3 | The sequence, `processNewBlockHeaders`, with the linear theorem `process_linear` | Specified in `Block.HeaderSequence`, with every sequence target of section 11. `process_complete` also takes `n < 2147483647`, the budget of an index without entries. Known answers from all 34 regtest cases in full and from 14 mainnet sequences |
 | 4 | `GetBlockProof` and the chain work of each entry | Not started |
 | 5 | The oracle operation `block.header_sequence`, the Core harness and the comparison | Not started |
 

@@ -26,6 +26,16 @@ The stage-2 theorems describe one step, `acceptBlockHeader`:
 - The target `wellFormed_preserved`: each step keeps `WellFormed`.
 - The target `failedAncestor_verdict_perm`: the verdict does not depend on the order of the failed list.
 
+The stage-3 theorems describe the sequence, `processNewBlockHeaders`:
+
+- The targets `process_append`, `process_error_suffix` and `process_prefix_ok`: a sequence over `xs ++ ys` is the composition of its two parts.
+- The target `process_linear`: take a list that extends one entry in order, without failure state.
+  It is accepted exactly when each header passes step 2 and the contextual check on the view that its predecessors extend.
+  `process_height` gives the heights of the added entries.
+- The target `process_no_failure`: without failure flags and failed blocks, no step returns `duplicate`, `prevBlockInvalid` or `failedAncestor`, and no step sets a flag.
+- The target `process_adjustedTime_mono`: a later adjusted time keeps an acceptance and its result.
+- The target `process_complete`: without anchors, within the height budget and with an adjusted time in the domain, the sequence returns no adapter error.
+
 Section 13.1 of the record replaces the target `accept_genesis` with `accept_genesis_known`, `accept_genesis_insert` and `accept_genesis_parent`.
 `addToBlockIndex` follows Core and searches the index for `hashPrevBlock`.
 So a genesis entry gets no predecessor and height 0 only when the index lacks the genesis header's `hashPrevBlock`.
@@ -1028,5 +1038,963 @@ theorem failedAncestor_verdict_perm (ctx : HeaderContext) (index : HeaderIndex) 
   · rw [rel.mpr hb] at ha; cases ha
   · rename_i first second
     right; exact ⟨first, second, by simp [hf, hh, hcc, hs, ha], by simp [hf, hh, hcc, hs, hb]⟩
+
+
+/-! ## The sequence: composition -/
+
+/-- For every length and pair of results, the composition with a first result that is an error is the first result. -/
+theorem composeSequence_of_error (n : Nat) (first second : HeaderSequenceResult) (error : HeaderSequenceError)
+    (err : first.2 = .error error) : composeSequence n first second = first := by
+  simp [composeSequence, err]
+
+section Sequence
+
+variable (ctx : HeaderContext)
+
+/--
+Take every start position `n`, index, result so far `last` and list.
+The loop from position `n` with `last` is the composition of the success `last` with the loop from position 0 and `none`.
+-/
+theorem processSteps_eq_compose (n : Nat) (index : HeaderIndex) (last : Option Hash256)
+    (headers : List BlockHeader) :
+    processSteps ctx n index last headers =
+      composeSequence n (index, .ok last) (processSteps ctx 0 index none headers) := by
+  induction headers generalizing n index last with
+  | nil => rfl
+  | cons header rest ih =>
+    cases hstep : acceptBlockHeader ctx index header with
+    | mk index' result =>
+      cases result with
+      | error e => simp [processSteps, hstep, composeSequence]
+      | ok hash =>
+        simp only [processSteps, hstep]
+        rw [ih (n + 1), ih 1]
+        obtain ⟨final, outcome⟩ := processSteps ctx 0 index' none rest
+        rcases outcome with e | _ | h
+        · simp only [composeSequence]
+          rw [Nat.add_assoc, Nat.add_comm 1 n]
+        · rfl
+        · rfl
+
+/--
+For every start position, index, result so far and pair of lists, the loop over `xs ++ ys` runs the loop over `xs`.
+If that loop fails, the result is its result.
+Otherwise the loop continues over `ys` from its index, at position `p + xs.length`.
+-/
+theorem processSteps_append (p : Nat) (index : HeaderIndex) (last : Option Hash256)
+    (xs ys : List BlockHeader) :
+    processSteps ctx p index last (xs ++ ys) =
+      match (processSteps ctx p index last xs).2 with
+      | .error _ => processSteps ctx p index last xs
+      | .ok last' => processSteps ctx (p + xs.length) (processSteps ctx p index last xs).1 last' ys := by
+  induction xs generalizing p index last with
+  | nil => simp [processSteps]
+  | cons header rest ih =>
+    cases hstep : acceptBlockHeader ctx index header with
+    | mk index' result =>
+      cases result with
+      | error e => simp [processSteps, hstep]
+      | ok hash =>
+        simp only [List.cons_append, processSteps, hstep, List.length_cons]
+        rw [ih, show p + 1 + rest.length = p + (rest.length + 1) by omega]
+
+/-- For every start position, result so far and list, the loop keeps a well-formed index well formed, also when a step fails. -/
+theorem wellFormed_processSteps (p : Nat) (index : HeaderIndex) (last : Option Hash256)
+    (headers : List BlockHeader) (wf : WellFormed ctx.network index) :
+    WellFormed ctx.network (processSteps ctx p index last headers).1 := by
+  induction headers generalizing p index last with
+  | nil => exact wf
+  | cons header rest ih =>
+    have step := wellFormed_preserved ctx index header wf
+    cases hstep : acceptBlockHeader ctx index header with
+    | mk index' result =>
+      rw [hstep] at step
+      cases result with
+      | error e => simp only [processSteps, hstep]; exact step
+      | ok hash => simp only [processSteps, hstep]; exact ih _ _ _ step
+
+/-- For every well-formed index and list, the sequence is the loop from position 0 with `none`: the test of `checkWellFormed` passes. -/
+theorem processNewBlockHeaders_of_wellFormed (index : HeaderIndex) (wf : WellFormed ctx.network index)
+    (headers : List BlockHeader) :
+    processNewBlockHeaders ctx index headers = processSteps ctx 0 index none headers := by
+  simp [processNewBlockHeaders, (checkWellFormed_iff ctx.network index).mpr wf]
+
+/-- For every index that fails `WellFormed`, and every list, the sequence returns `notWellFormed` at position 0 with the input index. -/
+theorem processNewBlockHeaders_of_not_wellFormed (index : HeaderIndex) (bad : ¬ WellFormed ctx.network index)
+    (headers : List BlockHeader) :
+    processNewBlockHeaders ctx index headers = (index, .error ⟨0, .adapter .notWellFormed⟩) := by
+  have : checkWellFormed ctx.network index = false := by
+    cases h : checkWellFormed ctx.network index
+    · rfl
+    · exact absurd ((checkWellFormed_iff ctx.network index).mp h) bad
+  simp [processNewBlockHeaders, this]
+
+/--
+The target `process_append` of design record 0008, section 11.
+Let the index be well formed.
+For every pair of lists, processing `xs ++ ys` gives `composeSequence xs.length` of two results.
+The first is the result of `xs`, and the second is the result of `ys` from the index after `xs`.
+The theorem needs no height budget.
+-/
+theorem process_append (index : HeaderIndex) (_wf : WellFormed ctx.network index) (xs ys : List BlockHeader) :
+    processNewBlockHeaders ctx index (xs ++ ys) =
+      composeSequence xs.length (processNewBlockHeaders ctx index xs)
+        (processNewBlockHeaders ctx (processNewBlockHeaders ctx index xs).1 ys) := by
+  by_cases wf : WellFormed ctx.network index
+  · have after := wellFormed_processSteps ctx 0 index none xs wf
+    rw [processNewBlockHeaders_of_wellFormed ctx index wf, processNewBlockHeaders_of_wellFormed ctx index wf,
+      processNewBlockHeaders_of_wellFormed ctx _ after, processSteps_append]
+    cases h : (processSteps ctx 0 index none xs).2 with
+    | error e => simp [composeSequence, h]
+    | ok last' =>
+      simp only [Nat.zero_add]
+      rw [processSteps_eq_compose]
+      simp [composeSequence, h]
+  · rw [processNewBlockHeaders_of_not_wellFormed ctx index wf, processNewBlockHeaders_of_not_wellFormed ctx index wf]
+    rfl
+
+/--
+The target `process_error_suffix` of design record 0008, section 11.
+Let the index be well formed, and let processing `xs` fail with `error`, at the position that `error` holds.
+Then for every list `ys`, processing `xs ++ ys` fails with the same error at the same position.
+It also returns the same index.
+-/
+theorem process_error_suffix (index : HeaderIndex) (wf : WellFormed ctx.network index) (xs ys : List BlockHeader)
+    (error : HeaderSequenceError) (fail : (processNewBlockHeaders ctx index xs).2 = .error error) :
+    processNewBlockHeaders ctx index (xs ++ ys) = ((processNewBlockHeaders ctx index xs).1, .error error) := by
+  rw [process_append ctx index wf, composeSequence_of_error _ _ _ _ fail]
+  exact Prod.ext rfl fail
+
+/--
+The target `process_prefix_ok` of design record 0008, section 11.
+Let the index be well formed.
+For every pair of lists, if processing `xs ++ ys` succeeds, processing `xs` succeeds.
+-/
+theorem process_prefix_ok (index : HeaderIndex) (wf : WellFormed ctx.network index) (xs ys : List BlockHeader)
+    (last : Option Hash256) (ok : (processNewBlockHeaders ctx index (xs ++ ys)).2 = .ok last) :
+    ∃ last', (processNewBlockHeaders ctx index xs).2 = .ok last' := by
+  cases h : (processNewBlockHeaders ctx index xs).2 with
+  | ok last' => exact ⟨last', rfl⟩
+  | error e =>
+    rw [process_error_suffix ctx index wf xs ys e h] at ok
+    cases ok
+
+end Sequence
+
+/-! ## The sequence: the index after accepted steps -/
+
+/-- The index after `addToBlockIndex` of each header of a list in order: the index after a sequence of acceptances (`processSteps_ok_index`). -/
+def addHeaders (index : HeaderIndex) (headers : List BlockHeader) : HeaderIndex :=
+  headers.foldl (fun acc header => addToBlockIndex acc header.pure) index
+
+/-- For every context, index and header, an acceptance returns `addToBlockIndex` of the input index. For a known hash, that is the input index. -/
+theorem accept_ok_index (ctx : HeaderContext) (index : HeaderIndex) (header : BlockHeader) (result : Hash256)
+    (ok : (acceptBlockHeader ctx index header).2 = .ok result) :
+    (acceptBlockHeader ctx index header).1 = addToBlockIndex index header.pure := by
+  simp only [acceptBlockHeader] at ok ⊢
+  revert ok
+  repeat' split
+  all_goals (intro ok; simp_all [addToBlockIndex])
+
+/-- For every context, start position, index, result so far and list, a successful loop returns `addHeaders` of the input index. -/
+theorem processSteps_ok_index (ctx : HeaderContext) (p : Nat) (index : HeaderIndex) (last : Option Hash256)
+    (headers : List BlockHeader) (result : Option Hash256)
+    (ok : (processSteps ctx p index last headers).2 = .ok result) :
+    (processSteps ctx p index last headers).1 = addHeaders index headers := by
+  induction headers generalizing p index last with
+  | nil => rfl
+  | cons header rest ih =>
+    cases hstep : acceptBlockHeader ctx index header with
+    | mk index' r =>
+      cases r with
+      | error e => simp [processSteps, hstep] at ok
+      | ok hash =>
+        have eq := accept_ok_index ctx index header hash (by rw [hstep])
+        rw [hstep] at eq
+        simp only [processSteps, hstep] at ok ⊢
+        rw [ih _ _ _ ok]
+        simp only [addHeaders, List.foldl_cons]
+        rw [← eq]
+
+/-- For every index, header, key and entry, `addToBlockIndex` keeps the entry under a key that the index has. -/
+theorem lookup_addToBlockIndex_of_some (index : HeaderIndex) (header : PureBlockHeader) (key : Hash256)
+    (entry : IndexEntry) (found : index.lookup key = some entry) :
+    (addToBlockIndex index header).lookup key = some entry := by
+  have ne : index.lookup header.getHash = none → key ≠ header.getHash := by
+    intro unknown same; subst same; rw [found] at unknown; cases unknown
+  simp only [addToBlockIndex]
+  cases hk : index.lookup header.getHash with
+  | some _ => exact found
+  | none =>
+    cases hp : index.lookup header.hashPrevBlock <;>
+      (simp only []; rw [HeaderIndex.lookup_insert_of_ne _ _ _ _ (ne hk)]; exact found)
+
+/-- For every index, list, key and entry, `addHeaders` keeps the entry under a key that the index has. -/
+theorem lookup_addHeaders_of_some (index : HeaderIndex) (headers : List BlockHeader) (key : Hash256)
+    (entry : IndexEntry) (found : index.lookup key = some entry) :
+    (addHeaders index headers).lookup key = some entry := by
+  induction headers generalizing index with
+  | nil => exact found
+  | cons header rest ih => exact ih _ (lookup_addToBlockIndex_of_some index header.pure key entry found)
+
+
+/-! ## The sequence: a linear extension -/
+
+/--
+The headers link from `prev` in order.
+The first header's `hashPrevBlock` is `prev`, and each later header's `hashPrevBlock` is the hash of the header before it.
+-/
+def LinksFrom : Hash256 → List BlockHeader → Prop
+  | _, [] => True
+  | prev, header :: rest => header.pure.hashPrevBlock = prev ∧ LinksFrom header.pure.getHash rest
+
+/--
+The view entries of headers that extend an entry at height `base`, newest first.
+The header at position `j` of the list becomes `⟨base + j + 1, nTime, nBits⟩`.
+-/
+def linearView (base : Nat) (headers : List BlockHeader) : List BlockIndex :=
+  (headers.mapIdx fun j header => ⟨base + j + 1, header.pure.nTime, header.pure.nBits⟩).reverse
+
+/-- For every height, header and list, the view of `header :: rest` is the view of `rest` above `base + 1`.
+The entry of `header` at `base + 1` follows it. -/
+theorem linearView_cons (base : Nat) (header : BlockHeader) (rest : List BlockHeader) :
+    linearView base (header :: rest) =
+      linearView (base + 1) rest ++ [⟨base + 1, header.pure.nTime, header.pure.nBits⟩] := by
+  simp only [linearView, List.mapIdx_cons, List.reverse_cons, Nat.add_zero]
+  congr 3
+  funext j h
+  rw [show base + (j + 1) + 1 = base + 1 + j + 1 by omega]
+
+/--
+Take every network and pair of entries below 2147483647.
+The view depth of the higher entry is at most the view depth of the lower entry.
+The depth is 241 or 14401 below the first DigiShield height and 11 from it (`contextualViewDepth_eq`).
+-/
+theorem contextualViewDepth_antitone (network : WorkNetwork) (a b : BlockIndex) (le : a.nHeight ≤ b.nHeight)
+    (range : b.nHeight < 2147483647) :
+    contextualViewDepth network b ≤ contextualViewDepth network a := by
+  rw [contextualViewDepth_eq network a (by omega), contextualViewDepth_eq network b range]
+  cases network <;> simp only <;> (repeat' split) <;> omega
+
+/--
+Let `prev` be an entry of a well-formed index, and let `fuel` be at least the view depth of `prev`.
+Then `contextualCheckBlockHeader` gives the same result on `ancestorView` as on the walk from `prev` with `fuel` entries.
+This holds for every network, header, adjusted time and last checkpoint.
+-/
+theorem ancestorView_congr_walk (network : WorkNetwork) (index : HeaderIndex) (wf : WellFormed network index)
+    (hash : Hash256) (prev : IndexEntry) (found : index.lookup hash = some prev) (fuel : Nat)
+    (deep : contextualViewDepth network prev.toBlockIndex ≤ fuel) (header : PureBlockHeader)
+    (adjustedTime : Int64) (lastCheckpointHeight : Option Nat) :
+    contextualCheckBlockHeader network header (ancestorView network index prev) adjustedTime
+        lastCheckpointHeight =
+      contextualCheckBlockHeader network header (ancestorWalk index fuel prev) adjustedTime
+        lastCheckpointHeight := by
+  have positive : 0 < contextualViewDepth network prev.toBlockIndex := by
+    simp only [contextualViewDepth, nMedianTimeSpan]; omega
+  have agree : (ancestorView network index prev).take (contextualViewDepth network prev.toBlockIndex) =
+      (ancestorWalk index fuel prev).take (contextualViewDepth network prev.toBlockIndex) := by
+    unfold ancestorView
+    rw [List.take_of_length_le (ancestorWalk_length_le _ _ _), ancestorWalk_take index prev _ _ deep]
+  have viewValid := ancestorWalk_valid network index wf (contextualViewDepth network prev.toBlockIndex)
+    hash prev found
+  have walkValid := ancestorWalk_valid network index wf fuel hash prev found
+  have cons : ∀ n, 0 < n → ∃ rest, ancestorWalk index n prev = prev.toBlockIndex :: rest := by
+    intro n pos
+    obtain ⟨m, rfl⟩ : ∃ m, n = m + 1 := ⟨n - 1, by omega⟩
+    exact ⟨_, rfl⟩
+  obtain ⟨r₁, h₁⟩ := cons _ positive
+  obtain ⟨r₂, h₂⟩ := cons fuel (by omega)
+  unfold ancestorView at agree ⊢
+  rw [h₁] at agree viewValid ⊢
+  rw [h₂] at agree walkValid ⊢
+  exact contextualCheck_congr_prefix network header prev.toBlockIndex r₁ r₂ adjustedTime
+    lastCheckpointHeight viewValid walkValid agree
+
+/-- An insertion under a key that the index lacks does not change the walk from an entry of a well-formed index. -/
+theorem ancestorWalk_insert_fresh {network : WorkNetwork} (index : HeaderIndex) (wf : WellFormed network index)
+    (fresh : Hash256) (new : IndexEntry) (unknown : index.lookup fresh = none) (fuel : Nat) (key : Hash256)
+    (entry : IndexEntry) (found : index.lookup key = some entry) :
+    ancestorWalk (index.insert fresh new) fuel entry = ancestorWalk index fuel entry := by
+  induction fuel generalizing key entry with
+  | zero => rfl
+  | succ n ih =>
+    cases hp : entry.prev with
+    | none => simp [ancestorWalk, hp]
+    | some p =>
+      obtain ⟨-, parent, hparent, -⟩ := wf.prevLink key entry p found hp
+      have ne : p ≠ fresh := by rintro rfl; rw [hparent] at unknown; cases unknown
+      simp only [ancestorWalk, hp, Option.bind_some, HeaderIndex.lookup_insert_of_ne _ _ _ _ ne, hparent,
+        ih p parent hparent]
+
+/-- An insertion under a key that the index lacks does not change the ancestor walk of step 6 from an entry of a well-formed index. -/
+theorem ancestorHashAt_insert_fresh {network : WorkNetwork} (index : HeaderIndex) (wf : WellFormed network index)
+    (fresh : Hash256) (new : IndexEntry) (unknown : index.lookup fresh = none) (fuel : Nat) (key : Hash256)
+    (entry : IndexEntry) (found : index.lookup key = some entry) (height : Nat) :
+    ancestorHashAt (index.insert fresh new) fuel key entry height = ancestorHashAt index fuel key entry height := by
+  induction fuel generalizing key entry with
+  | zero => rfl
+  | succ n ih =>
+    cases hp : entry.prev with
+    | none => simp [ancestorHashAt, hp]
+    | some p =>
+      obtain ⟨-, parent, hparent, -⟩ := wf.prevLink key entry p found hp
+      have ne : p ≠ fresh := by rintro rfl; rw [hparent] at unknown; cases unknown
+      simp only [ancestorHashAt, hp, HeaderIndex.lookup_insert_of_ne _ _ _ _ ne, hparent, ih p parent hparent]
+
+/-- One unfolding of `ancestorHashAt` with positive fuel. -/
+private theorem ancestorHashAt_succ (index : HeaderIndex) (fuel : Nat) (hash : Hash256) (entry : IndexEntry)
+    (height : Nat) :
+    ancestorHashAt index (fuel + 1) hash entry height =
+      if entry.height = height then some hash
+      else if entry.height < height then none
+      else
+        match entry.prev with
+        | some prev =>
+          match index.lookup prev with
+          | some parent => ancestorHashAt index fuel prev parent height
+          | none => none
+        | none => none := rfl
+
+/-- The entry that an acceptance adds above the entry `tip`: the header, the height of `tip` plus one, the predecessor `hashPrevBlock` and no flags. -/
+def linkedEntry (tip : IndexEntry) (header : BlockHeader) : IndexEntry :=
+  ⟨header.pure, tip.height + 1, some header.pure.hashPrevBlock, false, false, false⟩
+
+/--
+Let `tip` be an entry of a well-formed index under `tipHash`, and let a header with an unknown hash link to it.
+Insert the header's `linkedEntry`.
+Then a member of the index is an ancestor of the new entry exactly when it is an ancestor of `tip`.
+-/
+theorem isAncestorInIndex_linked {network : WorkNetwork} (index : HeaderIndex) (wf : WellFormed network index)
+    (tipHash : Hash256) (tip : IndexEntry) (found : index.lookup tipHash = some tip) (header : BlockHeader)
+    (unknown : index.lookup header.pure.getHash = none) (link : header.pure.hashPrevBlock = tipHash)
+    (member : Hash256) (memberEntry : IndexEntry) (inIndex : index.lookup member = some memberEntry) :
+    isAncestorInIndex (index.insert header.pure.getHash (linkedEntry tip header)) header.pure.getHash
+        (linkedEntry tip header) member =
+      isAncestorInIndex index tipHash tip member := by
+  have ne : member ≠ header.pure.getHash := by rintro rfl; rw [inIndex] at unknown; cases unknown
+  have tipNe : tipHash ≠ header.pure.getHash := by rintro rfl; rw [found] at unknown; cases unknown
+  have fresh := ancestorHashAt_insert_fresh index wf header.pure.getHash (linkedEntry tip header) unknown
+    (tip.height + 1) tipHash tip found memberEntry.height
+  simp only [isAncestorInIndex, HeaderIndex.lookup_insert_of_ne _ _ _ _ ne, inIndex]
+  rw [ancestorHashAt_succ _ (linkedEntry tip header).height]
+  simp only [linkedEntry]
+  by_cases same : tip.height + 1 = memberEntry.height
+  · have differ : (header.pure.getHash.val == member.val) = false :=
+      beq_false_of_ne fun eq => ne (Subtype.ext eq).symm
+    have notEq : ¬ tip.height = memberEntry.height := by omega
+    have below : tip.height < memberEntry.height := by omega
+    rw [ancestorHashAt_succ]
+    simp only [same, notEq, below, ite_true, ite_false]
+    simpa using differ
+  · by_cases above : tip.height + 1 < memberEntry.height
+    · have notEq : ¬ tip.height = memberEntry.height := by omega
+      have below : tip.height < memberEntry.height := by omega
+      rw [ancestorHashAt_succ]
+      simp only [same, above, notEq, below, ite_true, ite_false]
+    · simp only [same, above, ite_false, link, HeaderIndex.lookup_insert_of_ne _ _ _ _ tipNe, found]
+      simp only [linkedEntry, link] at fresh
+      rw [fresh]
+
+
+/--
+The setting of `process_linear`: a list of headers that extends the entry `tip` of a well-formed index in order.
+The heights stay below 2147483647, and the hashes are new, distinct and not the genesis hash.
+`tip` has no failure flag, and no member of the failed list is `tip` or an ancestor of it.
+-/
+structure LinearSetting (ctx : HeaderContext) (index : HeaderIndex) (tipHash : Hash256) (tip : IndexEntry)
+    (headers : List BlockHeader) : Prop where
+  /-- The index is well formed. -/
+  wf : WellFormed ctx.network index
+  /-- `tip` is the entry under `tipHash`. -/
+  found : index.lookup tipHash = some tip
+  /-- The height budget: the last header's height `tip.height + headers.length` is below 2147483647. -/
+  budget : tip.height + headers.length < 2147483647
+  /-- The headers link from `tipHash` in order. -/
+  links : LinksFrom tipHash headers
+  /-- The index has no header of the list. -/
+  unknown : ∀ header ∈ headers, index.lookup header.pure.getHash = none
+  /-- The hashes of the headers are distinct. -/
+  distinct : (headers.map (·.pure.getHash)).Nodup
+  /-- No header has the genesis hash of the network. -/
+  notGenesis : ∀ header ∈ headers, genesisHash? ctx.network ≠ some header.pure.getHash
+  /-- `tip` has no failure flag. -/
+  notFailed : tip.isFailed = false
+  /-- No member of the failed list is `tip` or an ancestor of it. -/
+  noFailedAncestor : ∀ member ∈ index.failedBlocks, isAncestorInIndex index tipHash tip member = false
+
+namespace LinearSetting
+
+variable {ctx : HeaderContext} {index : HeaderIndex} {tipHash : Hash256} {tip : IndexEntry}
+  {header : BlockHeader} {rest : List BlockHeader}
+
+/-- The first header of the setting links to `tip`. -/
+theorem foundPrev (s : LinearSetting ctx index tipHash tip (header :: rest)) :
+    index.lookup header.pure.hashPrevBlock = some tip := by
+  rw [s.links.1]; exact s.found
+
+/-- The index lacks the hash of the first header. -/
+theorem unknownHead (s : LinearSetting ctx index tipHash tip (header :: rest)) :
+    index.lookup header.pure.getHash = none :=
+  s.unknown header (List.mem_cons_self ..)
+
+/-- The acceptance of the first header inserts its `linkedEntry`. -/
+theorem addToBlockIndex_eq (s : LinearSetting ctx index tipHash tip (header :: rest)) :
+    addToBlockIndex index header.pure = index.insert header.pure.getHash (linkedEntry tip header) :=
+  addToBlockIndex_of_unknown index header.pure tip s.unknownHead s.foundPrev
+
+/-- After the first header, the rest of the list extends the entry of the first header in the same setting. -/
+theorem next (s : LinearSetting ctx index tipHash tip (header :: rest)) :
+    LinearSetting ctx (addToBlockIndex index header.pure) header.pure.getHash (linkedEntry tip header) rest := by
+  have distinct := s.distinct
+  rw [List.map_cons, List.nodup_cons] at distinct
+  have budget := s.budget
+  simp only [List.length_cons] at budget
+  have wf' : WellFormed ctx.network (addToBlockIndex index header.pure) := by
+    apply wellFormed_addToBlockIndex index s.wf header.pure
+    · intro parent hp
+      rw [s.foundPrev] at hp; cases hp
+      simp only [maxPrevHeight]; omega
+    · intro hp; rw [s.foundPrev] at hp; cases hp
+  rw [s.addToBlockIndex_eq] at wf' ⊢
+  refine ⟨wf', HeaderIndex.lookup_insert_self .., by simp only [linkedEntry]; omega, s.links.2, ?_,
+    distinct.2, fun h mem => s.notGenesis h (List.mem_cons_of_mem _ mem), rfl, ?_⟩
+  · intro h mem
+    have ne : h.pure.getHash ≠ header.pure.getHash := fun same =>
+      distinct.1 (List.mem_map.mpr ⟨h, mem, same⟩)
+    rw [HeaderIndex.lookup_insert_of_ne _ _ _ _ ne]
+    exact s.unknown h (List.mem_cons_of_mem _ mem)
+  · intro member mem
+    rw [HeaderIndex.insert_failedBlocks] at mem
+    obtain ⟨me, hm, -⟩ := s.wf.failedListed member mem
+    rw [isAncestorInIndex_linked index s.wf tipHash tip s.found header s.unknownHead s.links.1 member me hm]
+    exact s.noFailedAncestor member mem
+
+/-- The step accepts the first header exactly when step 2 and the contextual check on `tip` pass. -/
+theorem accept_ok_iff (s : LinearSetting ctx index tipHash tip (header :: rest)) :
+    (∃ r, (acceptBlockHeader ctx index header).2 = .ok r) ↔
+      checkBlockHeader ctx.network header = .ok () ∧ contextualCheckInIndex ctx index header.pure tip = .ok () := by
+  have notGenesis := s.notGenesis header (List.mem_cons_self ..)
+  have iff := accept_eq_ok_iff ctx index header s.wf notGenesis s.unknownHead
+  have budget := s.budget
+  simp only [List.length_cons] at budget
+  constructor
+  · rintro ⟨r, ok⟩
+    have := accept_ok_hash ctx index header r ok
+    subst this
+    obtain ⟨c, prev, hp, -, -, cc, -⟩ := iff.mp ok
+    rw [s.foundPrev] at hp; cases hp
+    exact ⟨c, cc⟩
+  · rintro ⟨c, cc⟩
+    refine ⟨_, iff.mpr ⟨c, tip, s.foundPrev, s.notFailed, by simp only [maxPrevHeight]; omega, cc, Or.inr ?_⟩⟩
+    intro member mem
+    rw [s.links.1]
+    exact s.noFailedAncestor member mem
+
+/-- The walk from the entry of the first header is that entry followed by the walk from `tip` in the input index. -/
+theorem ancestorWalk_linked (s : LinearSetting ctx index tipHash tip (header :: rest)) (fuel : Nat) :
+    ancestorWalk (addToBlockIndex index header.pure) (fuel + 1) (linkedEntry tip header) =
+      (linkedEntry tip header).toBlockIndex :: ancestorWalk index fuel tip := by
+  have tipNe : header.pure.hashPrevBlock ≠ header.pure.getHash := by
+    intro same; have := s.foundPrev; rw [same, s.unknownHead] at this; cases this
+  rw [s.addToBlockIndex_eq]
+  simp only [ancestorWalk]
+  simp only [linkedEntry, Option.bind_some, HeaderIndex.lookup_insert_of_ne _ _ _ _ tipNe, s.foundPrev]
+  rw [ancestorWalk_insert_fresh index s.wf _ _ s.unknownHead fuel tipHash tip s.found]
+
+end LinearSetting
+
+/-- A statement about each position of a list with a first element splits into the first element and the positions of the rest. -/
+private theorem forall_lt_cons {α : Type} (head : α) (rest : List α) (P : Nat → α → Prop) :
+    (∀ i (lt : i < (head :: rest).length), P i (head :: rest)[i]) ↔
+      P 0 head ∧ ∀ i (lt : i < rest.length), P (i + 1) rest[i] := by
+  constructor
+  · intro h
+    exact ⟨h 0 (by simp), fun i lt => h (i + 1) (by simp; omega)⟩
+  · rintro ⟨h0, h⟩ i lt
+    cases i with
+    | zero => exact h0
+    | succ i => exact h i (by simp at lt; omega)
+
+/--
+In the linear setting, the loop succeeds exactly when each header passes step 2 and the contextual check of step 5.
+The check of the header at position `i` runs on the index after the headers before it, with the entry of its predecessor.
+-/
+theorem LinearSetting.steps_ok_iff {ctx : HeaderContext} {index : HeaderIndex} {tipHash : Hash256}
+    {tip : IndexEntry} {headers : List BlockHeader} (s : LinearSetting ctx index tipHash tip headers)
+    (p : Nat) (last : Option Hash256) :
+    (∃ r, (processSteps ctx p index last headers).2 = .ok r) ↔
+      ∀ i (lt : i < headers.length), checkBlockHeader ctx.network headers[i] = .ok () ∧
+        ∃ e, (addHeaders index (headers.take i)).lookup headers[i].pure.hashPrevBlock = some e ∧
+          contextualCheckInIndex ctx (addHeaders index (headers.take i)) headers[i].pure e = .ok () := by
+  induction headers generalizing index tipHash tip p last with
+  | nil => simp [processSteps]
+  | cons header rest ih =>
+    rw [forall_lt_cons header rest (fun i x => checkBlockHeader ctx.network x = .ok () ∧
+      ∃ e, (addHeaders index ((header :: rest).take i)).lookup x.pure.hashPrevBlock = some e ∧
+        contextualCheckInIndex ctx (addHeaders index ((header :: rest).take i)) x.pure e = .ok ())]
+    have zero : (checkBlockHeader ctx.network header = .ok () ∧
+        ∃ e, (addHeaders index ((header :: rest).take 0)).lookup header.pure.hashPrevBlock = some e ∧
+          contextualCheckInIndex ctx (addHeaders index ((header :: rest).take 0)) header.pure e = .ok ()) ↔
+        (∃ r, (acceptBlockHeader ctx index header).2 = .ok r) := by
+      rw [s.accept_ok_iff]
+      simp [addHeaders, s.foundPrev]
+    rw [zero]
+    cases hstep : acceptBlockHeader ctx index header with
+    | mk index' r =>
+      cases r with
+      | error e => simp [processSteps, hstep]
+      | ok hash =>
+        have eq := accept_ok_index ctx index header hash (by rw [hstep])
+        rw [hstep] at eq
+        simp only at eq
+        subst eq
+        simp only [processSteps, hstep]
+        rw [ih s.next (p + 1) (some hash)]
+        simp only [Except.ok.injEq, exists_eq', true_and, List.take_succ_cons]
+        rfl
+
+/--
+In the linear setting, the index after the headers before position `i` holds the predecessor's entry of the header at `i`.
+The entry is at height `tip.height + i`, and the index is well formed.
+The walk from that entry with `i + fuel` entries is the view of those headers, followed by the walk from `tip` in the input index.
+-/
+theorem LinearSetting.walk {ctx : HeaderContext} {index : HeaderIndex} {tipHash : Hash256}
+    {tip : IndexEntry} {headers : List BlockHeader} (s : LinearSetting ctx index tipHash tip headers) :
+    ∀ i (lt : i < headers.length), ∃ e,
+      (addHeaders index (headers.take i)).lookup headers[i].pure.hashPrevBlock = some e ∧
+      e.height = tip.height + i ∧ WellFormed ctx.network (addHeaders index (headers.take i)) ∧
+      ∀ fuel, ancestorWalk (addHeaders index (headers.take i)) (i + fuel) e =
+        linearView tip.height (headers.take i) ++ ancestorWalk index fuel tip := by
+  induction headers generalizing index tipHash tip with
+  | nil => intro i lt; simp at lt
+  | cons header rest ih =>
+    rw [forall_lt_cons header rest (fun i x => ∃ e,
+      (addHeaders index ((header :: rest).take i)).lookup x.pure.hashPrevBlock = some e ∧
+      e.height = tip.height + i ∧ WellFormed ctx.network (addHeaders index ((header :: rest).take i)) ∧
+      ∀ fuel, ancestorWalk (addHeaders index ((header :: rest).take i)) (i + fuel) e =
+        linearView tip.height ((header :: rest).take i) ++ ancestorWalk index fuel tip)]
+    constructor
+    · refine ⟨tip, by simp [addHeaders, s.foundPrev], rfl, s.wf, fun fuel => ?_⟩
+      simp [addHeaders, linearView]
+    · intro i lt
+      obtain ⟨e, he, height, wfi, walk⟩ := ih s.next i lt
+      refine ⟨e, he, by simp only [linkedEntry] at height; omega, wfi, fun fuel => ?_⟩
+      simp only [List.take_succ_cons]
+      show ancestorWalk (addHeaders (addToBlockIndex index header.pure) (rest.take i)) (i + 1 + fuel) e = _
+      rw [show i + 1 + fuel = i + (fuel + 1) by omega, walk (fuel + 1), s.ancestorWalk_linked fuel,
+        linearView_cons]
+      simp [linkedEntry, IndexEntry.toBlockIndex]
+
+/-- In the linear setting, the index after all the headers holds the entry of each header.
+The entry of the header at position `i` has height `tip.height + i + 1` and the predecessor `hashPrevBlock`. -/
+theorem LinearSetting.lookup_addHeaders {ctx : HeaderContext} {index : HeaderIndex} {tipHash : Hash256}
+    {tip : IndexEntry} {headers : List BlockHeader} (s : LinearSetting ctx index tipHash tip headers) :
+    ∀ i (lt : i < headers.length), ∃ entry,
+      (addHeaders index headers).lookup headers[i].pure.getHash = some entry ∧
+      entry.height = tip.height + i + 1 ∧ entry.prev = some headers[i].pure.hashPrevBlock := by
+  induction headers generalizing index tipHash tip with
+  | nil => intro i lt; simp at lt
+  | cons header rest ih =>
+    rw [forall_lt_cons header rest (fun i x => ∃ entry,
+      (addHeaders index (header :: rest)).lookup x.pure.getHash = some entry ∧
+      entry.height = tip.height + i + 1 ∧ entry.prev = some x.pure.hashPrevBlock)]
+    constructor
+    · refine ⟨linkedEntry tip header, ?_, rfl, rfl⟩
+      exact lookup_addHeaders_of_some (addToBlockIndex index header.pure) rest _ _
+        (by rw [s.addToBlockIndex_eq]; exact HeaderIndex.lookup_insert_self ..)
+    · intro i lt
+      obtain ⟨entry, he, height, prev⟩ := ih s.next i lt
+      exact ⟨entry, he, by simp only [linkedEntry] at height; omega, prev⟩
+
+
+/--
+The target `process_linear` of design record 0008, section 11, the linear case of option S3.
+
+Let the index be well formed, with the entry `tip` under `tipHash`.
+Let `headers` be `h₁ … hₙ`, and let them link from `tipHash` in order (`LinksFrom`), with `tip.height + n < 2147483647`.
+The hashes of the headers are unknown: the index has none of them, and they are distinct.
+So no hash is known when its step runs.
+No hash is the genesis hash.
+The path has no failure state: `tip` has no failure flag, and no member of the failed list is `tip` or an ancestor of it.
+
+Then the sequence succeeds exactly when each header passes step 2 and the contextual check.
+For the header at position `i`, the check uses two inputs:
+
+- The view `linearView tip.height (headers.take i)` of the headers before it, newest first, followed by `ancestorView` of `tip` in the input index.
+- The last checkpoint of the index after those headers, `addHeaders index (headers.take i)`.
+-/
+theorem process_linear (ctx : HeaderContext) (index : HeaderIndex) (wf : WellFormed ctx.network index)
+    (tipHash : Hash256) (tip : IndexEntry) (found : index.lookup tipHash = some tip)
+    (headers : List BlockHeader) (budget : tip.height + headers.length < 2147483647)
+    (links : LinksFrom tipHash headers)
+    (unknown : ∀ header ∈ headers, index.lookup header.pure.getHash = none)
+    (distinct : (headers.map (·.pure.getHash)).Nodup)
+    (notGenesis : ∀ header ∈ headers, genesisHash? ctx.network ≠ some header.pure.getHash)
+    (notFailed : tip.isFailed = false)
+    (noFailedAncestor : ∀ member ∈ index.failedBlocks, isAncestorInIndex index tipHash tip member = false) :
+    (∃ last, (processNewBlockHeaders ctx index headers).2 = .ok last) ↔
+      ∀ i (lt : i < headers.length),
+        checkBlockHeader ctx.network headers[i] = .ok () ∧
+        contextualCheckBlockHeader ctx.network headers[i].pure
+            (linearView tip.height (headers.take i) ++ ancestorView ctx.network index tip) ctx.adjustedTime
+            (lastCheckpointInIndex ctx.network ctx.checkpointsEnabled (addHeaders index (headers.take i))) =
+          .ok () := by
+  have s : LinearSetting ctx index tipHash tip headers :=
+    ⟨wf, found, budget, links, unknown, distinct, notGenesis, notFailed, noFailedAncestor⟩
+  rw [processNewBlockHeaders_of_wellFormed ctx index wf, s.steps_ok_iff 0 none]
+  refine forall_congr' fun i => forall_congr' fun lt => and_congr_right' ?_
+  obtain ⟨e, he, height, wfi, walk⟩ := s.walk i lt
+  have depth : contextualViewDepth ctx.network e.toBlockIndex ≤
+      i + contextualViewDepth ctx.network tip.toBlockIndex := by
+    have := contextualViewDepth_antitone ctx.network tip.toBlockIndex e.toBlockIndex
+      (by simp only [IndexEntry.toBlockIndex]; omega) (by simp only [IndexEntry.toBlockIndex]; omega)
+    omega
+  have check : contextualCheckInIndex ctx (addHeaders index (headers.take i)) headers[i].pure e =
+      contextualCheckBlockHeader ctx.network headers[i].pure
+        (linearView tip.height (headers.take i) ++ ancestorView ctx.network index tip) ctx.adjustedTime
+        (lastCheckpointInIndex ctx.network ctx.checkpointsEnabled (addHeaders index (headers.take i))) := by
+    unfold contextualCheckInIndex
+    rw [ancestorView_congr_walk ctx.network _ wfi _ e he _ depth, walk]
+    rfl
+  simp only [he, Option.some.injEq, exists_eq_left', check]
+
+/--
+The target `process_height` of design record 0008, section 11.
+In the setting of `process_linear`, let the sequence succeed.
+Then the result index holds the entry of the header at position `i` at height `tip.height + i + 1`, with the predecessor `hashPrevBlock`.
+With positions from 1, as the record writes `hᵢ`, the entry of `hᵢ` has height `tip.height + i`.
+-/
+theorem process_height (ctx : HeaderContext) (index : HeaderIndex) (wf : WellFormed ctx.network index)
+    (tipHash : Hash256) (tip : IndexEntry) (found : index.lookup tipHash = some tip)
+    (headers : List BlockHeader) (budget : tip.height + headers.length < 2147483647)
+    (links : LinksFrom tipHash headers)
+    (unknown : ∀ header ∈ headers, index.lookup header.pure.getHash = none)
+    (distinct : (headers.map (·.pure.getHash)).Nodup)
+    (notGenesis : ∀ header ∈ headers, genesisHash? ctx.network ≠ some header.pure.getHash)
+    (notFailed : tip.isFailed = false)
+    (noFailedAncestor : ∀ member ∈ index.failedBlocks, isAncestorInIndex index tipHash tip member = false)
+    (last : Option Hash256) (ok : (processNewBlockHeaders ctx index headers).2 = .ok last) :
+    ∀ i (lt : i < headers.length), ∃ entry,
+      (processNewBlockHeaders ctx index headers).1.lookup headers[i].pure.getHash = some entry ∧
+      entry.height = tip.height + i + 1 ∧ entry.prev = some headers[i].pure.hashPrevBlock := by
+  have s : LinearSetting ctx index tipHash tip headers :=
+    ⟨wf, found, budget, links, unknown, distinct, notGenesis, notFailed, noFailedAncestor⟩
+  rw [processNewBlockHeaders_of_wellFormed ctx index wf] at ok ⊢
+  rw [processSteps_ok_index ctx 0 index none headers last ok]
+  exact s.lookup_addHeaders
+
+
+/-! ## The sequence: failure state, adjusted time and completeness -/
+
+/--
+Take every index, header, key and entry.
+An entry of `addToBlockIndex` is an entry of the input index, or the new entry under the header's hash.
+The new entry has the header, no flags and no `scriptsValid`.
+With a predecessor under `hashPrevBlock`, it is linked to it at its height plus one, and otherwise it has no predecessor and height 0.
+-/
+theorem lookup_addToBlockIndex (index : HeaderIndex) (header : PureBlockHeader) (key : Hash256)
+    (entry : IndexEntry) (found : (addToBlockIndex index header).lookup key = some entry) :
+    index.lookup key = some entry ∨
+      (key = header.getHash ∧ entry.failedValid = false ∧ entry.failedChild = false ∧
+        entry.scriptsValid = false ∧ entry.header = header ∧
+        (∀ parent, index.lookup header.hashPrevBlock = some parent →
+          entry.height = parent.height + 1 ∧ entry.prev = some header.hashPrevBlock) ∧
+        (index.lookup header.hashPrevBlock = none → entry.height = 0 ∧ entry.prev = none)) := by
+  simp only [addToBlockIndex] at found
+  cases hk : index.lookup header.getHash with
+  | some _ => simp only [hk] at found; exact Or.inl found
+  | none =>
+    simp only [hk] at found
+    cases hp : index.lookup header.hashPrevBlock with
+    | some parent =>
+      simp only [hp, HeaderIndex.lookup_insert] at found
+      split at found
+      · next same => cases found; exact Or.inr ⟨same, rfl, rfl, rfl, rfl, by simp, by simp⟩
+      · exact Or.inl found
+    | none =>
+      simp only [hp, HeaderIndex.lookup_insert] at found
+      split at found
+      · next same => cases found; exact Or.inr ⟨same, rfl, rfl, rfl, rfl, by simp, by simp⟩
+      · exact Or.inl found
+
+/--
+Let the index have no failure flag and an empty failed list.
+Then for every context and header, the step returns neither `duplicate`, `prevBlockInvalid` nor `failedAncestor`.
+The index after the step also has no failure flag and an empty failed list.
+-/
+theorem accept_no_failure (ctx : HeaderContext) (index : HeaderIndex) (header : BlockHeader)
+    (noFlags : ∀ key entry, index.lookup key = some entry → entry.failedValid = false ∧ entry.failedChild = false)
+    (noFailed : index.failedBlocks = []) :
+    (∀ error, (acceptBlockHeader ctx index header).2 = .error error →
+      error ≠ .rejection .duplicate ∧ error ≠ .rejection .prevBlockInvalid ∧
+      ∀ failed, error ≠ .rejection (.failedAncestor failed)) ∧
+    (∀ key entry, (acceptBlockHeader ctx index header).1.lookup key = some entry →
+      entry.failedValid = false ∧ entry.failedChild = false) ∧
+    (acceptBlockHeader ctx index header).1.failedBlocks = [] := by
+  have notFailed : ∀ key entry, index.lookup key = some entry → entry.isFailed = false := by
+    intro key entry found
+    obtain ⟨a, b⟩ := noFlags key entry found
+    simp [IndexEntry.isFailed, a, b]
+  have noAncestor : ∀ prevHash prev, failedAncestor? index prevHash prev = none := by
+    intro prevHash prev; simp [failedAncestor?, noFailed]
+  have errors : ∀ error, (acceptBlockHeader ctx index header).2 = .error error →
+      error ≠ .rejection .duplicate ∧ error ≠ .rejection .prevBlockInvalid ∧
+      ∀ failed, error ≠ .rejection (.failedAncestor failed) := by
+    intro error err
+    by_cases g : genesisHash? ctx.network = some header.pure.getHash
+    · have : error = .adapter .heightOutOfRange := by
+        simp only [acceptBlockHeader, g, ite_true] at err
+        revert err
+        repeat' split
+        all_goals (intro err; simp at err; try exact err.symm)
+      subst this
+      simp
+    · refine ⟨?_, ?_, ?_⟩
+      · rintro rfl
+        obtain ⟨entry, found, failed⟩ := (accept_eq_duplicate_iff ctx index header g).mp err
+        rw [notFailed _ _ found] at failed; cases failed
+      · rintro rfl
+        obtain ⟨-, -, prev, found, failed⟩ := (accept_eq_prevBlockInvalid_iff ctx index header g).mp err
+        rw [notFailed _ _ found] at failed; cases failed
+      · rintro failed rfl
+        obtain ⟨-, -, prev, -, -, -, -, -, found⟩ :=
+          (accept_eq_failedAncestor_iff ctx index header g failed).mp err
+        rw [noAncestor] at found; cases found
+  refine ⟨errors, ?_⟩
+  cases hr : (acceptBlockHeader ctx index header).2 with
+  | ok r =>
+    rw [accept_ok_index ctx index header r hr]
+    refine ⟨fun key entry found => ?_, ?_⟩
+    · rcases lookup_addToBlockIndex index header.pure key entry found with old | ⟨-, a, b, -⟩
+      · exact noFlags key entry old
+      · exact ⟨a, b⟩
+    · simp only [addToBlockIndex]
+      split
+      · exact noFailed
+      · split <;> exact noFailed
+  | error e =>
+    rw [accept_error_index_other ctx index header e hr (errors e hr).2.2]
+    exact ⟨noFlags, noFailed⟩
+
+/--
+The target `process_no_failure` of design record 0008, section 11 (item 19).
+Let the index be well formed, without failure flags and with an empty failed list.
+Then for every context and list, no step returns `duplicate`, `prevBlockInvalid` or `failedAncestor`.
+The result index has no failure flag and an empty failed list, so no step sets a flag.
+Only the last step that runs can fail, so the theorem states this of the result.
+-/
+theorem process_no_failure (ctx : HeaderContext) (index : HeaderIndex) (wf : WellFormed ctx.network index)
+    (headers : List BlockHeader)
+    (noFlags : ∀ key entry, index.lookup key = some entry → entry.failedValid = false ∧ entry.failedChild = false)
+    (noFailed : index.failedBlocks = []) :
+    (∀ error, (processNewBlockHeaders ctx index headers).2 = .error error →
+      error.error ≠ .rejection .duplicate ∧ error.error ≠ .rejection .prevBlockInvalid ∧
+      ∀ failed, error.error ≠ .rejection (.failedAncestor failed)) ∧
+    (∀ key entry, (processNewBlockHeaders ctx index headers).1.lookup key = some entry →
+      entry.failedValid = false ∧ entry.failedChild = false) ∧
+    (processNewBlockHeaders ctx index headers).1.failedBlocks = [] := by
+  rw [processNewBlockHeaders_of_wellFormed ctx index wf]
+  generalize 0 = p
+  generalize (none : Option Hash256) = last
+  induction headers generalizing p index last with
+  | nil => exact ⟨fun _ err => by simp [processSteps] at err, noFlags, noFailed⟩
+  | cons header rest ih =>
+    obtain ⟨errors, flags, failed⟩ := accept_no_failure ctx index header noFlags noFailed
+    have wf' := wellFormed_preserved ctx index header wf
+    cases hstep : acceptBlockHeader ctx index header with
+    | mk index' r =>
+      rw [hstep] at errors flags failed wf'
+      cases r with
+      | error e =>
+        simp only [processSteps, hstep]
+        refine ⟨fun error err => ?_, flags, failed⟩
+        simp only [Except.error.injEq] at err
+        subst err
+        exact errors e rfl
+      | ok hash =>
+        simp only [processSteps, hstep]
+        exact ih index' wf' flags failed (p + 1) (some hash)
+
+/--
+Let the step accept with the adjusted time of `ctx`, and let `t` be a greater adjusted time up to `maxAdjustedTime`.
+Then the step with `t` gives the same result.
+-/
+theorem accept_adjustedTime_mono (ctx : HeaderContext) (index : HeaderIndex) (header : BlockHeader) (t : Int64)
+    (later : ctx.adjustedTime.toInt ≤ t.toInt) (bounded : t.toInt ≤ maxAdjustedTime) (result : Hash256)
+    (ok : (acceptBlockHeader ctx index header).2 = .ok result) :
+    acceptBlockHeader { ctx with adjustedTime := t } index header = acceptBlockHeader ctx index header := by
+  have mono : ∀ prev, contextualCheckInIndex ctx index header.pure prev = .ok () →
+      contextualCheckInIndex { ctx with adjustedTime := t } index header.pure prev = .ok () := by
+    intro prev accepted
+    exact contextualCheck_adjustedTime_mono ctx.network header.pure _ ctx.adjustedTime t _ accepted later bounded
+  simp only [acceptBlockHeader] at ok ⊢
+  revert ok
+  repeat' split
+  all_goals (intro ok; simp_all)
+
+/-- Let a loop succeed with the adjusted time of `ctx`, for any start position, index, result so far and list.
+Then it gives the same result with a greater adjusted time up to `maxAdjustedTime`. -/
+theorem processSteps_adjustedTime_mono (ctx : HeaderContext) (t : Int64)
+    (later : ctx.adjustedTime.toInt ≤ t.toInt) (bounded : t.toInt ≤ maxAdjustedTime) (p : Nat)
+    (index : HeaderIndex) (last : Option Hash256) (headers : List BlockHeader) (result : Option Hash256)
+    (ok : (processSteps ctx p index last headers).2 = .ok result) :
+    processSteps { ctx with adjustedTime := t } p index last headers = processSteps ctx p index last headers := by
+  induction headers generalizing p index last with
+  | nil => rfl
+  | cons header rest ih =>
+    cases hstep : acceptBlockHeader ctx index header with
+    | mk index' r =>
+      cases r with
+      | error e => simp [processSteps, hstep] at ok
+      | ok hash =>
+        have same := accept_adjustedTime_mono ctx index header t later bounded hash (by rw [hstep])
+        rw [hstep] at same
+        simp only [processSteps, hstep] at ok ⊢
+        rw [same]
+        exact ih _ _ _ ok
+
+/--
+The target `process_adjustedTime_mono` of design record 0008, section 11.
+Let the index be well formed, and let the sequence accept with the adjusted time of `ctx`.
+Then for every greater adjusted time `t` up to `maxAdjustedTime`, `INT64_MAX − 7200`, the sequence gives the same result.
+It accepts with the same last hash, and it returns the same index.
+-/
+theorem process_adjustedTime_mono (ctx : HeaderContext) (index : HeaderIndex) (_wf : WellFormed ctx.network index)
+    (headers : List BlockHeader) (t : Int64) (later : ctx.adjustedTime.toInt ≤ t.toInt)
+    (bounded : t.toInt ≤ maxAdjustedTime) (last : Option Hash256)
+    (ok : (processNewBlockHeaders ctx index headers).2 = .ok last) :
+    processNewBlockHeaders { ctx with adjustedTime := t } index headers = processNewBlockHeaders ctx index headers := by
+  unfold processNewBlockHeaders at ok ⊢
+  by_cases check : checkWellFormed ctx.network index
+  · simp only [check, ite_true] at ok ⊢
+    exact processSteps_adjustedTime_mono ctx t later bounded 0 index none headers last ok
+  · simp [check] at ok
+
+/--
+Let the index be well formed and without anchors: every entry without a predecessor is at height 0.
+Then for every entry and fuel of at least its height plus one, the walk from the entry ends at height 0.
+-/
+theorem ancestorWalk_last_zero {network : WorkNetwork} {index : HeaderIndex} (wf : WellFormed network index)
+    (noAnchor : ∀ key entry, index.lookup key = some entry → entry.prev = none → entry.height = 0)
+    (fuel : Nat) (key : Hash256) (entry : IndexEntry) (found : index.lookup key = some entry)
+    (enough : entry.height + 1 ≤ fuel) :
+    (ancestorWalk index fuel entry).getLast?.map BlockIndex.nHeight = some 0 := by
+  induction fuel generalizing key entry with
+  | zero => omega
+  | succ n ih =>
+    cases hp : entry.prev with
+    | none => simp [ancestorWalk, hp, noAnchor key entry found hp, IndexEntry.toBlockIndex]
+    | some p =>
+      obtain ⟨-, parent, hparent, height⟩ := wf.prevLink key entry p found hp
+      obtain ⟨m, rfl⟩ : ∃ m, n = m + 1 := ⟨n - 1, by omega⟩
+      have := ih p parent hparent (by omega)
+      simp only [ancestorWalk, hp, Option.bind_some, hparent] at this ⊢
+      rw [List.getLast?_cons_cons]
+      exact this
+
+/--
+Let the index be well formed and without anchors, every height in it below `maxPrevHeight`, and the adjusted time at most `maxAdjustedTime`.
+Then for every header, the step returns no adapter error.
+-/
+theorem accept_complete (ctx : HeaderContext) (index : HeaderIndex) (header : BlockHeader)
+    (wf : WellFormed ctx.network index)
+    (noAnchor : ∀ key entry, index.lookup key = some entry → entry.prev = none → entry.height = 0)
+    (bounded : ctx.adjustedTime.toInt ≤ maxAdjustedTime)
+    (budget : ∀ key entry, index.lookup key = some entry → entry.height < maxPrevHeight) :
+    ∀ error, (acceptBlockHeader ctx index header).2 = .error error → ∀ adapter, error ≠ .adapter adapter := by
+  have contextual : ∀ key prev e, index.lookup key = some prev →
+      contextualCheckInIndex ctx index header.pure prev = .error e →
+      ∀ adapter, HeaderStepError.ofContextual e ≠ .adapter adapter := by
+    intro key prev e found fail adapter
+    unfold contextualCheckInIndex at fail
+    rw [ancestorView_congr_chain ctx.network index wf key prev found] at fail
+    have valid := ancestorWalk_valid ctx.network index wf (prev.height + 1) key prev found
+    have last := ancestorWalk_last_zero wf noAnchor (prev.height + 1) key prev found (Nat.le_refl _)
+    obtain ⟨rest, hrest⟩ : ∃ rest, ancestorWalk index (prev.height + 1) prev = prev.toBlockIndex :: rest :=
+      ⟨_, rfl⟩
+    unfold ancestorChain at fail
+    rw [hrest] at fail valid last
+    have rejection := contextualCheck_complete ctx.network header.pure _ rest ctx.adjustedTime _ valid last
+      bounded e fail
+    rw [(HeaderStepError.ofContextual_eq_rejection_iff e (.contextual e)).mpr ⟨rfl, rejection⟩]
+    simp
+  intro error err adapter same
+  subst same
+  simp only [acceptBlockHeader] at err
+  revert err
+  repeat' split
+  all_goals intro err
+  all_goals first
+    | (simp at err; done)
+    | (simp only [Except.error.injEq] at err
+       first
+         | (have := budget _ _ ‹_›; omega)
+         | exact contextual _ _ _ ‹_› ‹_› _ err)
+
+/-- The loop form of `process_complete`, by induction on the list with its height budget. -/
+theorem processSteps_complete (ctx : HeaderContext) (bounded : ctx.adjustedTime.toInt ≤ maxAdjustedTime)
+    (headers : List BlockHeader) (p : Nat) (index : HeaderIndex) (last : Option Hash256)
+    (wf : WellFormed ctx.network index)
+    (noAnchor : ∀ key entry, index.lookup key = some entry → entry.prev = none → entry.height = 0)
+    (budget : ∀ key entry, index.lookup key = some entry → entry.height + headers.length < 2147483647)
+    (short : headers.length < 2147483647) :
+    ∀ error, (processSteps ctx p index last headers).2 = .error error → ∀ adapter, error.error ≠ .adapter adapter := by
+  induction headers generalizing p index last with
+  | nil => intro error err; simp [processSteps] at err
+  | cons header rest ih =>
+    simp only [List.length_cons] at budget short
+    have step := accept_complete ctx index header wf noAnchor bounded
+      (fun key entry found => by have := budget key entry found; simp only [maxPrevHeight]; omega)
+    have wf' := wellFormed_preserved ctx index header wf
+    cases hstep : acceptBlockHeader ctx index header with
+    | mk index' r =>
+      rw [hstep] at step wf'
+      cases r with
+      | error e =>
+        intro error err
+        simp only [processSteps, hstep, Except.error.injEq] at err
+        subst err
+        exact step e rfl
+      | ok hash =>
+        have eq := accept_ok_index ctx index header hash (by rw [hstep])
+        rw [hstep] at eq
+        simp only at eq
+        subst eq
+        simp only [processSteps, hstep]
+        refine ih (p + 1) _ (some hash) wf' ?_ ?_ (by omega)
+        · intro key entry found none
+          rcases lookup_addToBlockIndex index header.pure key entry found with old | ⟨-, -, -, -, -, linked, root⟩
+          · exact noAnchor key entry old none
+          · cases hp : index.lookup header.pure.hashPrevBlock with
+            | some parent => have := (linked parent hp).2; rw [none] at this; cases this
+            | none => exact (root hp).1
+        · intro key entry found
+          rcases lookup_addToBlockIndex index header.pure key entry found with old | ⟨-, -, -, -, -, linked, root⟩
+          · have := budget key entry old; omega
+          · cases hp : index.lookup header.pure.hashPrevBlock with
+            | some parent =>
+              have := budget _ parent hp
+              have := (linked parent hp).1
+              omega
+            | none => have := (root hp).1; omega
+
+/--
+The target `process_complete` of design record 0008, section 11.
+Let the index be well formed and without anchors: every entry without a predecessor is at height 0, the genesis entry.
+Let the adjusted time be in the domain, at most `maxAdjustedTime`.
+Let `headers` have `n` headers, with the height budget of section 11: the greatest height in the index plus `n` is below 2147483647.
+The theorem states the budget for each entry, and as `n < 2147483647`, which is the budget of an index without entries.
+Then the sequence returns no adapter error.
+-/
+theorem process_complete (ctx : HeaderContext) (index : HeaderIndex) (wf : WellFormed ctx.network index)
+    (headers : List BlockHeader)
+    (noAnchor : ∀ key entry, index.lookup key = some entry → entry.prev = none → entry.height = 0)
+    (bounded : ctx.adjustedTime.toInt ≤ maxAdjustedTime)
+    (budget : ∀ key entry, index.lookup key = some entry → entry.height + headers.length < 2147483647)
+    (short : headers.length < 2147483647) :
+    ∀ error, (processNewBlockHeaders ctx index headers).2 = .error error →
+      ∀ adapter, error.error ≠ .adapter adapter := by
+  rw [processNewBlockHeaders_of_wellFormed ctx index wf]
+  exact processSteps_complete ctx bounded headers 0 index none wf noAnchor budget short
 
 end DogeLib.Block

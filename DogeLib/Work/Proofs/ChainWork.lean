@@ -7,7 +7,7 @@ public import DogeLib.Work.ChainWork
 
 - `setCompact_value_ne_max`: no compact value decodes to 2^256 - 1.
   So the divisor `target + 1` of `GetBlockProof` is never zero, and Core's division never throws there.
-- `blockProof_eq`, a target of design record 0008, section 11, covers a compact value whose target `t` is not negative, does not overflow and is not zero.
+- `blockProof_eq` (design record 0008, section 11) covers a compact value whose target `t` is not negative, does not overflow and is not zero.
   For such a value, `blockProof` is `⌊2^256 / (t + 1)⌋`.
   Otherwise it is 0.
 -/

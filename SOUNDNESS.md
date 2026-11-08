@@ -270,6 +270,11 @@ No theorem establishes contextual header validity beyond [version gating](#versi
 Its prefix-length hypothesis establishes that the final leaf is unpaired.
 `merkleMutated_of_equal` detects any equal aligned leaf pair after an even-length prefix.
 
+`computeMerkleRoot_duplicate_last` combines the two for a nonempty even-length prefix `pre` and a leaf `last`.
+The leaves `pre ++ [last, last]` have the root of `pre ++ [last]` and set the mutation flag.
+The theorem states the duplicate-leaf shape of CVE-2012-2459 that the comment in D42 describes, and it needs no hash collision.
+No theorem states what a block validator does with the flag, because DogeLib does not specify `CheckBlock`.
+
 `merkleMutated_iff` characterizes the recursive flag through equal pairs here or among complete parent subtrees.
 The complete-level operation discards an unpaired final subtree.
 Thus synthetic nodes from padding never enter mutation detection.
@@ -2702,6 +2707,40 @@ By `#print axioms` with Lean `v4.35.0`:
 | `propext` | `readInstruction_operandScript_nop10` |
 | `propext`, `Quot.sound` | `versionCheck_next`, `exampleStep_false`, `exampleStep_restricts`, `exampleStep_eq_of_not_nop10`, `example_evalScript_inactive_eq`, `example_inactive_eq`, `example_spend_inactive_eq`, `example_inactiveEq`, `example_verifyScript_soft_fork_local`, `example_soft_fork_local`, `example_restrictsAcceptance`, `example_evalScript_eq_of_no_nop10`, `example_eq_of_no_nop10`, `example_step_state`, `example_evalScript_state`, `example_soft_fork_projected`, `toNat_lengthByte`, `readInstruction_operandScript_zero`, `readInstruction_append`, `opcodeFreeFrom_append`, `example_strict`, `example_use`, `example_softFork` |
 | `propext`, `Classical.choice`, `Quot.sound` | `example_accepted_iff`, `example_spend_accepted_iff` |
+
+### Proposed revisions: the deliberately faulty example
+
+`DogeLib.Proposals.ExampleFaultyLocktime` is an invented rule with a deliberate fault, and its corrected variant.
+It is not a proposal for Dogecoin, and no network activates it.
+It is the worked example of [docs/in-practice.md](docs/in-practice.md), and a test that the framework refutes a false soft-fork claim.
+
+The rule redefines `OP_NOP4` (`0xb3`), a NOP at the pin (D3, lines 429 to 435).
+With `active` true and the opcode in an executing branch, `lockStep` runs the baseline `evalInstruction` and then `checkLockTimeStep` on its successful state.
+That step has the checks and errors of `OP_CHECKLOCKTIMEVERIFY` with its flag set, and the checker answers the lock-time comparison.
+After a successful check, `Variant.faulty` pops the operand, and `Variant.corrected` keeps the state.
+
+What the proofs say. Every theorem is Script-local: it is about one call of `verifyScript` or `verifyLegacySpend`, not about a block or a chain.
+
+- `lockStep_false`, `revisedVerifyScript_inactive_eq`, `revisedSpend_inactive_eq`, `inactiveEq`: with `active` false, each variant equals the baseline result with the error map `id`. This holds for every other argument, and every result agrees.
+- `faultyStep_pops`, `faultyStep_not_restricts`: take the checker of lock time 2 and no flags. At `OP_NOP4`, the faulty step succeeds with the stack `[1]`, and the baseline step succeeds with `[1, 2]`. So the faulty step does not restrict the baseline step.
+- `faulty_counterexample`: one concrete spend, `OP_1 OP_2 OP_NOP4 OP_1 OP_EQUAL` with lock time 2 and sequence `0xfffffffe`. `verifyLegacySpend` rejects it with `EVAL_FALSE`, and the active faulty revision accepts it.
+- `faulty_not_restrictsAcceptance`, `faulty_not_softFork`: the faulty spend predicate does not restrict acceptance, so it is not a `SoftFork` for any use predicate.
+- `faulty_strict`, `faulty_incompatible`: the faulty spend predicate also rejects a spend that the baseline accepts, so it is `Incompatible`.
+- `correctedStep_restricts`: for every `active`, checker, flag set and baseline error map, the corrected step restricts the baseline step.
+- `corrected_soft_fork_local`, `corrected_verifyScript_soft_fork_local`, `corrected_restrictsAcceptance`: if the corrected revision accepts, the baseline accepts, for every `active` and other argument. The P2SH evaluation is included.
+- `corrected_counterexample`, `corrected_strict`, `corrected_use`, `corrected_softFork`: the corrected revision rejects the counterexample as the baseline does. The witnesses and the four results above give the framework's `SoftFork`, with the use predicate `RunsRule`.
+
+The example adds no axiom and no trust assumption.
+It inherits the gaps of the baseline definitions that it reuses, as the worked example does.
+It has these boundaries:
+
+- **Unsupported reason.** Without a checker, an executed `OP_NOP4` with `active` true reports `Unsupported.checkLockTimeVerify`. That constructor's documentation describes `OP_CHECKLOCKTIMEVERIFY`, so the label is a stand-in. A spend always has a checker.
+- **Flags.** `DISCOURAGE_UPGRADABLE_NOPS` lies outside the supported flags, so every call with it is unsupported in both variants and in the baseline.
+- **Witnesses.** The kernel evaluates every concrete spend and step with `decide +kernel`. The spends contain no signature opcode, so no digest is computed.
+- **Evidence.** The known answers in `tests/KnownAnswers/Proposals/ExampleFaultyLocktime.lean` have results derived by hand. No implementation of the rule exists, so there is no comparison of the rule. The baseline verdicts of the counterexample and of the lock-time spend `01 02 b3 75 51` agree with the Core harness, by the commands in docs/in-practice.md.
+
+By `#print axioms` with Lean `v4.35.0`, every theorem of the example depends on `propext` and `Quot.sound` only.
+The theorems are `lockStep_false`, `lockCheck_corrected_next`, `correctedStep_restricts`, `revisedVerifyScript_inactive_eq`, `revisedSpend_inactive_eq`, `inactiveEq`, `corrected_verifyScript_soft_fork_local`, `corrected_soft_fork_local`, `corrected_restrictsAcceptance`, `faultyStep_pops`, `faultyStep_not_restricts`, `faulty_counterexample`, `faulty_not_restrictsAcceptance`, `faulty_not_softFork`, `faulty_strict`, `faulty_incompatible`, `corrected_counterexample`, `corrected_strict`, `corrected_use` and `corrected_softFork`.
 
 ### What cannot be proved yet
 

@@ -20,9 +20,17 @@ import campaign
 from oracle_script import refused_set
 
 
+def check(condition, detail='campaign self-test check failed'):
+    """Keep self-test checks active when Python optimizes bytecode."""
+    if not condition:
+        raise RuntimeError(detail)
+
+
 def wrap(mode, program, args):
     """Mutate one exact request's response, or fail after flushing its predecessors."""
     if args:
+        if mode == 'version-hang':
+            time.sleep(30)
         return subprocess.call([program, *args])
     requests = [json.loads(line) for line in sys.stdin]
     run = subprocess.run([program], input=''.join(json.dumps(r) + '\n' for r in requests),
@@ -104,36 +112,44 @@ def main():
                 local.harness = wrapper(tmp / f'{mode}-core', mode, args.harness)
             summary = campaign.run_campaign(local, chosen)
             expected = 'crash' if mode in ('malformed', 'id', 'count', 'nonutf8-stdout', 'nonutf8-stderr') else mode
-            assert summary['completed'] == 8, summary
-            assert summary['counts'][expected] == 1, summary
-            assert summary['counts']['pass_count'] == 7, summary
-            assert len(summary['saved']) == 1, summary
+            check(summary['completed'] == 8, summary)
+            check(summary['counts'][expected] == 1, summary)
+            check(summary['counts']['pass_count'] == 7, summary)
+            check(len(summary['saved']) == 1, summary)
             record_path = pathlib.Path(summary['saved'][0])
             record = json.loads(record_path.read_text())
-            assert record['case_index'] == 3
-            assert record['requests'] == [chosen[3]['request']]
-            assert record_path.stem == hashlib.sha256(campaign.canonical(record['requests'][0]).encode()).hexdigest()
-            assert record['signer'] == []
+            check(record['case_index'] == 3, 'check failed at line 119')
+            check(record['requests'] == [chosen[3]['request']], 'check failed at line 120')
+            check(record_path.stem == hashlib.sha256(campaign.canonical(record['requests'][0]).encode()).hexdigest(), 'check failed at line 121')
+            check(record['signer'] == [], 'check failed at line 122')
+            if mode == 'verdict':
+                evidence = record['responses']['core']
+                printed = json.dumps(evidence['responses'][0]) + '\n'
+                if printed not in evidence['stdout'] or evidence['stdout_requests'] != [c['request'] for c in chosen]:
+                    raise RuntimeError('per-request record lost the original response stream')
             if mode.startswith('nonutf8-'):
                 stream = mode.removeprefix('nonutf8-')
                 if b'\xff' not in record['responses']['core'][stream].encode('utf-8', errors='surrogateescape'):
                     raise RuntimeError('invalid output bytes were lost')
             if mode in ('crash', 'timeout'):
-                assert record['batch_failures']
+                check(record['batch_failures'], 'check failed at line 133')
                 parent = record['batch_failures'][0]['responses']['core']
-                assert len(parent['stdout'].splitlines()) == 3
-                assert 'planted ' + mode in parent['stderr']
+                check(len(parent['stdout'].splitlines()) == 3, 'check failed at line 135')
+                check('planted ' + mode in parent['stderr'], 'check failed at line 136')
                 if mode == 'crash':
-                    assert len(parent['stderr']) > 2000
-                    assert record['responses']['core']['returncode'] == 3
+                    check(len(parent['stderr']) > 2000, 'check failed at line 138')
+                    check(record['responses']['core']['returncode'] == 3, 'check failed at line 139')
             replay = subprocess.run([sys.executable, '-I', str(ROOT / 'scripts/campaign.py'), 'replay',
                                      str(record_path), local.oracle, local.harness], capture_output=True, text=True)
-            assert replay.returncode == 0, replay.stderr + replay.stdout
-            assert json.loads(replay.stdout)['reproduced'] is True
+            check(replay.returncode == 0, replay.stderr + replay.stdout)
+            check(json.loads(replay.stdout)['reproduced'] is True, 'check failed at line 143')
             if mode == 'crash':
                 blocked = tmp / 'non-executable'
                 blocked.write_text('not executable\n')
-                for bad in (tmp / 'missing', blocked):
+                invalid_executable = tmp / 'invalid-executable'
+                invalid_executable.write_text('#!/missing/campaign-interpreter\n')
+                invalid_executable.chmod(0o755)
+                for bad in (tmp / 'missing', blocked, invalid_executable):
                     for side in (0, 1):
                         programs = [local.oracle, local.harness]
                         programs[side] = str(bad)
@@ -147,22 +163,24 @@ def main():
             if mode not in ('unsupported', 'refusal'):
                 clean = subprocess.run([sys.executable, '-I', str(ROOT / 'scripts/campaign.py'), 'replay',
                                         str(record_path), args.oracle, args.harness], capture_output=True, text=True)
-                assert clean.returncode == 1, clean.stderr + clean.stdout
-                assert json.loads(clean.stdout)['reproduced'] is False
+                check(clean.returncode == 1, clean.stderr + clean.stdout)
+                check(json.loads(clean.stdout)['reproduced'] is False, 'check failed at line 162')
             print(f'ok {mode}: saved case 3, replay {expected}')
             checks += 1
         batch = copy.deepcopy(options)
         batch.output = str(tmp / 'batch-only')
         batch.harness = wrapper(tmp / 'batch-only-core', 'batch-only', args.harness)
         summary = campaign.run_campaign(batch, copy.deepcopy(cases))
-        assert summary['counts']['crash'] == 1 and len(summary['saved']) == 1
+        check(summary['batch_counts']['crash'] == 1 and len(summary['saved']) == 1, 'check failed at line 169')
+        if sum(summary['counts'].values()) != summary['completed'] or summary['failures'] != 1:
+            raise RuntimeError(f'batch evidence inflated per-case counts: {summary}')
         record = json.loads(pathlib.Path(summary['saved'][0]).read_text())
-        assert len(record['requests']) == 2
-        assert record['case_index'] == 2
+        check(len(record['requests']) == 2, 'check failed at line 173')
+        check(record['case_index'] == 2, 'check failed at line 174')
         reproduced = subprocess.run([sys.executable, '-I', str(ROOT / 'scripts/campaign.py'), 'replay',
                                      summary['saved'][0], batch.oracle, batch.harness],
                                     capture_output=True, text=True)
-        assert reproduced.returncode == 0, reproduced.stderr + reproduced.stdout
+        check(reproduced.returncode == 0, reproduced.stderr + reproduced.stdout)
         print('ok batch-only: retain and replay the failing pair after single requests pass')
         checks += 1
         from unittest.mock import patch
@@ -189,7 +207,7 @@ def main():
         exhausted.output = str(tmp / 'exhausted')
         exhausted.seconds = 0.000001
         summary = campaign.run_campaign(exhausted, copy.deepcopy(cases))
-        assert summary['exhausted'] and summary['completed'] == 0
+        check(summary['exhausted'] and summary['completed'] == 0, 'check failed at line 205')
         print('ok budget: incomplete run cannot count as a clean campaign')
         checks += 1
         limited = copy.deepcopy(options)
@@ -214,13 +232,24 @@ def main():
         print('ok time limit: incomplete without evidence, replay uses configured timeout')
         checks += 1
         options.output = str(tmp / 'clean')
+        probe = copy.deepcopy(options)
+        probe.output = str(tmp / 'version-probe')
+        probe.timeout = 10
+        probe.harness = wrapper(tmp / 'version-core', 'version-hang', args.harness)
+        started = time.monotonic()
+        summary = campaign.run_campaign(probe, copy.deepcopy(cases))
+        check(summary['revisions']['versions']['core']['error'] == 'TIMEOUT', summary)
+        check(time.monotonic() - started < 3, 'version probe used the request timeout')
+        check(summary['counts']['pass_count'] == 8, summary)
+        print('ok version probe: hung version exits after a short fixed timeout')
+        checks += 1
         summary = campaign.run_campaign(options, cases)
-        assert summary['failures'] == 0 and not summary['saved'] and summary['counts']['pass_count'] == 8
-        assert all(summary['counts'][kind] == 0 for kind in campaign.CLASSES)
-        assert summary['revisions']['core_stamp']
-        assert summary['inputs'] == ['cltv'] and summary['seed'] == options.seed
-        assert campaign.selected_cases(['cltv'], 1) == campaign.selected_cases(['cltv'], 1)
-        assert campaign.selected_cases(['cltv'], 1) != campaign.selected_cases(['cltv'], 2)
+        check(summary['failures'] == 0 and not summary['saved'] and summary['counts']['pass_count'] == 8, 'check failed at line 231')
+        check(all(summary['counts'][kind] == 0 for kind in campaign.CLASSES), 'check failed at line 232')
+        check(summary['revisions']['core_stamp'], 'check failed at line 233')
+        check(summary['inputs'] == ['cltv'] and summary['seed'] == options.seed, 'check failed at line 234')
+        check(campaign.selected_cases(['cltv'], 1) == campaign.selected_cases(['cltv'], 1), 'check failed at line 235')
+        check(campaign.selected_cases(['cltv'], 1) != campaign.selected_cases(['cltv'], 2), 'check failed at line 236')
         print('ok clean: eight passes, zero in all six outcome classes')
         checks += 1
     print(f'{checks} cases, 0 failures')

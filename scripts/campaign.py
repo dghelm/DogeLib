@@ -138,8 +138,6 @@ def metadata(oracle, harness, timeout):
             run_captured(program, ['--version'], '', timeout, capture)
         except RunError as error:
             capture = dict(error=error.code, **error.capture)
-        except OSError as error:
-            capture = dict(error=str(error))
         versions[side] = capture
     stamp = pathlib.Path(harness).resolve().parent / 'core.stamp'
     return dict(dogelib=git('rev-parse', 'HEAD'), dirty=bool(git('status', '--porcelain')),
@@ -156,11 +154,12 @@ def run_campaign(args, cases=None):
     output = pathlib.Path(args.output) / f'run-{args.seed}-{time.time_ns()}'
     output.mkdir(parents=True, exist_ok=False)
     (output / 'failures').mkdir()
-    revisions = metadata(args.oracle, args.harness, min(args.timeout, args.seconds))
+    revisions = metadata(args.oracle, args.harness, 0.25)
     build = dict(lean_toolchain=(ROOT / 'lean-toolchain').read_text().strip(),
                  python=sys.version, machine=platform.uname()._asdict())
     counts = dict.fromkeys(CLASSES, 0)
     counts.update(pass_count=0, known=0)
+    batch_counts = dict(crash=0, timeout=0)
     saved, completed, attempts = [], 0, 0
 
     def save(batch, result, runs, history):
@@ -210,16 +209,17 @@ def run_campaign(args, cases=None):
         if results and results[0][0] is None and len(batch) > 1:
             evidence = history + [dict(requests=requests, responses=runs)]
             middle = len(batch) // 2
-            before = sum(counts[k] for k in ('crash', 'timeout'))
+            before = counts['crash'] + counts['timeout'] + sum(batch_counts.values())
             left = visit(batch[:middle], evidence)
             right = visit(batch[middle:], evidence)
-            if left and right and sum(counts[k] for k in ('crash', 'timeout')) == before:
+            attributed = counts['crash'] + counts['timeout'] + sum(batch_counts.values()) != before
+            if left and right and not attributed:
                 # A batch-only failure must retain the original stream for replay.
-                counts[results[0][1][0]] += 1
+                batch_counts[results[0][1][0]] += 1
                 save(batch, results[0][1], runs, history)
-            elif not (left and right) and sum(counts[k] for k in ('crash', 'timeout')) == before:
+            elif not (left and right) and not attributed:
                 save(batch, results[0][1], runs, history)
-                counts[results[0][1][0]] += 1
+                batch_counts[results[0][1][0]] += 1
             return left and right
         completed += len(batch)
         counts['pass_count'] += len(batch) - len(results)
@@ -229,8 +229,7 @@ def run_campaign(args, cases=None):
             if index is None:
                 evidence = runs
             else:
-                evidence = {side: dict(responses=[run['responses'][index]], returncode=run['returncode'], timeout=run['timeout'],
-                                       stdout=canonical(run['responses'][index]) + '\n', stderr=run['stderr'])
+                evidence = {side: dict(run, responses=[run['responses'][index]], stdout_requests=requests)
                             for side, run in runs.items()}
             save(selected, result, evidence, history)
         return True
@@ -240,11 +239,11 @@ def run_campaign(args, cases=None):
     for offset in range(0, len(cases), args.batch_size):
         if not visit(cases[offset:offset + args.batch_size], []):
             break
-    failures = sum(counts[k] for k in ('verdict', 'digest', 'crash', 'timeout'))
+    failures = sum(counts[k] for k in ('verdict', 'digest', 'crash', 'timeout')) + sum(batch_counts.values())
     summary = dict(output=str(output), campaign=args.campaign, seed=args.seed, budget=dict(cases=args.cases, seconds=args.seconds),
                    inputs=args.inputs, selection=[{k: v for k, v in case.items() if k != 'request'} for case in cases],
                    selected=len(cases), completed=completed,
-                   exhausted=completed < len(cases), counts=counts, failures=failures,
+                   exhausted=completed < len(cases), counts=counts, batch_counts=batch_counts, failures=failures,
                    saved=saved, revisions=revisions, batch_size=args.batch_size,
                    timeout=args.timeout, batches_executed=attempts, elapsed_seconds=time.monotonic() - started)
     (output / 'summary.json').write_text(json.dumps(summary, indent=2) + '\n')
@@ -316,7 +315,7 @@ def main():
             parser.error('--output must be under this worktree\'s build/campaign/')
         summary = run_campaign(args)
         # Public logs contain counts, never candidate requests or responses.
-        print(json.dumps({k: summary[k] for k in ('output', 'completed', 'counts', 'failures', 'exhausted')}))
+        print(json.dumps({k: summary[k] for k in ('output', 'completed', 'counts', 'batch_counts', 'failures', 'exhausted')}))
         return 1 if summary['failures'] or summary['exhausted'] else 0
     except (OSError, ValueError, KeyError) as error:
         print(f'campaign: {error}', file=sys.stderr)

@@ -30,6 +30,7 @@ from oracle_script import harness_refused, refused_set, refusal_precedence_set, 
 MUTATIONS = {
     **{f"sequence_{field}": ("core", "HEADER_SEQUENCE") for field in
        ("valid", "failed_at", "reject_reason", "dos", "reject_code", "last_hash", "added", "marked_failed_child", "height", "chain_work", "hash")},
+    "sequence_projected": ("core", "HEADER_SEQUENCE"),
     "contextual_valid": ("core", "CONTEXTUAL_HEADER"),
     "contextual_reason": ("core", "CONTEXTUAL_HEADER"),
     "contextual_reason_value": ("core", "CONTEXTUAL_HEADER"),
@@ -162,7 +163,11 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
             ok.pop("preimage_hex", None)
             ok.pop("diagnostic", None)
         if role == "core" and request["op"] == "block.header_sequence" and resp.get("error", {}).get("kind") == "work_view":
-            resp["error"] = {"kind": "request", "message": "anchor view refused"}
+            from oracle_header_sequence import core_refusal
+            resp["error"] = core_refusal(resp["error"])
+        if (role == "core" and request["op"] == "block.header_sequence" and
+                resp.get("error", {}).get("message", "").endswith("heightOutOfRange")):
+            resp["error"]["message"] = "heightOutOfRange"
         if role == "core" and harness_refused(request):
             resp.pop("ok", None)
             resp["error"] = {"kind": "request", "message": "Core VerifyScript flag dependencies are not satisfied"}
@@ -371,7 +376,7 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
         mutate_first(responses, is_plan("hash_bytes"), flip_last)
     elif mode == "oracle_preimage_malformed":
         mutate_first(responses, is_plan("hash_bytes"), set_ok("preimage_hex", "zz"))
-    if mode.startswith("sequence_"):
+    if mode.startswith("sequence_") and mode != "sequence_projected":
         field = mode[len("sequence_"):]
         for request, response in zip(requests, responses):
             if request["op"] == "block.header_sequence" and response.get("ok", {}).get("added"):
@@ -385,6 +390,17 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
                 break
         else:
             raise SystemExit("wrapper: no sequence response to mutate")
+    if mode == "sequence_projected":
+        from oracle_header_sequence import sequence_sets, EXPECTATIONS, key
+        sequence_sets()
+        for request, response in zip(requests, responses):
+            if (request['op'] == 'block.header_sequence' and key(request) not in EXPECTATIONS
+                    and response.get('ok', {}).get('added')):
+                value = response['ok']['added'][0]['chain_work']
+                response['ok']['added'][0]['chain_work'] = '00' * 32 if value != '00' * 32 else '01' * 32
+                break
+        else:
+            raise SystemExit("wrapper: no sequence insertion without an independent expectation")
     if mode in ("contextual_valid", "contextual_reason"):
         for request, response in zip(requests, responses):
             if request["op"] == "block.contextual_check" and "ok" in response:
@@ -447,26 +463,65 @@ def check_sequence_comparison():
     from oracle_header_sequence import sequence_sets, EXPECTATIONS as sequence_expected, key as sequence_key, exclude_marks
     sequence_sets()
     sequence_requests = sequence_sets()[0][1]
-    assert sum(exclude_marks(r) for r in sequence_requests) == 2
+    assert sum(exclude_marks(r, sequence_expected[sequence_key(r)]) for r in sequence_requests
+               if 'error' not in sequence_expected[sequence_key(r)]) == 2
     for req in sequence_requests:
-        upper = copy.deepcopy(req)
-        upper['failed_blocks'] = [h.upper() for h in req['failed_blocks']]
-        assert exclude_marks(upper) == exclude_marks(req)
         expected = sequence_expected[sequence_key(req)]
         if 'error' in expected: continue
+        excluded = exclude_marks(req, expected)
+        upper = copy.deepcopy(req)
+        upper['failed_blocks'] = [h.upper() for h in req['failed_blocks']]
+        assert exclude_marks(upper, expected) == excluded
         core = {'id': 1, 'ok': copy.deepcopy(expected)}
         lean = {'id': 1, 'ok': dict(expected, diagnostic=None)}
         assert compare_response(req, lean, core) is None
         core['ok']['marked_failed_child'] = ['00' * 32]
         result = compare_response(req, lean, core)
-        assert (result is None) == exclude_marks(req)
-        if exclude_marks(req):
+        assert (result is None) == excluded
+        if excluded:
             core['ok']['dos'] = 999
             assert compare_response(req, lean, core)[0] == 'HEADER_SEQUENCE'
     # Duplicate failed-list members do not create two distinct failed ancestors.
-    req = copy.deepcopy(next(r for r in sequence_requests if len(r['failed_blocks']) == 1))
+    original = next(r for r in sequence_requests if len(r['failed_blocks']) == 1)
+    req = copy.deepcopy(original)
     req['failed_blocks'] += [req['failed_blocks'][0].upper()]
-    assert not exclude_marks(req)
+    assert not exclude_marks(req, sequence_expected[sequence_key(original)])
+    from oracle_header_sequence import acceptance, core_refusal
+    req = copy.deepcopy(next(r for r in sequence_requests if len(set(r['failed_blocks'])) == 2))
+    for variant in ('scripts_valid', 'failed_child', 'earlier_rejection'):
+        trial = copy.deepcopy(req)
+        prev = bytes.fromhex(trial['headers'][0])[4:36][::-1].hex()
+        from oracle_header_sequence import digest
+        parent = next(e for e in trial['index'] if digest(e['header_hex']) == prev)
+        if variant == 'scripts_valid':
+            parent['scripts_valid'] = True
+            expected = acceptance(trial)
+        else:
+            expected = dict(valid=False, failed_at=0, reject_reason='bad-prevblk', dos=100,
+                            reject_code=16, last_hash=None, added=[], marked_failed_child=[])
+            if variant == 'failed_child':
+                parent['failed_child'] = True
+            else:
+                # A high-hash failure stops before a later header with two failed ancestors.
+                trial['headers'].insert(0, '00' * 80)
+                expected.update(reject_reason='high-hash', dos=50)
+        assert sequence_key(trial) not in sequence_expected
+        assert not exclude_marks(trial, expected)
+        lean = {'id': 1, 'ok': dict(expected, diagnostic=None)}
+        core = {'id': 1, 'ok': copy.deepcopy(expected)}
+        assert compare_response(trial, lean, core) is None
+        core['ok']['marked_failed_child'] = ['00' * 32]
+        assert compare_response(trial, lean, core)[0] == 'HEADER_SEQUENCE'
+    # Refusal reasons are part of the adapter comparison, even with the right kind.
+    for _, cases in sequence_sets()[:3]:
+        for req in cases:
+            expected = sequence_expected[sequence_key(req)]
+            if 'error' not in expected: continue
+            lean = {'id': 1, **expected}
+            core = {'id': 1, 'error': core_refusal(expected['error'])}
+            assert compare_response(req, lean, core) is None
+            core['error']['message'] = 'unrelated refusal'
+            assert compare_response(req, lean, core)[0] == 'HEADER_SEQUENCE'
 
 
 def main() -> int:
@@ -582,7 +637,7 @@ def main() -> int:
             else:
                 w = wrapper(tmp, mode, role, oracle)
                 oracle_side, harness_side = (w, wrapper(tmp, "none", "core", oracle)) if role == "oracle" else (oracle, w)
-            extra = ([] if mode in ("composition_stack", "targeted_early_error", "contextual_reason_value") else ["--quick"]) + ["--timeout", "5" if mode == "hang" else "120"]
+            extra = ([] if mode in ("composition_stack", "targeted_early_error", "contextual_reason_value", "sequence_projected") else ["--quick"]) + ["--timeout", "5" if mode == "hang" else "120"]
             result = compare(oracle_side, harness_side, extra, env)
             codes = {line.split()[1] for line in result.stdout.splitlines() if line.startswith("FAIL ")}
             if result.returncode != 1 or code not in codes:
@@ -590,7 +645,7 @@ def main() -> int:
                 print(f"FAIL {mode}: expected exit 1 with FAIL {code}, got exit {result.returncode}, codes {sorted(codes)}")
                 print(result.stdout[-1500:] + result.stderr[-1500:])
                 continue
-            if mode == "contextual_reason_value" and (codes != {"CONTEXTUAL_HEADER"} or "first difference at" not in result.stdout):
+            if mode in ("contextual_reason_value", "sequence_projected") and (codes != {code} or "first difference at" not in result.stdout):
                 failures += 1
                 print(f"FAIL {mode}: did not reach result-value comparison: {result.stdout[-1500:]}")
                 continue

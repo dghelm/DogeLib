@@ -582,8 +582,12 @@ A failed-ancestor rejection retains both prefix insertions and child marks.
 The operation permits several branches in one call.
 
 The comparator compares every response field except `diagnostic`.
-It also excludes the value of `marked_failed_child` exactly when two distinct failed-list members are ancestors of one request predecessor.
-It computes that condition from request ancestry, including predecessors supplied by earlier headers, without a fixture-name exemption.
+It compares all other fields first, including the failure position and accepted prefix.
+It excludes `marked_failed_child` only for an agreed step-6 failed-ancestor rejection at `failed_at`.
+The rejecting header's predecessor must have at least two distinct failed-list members among its ancestors.
+The ancestry includes entries added in the accepted prefix.
+
+Other rejection steps and accepted calls retain the mark comparison.
 Duplicate members of the failed list do not satisfy that condition alone.
 A failed member below an anchor is no ancestor under the finite-index convention.
 All other fields remain comparable in the excluded-mark cases.
@@ -1010,7 +1014,9 @@ These runs give finite evidence, not an all-input equivalence theorem with compi
 ### Header-sequence comparison evidence
 
 The harness follows H2 of [design record 0008](design/0008-header-sequence-validation.md#82-the-core-side).
-It transcribes D33, lines 3205 to 3286 and 2755 to 2781, with citations beside the ordered branches.
+It transcribes D33, lines 3205 to 3286 and 2755 to 2788, with citations beside the ordered branches.
+The index transcription omits `nTimeMax` (2779), the best-header pointer (2782 to 2783) and the dirty set (2785).
+
 It calls Core's `CheckAuxPowProofOfWork`, `GetAncestor`, `BuildSkip`, `GetBlockProof` and `Checkpoints::GetLastCheckpoint`.
 The contextual step reuses `contextualReject`, with the Core helpers listed above.
 The harness owns the index and visits the failed list in request order, rather than pointer-address order.
@@ -1022,7 +1028,7 @@ Two guards keep anchor walks inside their represented chains.
 Before contextual validation, the harness refuses short median, recovery and retarget histories.
 So `GetNextWorkRequired` cannot call `GetAncestor` below an anchor at `pow.cpp:84`.
 
-For the three fixture adapter errors, the comparator requires the exact Lean `work_view` error and a Core request refusal.
+For the three fixture adapter errors, the comparator requires the exact Lean `work_view` error and the corresponding Core request-refusal message.
 Neither response is a consensus rejection.
 
 `scripts/oracle_header_sequence.py` defines these streams:
@@ -1031,7 +1037,7 @@ Neither response is a consensus rejection.
 | --- | ---: | --- |
 | Regtest | 34 | D83's complete requests and hand-derived expected fields |
 | Mainnet | 15 | Five full-header ranges, three pure-header initial indices, checkpoint branches, two anchor refusals and three version mutations |
-| State boundaries | 3 | Prefix insertion followed by marks, a pre-existing child flag and a failed member below an anchor |
+| State boundaries | 8 | Prefix marks, an existing child flag, anchor separation, three failed-list search orders, the candidate height bound and size-before-decode precedence |
 | Mutations, seed `20261110` | 200 | Header order, bits, time, predecessor bytes, failure/validity flags and failed-list order |
 
 The mainnet sequences use every full candidate after the first eleven context entries of each non-genesis range.

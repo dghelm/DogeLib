@@ -933,7 +933,11 @@ Neither a build nor agreement on the tested inputs proves the transcription equi
 The [comparison streams](docs/oracle.md#header-sequence-comparison-evidence) record the finite evidence and seeds.
 
 The comparison excludes Lean diagnostics.
-When two distinct failed members are ancestors of one predecessor, it also excludes child marks.
+All other fields must agree before the comparator decides whether to exclude child marks.
+It excludes them only for a step-6 failed-ancestor rejection at the agreed failure position.
+At least two distinct failed members must be ancestors of that header's predecessor, including entries added in the accepted prefix.
+
+Other rejection steps and accepted calls retain the mark comparison.
 The verdict, failure position, reason, score, code, last hash and every added entry remain compared.
 `failedAncestor_verdict_perm` proves verdict independence from failed-list order for the Lean definition, rather than for the C++ transcription.
 Initial state, adjusted time and the checkpoint option remain execution boundaries.

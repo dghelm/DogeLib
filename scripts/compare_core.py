@@ -41,7 +41,7 @@ from oracle_hash_block import header_fields, header_records, header_fixtures, me
 from oracle_script import script_sets, corpus_records, evaluation, validate_eval, adapter_limit_cases, legacy_sets, harness_refused, refused_set, tx_spend_sets, locktime_sets, refusal_precedence_set
 
 from oracle_pubkey import pubkey_sets, signature_spends
-from oracle_header_sequence import sequence_sets, EXPECTATIONS as SEQUENCE_EXPECTATIONS, key as sequence_key, exclude_marks
+from oracle_header_sequence import sequence_sets, EXPECTATIONS as SEQUENCE_EXPECTATIONS, key as sequence_key, exclude_marks, core_refusal
 from oracle_contextual import contextual_sets, EXPECTATIONS as CONTEXT_EXPECTATIONS, key as context_key
 from oracle_header_pow import header_pow_sets, CODES as HEADER_CODES, EXPECTATIONS as HEADER_EXPECTATIONS, key as header_key
 
@@ -757,7 +757,8 @@ def compare(req: dict, ours: dict, core: dict, peer: str = "core") -> tuple[str,
         expected = SEQUENCE_EXPECTATIONS.get(sequence_key(req))
         if expected is not None and "error" in expected:
             # Core refuses an incomplete view before invoking assertion-bearing helpers.
-            if not json_equal(ours.get("error"), expected["error"]) or core.get("error", {}).get("kind") != "request":
+            if (not json_equal(ours.get("error"), expected["error"]) or
+                    not json_equal(core.get("error"), core_refusal(expected["error"]))):
                 return "HEADER_SEQUENCE", "adapter error or Core refusal differs from fixture"
             return None
         from oracle_header_sequence import well_shaped
@@ -772,19 +773,21 @@ def compare(req: dict, ours: dict, core: dict, peer: str = "core") -> tuple[str,
                 ok.pop("diagnostic")
             if not well_shaped(ok):
                 return "HEADER_SEQUENCE", "malformed sequence verdict"
-            if expected is not None and not json_equal(ok, expected):
-                # The known answer fixes list order too, but the comparison has
-                # exactly the mark exclusion adopted in decision 12.
-                want = dict(expected)
-                actual = dict(ok)
-                if exclude_marks(req):
-                    want.pop("marked_failed_child"); actual.pop("marked_failed_child")
-                if not json_equal(actual, want):
-                    return "HEADER_SEQUENCE", f"{side} disagrees with independent expectation"
-            if exclude_marks(req): ok.pop("marked_failed_child")
             projected.append({"id": response["id"], "ok": ok})
-        if not json_equal(*projected):
+        # Establish agreement on the rejection and prefix before deciding whether
+        # pointer-address order can change the marking path at that position.
+        def without_marks(response):
+            return {**response, "ok": {k: v for k, v in response['ok'].items() if k != 'marked_failed_child'}}
+        if not json_equal(*(without_marks(r) for r in projected)):
             return "HEADER_SEQUENCE", f"first difference at {first_difference(*projected)}"
+        if expected is not None and not json_equal(without_marks(projected[0])['ok'],
+                                                   {k: v for k, v in expected.items() if k != 'marked_failed_child'}):
+            return "HEADER_SEQUENCE", "oracle disagrees with independent expectation"
+        if not exclude_marks(req, projected[0]['ok']):
+            if not json_equal(*projected):
+                return "HEADER_SEQUENCE", f"first difference at {first_difference(*projected)}"
+            if expected is not None and not json_equal(projected[0]['ok'], expected):
+                return "HEADER_SEQUENCE", "oracle disagrees with independent expectation"
         return None
     for side, resp in (("oracle", ours), (peer, core)):
         if resp.get("error", {}).get("kind") == "request":
@@ -998,7 +1001,7 @@ def main() -> int:
     dirty = subprocess.run(["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True)
     print(f"DogeLib revision: {revision.stdout.strip()}" + (" (dirty tree)" if dirty.stdout else ""))
     print("Expected Core source revision: e0a1c157791544e818c901bd9341896965afbf9d")
-    print("Seeds: transaction mutations 20261104, Script evaluation 20261105, legacy spends 20261106, targeted timelocks 20261107, header PoW 20261108")
+    print("Seeds: transaction mutations 20261104, Script evaluation 20261105, legacy spends 20261106, targeted timelocks 20261107, header PoW 20261108, contextual headers 20261109, header sequences 20261110")
 
     rust_args = []
     if args.rust_compactsize:

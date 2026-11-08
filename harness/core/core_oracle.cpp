@@ -515,6 +515,8 @@ void sequenceSkip(CBlockIndex* entry)
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 // The request owns the index and failed-list order. Disk state, best-header
 // selection, notifications, locks and peer penalties are outside this operation.
+// AddToBlockIndex omits nTimeMax (2779), pindexBestHeader (2782-2783)
+// and setDirtyBlockIndex (2785).
 UniValue headerSequence(const UniValue& req)
 {
     checkArgs(req, "block.header_sequence", {"network", "mode", "adjusted_time", "checkpoints_enabled", "index", "failed_blocks", "headers"});
@@ -589,11 +591,21 @@ UniValue headerSequence(const UniValue& req)
     }
     std::vector<CBlockHeader> decoded;
     size_t total = 0;
+    // Match the Lean adapter: check every string size before decoding any hex
+    // or full header, so a later size refusal precedes an earlier read error.
+    for (size_t i = 0; i < headers.size(); ++i) {
+        if (!headers[i].isStr()) throw RequestError{"headers must contain hexadecimal strings"};
+        const size_t length = headers[i].get_str().size();
+        if (length > 2097152) throw RequestError{"header exceeds 1 MiB"};
+        total += length / 2;
+    }
+    if (total > 16777216) throw RequestError{"headers exceed 16 MiB"};
+    std::vector<std::vector<unsigned char>> headerBytes;
     for (size_t i = 0; i < headers.size(); ++i) {
         UniValue field(UniValue::VOBJ); field.pushKV("header", headers[i]);
-        const auto bytes = argHex(field, "header");
-        total += bytes.size();
-        if (bytes.size() > 1048576 || total > 16777216) throw RequestError{"sequence header byte limit"};
+        headerBytes.push_back(argHex(field, "header"));
+    }
+    for (const auto& bytes : headerBytes) {
         CDataStream ds(bytes, SER_NETWORK, version);
         CBlockHeader header;
         try { ds >> header; } catch (const std::ios_base::failure& e) { throw SpecError{mapCoreFailure(e)}; }
@@ -650,7 +662,7 @@ UniValue headerSequence(const UniValue& req)
                 if (!reason.isNull()) break;
             }
         }
-        // C3, validation.cpp:2757-2781. Search before insertion follows the
+        // C3, validation.cpp:2755-2788. Search before insertion follows the
         // accepted fixed-point convention of design 0008, amendment 13.1.
         if (known == mapBlockIndex.end()) {
             const auto parent = mapBlockIndex.find(block.hashPrevBlock);

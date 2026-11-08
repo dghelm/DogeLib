@@ -161,25 +161,44 @@ def mainnet_cases():
     return cases
 
 
-def exclude_marks(req):
-    """Decision 12: two distinct failed members are ancestors of one predecessor.
+def exclude_marks(req, verdict):
+    """Decision 12 applies only to the agreed step-6 rejection position."""
+    if (verdict['valid'] or verdict['reject_reason'] != 'bad-prevblk' or
+            verdict['dos'] != 100 or verdict['reject_code'] != 16):
+        return False
+    position = verdict['failed_at']
+    index = {digest(e['header_hex']): e for e in req['index']}
+    added = {e['hash'] for e in verdict['added']}
+    # Only the accepted prefix can supply entries at the rejecting position.
+    for raw in req['headers'][:position]:
+        h = digest(raw)
+        if h in added and h not in index:
+            prev = bytes.fromhex(raw)[4:36][::-1].hex()
+            index[h] = entry(raw, index[prev]['height'] + 1 if prev in index else 0)
+    prev = bytes.fromhex(req['headers'][position])[4:36][::-1].hex()
+    parent = index.get(prev)
+    # A missing or flagged predecessor rejects at steps 3 or 4. Script validity
+    # bypasses step 6. The remaining bad-prevblk/100/16 branch is step 6.
+    if parent is None or any(parent[f] for f in ('failed_valid', 'failed_child', 'scripts_valid')):
+        return False
+    seen = set()
+    while prev in index and prev not in seen:
+        seen.add(prev)
+        e = index[prev]
+        if e['anchor'] or e['height'] == 0:
+            break
+        prev = bytes.fromhex(e['header_hex'])[4:36][::-1].hex()
+    return len(seen & {h.lower() for h in req['failed_blocks']}) >= 2
 
-    Include predecessors supplied by earlier request headers, on any branch.
-    This predicate depends on ancestry, never on fixture names or response marks.
-    """
-    index = {digest(e['header_hex']): (None if e['anchor'] or e['height'] == 0 else
-             bytes.fromhex(e['header_hex'])[4:36][::-1].hex()) for e in req['index']}
-    failed = {h.lower() for h in req['failed_blocks']}
-    for raw in req['headers']:
-        prev = bytes.fromhex(raw)[4:36][::-1].hex()
-        seen = set()
-        while prev in index and prev not in seen:
-            seen.add(prev)
-            prev = index[prev]
-        if len(seen & failed) >= 2:
-            return True
-        index.setdefault(digest(raw), bytes.fromhex(raw)[4:36][::-1].hex())
-    return False
+
+def core_refusal(error):
+    """Exact harness adapter refusal corresponding to an independent expectation."""
+    if error['kind'] == 'request':
+        message = 'heightOutOfRange' if error['message'].endswith('heightOutOfRange') else error['message']
+    else:
+        message = {'short_view': 'short contextual view',
+                   'missing_ancestor': 'missing retarget ancestor is outside the Core comparison domain'}[error['reason']]
+    return {'kind': 'request', 'message': message}
 
 
 def boundary_cases(regtest):
@@ -209,6 +228,32 @@ def boundary_cases(regtest):
     req['index'].append(genesis)
     req['failed_blocks'] = [digest(raw['genesis'])]
     EXPECTATIONS[key(req)] = copy.deepcopy(fixture['expected'])
+    cases.append(req)
+    # C1:3242-3253: only a is an ancestor of b. Failed branch entries
+    # cannot match. Every order must reject c and mark b alone.
+    for names in [('a', 'branch'), ('branch', 'a'), ('branch', 'a', 'branch_child')]:
+        state = [entry(raw[n], h, 2*(h+1)) for n, h in
+                 [('genesis', 0), ('a', 1), ('b', 2), ('branch', 1), ('branch_child', 2)]]
+        for e in state:
+            e['failed_valid'] = digest(e['header_hex']) in {digest(raw[n]) for n in names}
+        req = dict(op='block.header_sequence', network='regtest', mode='base', adjusted_time=1296688702,
+                   checkpoints_enabled=False, index=state, failed_blocks=[digest(raw[n]) for n in names],
+                   headers=[raw['c']])
+        EXPECTATIONS[key(req)] = dict(valid=False, failed_at=0, reject_reason='bad-prevblk',
+                                     dos=100, reject_code=16, last_hash=None, added=[],
+                                     marked_failed_child=[digest(raw['b'])])
+        cases.append(req)
+    # Decision 17 runs before contextual validation: the linked candidate would
+    # have height INT_MAX, outside the adapter domain, irrespective of history.
+    req = request([entry(raw['a'], 2147483646, anchor=True)], [raw['b']], False)
+    req['network'] = 'regtest'
+    EXPECTATIONS[key(req)] = {'error': {'kind': 'request',
+                                      'message': 'DogeLib.Block.HeaderAdapterError.heightOutOfRange'}}
+    cases.append(req)
+    # All size limits precede full-header decoding, including an earlier truncation.
+    req = dict(request([], [], False), headers=['00', '00' * 1048577])
+    req['network'] = 'regtest'
+    EXPECTATIONS[key(req)] = {'error': {'kind': 'request', 'message': 'header exceeds 1 MiB'}}
     cases.append(req)
     return cases
 

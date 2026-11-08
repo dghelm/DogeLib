@@ -565,6 +565,8 @@ def main():
                        help='with --level: label the Core revision as the pin or as current upstream')
     again.add_argument('--revision', help='with --level: the full Core commit that the builds must name')
     again.add_argument('--node', help='with --level L3: a scripts/build_core_node.sh build directory')
+    again.add_argument('--candidate-harness',
+                       help="with --level L3: the harness that found the candidate (default: the record's replay command)")
     again.add_argument('failure')
     shrink = commands.add_parser('reduce')
     shrink.add_argument('--max-candidates', type=positive_int, default=2000)
@@ -583,8 +585,9 @@ def main():
             parser.error('--script requires --campaign proposal')
         if args.command == 'run' and args.campaign == 'generated' and not args.signer:
             parser.error('--campaign generated requires --signer')
-        if args.command == 'replay' and not args.level and (args.revision or args.node or args.target != 'pin'):
-            parser.error('--target, --revision and --node require --level')
+        if args.command == 'replay' and not args.level and (args.revision or args.node or args.candidate_harness or
+                                                          args.target != 'pin'):
+            parser.error('--target, --revision, --node and --candidate-harness require --level')
         for program in (args.oracle, args.harness, *([args.signer] if args.signer else [])):
             if not pathlib.Path(program).is_file() or not os.access(program, os.X_OK):
                 raise OSError(f'program is absent or not executable: {program}')

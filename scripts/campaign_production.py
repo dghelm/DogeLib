@@ -16,7 +16,9 @@ All Core citations refer to commit e0a1c157791544e818c901bd9341896965afbf9d.
 """
 
 import base64
+import contextlib
 import copy
+import ctypes
 import hashlib
 import http.client
 import json
@@ -24,6 +26,8 @@ import os
 import pathlib
 import re
 import secrets
+import shlex
+import signal
 import socket
 import struct
 import subprocess
@@ -52,6 +56,14 @@ UNFUNDABLE = ('own_outpoint', 'other_outpoint', 'input_count')
 # ports are 22555, 44555 and 18332 (D39, src/chainparamsbase.cpp). The node's P2P
 # port is its RPC port plus 100, and the node does not listen on it.
 RPC_PORTS = range(24440, 24480)
+# D98: MANDATORY_SCRIPT_VERIFY_FLAGS is P2SH alone, and AcceptToMemoryPool
+# checks it again after the plan's flags (D97, line 1009). Only the first
+# failing input is reported, so the other inputs, bare OP_TRUE outputs with an
+# empty or OP_1 scriptSig, must pass every flag: CLEANSTACK would fail them.
+P2SH, CLEANSTACK = 1, 256
+# Exit statuses of a production replay. A refusal or an unexpected error is 2.
+EXIT = {'reproduced': 0, 'not-reproduced': 1, 'not-comparable': 3, 'error': 3}
+PR_SET_PDEATHSIG = 1
 
 # D99, script/script_error.cpp, ScriptErrorString, lines 12 to 90, mapped to
 # the names of harness/core/script_error_names.inc.
@@ -156,11 +168,29 @@ def replay_l1(record, args):
     identity = harness_identity(args.harness, args.revision)
     revision = target_revision(args, identity)
     runs, results = campaign.resend(record, args.oracle, args.harness)
-    matching = [r for _, r in results if (r[0], r[1]) == (record['class'], record['failing_side'])]
-    spend = runs['core'].get('responses', [{}])[-1].get('ok') if 'error' not in runs['core'] else None
     return dict(level='L1', target=args.target, revision=revision, harness=identity,
-                responses=runs, results=[list(r) for _, r in results], core_spend=spend,
-                outcome='reproduced' if matching else 'not-reproduced')
+                responses=runs, results=[list(r) for _, r in results], core_spend=spend_result(runs),
+                outcome=l1_outcome(record, runs, results))
+
+
+def spend_result(runs):
+    """The harness's result for the spend, the last request, or None after a stream error."""
+    if 'error' in runs['core'] or not runs['core'].get('responses'):
+        return None
+    return runs['core']['responses'][-1].get('ok')
+
+
+def l1_outcome(record, runs, results):
+    """`reproduced` when the saved class and failing side recur.
+
+    A process error, a crash or a timeout on either side gives `error`, never
+    `not-reproduced`: a run that did not finish decides nothing.
+    """
+    if any((r[0], r[1]) == (record['class'], record['failing_side']) for _, r in results):
+        return 'reproduced'
+    if any('error' in run for run in runs.values()) or any(r[0] in ('crash', 'timeout') for _, r in results):
+        return 'error'
+    return 'not-reproduced'
 
 
 class RPCError(ValueError):
@@ -169,6 +199,21 @@ class RPCError(ValueError):
     def __init__(self, error):
         self.error = error
         super().__init__(f"node RPC error {error.get('code')}: {error.get('message')}")
+
+
+def die_with_parent():
+    """In the child: ask Linux to send SIGKILL when the replay process dies, even by SIGKILL."""
+    with contextlib.suppress(OSError, AttributeError):
+        ctypes.CDLL(None, use_errno=True).prctl(PR_SET_PDEATHSIG, signal.SIGKILL)
+
+
+class Terminated(Exception):
+    """SIGTERM reached the replay. Raising it runs the cleanup of the node and its directory."""
+
+
+def terminate(signum, frame):
+    """Turn SIGTERM into an exception, so that `with` blocks stop the node."""
+    raise Terminated(f'signal {signum}')
 
 
 class Node:
@@ -222,7 +267,7 @@ class Node:
                      f'-port={self.port + 100}', f'-promiscuousmempoolflags={self.mempool_flags}']
         try:
             self.process = subprocess.Popen(arguments, stdout=self.log, stderr=subprocess.STDOUT,
-                                            stdin=subprocess.DEVNULL)
+                                            stdin=subprocess.DEVNULL, preexec_fn=die_with_parent)
             deadline = time.monotonic() + self.timeout
             while True:
                 if self.process.poll() is not None:
@@ -268,10 +313,14 @@ def l3_plan(plan):
 
     CheckTransaction rejects a transaction without outputs (D90, validation.cpp,
     line 533). The reducer removes every output that a property does not need,
-    so L3 then adds one zero-value OP_TRUE output and records the change. The caller compares the
-    property, verdict, error and digest relation of the changed case with the
-    saved ones before it compares verdicts.
+    so L3 then adds one zero-value OP_TRUE output and records the change. The
+    caller compares the property, verdict, error and digest relation of the
+    changed case with the saved ones before it compares verdicts.
+
+    The flags must include P2SH and exclude CLEANSTACK (see P2SH, CLEANSTACK).
     """
+    if not plan['flags'] & P2SH or plan['flags'] & CLEANSTACK:
+        raise ValueError('L3 needs flags with P2SH and without CLEANSTACK, so that the mempool checks only input n')
     if plan['mode'] == 'preserve':
         result = mutated(plan)
         result['mutations'] = []
@@ -388,25 +437,34 @@ def agrees(result, expected):
         result['script_error'] == expected['script_error']
 
 
-def outcome(mempool, saved, rebuilt):
+def outcome(mempool, saved, rebuilt, trigger_kept=None):
     """Compare the node's mempool verdict, under the plan's flags, with the saved expectation.
 
     The rebuilt case must keep the saved property, verdict, error and digest
     relation. Otherwise the regtest spend is a different case, and its verdict
-    says nothing about the candidate.
+    says nothing about the candidate. `trigger_kept` is False when the
+    candidate's harness no longer shows the saved failure on the rebuilt
+    bytes. A node that then agrees with the property is not comparable.
     """
     same_case = all(rebuilt.get(k) == saved.get(k) for k in ('property', 'verdict', 'script_error', 'relation'))
     if not same_case or mempool['result'] == 'not-comparable':
         return 'not-comparable'
-    return 'not-reproduced' if agrees(mempool, saved) else 'reproduced'
+    if not agrees(mempool, saved):
+        return 'reproduced'
+    # Agreement says nothing about the candidate if the rebuilt bytes no longer fail.
+    return 'not-comparable' if trigger_kept is False else 'not-reproduced'
 
 
-def run_l3(plan, expected, programs, timeout):
+def run_l3(plan, expected, programs, timeout, trigger=None):
     """Fund, re-sign and submit one plan on an isolated regtest node.
 
     `programs` holds the oracle, the harness, the signer and dogecoind. The
     mempool checks the spend with the plan's own flags. A block then checks it
     with the consensus flags of its height, BLOCK_FLAGS.
+
+    `trigger` is (class, failing side, candidate harness) for a saved
+    candidate. The candidate harness, the program that found it, must show
+    that class and side on the rebuilt bytes too.
     """
     plan, changes = l3_plan(plan)
     base = campaign.ROOT / 'build/campaign'
@@ -424,6 +482,12 @@ def run_l3(plan, expected, programs, timeout):
             # The digest checks of section 5.1, and the harness verdict on the same bytes.
             runs = {side: campaign.execute(programs[side], case['requests'], timeout) for side in ('lean', 'core')}
             property_failures = [list(r) for _, r in campaign.assess_cases([case], runs)]
+            trigger_runs = trigger_failures = trigger_kept = None
+            if trigger:
+                kind, side, candidate = trigger
+                trigger_runs = dict(lean=runs['lean'], core=campaign.execute(candidate, case['requests'], timeout))
+                trigger_failures = [list(r) for _, r in campaign.assess_cases([case], trigger_runs)]
+                trigger_kept = any((r[0], r[1]) == (kind, side) for r in trigger_failures)
             spend = case['requests'][-1]['tx_hex']
             try:
                 mempool = dict(txid=regtest.rpc('sendrawtransaction', spend, True), **node_result(None))
@@ -439,12 +503,28 @@ def run_l3(plan, expected, programs, timeout):
     harness_spend = runs['core'].get('responses', [{}])[-1].get('ok') if 'error' not in runs['core'] else None
     return dict(plan=rebased, changes=changes, funding=funding, signer=entries, requests=case['requests'],
                 expected=case['expected'], responses=runs, property_failures=property_failures,
+                trigger=dict(harness=trigger[2], responses=trigger_runs, failures=trigger_failures,
+                             kept=trigger_kept) if trigger else None,
                 harness_spend=harness_spend, mempool_flags=plan['flags'], mempool=mempool, block=block,
                 policy_only=mempool['result'] == 'rejected' and block['result'] == 'accepted',
                 chain=dict(height=chain.get('blocks'), softforks=chain.get('softforks'),
                            bip9_softforks=chain.get('bip9_softforks')),
                 node_log_tail=log, seconds=round(time.monotonic() - started, 2),
-                outcome=outcome(mempool, expected, case['expected']))
+                outcome=outcome(mempool, expected, case['expected'], trigger_kept))
+
+
+def candidate_harness(record, args):
+    """The harness that found the candidate: --candidate-harness, or the one in the record's replay command."""
+    if getattr(args, 'candidate_harness', None):
+        program = pathlib.Path(args.candidate_harness).resolve()
+    else:
+        words = shlex.split(record.get('replay', ''))
+        if len(words) < 7 or words[3] != 'replay':
+            raise ValueError('the saved failure names no harness; give --candidate-harness')
+        program = pathlib.Path(words[6])
+    if not program.is_file() or not os.access(program, os.X_OK):
+        raise ValueError(f'the candidate harness {program} is absent; give --candidate-harness')
+    return str(program)
 
 
 def replay_l3(record, args, timeout):
@@ -457,38 +537,80 @@ def replay_l3(record, args, timeout):
     node = build_identity(node_dir / 'core/src/dogecoind', node_dir / 'node.stamp', revision)
     signer = build_identity(args.signer, pathlib.Path(args.signer).resolve().parent / 'core.stamp', revision)
     plan, expected = saved_case(record)
+    candidate = candidate_harness(record, args)
     evidence = run_l3(plan, expected, dict(lean=args.oracle, core=args.harness, signer=args.signer,
-                                           node=node['program']), timeout)
+                                           node=node['program']), timeout,
+                      trigger=(record['class'], record['failing_side'], candidate))
     return dict(level='L3', target=args.target, revision=revision, harness=harness, node=node,
                 signer_build=signer, **evidence)
 
 
-def classification(record):
-    """Summarize the production evidence by level, target and commit.
+def label(record, outcomes):
+    """The label of one target, from the latest L1 and L3 outcome of each level.
 
-    `reproduced`: some replay reproduced the candidate on a production path.
-    `harness-fault`: a verdict or digest failure on the Core side that the
-    unchanged harness at the pin does not reproduce at L1, and, for a verdict,
-    that the node at the pin does not reproduce at L3 either.
-    `undetermined`: any other combination, such as a missing level.
+    For a Core-side `verdict` candidate, L3 decides, because only a node runs
+    the production caller (section 9.1):
+
+    - L3 `reproduced`: `reproduced`.
+    - L3 `not-reproduced`, with L1 `reproduced` or `not-reproduced`:
+      `harness-fault`. With L1 `reproduced`, the harness's own code around the
+      production function, such as its transaction or flag handling, gives
+      the failure that the node does not.
+    - No comparable L3 result, and L1 `reproduced`: `reproduced-at-l1`, a
+      candidate that still needs L3.
+
+    For a Core-side `digest` candidate, L1 decides, because `sighash.legacy`
+    calls `SignatureHash` itself and L3 checks only verdicts: L1 `reproduced`
+    gives `reproduced`, and L1 `not-reproduced` gives `harness-fault`.
+
+    For any other candidate, any reproduction gives `reproduced`. Every other
+    combination, including an L1 `error`, gives `undetermined`.
     """
+    l1, l3 = outcomes.get('L1'), outcomes.get('L3')
+    core_side = record['failing_side'] in ('core', 'both', 'undetermined')
+    if core_side and record['class'] == 'verdict':
+        if l3 == 'reproduced':
+            return 'reproduced'
+        if l3 == 'not-reproduced' and l1 in ('reproduced', 'not-reproduced'):
+            return 'harness-fault'
+        return 'reproduced-at-l1' if l1 == 'reproduced' else 'undetermined'
+    if core_side and record['class'] == 'digest':
+        return {'reproduced': 'reproduced', 'not-reproduced': 'harness-fault'}.get(l1, 'undetermined')
+    return 'reproduced' if 'reproduced' in (l1, l3) else 'undetermined'
+
+
+def classification(record):
+    """Label the candidate from the replays at the pin, and separately from those at upstream."""
     evidence = record['production']['replays']
     rows = [dict(level=e['level'], target=e['target'], revision=e['revision'], outcome=e['outcome'])
             for e in evidence]
-    pin = {r['level']: r['outcome'] for r in rows if r['target'] == 'pin'}
-    core_side = record['failing_side'] in ('core', 'both', 'undetermined')
-    if any(r['outcome'] == 'reproduced' for r in rows):
-        label = 'reproduced'
-    elif (core_side and record['class'] in ('verdict', 'digest') and pin.get('L1') == 'not-reproduced' and
-          (record['class'] == 'digest' or pin.get('L3') == 'not-reproduced')):
-        label = 'harness-fault'
-    else:
-        label = 'undetermined'
-    return dict(label=label, replays=rows)
+    labels = {}
+    for target in ('pin', 'upstream'):
+        latest = {r['level']: r['outcome'] for r in rows if r['target'] == target}
+        labels[target] = label(record, latest) if latest else None
+    return dict(label=labels['pin'] or 'undetermined', upstream=labels['upstream'], replays=rows)
 
 
 def replay(args):
-    """Append one production replay to an uncommitted saved failure, and print labels only."""
+    """Append one production replay to an uncommitted saved failure, and print labels only.
+
+    SIGTERM raises an exception, so the node stops and its directory goes. An
+    unexpected exception becomes a ValueError, which campaign.py reports with
+    exit status 2. The saved failure changes only after a complete replay.
+    """
+    previous = signal.signal(signal.SIGTERM, terminate)
+    try:
+        return replay_once(args)
+    except (ValueError, OSError, KeyError, subprocess.SubprocessError, http.client.HTTPException):
+        raise
+    except Exception as error:
+        raise ValueError(f'production replay failed: {type(error).__name__}: {error}') from error
+    finally:
+        signal.signal(signal.SIGTERM, previous)
+
+
+def replay_once(args):
+    """Run one replay and write its evidence."""
     path = pathlib.Path(args.failure).resolve()
     if not path.is_relative_to(campaign.ROOT / 'build/campaign'):
         raise ValueError("production evidence stays under this worktree's build/campaign/ (design record 0009, section 9.4)")
@@ -516,4 +638,4 @@ def replay(args):
         summary.update(mempool=evidence['mempool']['result'], block=evidence['block']['result'],
                        policy_only=evidence['policy_only'])
     print(json.dumps(summary))
-    return 0 if evidence['outcome'] == 'reproduced' else 1
+    return EXIT[evidence['outcome']]

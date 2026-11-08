@@ -115,9 +115,7 @@ def main():
                 parent = record['batch_failures'][0]['responses']['core']
                 assert len(parent['stdout'].splitlines()) == 3
                 assert 'planted ' + mode in parent['stderr']
-                if mode == 'batch-only' and len(requests) > 1:
-                return 3
-            if mode == 'crash':
+                if mode == 'crash':
                     assert len(parent['stderr']) > 2000
                     assert record['responses']['core']['returncode'] == 3
             replay = subprocess.run([sys.executable, '-I', str(ROOT / 'scripts/campaign.py'), 'replay',

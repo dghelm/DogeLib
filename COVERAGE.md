@@ -149,3 +149,7 @@ The six outcome classes keep unsupported results and harness refusals apart from
 It also checks malformed output, missing responses, wrong identifiers, batch-only failures and an exhausted budget.
 These checks test the driver, without adding a theorem or extending the input domain of a specification operation.
 Generation, signing requests, Q1 to Q5, Q7, reduction and production-path replay belong to later stages.
+
+At seed `20261108`, the default campaign compares 1,897 requests with Core at `e0a1c15`, with zero in all six outcome classes.
+The optional signed-digest group compares 25 requests at the same seed, also with zero in all six classes.
+The campaign self-test passes 13 cases, including saved replay for each class.

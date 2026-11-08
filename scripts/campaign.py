@@ -1,6 +1,7 @@
 """Run fixed-input agreement campaigns and replay complete saved failures."""
 
 import argparse
+import copy
 import hashlib
 import json
 import itertools
@@ -231,13 +232,19 @@ def prepare_generated(args, plans, timeout):
     return cases, entries, runs
 
 
-def run_campaign(args, cases=None):
-    """Run bounded batches, isolate stream failures and save complete evidence locally."""
+def run_campaign(args, cases=None, revisions=None):
+    """Run bounded batches, isolate stream failures and save complete evidence locally.
+
+    The reducer passes the revisions that it probed once, so that each candidate skips the version probes.
+    """
     started = time.monotonic()
     deadline = started + args.seconds
     generated = args.campaign == 'generated'
     proposal = args.campaign == 'proposal'
-    if proposal and cases is None:
+    if proposal and cases is None and getattr(args, 'script', None):
+        from campaign_proposal import parse_script, script_case, script_plan
+        cases = [script_case(script_plan(parse_script(args.script), args.lock_time, args.sequence), 0)]
+    elif proposal and cases is None:
         from campaign_proposal import cases as proposal_cases
         cases = itertools.islice(proposal_cases(), args.cases)
     if cases is None and generated:
@@ -247,8 +254,9 @@ def run_campaign(args, cases=None):
     cases = selected_cases(args.inputs, args.seed) if cases is None else cases
     cases = cases if proposal else cases[:args.cases]
     # Probe the programs first, so that an invocation error leaves no empty run directory.
-    revisions = metadata(args.oracle, args.harness, 0.25)
-    if generated:
+    probed = revisions is None
+    revisions = metadata(args.oracle, args.harness, 0.25) if probed else copy.deepcopy(revisions)
+    if generated and probed:
         capture = {}
         try:
             raw = run_captured(args.signer, ['--version'], '', 0.25, capture)
@@ -428,7 +436,7 @@ def run_campaign(args, cases=None):
             save(selected, result, evidence, history)
         return True
 
-    if proposal:
+    if proposal and not isinstance(cases, list):
         from campaign_proposal import SPACE_SIZE
         selected = min(args.cases, SPACE_SIZE)
     else:
@@ -525,7 +533,11 @@ def main():
     commands = parser.add_subparsers(dest='command', required=True)
     run = commands.add_parser('run')
     run.add_argument('--campaign', choices=('existing', 'generated', 'proposal'), default='existing')
-    run.add_argument('--variant', choices=('faulty', 'corrected'), default='faulty')
+    run.add_argument('--variant', choices=('faulty', 'corrected'), default='faulty',
+                     help='variant of ExampleFaultyLocktime for --campaign proposal')
+    run.add_argument('--script', help='with --campaign proposal: run this one script instead of the enumeration')
+    run.add_argument('--lock-time', type=int, default=2, help='lock time of --script')
+    run.add_argument('--sequence', type=lambda s: int(s, 0), default=0xfffffffe, help='sequence of --script')
     run.add_argument('--signer', help='core-signer executable, required for --campaign generated')
     run.add_argument('--seed', type=int, required=True)
     run.add_argument('--cases', type=positive_int, default=10000)
@@ -537,15 +549,21 @@ def main():
     again = commands.add_parser('replay')
     again.add_argument('--signer', help='replay signing requests for a signer failure')
     again.add_argument('failure')
-    for command in (run, again):
+    shrink = commands.add_parser('reduce')
+    shrink.add_argument('--max-candidates', type=positive_int, default=2000)
+    shrink.add_argument('failure')
+    for command in (run, again, shrink):
         command.add_argument('oracle')
         command.add_argument('harness')
+    shrink.add_argument('signer', nargs='?', help='core-signer executable, required for a generated failure')
     args = parser.parse_args()
     args.oracle = str(pathlib.Path(args.oracle).resolve())
     args.harness = str(pathlib.Path(args.harness).resolve())
     if args.signer:
         args.signer = str(pathlib.Path(args.signer).resolve())
     try:
+        if args.command == 'run' and args.script and args.campaign != 'proposal':
+            parser.error('--script requires --campaign proposal')
         if args.command == 'run' and args.campaign == 'generated' and not args.signer:
             parser.error('--campaign generated requires --signer')
         for program in (args.oracle, args.harness, *([args.signer] if args.signer else [])):
@@ -553,6 +571,9 @@ def main():
                 raise OSError(f'program is absent or not executable: {program}')
         if args.command == 'replay':
             return replay(args)
+        if args.command == 'reduce':
+            from campaign_reduce import reduce_command
+            return reduce_command(args)
         output = pathlib.Path(args.output).resolve()
         if not output.is_relative_to(ROOT / 'build/campaign'):
             parser.error('--output must be under this worktree\'s build/campaign/')

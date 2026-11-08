@@ -29,6 +29,22 @@ def script_plan(instructions, lock_time=2, sequence=0xfffffffe):
                         outputs=[]))
 
 
+def parse_script(text):
+    """Split hex script bytes into instructions, so that a push and its data form one element."""
+    raw, out, i = bytes.fromhex(text.replace(' ', '')), [], 0
+    while i < len(raw):
+        op = raw[i]
+        size = op if op <= 75 else 0
+        if op in (76, 77, 78):
+            width = {76: 1, 77: 2, 78: 4}[op]
+            size = width + int.from_bytes(raw[i + 1:i + 1 + width], 'little')
+        if i + 1 + size > len(raw):
+            raise ValueError('script ends inside a push')
+        out.append(raw[i:i + 1 + size].hex())
+        i += 1 + size
+    return out
+
+
 def cases():
     """Enumerate every instruction tuple and context, shortest scripts first, without seeds."""
     index = 0
@@ -54,6 +70,7 @@ def assess(cases, runs):
             results.append((i, (*excluded[i], 'RestrictsAcceptance')))
         elif (runs['core']['responses'][i].get('ok', {}).get('result') == 'accepted' and
               runs['lean']['responses'][i].get('ok', {}).get('result') == 'rejected'):
-            results.append((i, ('verdict', 'core', 'revised acceptance exceeds baseline',
+            # The harness slot runs proposal-replay, so the failing side is the revised rule.
+            results.append((i, ('verdict', 'revised', 'revised acceptance exceeds baseline',
                                 'RestrictsAcceptance', 'RestrictsAcceptance')))
     return results

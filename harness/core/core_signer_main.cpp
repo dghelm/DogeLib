@@ -85,10 +85,10 @@ void signStream() {
 int main(int argc, char** argv) {
     if (argc == 2 && std::string(argv[1]) == "--version") {
         UniValue version(UniValue::VOBJ);
-        #ifdef CORE_BUILD_REVISION
-        version.pushKV("core_pin", CORE_BUILD_REVISION);
-#else
         version.pushKV("core_pin", PIN);
+#ifdef CORE_BUILD_REVISION
+        // A replay build from scripts/build_core_harness.sh --revision names its Core commit.
+        version.pushKV("core_revision", CORE_BUILD_REVISION);
 #endif
         version.pushKV("CORE_SIGNER_BLOB", CORE_SIGNER_BLOB);
         version.pushKV("request_source_blob", CORE_SIGNER_REQUEST_BLOB);

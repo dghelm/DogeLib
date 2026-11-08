@@ -4,6 +4,13 @@
 #
 # Usage: scripts/build_core_harness.sh [--revision COMMIT] <core-git-repo> <build-dir>
 #
+# --revision builds against another Core commit for a labelled replay
+# (design record 0009, section 9.2). It needs a build directory other than
+# build/core-harness. core.stamp then names that commit on its first line,
+# <build-dir>/core.revision holds it, and both programs report it as
+# `core_revision` in their --version output. Without --revision the build and
+# its output are unchanged. The option never changes the pin.
+#
 # The script exports the pinned tree with `git archive`, so the build never
 # touches the clone's working tree, and the clone may be checked out at any
 # commit that contains the pin. It writes <build-dir>/core-oracle and <build-dir>/core-signer.
@@ -18,13 +25,13 @@ set -euo pipefail
 PIN=e0a1c157791544e818c901bd9341896965afbf9d
 revision=
 if [ "${1:-}" = --revision ]; then
-  [ "$#" -ge 4 ] || { echo "--revision needs a commit, repository and build directory" >&2; exit 2; }
+  [ "$#" -eq 4 ] || { echo "usage: $0 [--revision COMMIT] <core-git-repo> <build-dir>" >&2; exit 2; }
   revision=$2
   shift 2
 fi
 
 if [ "$#" -ne 2 ]; then
-  echo "usage: $0 <core-git-repo> <build-dir>" >&2
+  echo "usage: $0 [--revision COMMIT] <core-git-repo> <build-dir>" >&2
   exit 2
 fi
 

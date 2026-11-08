@@ -1218,6 +1218,7 @@ int main(int argc, char** argv)
         UniValue v(UniValue::VOBJ);
         v.pushKV("format", FORMAT);
 #ifdef CORE_BUILD_REVISION
+        // A replay build from scripts/build_core_harness.sh --revision names its Core commit.
         v.pushKV("core_revision", CORE_BUILD_REVISION);
 #endif
         std::cout << v.write() << std::endl;

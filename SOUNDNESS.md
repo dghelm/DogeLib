@@ -2152,7 +2152,7 @@ The theorems:
 - `multisigRecovery_lockTime_lt`: with `CHECKLOCKTIMEVERIFY`, a false selector and a lock time below 1,000,000 give `UNSATISFIED_LOCKTIME` before any signature check.
   `multisigRecovery_accepted_lockTime_lt`: such a spend is accepted only through the ordinary branch.
   Without the flag, `OP_CHECKLOCKTIMEVERIFY` is `OP_NOP2`, and a known answer accepts the recovery branch with lock time 0.
-- `multisigRecovery_lockTime_ge_threshold`: with `CHECKLOCKTIMEVERIFY`, a false selector and a lock time of at least 500,000,000 give `UNSATISFIED_LOCKTIME` before any signature check.
+- `multisigRecovery_lockTime_ge_threshold`: with `CHECKLOCKTIMEVERIFY`, at most 998 items in the unlocking stack (`S.length + 2 ≤ 1000`), a false selector and a lock time of at least 500,000,000 give `UNSATISFIED_LOCKTIME` before any signature check.
   `multisigRecovery_finalSequence`: the same for a sequence of `0xffffffff` on the input, at every lock time.
   With `multisigRecovery_lockTime_lt`, they cover each case in which the lock-time check of the recovery branch fails.
 - `verifyLegacySpend_scriptSig_rejected` and `verifyLegacySpend_scriptSig_unsupported`: a failed `scriptSig` evaluation passes through.

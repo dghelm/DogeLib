@@ -137,6 +137,24 @@ def stage2(args, wrapper, check):
         check('Q6' in record['expected']['text'], record)
         print('ok Q6-only: generated disagreement saves the comparison property and expectation')
         checks += 1
+        from campaign_generator import property_result
+        plan = next(p for p in plans(20261108, 2000)
+                    if p['mode'] == 'commitment' and p['boundary'] == 'field'
+                    and p['mutations'][0]['field'] == 'version')
+        built, _, _ = campaign.prepare_generated(opts, [dict(plan=plan, case_index=0)], 10)
+        case = built[0]
+        runs = {side: campaign.execute(program, case['requests'], 10)
+                for side, program in (('lean', args.oracle), ('core', args.harness))}
+        for run in runs.values():
+            run['responses'][-1]['ok'] = dict(result='unsupported', reason='flags', bits=64)
+        check(property_result(case, runs) is None, 'unsupported spend became a verdict failure')
+        for field in ('digest_hex', 'preimage_hex'):
+            faulty = copy.deepcopy(runs)
+            faulty['lean']['responses'][1]['ok'][field] = faulty['lean']['responses'][0]['ok'][field]
+            result = property_result(case, faulty)
+            check(result and result[0] == 'digest' and result[1] == 'lean' and result[4] == 'Q4', result)
+        print('ok unsupported: digest and preimage checks survive the excluded spend')
+        checks += 1
         requests = [r for i, plan in enumerate(plans(20261108, 64))
                     for r in signing_requests(plan, f'generated-{i}')]
         first = campaign.execute(signer, requests, 10, ['--sign'])

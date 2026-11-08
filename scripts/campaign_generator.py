@@ -355,15 +355,11 @@ def materialize(plan, prefix, signer):
 
 def property_result(case, runs):
     """Check each side against a property, keeping Q6 agreement separate."""
-    if case['plan']['flags'] & ~1567:
-        return None  # Q1–Q7 require a subset of the supported flag set.
     expected = case['expected']
     violations = []
     for side, run in runs.items():
         responses = run['responses']
         spend = responses[-1].get('ok', {})
-        if spend.get('result') == 'unsupported':
-            continue
         kind = None
         for i, entry in enumerate(case['signer']):
             before = responses[2 * i].get('ok', {})
@@ -383,8 +379,10 @@ def property_result(case, runs):
                     kind = 'digest'
                 if side == 'lean' and ((before.get('preimage_hex') != after.get('preimage_hex')) != changed):
                     kind = 'digest'
-        if kind is None and (spend.get('result') != expected['verdict'] or
-                             ('script_error' in expected and spend.get('script_error') != expected['script_error'])):
+        # Unsupported spending flags do not exclude the separate sighash requests.
+        if (kind is None and not case['plan']['flags'] & ~1567 and
+                spend.get('result') != 'unsupported' and (spend.get('result') != expected['verdict'] or
+                             ('script_error' in expected and spend.get('script_error') != expected['script_error']))):
             kind = 'verdict'
         if kind:
             violations.append((side, kind))

@@ -5,6 +5,7 @@ import KnownAnswers.ContextualParams
 import KnownAnswers.Genesis
 import KnownAnswers.Hash
 import KnownAnswers.HeaderPow
+import KnownAnswers.HeaderSequence
 import KnownAnswers.MedianTimePast
 import KnownAnswers.Proposals.ExampleVersionVerify
 import KnownAnswers.Script
@@ -28,6 +29,7 @@ def KnownAnswers.checks : List (String × IO Nat) :=
     KnownAnswers.Genesis.checks,
     KnownAnswers.Hash.checks,
     KnownAnswers.HeaderPow.checks,
+    KnownAnswers.HeaderSequence.checks,
     KnownAnswers.MedianTimePast.checks,
     KnownAnswers.Proposals.checks,
     KnownAnswers.Script.checks,

@@ -96,7 +96,7 @@ Section 10 of the record gives five stages, and section 11 gives their theorem t
 
 | Stage | Deliverable | Status |
 | --- | --- | --- |
-| 1 | The block-index model, the ancestor view and the checkpoint search over the index | Not started |
+| 1 | The block-index model, the ancestor view and the checkpoint search over the index | Specified in `Block.HeaderSequence`, with the targets `ancestorView_congr` and `lastCheckpointInIndex_eq` and known answers from five mainnet ranges |
 | 2 | One step, `acceptBlockHeader`, with its characterization theorems | Not started |
 | 3 | The sequence, `processNewBlockHeaders`, with the linear theorem `process_linear` | Not started |
 | 4 | `GetBlockProof` and the chain work of each entry | Not started |

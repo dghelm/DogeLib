@@ -620,6 +620,79 @@ By `#print axioms` with Lean `v4.35.0`:
 | `propext`, `Quot.sound` | `checkVersion_mapError_eq_ok_iff`, `checkVersion_mapError_eq_error_iff`, `checkCheckpoint_eq_ok_iff`, `checkCheckpoint_eq_error_iff`, `checkTimeTooOld_eq_ok_iff`, `checkTimeTooNew_eq_ok_iff`, `contextualChecks_isRejection`, `contextualViewDepth_eq`, `badVersion_iff` |
 | `propext`, `Classical.choice`, `Quot.sound` | `checkBaseVersion_eq_ok_iff`, `contextualChecks_eq_ok_iff`, `contextualCheck_nil`, `contextualCheck_of_medianTimePast_error`, `contextualCheck_of_nextWorkRequired_error`, `contextualCheck_of_adjustedTime`, `contextualCheck_eq_contextualChecks`, `contextualCheck_eq_iff_contextualChecks`, `contextualCheck_eq_ok_iff`, the seven `contextualCheck_eq_*_iff` rejection theorems, `contextualCheck_congr_header`, `contextualCheck_adjustedTime_mono`, `contextualCheck_no_checkpoint`, `contextualCheck_congr_prefix`, `contextualCheck_complete` |
 
+### The block-index model
+
+`DogeLib.Block.HeaderSequence` specifies the part of Core's block index that `AcceptBlockHeader` reads (design record 0008, stage 1).
+`HeaderIndex` holds the entries of `mapBlockIndex` (D69, lines 169 and 170) as an association list, and the members of `gFailedBlocks` (D33, line 180) as a list.
+Each `IndexEntry` holds the pure header, the height and the hash of its predecessor (D18, lines 164 to 171).
+It also holds the two failure flags and a flag for the validity level `BLOCK_VALID_SCRIPTS` (D18, lines 136, 146 and 147).
+The other definitions read the list only through `HeaderIndex.lookup`, so a later lane can change the representation behind that interface.
+Source review, not a theorem, connects the model to Core's `CBlockIndex`.
+
+`WellFormed` states the conditions of design record 0008, section 5.5:
+
+- Each key is the double SHA-256 of the pure header of its entry.
+- A predecessor hash equals the header's `hashPrevBlock`, and the index has an entry under it one height below.
+- An entry at height 0 without a predecessor has the genesis hash of the network (D9, lines 160, 320 and 450).
+- Each height is below 2147483647.
+- Each member of the failed list has an entry with `BLOCK_FAILED_VALID`, as Core asserts (D33, line 3244).
+
+An entry without a predecessor above height 0 is an *anchor*.
+Core's index has no anchor, because it always reaches the genesis block.
+An anchor lets a fixture or a consumer start the index at a recent block.
+Where the contextual check needs an entry below an anchor, `contextualCheckBlockHeader` returns an adapter error, not a Core verdict.
+
+`ancestorView` walks the predecessor links from an entry and collects the height, time and `nBits` of each entry.
+It stops after `contextualViewDepth` entries or at an entry without a predecessor.
+`contextualViewDepth` moved from `Block.Proofs.ContextualCheck` to `Block.ContextualCheck` without a change, because the specification now uses it.
+`lastCheckpointInIndex` follows `GetLastCheckpoint` (D67, lines 18 to 30) over the index.
+It returns the `nHeight` of the entry that it finds, which check 4 compares (D33, line 3098), not the key of the table.
+`Checkpoint.blockHash?` and `genesisHash?` read Core's `uint256S` literals (D22, lines 151 to 156) with the existing transcription of `SetHex` (D11).
+
+The theorems in `Block.Proofs.HeaderSequence` hold for every network:
+
+- `ancestorWalk_valid`: in a well-formed index, every walk from an entry passes `validateWorkView`.
+- `ancestorView_congr_chain`: in a well-formed index, `contextualCheckBlockHeader` gives the same result on the `ancestorView` of an entry as on its `ancestorChain`.
+  `ancestorChain` is the whole chain of predecessors in the index, and the equality holds for every header, adjusted time and last checkpoint.
+- `ancestorView_congr`: the target of design record 0008, section 11, with the hypothesis that the chain reaches height 0.
+  Such a chain has no anchor, so it is the chain of `pprev` links that Core walks.
+  The proof does not use the hypothesis, and `ancestorView_congr_chain` is the general form.
+- `lastCheckpointInIndex_eq`: suppose that each table hash in the index belongs to an entry at its table height.
+  Then `lastCheckpointInIndex` equals `lastCheckpoint` of design record 0006 on the table heights whose hashes the index has.
+  The hypothesis is the hash commitment assumption of [the checkpoint subsection](#contextual-parameters-and-checkpoints), stated for one index.
+  No theorem discharges it, because that needs collision resistance of double SHA-256 (A4).
+  The theorem also takes `WellFormed`, as section 11 of the record requires, and its proof does not use it.
+- `HeaderIndex.lookup_insert_self` and `HeaderIndex.lookup_insert_of_ne`: a lookup after an insertion finds the inserted entry under its key, and the earlier entry under another key.
+
+These theorems establish the behaviour of DogeLib's definitions.
+The index is an input.
+No theorem says that its anchors, failure flags, validity flags and failed list are the state that a node holds.
+
+`WellFormed` is a hypothesis, and no executable check of it exists in stage 1.
+Stage 2 of the record checks it as an adapter error before the first header.
+Stage 1 builds the view from an entry, but the caller still chooses the entry.
+Stage 2 finds the entry by the header's `hashPrevBlock`, and that step removes the link boundary of [contextual header validation](#contextual-header-validation).
+
+`lake test` builds an index from each of the five mainnet fixtures.
+The first header of each fixture is the genesis entry or an anchor, and no entry has a failure flag.
+The expected view of each entry lists the fixture records from that height down, by their position in the fixture.
+Its length is the depth that `contextualViewDepth_eq` gives, or the number of records down to the anchor if that is smaller.
+
+The expected last checkpoint is the table height of D9 in the range of each fixture: 0, 145000, 371337 or none.
+The expected verdict of the contextual check comes from chain acceptance and D33.
+A candidate with fewer than 11 entries above an anchor gives `shortView`, and a candidate below the last checkpoint gives `bad-fork-prior-to-checkpoint`.
+An anchor at 144720 gives `nextWork missingAncestor` at the retarget 144960.
+These checks do not run Core, and the Core comparison is stage 5 of the record.
+
+By `#print axioms` with Lean `v4.35.0`:
+
+| Axioms | Theorems in `Block.Proofs.HeaderSequence` |
+| --- | --- |
+| None | `HeaderIndex.insert_failedBlocks` |
+| `propext` | `HeaderIndex.lookup_insert_of_ne` |
+| `propext`, `Quot.sound` | `ancestorWalk_length_le`, `ancestorWalk_take` |
+| `propext`, `Classical.choice`, `Quot.sound` | `HeaderIndex.lookup_insert_self`, `ancestorWalk_valid`, `ancestorWalk_eq_ancestorChain`, `ancestorView_congr_chain`, `ancestorView_congr`, `lastCheckpointInIndex_eq` |
+
 ### RIPEMD-160 and Hash160
 
 `Ripemd160.hash` adapts EthLib's executable definition at `6a93711`, as SOURCES.md records.
@@ -2420,6 +2493,10 @@ The median-time-past theorems require a view that passes `validateWorkView`, and
 `medianTimePast` checks both conditions and returns an adapter error when one fails, so no caller discharges them silently.
 No theorem says that the view is the chain below a given header.
 The caller supplies that link, as Core's lookup of `pindexPrev` by hash supplies it.
+
+The theorems of the block-index model take `WellFormed` as a hypothesis.
+`lastCheckpointInIndex_eq` also assumes that each checkpoint hash in the index belongs to an entry at its table height.
+[The block-index model](#the-block-index-model) states both hypotheses and what discharges them.
 
 ### A3. Side channels
 

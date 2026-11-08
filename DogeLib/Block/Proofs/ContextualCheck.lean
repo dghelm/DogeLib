@@ -513,17 +513,6 @@ theorem contextualCheck_no_checkpoint (network : WorkNetwork) (h : PureBlockHead
     simp
 
 /--
-The number of leading view entries that `contextualCheck_congr_prefix` requires to agree, for the predecessor `prev`.
-It is the greater of `nMedianTimeSpan` and `retargetInterval params prev.nHeight + 1`, where `params` is the record of `getConsensus` at the candidate height.
-`nextWorkRequired` reads fewer than `retargetInterval params prev.nHeight + 1` entries (`nextWorkRequired_congr_prefix`).
-`contextualViewDepth_eq` gives its values: 241 on mainnet and testnet below candidate height 145000, and 11 from that height.
-On regtest it is 14401 below candidate height 10, and 11 from that height.
--/
-def contextualViewDepth (network : WorkNetwork) (prev : BlockIndex) : Nat :=
-  max nMedianTimeSpan
-    (retargetInterval (getConsensus network (UInt32.ofNat (prev.nHeight + 1))) prev.nHeight + 1)
-
-/--
 The values of `contextualViewDepth` for a predecessor height below 2147483647, as `validateWorkView` requires.
 On mainnet and testnet, the depth is 241 below candidate height 145000 and 11 from it.
 On regtest, the depth is 14401 below candidate height 10 and 11 from it.

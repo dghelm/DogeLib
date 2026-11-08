@@ -162,12 +162,12 @@ The example defines no `Activation` value, because no network activates it.
 Every theorem of the example is *Script-local*: it is about one call of `verifyScript` or `verifyLegacySpend`.
 A soft-fork claim about the network also needs block validity and a legacy projection, which DogeLib does not have (design record 0007, section 8.3).
 
-The known answers run both variants through the compiled code on 12 `verifyScript` cases and 4 spends.
+The known answers run both variants through the compiled code on 13 `verifyScript` cases and 4 spends.
 A person derived each expected result by hand from Core's rules.
 `lake test` prints this line for them:
 
 ```text
-ExampleFaultyLocktime: 12 verifyScript cases and 4 spend cases, 0 failures
+ExampleFaultyLocktime: 13 verifyScript cases and 4 spend cases, 0 failures
 ```
 
 The module is also a test of the framework: if a change to the framework stops it from refuting the faulty rule, the build fails.
@@ -250,7 +250,11 @@ python3 -I scripts/compare_core.py .lake/build/bin/dogelib-oracle build/core-har
 
 `scripts/compare_core.py` sends the same requests to both programs and requires their responses to agree.
 `scripts/test_compare_core.py` checks that the comparison can fail.
-Each of its mutations changes the oracle's responses, and each mutation must fail the comparison with the failure code that it targets.
+
+Wrappers around the oracle stand in for the programs, and the self-test runs the comparison once for each mutation.
+A mutation changes the responses or the behaviour of the wrapper on the Core side, on the oracle side or on both sides.
+Some mutations change one response field, and others drop, add or corrupt a response, change the format version, exit early or stop answering.
+Each mutation must fail the comparison with the failure code that it targets, such as `MISMATCH`, `EXIT` or `TIMEOUT`.
 Run the self-test to see the report of a disagreement.
 
 ### What a disagreement can mean
@@ -259,12 +263,12 @@ A disagreement shows that two programs differ on one input.
 It does not say which program is wrong.
 Investigate each of these causes:
 
-- The Lean model is wrong. Compare the definition with the source that SOURCES.md records for it.
+- The Lean model is wrong, for example because it makes a consensus quirk of Core regular. Compare the definition with the source that SOURCES.md records for it.
 - Core's C++ code does something that the source review of the definition missed, for example undefined behaviour or an integer wrap.
 - The harness is wrong. It converts JSON to Core's types, and it can transcribe Core's code (see below).
 - The request violates a precondition that Core's callers maintain. Core can assert, or behave differently, on such an input.
 - The operation is unsupported in Lean. The oracle reports `unsupported`, and the comparator counts that request separately, as neither agreement nor disagreement.
-- The model makes a Core quirk regular, for example a result that depends on undefined behaviour. The baseline keeps Core's behaviour, and a change to that behaviour is a proposed revision ([CONTRIBUTING.md](../CONTRIBUTING.md)).
+- The disagreement comes from undefined behaviour or an unrelated detail of the C++ code. CONTRIBUTING.md says that such a case "is not a protocol requirement", and that you document it and "decide the intended contract explicitly" ([sources of truth](../CONTRIBUTING.md#sources-of-truth)). A correction of the model there is not automatically a proposed revision.
 
 ### Transcriptions in the harness
 

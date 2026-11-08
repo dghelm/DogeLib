@@ -24,9 +24,12 @@ Every case also checks that both variants with `active` false give the baseline 
 
 Each transaction is `mkTx 1 lockTime sequence`: version 1, one input with an empty `scriptSig`, no outputs.
 The cases cover the counterexample of `faulty_counterexample` and the spend of `corrected_use`.
-They also cover each failed check, a skipped branch, a P2SH redeem script and an operand from `scriptSig`.
+They also cover each rejection of the rule: an empty stack, a six-byte operand, a negative operand and each failed `CheckLockTime` condition.
+
+Other cases cover a skipped branch, a P2SH redeem script and an operand from `scriptSig`.
+No case runs the rule without a checker: `revisedVerifyScript` and the spend predicate always pass one.
 `DISCOURAGE_UPGRADABLE_NOPS` lies outside the supported flags, so that case is unsupported.
-The 12 `verifyScript` cases run both variants with `active` true and with `active` false.
+The 13 `verifyScript` cases run both variants with `active` true and with `active` false.
 The 4 spend cases run `revisedVerifyLegacySpend` for both variants and the baseline `verifyLegacySpend`.
 -/
 
@@ -82,6 +85,9 @@ def cases : List Case := [
   { label := "empty stack", scriptPubKey := [0xb3],
     faulty := .rejected .invalidStackOperation, corrected := .rejected .invalidStackOperation,
     inactive := .rejected .evalFalse },
+  -- A push of six bytes `01 00 00 00 00 00` exceeds five bytes, so the decode fails. Inactive: the top item is true.
+  { label := "six-byte operand", scriptPubKey := [0x06, 0x01, 0, 0, 0, 0, 0, 0xb3],
+    faulty := .rejected .unknownError, corrected := .rejected .unknownError, inactive := .accepted },
   -- `81` is -1.
   { label := "negative operand", scriptPubKey := [0x01, 0x81, 0xb3],
     faulty := .rejected .negativeLocktime, corrected := .rejected .negativeLocktime, inactive := .accepted },

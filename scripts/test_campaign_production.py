@@ -94,7 +94,7 @@ def l3_positives(args, check, signer, node):
     print(f"ok L3 Q4: a commitment-mode spend with a changed version fails in the mempool and in a block: "
           f"{evidence['block']['reason']} ({evidence['seconds']} s)")
     checks += 1
-    # hash_byte flips the ANYONECANPAY bit of one signature and clears STRICTENC in the spend request.
+    # hash_byte flips bit 0x20 of the hash-type byte of one signature and clears STRICTENC in the spend request.
     flipped, expected = spend_plan('ordinary', signature_mutation='hash_byte')
     evidence = campaign_production.run_l3(flipped, expected, programs, 60)
     check(evidence['mempool_flags'] == 543 & ~2 == evidence['requests'][-1]['flags'],

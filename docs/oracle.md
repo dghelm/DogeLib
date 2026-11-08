@@ -1448,7 +1448,7 @@ With `--candidate-harness` set to the unchanged harness, the trigger is lost, an
 - An ordinary 2-of-3 spend, which the mempool and a block accept.
 - An early recovery spend at lock time 1,000, which both reject with `UNSATISFIED_LOCKTIME`.
 - A commitment-mode spend whose version changes after signing, which both reject with `mandatory-script-verify-flag-failed`.
-- A spend whose first signature has its ANYONECANPAY bit flipped (`hash_byte`). The node and the harness must both use flags 541, without STRICTENC.
+- A spend whose first signature has bit `0x20` of its hash-type byte flipped (`hash_byte`). The node and the harness must both use flags 541, without STRICTENC.
 - A high-S spend, which the mempool rejects with `SIG_HIGH_S` and a block accepts, so `policy_only` is true.
 
 `--upstream-harness` adds L1 against another harness build, with `--target upstream`.

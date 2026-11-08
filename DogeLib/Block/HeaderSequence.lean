@@ -1,6 +1,7 @@
 module
 
 public import DogeLib.Block.ContextualCheck
+public import DogeLib.Block.ProofOfWork
 
 /-!
 # The block-index model
@@ -15,7 +16,7 @@ An entry stores the hash of its predecessor in place of Core's pointer.
 An entry without a predecessor above height 0 is an *anchor*: a fixture or a consumer can start the index at a recent block (decision 2).
 
 `WellFormed` states the conditions of design record 0008, section 5.5, that a real index satisfies and an anchor relaxes.
-The theorems take it as a hypothesis.
+The theorems take it as a hypothesis, and `checkWellFormed` is its executable form.
 
 The module also builds the two inputs of `contextualCheckBlockHeader` that come from the index (section 5.4):
 
@@ -23,7 +24,21 @@ The module also builds the two inputs of `contextualCheckBlockHeader` that come 
   It stops after `contextualViewDepth` entries, or at an entry without a predecessor.
 - `lastCheckpointInIndex`: Core's `GetLastCheckpoint` over the index (D67, lines 18 to 30), as the height of the entry that it finds.
 
-The step, `acceptBlockHeader`, and the sequence are later stages of the record.
+Stage 2 adds one step, `acceptBlockHeader`: Core's `AcceptBlockHeader` (D33, lines 3205 to 3267) on the model.
+The step runs the seven steps of design record 0008, section 3.1, in Core's order:
+
+1. A known hash returns its entry, or `duplicate` when the entry has a failure flag.
+2. `checkBlockHeader`, Core's `CheckBlockHeader` with `fCheckPOW` true.
+3. The index must have the predecessor.
+4. The predecessor must have no failure flag.
+5. `contextualCheckBlockHeader` on the view and the last checkpoint that the index gives.
+6. Unless the predecessor has `scriptsValid`, no member of the failed list may be an ancestor of the predecessor.
+   A failure marks the entries from the predecessor down to that member with `failedChild`, and then rejects.
+7. `addToBlockIndex`, the index part of Core's `AddToBlockIndex` (D33, lines 2755 to 2788), without chain work.
+
+The genesis hash skips steps 1 to 6.
+Between steps 4 and 5, the adapter error `heightOutOfRange` excludes a candidate at height 2147483647 (decision 17).
+The sequence, `processNewBlockHeaders`, is stage 3 of the record.
 The fields for chain work enter in stage 4.
 The theorems are in `DogeLib.Block.Proofs.HeaderSequence`.
 
@@ -134,6 +149,29 @@ structure WellFormed (network : WorkNetwork) (index : HeaderIndex) : Prop where
   failedListed : ∀ hash ∈ index.failedBlocks, ∃ entry, index.lookup hash = some entry ∧ entry.failedValid = true
 
 /--
+The conditions of `WellFormed` on one entry under `hash`: the key, the predecessor link, the genesis condition and the height bound.
+-/
+def wellFormedEntry (network : WorkNetwork) (index : HeaderIndex) (hash : Hash256) (entry : IndexEntry) :
+    Bool :=
+  entry.header.getHash == hash &&
+    (match entry.prev with
+      | some prev =>
+        entry.header.hashPrevBlock == prev &&
+          (index.lookup prev).any fun parent => entry.height == parent.height + 1
+      | none => entry.height != 0 || genesisHash? network == some hash) &&
+    decide (entry.height < 2147483647)
+
+/--
+The executable form of `WellFormed` (`checkWellFormed_iff`).
+It tests `wellFormedEntry` on each pair of the list that `HeaderIndex.lookup` finds, and skips each pair that an earlier pair with the same key shadows.
+It also tests that each member of the failed list has an entry with `failedValid`.
+The sequence of design record 0008, stage 3, runs it before the first header, and returns `HeaderAdapterError.notWellFormed` when it fails.
+-/
+def checkWellFormed (network : WorkNetwork) (index : HeaderIndex) : Bool :=
+  index.entries.all (fun pair => index.lookup pair.1 != some pair.2 || wellFormedEntry network index pair.1 pair.2) &&
+    index.failedBlocks.all fun hash => (index.lookup hash).any (·.failedValid)
+
+/--
 The walk of the predecessor links from `entry`, with at most `fuel` entries, newest first.
 Each entry becomes its `toBlockIndex`.
 The walk stops when the fuel runs out, at an entry without a predecessor, or at a predecessor hash that the index lacks.
@@ -184,5 +222,285 @@ It is the known list that `lastCheckpoint` of design record 0006 takes. -/
 def checkpointHeightsInIndex (network : WorkNetwork) (index : HeaderIndex) : List Nat :=
   ((checkpoints network).filter fun checkpoint =>
     (checkpoint.blockHash?.bind index.lookup).isSome).map Checkpoint.height
+
+/-! ## One step: `AcceptBlockHeader` -/
+
+/--
+The inputs of a step that do not come from the index (design record 0008, section 7.1).
+`adjustedTime` is one value for the whole call (decision 6).
+`checkpointsEnabled` is Core's `fCheckpointsEnabled` (D69).
+-/
+structure HeaderContext where
+  /-- The network, which selects the genesis hash, the proof-of-work record and the contextual records. -/
+  network : WorkNetwork
+  /-- `GetAdjustedTime()`, which Core passes to `ContextualCheckBlockHeader` (D33, line 3238). -/
+  adjustedTime : Int64
+  /-- `fCheckpointsEnabled`, which decides whether check 4 of the contextual check runs. -/
+  checkpointsEnabled : Bool
+
+/-- The failure flags of an entry: `nStatus & BLOCK_FAILED_MASK` is not zero (D18, lines 146 to 148). -/
+def IndexEntry.isFailed (entry : IndexEntry) : Bool := entry.failedValid || entry.failedChild
+
+/-- Core's `REJECT_INVALID`, `0x10` (D84, line 13). -/
+def rejectInvalid : Nat := 0x10
+
+/-- Core's `REJECT_OBSOLETE`, `0x11` (D84, line 14). -/
+def rejectObsolete : Nat := 0x11
+
+/-- Core's `REJECT_CHECKPOINT`, `0x43` (D84, line 19). -/
+def rejectCheckpoint : Nat := 0x43
+
+/--
+The denial-of-service score of a rejection of `ContextualCheckBlockHeader` (D33, lines 3066 to 3119).
+Checks 1 to 4 use `state.DoS(100, …)`, and checks 5 to 7 use `state.Invalid`, which adds 0 (D84, lines 35 to 53).
+An adapter error has no Core score, and the value is 0.
+-/
+def ContextualHeaderError.dosScore : ContextualHeaderError → Nat
+  | .lateLegacyBlock | .earlyAuxpowBlock | .badDiffbits | .badForkPriorToCheckpoint => 100
+  | .timeTooOld | .timeTooNew | .badVersion _ => 0
+  | .emptyView | .invalidView _ | .shortView | .nextWork _ | .adjustedTimeOutOfRange => 0
+
+/--
+The reject code of a rejection of `ContextualHeaderError` (D33, lines 3066 to 3119).
+Check 4 uses `REJECT_CHECKPOINT`, check 7 uses `REJECT_OBSOLETE`, and the other checks use `REJECT_INVALID`.
+An adapter error has no Core code, and the value is 0.
+-/
+def ContextualHeaderError.rejectCode : ContextualHeaderError → Nat
+  | .lateLegacyBlock | .earlyAuxpowBlock | .badDiffbits | .timeTooOld | .timeTooNew => rejectInvalid
+  | .badForkPriorToCheckpoint => rejectCheckpoint
+  | .badVersion _ => rejectObsolete
+  | .emptyView | .invalidView _ | .shortView | .nextWork _ | .adjustedTimeOutOfRange => 0
+
+/--
+A Core rejection of one step: one constructor for each rejection of design record 0008, section 3.1.
+Steps 3, 4 and 6 have the same reject reason, `bad-prevblk`, so the reason alone does not identify the step (item 8).
+-/
+inductive HeaderRejection where
+  /-- Step 1: the hash is known, and its entry has a failure flag: `duplicate` (D33, lines 3214 to 3222). -/
+  | duplicate
+  /-- Step 2: `CheckBlockHeader` fails: `high-hash` (D33, lines 3224 and 3225). -/
+  | highHash (error : CheckPowError)
+  /-- Step 3: the index has no entry under `hashPrevBlock`: `bad-prevblk` (D33, lines 3229 to 3231). -/
+  | prevBlockNotFound
+  /-- Step 4: the predecessor has a failure flag: `bad-prevblk` (D33, lines 3233 and 3234). -/
+  | prevBlockInvalid
+  /-- Step 5: `ContextualCheckBlockHeader` rejects (D33, lines 3238 and 3239).
+  The step holds only Core rejections here, never an adapter error of the contextual check. -/
+  | contextual (error : ContextualHeaderError)
+  /-- Step 6: the member `failed` of the failed list is an ancestor of the predecessor: `bad-prevblk` (D33, lines 3241 to 3256). -/
+  | failedAncestor (failed : Hash256)
+  deriving DecidableEq, Repr
+
+/-- Core's reject reason for each rejection (D33, lines 3220, 3231, 3234 and 3253, and line 2934 for `high-hash`).
+The reason of step 5 is the reason of the contextual check. -/
+def HeaderRejection.rejectReason : HeaderRejection → String
+  | .duplicate => "duplicate"
+  | .highHash error => error.rejectReason
+  | .prevBlockNotFound | .prevBlockInvalid | .failedAncestor _ => "bad-prevblk"
+  | .contextual error => error.rejectReason.getD ""
+
+/-- Core's denial-of-service score for each rejection: 0, 50, 10, 100, the score of the contextual check, and 100.
+`state.Invalid` adds 0, and `state.DoS(n, …)` adds `n` (D84, lines 35 to 53). -/
+def HeaderRejection.dosScore : HeaderRejection → Nat
+  | .duplicate => 0
+  | .highHash _ => 50
+  | .prevBlockNotFound => 10
+  | .prevBlockInvalid => 100
+  | .contextual error => error.dosScore
+  | .failedAncestor _ => 100
+
+/-- Core's reject code for each rejection: 0 for `duplicate` and step 3, which use the default code, and `REJECT_INVALID` for steps 2, 4 and 6.
+The code of step 5 is the code of the contextual check. -/
+def HeaderRejection.rejectCode : HeaderRejection → Nat
+  | .duplicate | .prevBlockNotFound => 0
+  | .highHash _ | .prevBlockInvalid | .failedAncestor _ => rejectInvalid
+  | .contextual error => error.rejectCode
+
+/--
+An input outside the domain of a step (design record 0008, section 7.1). An adapter error is not a Core verdict.
+-/
+inductive HeaderAdapterError where
+  /-- The index fails `WellFormed`, as `checkWellFormed` tests it. The sequence of stage 3 checks this before the first header. The step does not produce it. -/
+  | notWellFormed
+  /-- `contextualCheckBlockHeader` returns this adapter error, for example `shortView` or `nextWork` below an anchor. -/
+  | contextual (error : ContextualHeaderError)
+  /-- The adjusted time is above `maxAdjustedTime`, where Core's sum `nAdjustedTime + 7200` overflows. -/
+  | adjustedTimeOutOfRange
+  /-- The predecessor is at height 2147483646 or above, so the candidate would be at height 2147483647 or above (decision 17). -/
+  | heightOutOfRange
+  deriving DecidableEq, Repr
+
+/-- The error of a step: a Core rejection, or an adapter error for an input outside the domain. -/
+inductive HeaderStepError where
+  /-- A Core rejection. -/
+  | rejection (rejection : HeaderRejection)
+  /-- An adapter error. -/
+  | adapter (error : HeaderAdapterError)
+  deriving DecidableEq, Repr
+
+/-- The error of step 5 for an error of the contextual check.
+A Core rejection becomes `HeaderRejection.contextual`, and an adapter error stays an adapter error. -/
+def HeaderStepError.ofContextual : ContextualHeaderError → HeaderStepError
+  | .adjustedTimeOutOfRange => .adapter .adjustedTimeOutOfRange
+  | error => if error.isRejection then .rejection (.contextual error) else .adapter (.contextual error)
+
+/--
+Step 5 (D33, lines 3238 and 3239): `contextualCheckBlockHeader` with the inputs that design record 0008, section 5.4, builds from the index.
+The view is `ancestorView` of the predecessor's entry, and the last checkpoint is `lastCheckpointInIndex` over the whole index.
+-/
+def contextualCheckInIndex (ctx : HeaderContext) (index : HeaderIndex) (header : PureBlockHeader)
+    (prev : IndexEntry) : Except ContextualHeaderError Unit :=
+  contextualCheckBlockHeader ctx.network header (ancestorView ctx.network index prev) ctx.adjustedTime
+    (lastCheckpointInIndex ctx.network ctx.checkpointsEnabled index)
+
+/--
+Core's `CBlockIndex::GetAncestor` (D35, lines 113 to 137), as the key of the ancestor's entry.
+The walk starts at `entry` under the key `hash` and follows the predecessor links, with at most `fuel` entries.
+It returns the key of the entry at `height`.
+The result is `none` when `height` is above the entry's height, or when the walk ends first.
+The walk ends at an entry without a predecessor, at a missing predecessor, or when the fuel runs out.
+
+An anchor above `height` ends the walk, where Core would fail its assertion on `pprev` (design record 0008, section 5.3).
+Core's skip pointers only shorten the walk, so they do not change the result.
+-/
+def ancestorHashAt (index : HeaderIndex) : Nat → Hash256 → IndexEntry → Nat → Option Hash256
+  | 0, _, _, _ => none
+  | fuel + 1, hash, entry, height =>
+    if entry.height = height then some hash
+    else if entry.height < height then none
+    else
+      match entry.prev with
+      | some prev =>
+        match index.lookup prev with
+        | some parent => ancestorHashAt index fuel prev parent height
+        | none => none
+      | none => none
+
+/--
+The test of step 6 for one member of the failed list (D33, line 3243): `pindexPrev->GetAncestor(failedit->nHeight) == failedit`.
+The predecessor's entry `prev` is under the key `prevHash`.
+The walk has `prev.height + 1` entries of fuel, enough to reach height 0.
+A member without an entry is no ancestor. A well-formed index has an entry for each member.
+-/
+def isAncestorInIndex (index : HeaderIndex) (prevHash : Hash256) (prev : IndexEntry) (member : Hash256) :
+    Bool :=
+  match index.lookup member with
+  | some entry => ancestorHashAt index (prev.height + 1) prevHash prev entry.height == some member
+  | none => false
+
+/--
+The search of step 6 (D33, lines 3242 and 3243): the first member of the failed list that is an ancestor of the predecessor.
+The search visits the list in its order, where Core visits `gFailedBlocks` in address order (design record 0008, decision 5).
+The verdict does not depend on that order (`failedAncestor_verdict_perm`).
+-/
+def failedAncestor? (index : HeaderIndex) (prevHash : Hash256) (prev : IndexEntry) : Option Hash256 :=
+  index.failedBlocks.find? (isAncestorInIndex index prevHash prev)
+
+/--
+The keys that the loop of step 6 marks (D33, lines 3245 to 3250).
+They are the entries from `entry` under `hash` down the predecessor links, up to the entry under `member` and without it.
+The walk has at most `fuel` entries, and it also stops at an entry without a predecessor or at a missing predecessor.
+-/
+def failedChildPath (index : HeaderIndex) : Nat → Hash256 → IndexEntry → Hash256 → List Hash256
+  | 0, _, _, _ => []
+  | fuel + 1, hash, entry, member =>
+    if hash = member then []
+    else
+      hash ::
+        match entry.prev with
+        | some prev =>
+          match index.lookup prev with
+          | some parent => failedChildPath index fuel prev parent member
+          | none => []
+        | none => []
+
+/--
+The marks of step 6: each key of `hashes` that the index has gets its entry with `failedChild` set, as `nStatus |= BLOCK_FAILED_CHILD` (D33, line 3247).
+Each mark is an insertion of the changed entry, which shadows the earlier one.
+Every other field and the failed list stay unchanged.
+-/
+def markFailedChild (index : HeaderIndex) (hashes : List Hash256) : HeaderIndex :=
+  hashes.foldl (fun acc hash =>
+    match acc.lookup hash with
+    | some entry => acc.insert hash { entry with failedChild := true }
+    | none => acc) index
+
+/--
+The index part of Core's `AddToBlockIndex` (D33, lines 2755 to 2788), without chain work, `nTimeMax`, `pindexBestHeader` and the dirty set.
+
+If the index has the hash of the header, the index does not change (lines 2757 to 2761).
+Otherwise the function inserts a new entry under the hash.
+If the index has `hashPrevBlock`, the entry gets that predecessor and the predecessor's height plus one (lines 2772 to 2778).
+Otherwise it has no predecessor and height 0.
+The entry has no failure flag and the validity level `BLOCK_VALID_TREE`, so `scriptsValid` is false (line 2781).
+
+Core searches for `hashPrevBlock` after it inserts the new entry (line 2772).
+The function searches the index before the insertion.
+The two differ only for a header whose `hashPrevBlock` is its own hash, a fixed point of double SHA-256.
+Core links that entry to itself at height 1, and the function inserts it with no predecessor at height 0.
+Design record 0008, section 13.1, accepts this difference, because a self-link would break `WellFormed`.
+-/
+def addToBlockIndex (index : HeaderIndex) (header : PureBlockHeader) : HeaderIndex :=
+  let hash := header.getHash
+  match index.lookup hash with
+  | some _ => index
+  | none =>
+    match index.lookup header.hashPrevBlock with
+    | some parent =>
+      index.insert hash ⟨header, parent.height + 1, some header.hashPrevBlock, false, false, false⟩
+    | none => index.insert hash ⟨header, 0, none, false, false, false⟩
+
+/-- The height bound of decision 17: a predecessor at height 2147483646 or above gives `heightOutOfRange`. -/
+def maxPrevHeight : Nat := 2147483646
+
+/--
+Core's `AcceptBlockHeader` (D33, lines 3205 to 3267) on the block-index model, design record 0008, section 3.1.
+It returns the index after the step and, on acceptance, the hash of the header's entry.
+
+For the genesis hash of the network, the step skips steps 1 to 6 and runs `addToBlockIndex`.
+If the index lacks the genesis hash but has a predecessor at `maxPrevHeight` or above, it returns `heightOutOfRange` (decision 17).
+
+For any other hash, the step runs steps 1 to 7 in order and returns at the first failure.
+The adapter error `heightOutOfRange` comes after step 4 and before step 5.
+A rejection of step 6 returns the index with the marks of `markFailedChild`.
+Every other error returns the input index.
+The step never checks `WellFormed`: the sequence of stage 3 checks it before the first header.
+-/
+def acceptBlockHeader (ctx : HeaderContext) (index : HeaderIndex) (header : BlockHeader) :
+    HeaderIndex × Except HeaderStepError Hash256 :=
+  let hash := header.pure.getHash
+  if genesisHash? ctx.network = some hash then
+    match index.lookup hash with
+    | some _ => (index, .ok hash)
+    | none =>
+      match index.lookup header.pure.hashPrevBlock with
+      | some parent =>
+        if maxPrevHeight ≤ parent.height then (index, .error (.adapter .heightOutOfRange))
+        else (addToBlockIndex index header.pure, .ok hash)
+      | none => (addToBlockIndex index header.pure, .ok hash)
+  else
+    match index.lookup hash with
+    | some entry =>
+      if entry.isFailed then (index, .error (.rejection .duplicate)) else (index, .ok hash)
+    | none =>
+      match checkBlockHeader ctx.network header with
+      | .error error => (index, .error (.rejection (.highHash error)))
+      | .ok () =>
+        match index.lookup header.pure.hashPrevBlock with
+        | none => (index, .error (.rejection .prevBlockNotFound))
+        | some prev =>
+          if prev.isFailed then (index, .error (.rejection .prevBlockInvalid))
+          else if maxPrevHeight ≤ prev.height then (index, .error (.adapter .heightOutOfRange))
+          else
+            match contextualCheckInIndex ctx index header.pure prev with
+            | .error error => (index, .error (.ofContextual error))
+            | .ok () =>
+              match (if prev.scriptsValid then none
+                  else failedAncestor? index header.pure.hashPrevBlock prev) with
+              | some failed =>
+                (markFailedChild index
+                    (failedChildPath index (prev.height + 1) header.pure.hashPrevBlock prev failed),
+                  .error (.rejection (.failedAncestor failed)))
+              | none => (addToBlockIndex index header.pure, .ok hash)
 
 end DogeLib.Block

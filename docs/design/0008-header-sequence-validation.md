@@ -1,6 +1,6 @@
 # Header-sequence validation
 
-**Status:** Adopted on 2026-11-07, with the decisions that section 13 records.
+**Status:** Adopted on 2026-11-07, with the decisions and the amendment that section 13 records.
 This record is frozen.
 Implementation status belongs in ROADMAP.md and COVERAGE.md.
 
@@ -829,6 +829,33 @@ The maintainer decided each proposal as its status states:
 | 16 | Rust work | Implementation refinement and Rust extraction stay outside this scope. | None in this scope. | Accepted |
 | 17 | Height bound | The adapter error `heightOutOfRange` for a candidate at height 2147483647, so that every entry stays below that height (section 7.1). | Allow that one height in the index, and let later steps return `invalidView`. | Accepted |
 
+### 13.1 Amendment to `accept_genesis`
+
+**Date:** 2026-11-07. **Decision maker:** Maintainer.
+The target `accept_genesis` of section 11 cannot be proved for a definition that follows Core's source.
+In its genesis branch, `AddToBlockIndex` searches the index for the header's `hashPrevBlock` [C3], and `WellFormed` does not exclude an entry under that hash.
+Such an entry needs a double SHA-256 preimage of zero or a collision with the genesis hash, and no target in this record assumes collision resistance.
+
+The definition keeps Core's search, and three theorems replace `accept_genesis`:
+
+- `accept_genesis_known`: with an entry under the genesis hash, the step accepts and returns the input index, with or without failure flags.
+- `accept_genesis_insert`: with no entry under the genesis hash and no entry under its `hashPrevBlock`, the step inserts one entry with no predecessor, height 0 and no flags.
+- `accept_genesis_parent`: with no entry under the genesis hash and an entry under its `hashPrevBlock`, the step links the new entry to that entry, or returns `heightOutOfRange`.
+
+The genesis branch also returns `heightOutOfRange` when the entry under `hashPrevBlock` has height 2147483646 or more, as decision 17 does for other headers.
+Core has no such check, and the case needs the same preimage or collision.
+Stage 4 adds the chain work of the inserted entry to `accept_genesis_insert`.
+
+The model keeps one difference from Core in this branch, as an accepted difference.
+Core's `AddToBlockIndex` inserts the new entry before it searches for `hashPrevBlock` [C3, lines 2770 and 2772].
+`addToBlockIndex` searches the input index before the insertion.
+The two differ only for a genesis header whose `hashPrevBlock` is its own hash, a fixed point of double SHA-256.
+For that header, Core finds the new entry itself, links it to itself and gives it height 1.
+The model finds no entry, so `accept_genesis_insert` applies and the step inserts a root at height 0.
+
+A self-link would break `WellFormed`, because an entry's height cannot be its own height plus one, and so `wellFormed_preserved` would fail.
+`accept_genesis_parent` never covers this header, because its hypotheses need an entry under `hashPrevBlock` and none under the genesis hash.
+
 ## 14. Remaining risks
 
 | Risk | Mitigation |
@@ -844,5 +871,6 @@ The maintainer decided each proposal as its status states:
 | Scrypt in the compiled code makes the long fixture ranges slow in `lake test`. | Stage 3 measures the cost, and can run the long ranges in the oracle comparison only. |
 | A fixture with anchors gives a different result from a full chain. | `ancestorView_congr`, `process_complete`, and anchors deep enough for each candidate (section 9.1). |
 
-There is no pin change, trust-policy exception, change to an agreed theorem statement or change to an existing fixture format in this record.
+There is no pin change, trust-policy exception or change to an existing fixture format in this record.
+Section 13.1 records one amendment to an agreed theorem statement: three theorems replace the target `accept_genesis`.
 Adoption of the scope does not establish any target theorem, and it does not authorize the merge of a later implementation.

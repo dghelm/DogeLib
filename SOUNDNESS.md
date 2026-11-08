@@ -598,6 +598,7 @@ The caller supplies them, and no theorem says that a caller supplies the values 
 - **The link from the header to the view.** No check reads a hash, so the function cannot check that the view is the chain of the header's `hashPrevBlock`.
   Core's `AcceptBlockHeader` finds `pindexPrev` by that hash before the call (D33, lines 3205 to 3267).
   A caller that passes the view of another chain gets the result for that chain.
+  `acceptBlockHeader` builds the view from the index by `hashPrevBlock`, so it has no such boundary ([one step](#one-step-acceptblockheader)).
 
 `lake test` runs the compiled function on the five mainnet fixtures: heights 0–12, 144719–145030, 371320–371340, 1032483–1034390 and 3464739–3464760.
 Two public Electrum servers returned the same bytes for the three ranges under `tests/block`.
@@ -668,10 +669,10 @@ These theorems establish the behaviour of DogeLib's definitions.
 The index is an input.
 No theorem says that its anchors, failure flags, validity flags and failed list are the state that a node holds.
 
-`WellFormed` is a hypothesis, and no executable check of it exists in stage 1.
-Stage 2 of the record checks it as an adapter error before the first header.
+`WellFormed` is a hypothesis.
+Stage 2 adds its executable form, `checkWellFormed`, and the sequence of stage 3 runs that check before the first header.
 Stage 1 builds the view from an entry, but the caller still chooses the entry.
-Stage 2 finds the entry by the header's `hashPrevBlock`, and that step removes the link boundary of [contextual header validation](#contextual-header-validation).
+[The step of stage 2](#one-step-acceptblockheader) finds the entry by the header's `hashPrevBlock`, and so removes the link boundary of [contextual header validation](#contextual-header-validation).
 
 `lake test` builds an index from each of the five mainnet fixtures.
 The first header of each fixture is the genesis entry or an anchor, and no entry has a failure flag.
@@ -692,6 +693,116 @@ By `#print axioms` with Lean `v4.35.0`:
 | `propext` | `HeaderIndex.lookup_insert_of_ne` |
 | `propext`, `Quot.sound` | `ancestorWalk_length_le`, `ancestorWalk_take` |
 | `propext`, `Classical.choice`, `Quot.sound` | `HeaderIndex.lookup_insert_self`, `ancestorWalk_valid`, `ancestorWalk_eq_ancestorChain`, `ancestorView_congr_chain`, `ancestorView_congr`, `lastCheckpointInIndex_eq` |
+
+### One step: `acceptBlockHeader`
+
+`acceptBlockHeader` in `DogeLib.Block.HeaderSequence` specifies Core's `AcceptBlockHeader` (D33, lines 3205 to 3267) on the block-index model (design record 0008, stage 2).
+It takes a `HeaderContext`, an index and a full header, and returns the index after the step and the hash or an error.
+For the genesis hash of the network, it skips steps 1 to 6, as Core does at line 3212.
+For any other hash, it runs the steps of the record's section 3.1 in Core's order and returns at the first failure:
+
+1. A known hash returns its entry, or `duplicate` when the entry has `failedValid` or `failedChild` (lines 3214 to 3222).
+2. `checkBlockHeader`, as `CheckBlockHeader` with `fCheckPOW` true (lines 3224 and 3225, and lines 2927 to 2937).
+3. The index must have `hashPrevBlock` (lines 3229 to 3231).
+4. The predecessor must have no failure flag (lines 3233 and 3234).
+5. `contextualCheckBlockHeader` on `ancestorView` of the predecessor and on `lastCheckpointInIndex` (lines 3238 and 3239).
+6. Unless the predecessor has `scriptsValid`, no member of the failed list may be an ancestor of the predecessor (lines 3241 to 3256).
+   A failure marks the entries from the predecessor down to that member with `failedChild`, without the member, and then rejects.
+7. `addToBlockIndex`, the index part of `AddToBlockIndex` (lines 2755 to 2788), without chain work, `nTimeMax`, `pindexBestHeader` and the dirty set.
+
+`HeaderRejection` has one constructor for each rejection, and `rejectReason`, `dosScore` and `rejectCode` give Core's reason, score and code.
+The scores and codes come from `state.DoS` and `state.Invalid` at each line (D84, lines 12 to 19 and 35 to 53).
+Source review, not a theorem, connects the step and these observables to Core.
+
+The step has these adapter errors, which are not Core verdicts:
+
+- `heightOutOfRange`: the predecessor is at `maxPrevHeight`, 2147483646, or above, so the candidate would be at height 2147483647 (decision 17).
+  The ordinary branch checks it after step 4 and before step 5.
+  The genesis branch also checks it when `addToBlockIndex` would link the genesis header to an entry at that height, where Core has no check.
+  Every entry of a well-formed index then stays below 2147483647.
+- `adjustedTimeOutOfRange` and `contextual`: the adapter errors of `contextualCheckBlockHeader` at step 5, such as `shortView` or `nextWork missingAncestor` below an anchor.
+- `notWellFormed`: the step never returns it.
+  `checkWellFormed` is the executable form of `WellFormed` (`checkWellFormed_iff`), and the sequence of stage 3 runs it before the first header.
+
+The step makes three choices where Core's source gives no behaviour on the model's domain:
+
+- Core's `GetAncestor` fails its assertion on `pprev` when a walk passes below an anchor (D35, line 131).
+  `ancestorHashAt` ends the walk at an anchor, and `isAncestorInIndex` then finds no ancestor (the record's section 5.3).
+- Core visits `gFailedBlocks` in address order (D33, line 180).
+  `failedAncestor?` visits the failed list in list order (decision 5).
+  `failedAncestor_verdict_perm` proves that the verdict does not depend on that order, but the marks can differ.
+- Core's `AddToBlockIndex` inserts the new entry and then searches for `hashPrevBlock` (D33, lines 2770 and 2772).
+  `addToBlockIndex` searches the input index.
+  The two differ only for a header whose `hashPrevBlock` is its own hash, a fixed point of double SHA-256.
+  Core links that genesis entry to itself at height 1, and the model inserts a root at height 0 (`accept_genesis_insert`).
+  Design record 0008, section 13.1, accepts this difference, because a self-link would break `WellFormed` and `wellFormed_preserved`.
+
+The theorems in `Block.Proofs.HeaderSequence` hold for every network and context.
+Each target of the record's section 11 takes an index that satisfies `WellFormed`, as the record requires, even when its proof does not use it:
+
+- `accept_known`: a known hash other than genesis is accepted with the input index.
+  When its entry has a failure flag, the step returns `duplicate` with the input index.
+  No proof-of-work check runs (item 6).
+- `accept_genesis_known`: with an entry under the genesis hash, the step accepts and returns the input index, even when the entry has a failure flag (item 1).
+- `accept_genesis_insert`: without that entry, and without an entry under the header's `hashPrevBlock`, the step inserts an entry with no predecessor, height 0 and no flags.
+- `accept_genesis_parent`: without that entry, but with an entry under `hashPrevBlock`, the step links the new entry to it or returns `heightOutOfRange`.
+- `accept_eq_ok_iff`: an unknown hash other than genesis is accepted exactly when five conditions hold.
+  Step 2 passes, and the predecessor exists without a flag below `maxPrevHeight`.
+  The contextual check accepts, and the predecessor has `scriptsValid` or no member of the failed list is its ancestor.
+- `accept_eq_error_iff`: for a hash other than genesis, each rejection occurs exactly when its condition fails and the conditions of all earlier steps hold.
+  It combines `accept_eq_duplicate_iff`, `accept_eq_highHash_iff`, `accept_eq_prevBlockNotFound_iff`, `accept_eq_prevBlockInvalid_iff`, `accept_eq_contextual_iff` and `accept_eq_failedAncestor_iff`.
+  `accept_eq_heightOutOfRange_iff` is its companion: `heightOutOfRange` occurs exactly when steps 1 to 4 pass and the predecessor is at height 2147483646.
+- `accept_ok_insert` and `accept_link`: an acceptance of an unknown hash other than genesis inserts one entry.
+  The entry has the predecessor `hashPrevBlock`, the predecessor's height plus one and no flags.
+  The failed list does not change.
+- `accept_error_index`: an adapter error, or a rejection other than `failedAncestor`, returns the input index.
+  `failedAncestor` changes only `failedChild`, on the keys of `failedChildPath`, and keeps the failed list.
+- `wellFormed_preserved`: each step maps a well-formed index to a well-formed index.
+- `failedAncestor_verdict_perm`: with a permutation of the failed list, the two results are equal, or both are `failedAncestor`.
+- `checkWellFormed_iff`: `checkWellFormed` returns true exactly when the index satisfies `WellFormed`.
+
+Design record 0008, section 13.1, replaces the target `accept_genesis` with `accept_genesis_known`, `accept_genesis_insert` and `accept_genesis_parent`.
+The original target said that the genesis entry gets no predecessor and height 0.
+`addToBlockIndex` follows Core and links the genesis header to an entry under its `hashPrevBlock` when the index has one.
+For the real genesis header, that entry needs a header that hashes to zero, and for another header a collision with the genesis hash.
+`WellFormed` does not exclude it, and no theorem can exclude it without a cryptographic assumption.
+So `accept_genesis_insert` states the hypothesis that the index lacks `hashPrevBlock`, and `accept_genesis_parent` covers the other case.
+
+These theorems establish the behaviour of DogeLib's definitions.
+The index, its anchors, failure flags, validity flags and failed list, the adjusted time and the checkpoint option are inputs.
+No theorem says that they are the state and the context that a node holds.
+
+`lake test` runs the step through the compiled code:
+
+- The regtest fixture (D83): the first header of each of its 33 cases with headers.
+  Each step uses the request's index, failed list, adjusted time and checkpoint option.
+  `checkWellFormed` accepts every index.
+  The expected verdict, reason, DoS score, reject code, adapter error, added entries and marks are the fixture's hand-derived values.
+  For a case with several headers, the first step is accepted when the fixture fails at a later position.
+  It then adds the first entry of the fixture's `added` list.
+- 23 mainnet steps with real headers, from the pure fixtures and from the full fixtures D80–D82.
+  The expected acceptances come from chain acceptance, and each other result comes from hand derivation from D33 and the record.
+  Each expected hash is a literal from the fixture READMEs, the chain parameters or an independent `hashlib` computation, or the `hashPrevBlock` field of the next fixture header.
+  No expected hash comes from `PureBlockHeader.getHash`, which derives only the keys of the input index.
+  A fork at 144990 below an anchor at checkpoint 145000 gives `bad-fork-prior-to-checkpoint` with checkpoints enabled, with DoS 100 and code `0x43`.
+  With checkpoints disabled, the step accepts it.
+  A raised anchor at 144720 gives `nextWork missingAncestor` at the retarget 144960.
+  The AuxPoW header at 371337 passes step 2 with its payload.
+  The header at `BIP66Height` with base version 2 gives `high-hash`.
+  Its payload commits to the real header's hash, and step 2 runs before check 7.
+- Two synthetic steps with the mined regtest headers: a predecessor at 2147483646 gives `heightOutOfRange`, and one at 2147483645 gives `shortView`.
+  Five cases of `checkWellFormed` accept and reject small indexes.
+
+These checks do not run Core, and the Core comparison is stage 5 of the record.
+
+By `#print axioms` with Lean `v4.35.0`:
+
+| Axioms | Theorems in `Block.Proofs.HeaderSequence` |
+| --- | --- |
+| None | `markFailedChild_failedBlocks`, `HeaderIndex.lookup_withFailed` |
+| `propext` | `HeaderStepError.ofContextual_eq_rejection_iff`, `HeaderStepError.ofContextual_ne_heightOutOfRange` |
+| `propext`, `Quot.sound` | `addToBlockIndex_of_unknown`, `ancestorWalk_withFailed`, `ancestorHashAt_withFailed`, `isAncestorInIndex_withFailed` |
+| `propext`, `Classical.choice`, `Quot.sound` | `checkWellFormed_iff`, `accept_known`, `accept_genesis_known`, `accept_genesis_insert`, `accept_genesis_parent`, `accept_ok_hash`, `accept_eq_ok_iff`, `accept_unknown_ok`, `accept_ok_insert`, `accept_link`, the six `accept_eq_*_iff` rejection theorems, `accept_eq_heightOutOfRange_iff`, `accept_eq_error_iff`, `lookup_markFailedChild`, `accept_error_index_other`, `accept_error_failedAncestor`, `accept_error_index`, `HeaderIndex.lookup_insert`, `wellFormed_insert`, `wellFormed_addToBlockIndex`, `wellFormed_of_shape`, `wellFormed_markFailedChild`, `wellFormed_preserved`, `contextualCheckInIndex_withFailed`, `failedAncestor_verdict_perm` |
 
 ### RIPEMD-160 and Hash160
 
@@ -2497,6 +2608,8 @@ The caller supplies that link, as Core's lookup of `pindexPrev` by hash supplies
 The theorems of the block-index model take `WellFormed` as a hypothesis.
 `lastCheckpointInIndex_eq` also assumes that each checkpoint hash in the index belongs to an entry at its table height.
 [The block-index model](#the-block-index-model) states both hypotheses and what discharges them.
+`checkWellFormed_iff` makes the first hypothesis checkable, and `wellFormed_preserved` shows that each step keeps it.
+`accept_genesis_insert` assumes that the index lacks the genesis header's `hashPrevBlock` ([one step](#one-step-acceptblockheader)).
 
 ### A3. Side channels
 

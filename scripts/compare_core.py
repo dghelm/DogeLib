@@ -615,7 +615,8 @@ def set_hash_boundaries(algorithm: str) -> list[dict]:
             for n in sorted(lengths)]
 
 
-QUICK_SETS = ("header sequence regtest 34", "header sequence state boundaries", f"header sequence mutations seed {SEQUENCE_SEED}", "contextual boundaries", "header PoW fixtures", "full header readers", "header version boundaries", "pubkey Core signatures", "Script signature verdict", "fixtures", "compactsize", "sighash endpoints", "witness flags and stacks",
+QUICK_SEQUENCE_MUTATIONS = 8
+QUICK_SETS = ("header sequence regtest 34", "header sequence state boundaries", "contextual boundaries", "header PoW fixtures", "full header readers", "header version boundaries", "pubkey Core signatures", "Script signature verdict", "fixtures", "compactsize", "sighash endpoints", "witness flags and stacks",
               "work compact boundaries", "regtest legacy wrap case", "work missing skip traversal", "header field boundaries", "Merkle generated",
               "RIPEMD-160 padding boundaries", "Hash160 padding boundaries", "SHA-1 padding boundaries", "Script reader truncations", "Script resource boundaries", "Script resource boundaries base",
               "Script legacy corpus base", "Script legacy corpus transaction", "Script harness refusal domain", "Script refusal precedence",
@@ -990,7 +991,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--timeout", type=float, default=600.0)
     parser.add_argument("--quick", action="store_true",
-                        help=f"only the sets {', '.join(QUICK_SETS)}, for the comparator's self-test")
+                        help=f"only the sets {', '.join(QUICK_SETS)} and a sample of the seeded sequence mutations, for the comparator's self-test")
     parser.add_argument("--rust-compactsize", metavar="PATH",
                         help="compare only CompactSize reader requests with this native Rust adapter as a third program")
     parser.add_argument("oracle")
@@ -1041,7 +1042,11 @@ def main() -> int:
     else:
         sets, excluded = request_sets()
     if args.quick:
-        sets = [(name, reqs) for name, reqs in sets if name in QUICK_SETS]
+        # The first few seeded sequence mutations have no fixture expectation, so the self-test
+        # can reach the Lean and Core cross-comparison without streaming all of them.
+        sample = f"header sequence mutations seed {SEQUENCE_SEED}"
+        sets = ([(name, reqs) for name, reqs in sets if name in QUICK_SETS] +
+                [(f"{name} sample", reqs[:QUICK_SEQUENCE_MUTATIONS]) for name, reqs in sets if name == sample])
     print(f"fixtures left out: {len(excluded)}")
     for e in excluded:
         print(f"  {e}")

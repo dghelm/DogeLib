@@ -124,6 +124,19 @@ def stage2(args, wrapper, check):
                                   completed=summary['completed'], elapsed_seconds=summary['elapsed_seconds']))
             print(f"ok {mode}: detected {kind} at case {record['case_index']}, replay reproduced")
             checks += 1
+        local = copy.deepcopy(opts)
+        local.output = str(tmp / 'q6-only')
+        local.oracle = wrapper(tmp / 'q6-only-lean', 'q6-after', args.oracle)
+        plan = next(p for p in plans(20261108, 2000)
+                    if p['mode'] == 'preserve' and p['boundary'] == 'field')
+        summary = campaign.run_campaign(local, [dict(plan=plan)])
+        record = json.loads(pathlib.Path(summary['saved'][0]).read_text())
+        check(record['class'] == 'digest' and record['failing_side'] == 'undetermined', record)
+        check(record['property'] == 'Q6', record)
+        check(record['expected']['relation'] == 'compare_core.compare agreement', record)
+        check('Q6' in record['expected']['text'], record)
+        print('ok Q6-only: generated disagreement saves the comparison property and expectation')
+        checks += 1
         requests = [r for i, plan in enumerate(plans(20261108, 64))
                     for r in signing_requests(plan, f'generated-{i}')]
         first = campaign.execute(signer, requests, 10, ['--sign'])

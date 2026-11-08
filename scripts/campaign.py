@@ -153,7 +153,7 @@ def case_requests(case):
 def assess_cases(cases, runs):
     """Apply Q6 to requests, then the independently stated generated property."""
     requests = [r for case in cases for r in case_requests(case)]
-    results = assess(requests, runs)
+    results = [(i, (*result, 'Q6')) for i, result in assess(requests, runs)]
     if results and results[0][0] is None:
         return results
     grouped, offset = [], 0
@@ -269,7 +269,8 @@ def run_campaign(args, cases=None):
         coverage[key][name] = coverage[key].get(name, 0) + 1
 
     def save(batch, result, runs, history):
-        kind, side, message, code = result
+        kind, side, message, code = result[:4]
+        property_name = result[4] if len(result) > 4 else 'Q6'
         requests = [r for case in batch for r in case_requests(case)]
         signer = [entry for case in batch for entry in case.get('signer', [])]
         text = canonical(requests[0]) if len(requests) == 1 else canonical(requests or signer)
@@ -281,13 +282,13 @@ def run_campaign(args, cases=None):
             replay += ' --signer ' + shlex.quote(args.signer)
         record = dict(format=FORMAT, campaign=args.campaign, seed=args.seed,
                       case_index=batch[0]['case_index'], budget=dict(cases=args.cases, seconds=args.seconds),
-                      property=batch[0].get('expected', {}).get('property', 'Q6'), **{'class': kind}, failing_side=side,
+                      property=property_name, **{'class': kind}, failing_side=side,
                       plan=dict(mode='generated' if generated else 'existing', inputs=[{k: v for k, v in case.items()
                                                                                        if k not in ('request', 'requests', 'signer')} for case in batch]),
                       requests=requests, signer=signer, responses=runs,
-                      expected=batch[0].get('expected', dict(relation='compare_core.compare agreement',
-                                    text='Design record 0009, section 11, Q6. No independent verdict is asserted.'),
-                      ),
+                      expected=(dict(relation='compare_core.compare agreement',
+                                     text='Design record 0009, section 11, Q6. No independent verdict is asserted.')
+                                if property_name == 'Q6' else batch[0]['expected']),
                       revisions=revisions, build=build, replay=replay, reduced_from=None,
                       detail=dict(message=message, code=code), timeout=args.timeout,
                       batch_failures=history)

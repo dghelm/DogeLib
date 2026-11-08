@@ -390,5 +390,5 @@ def property_result(case, runs):
             violations.append((side, kind))
     if violations:
         sides = 'both' if len(violations) == 2 else violations[0][0]
-        return violations[0][1], sides, f"{expected['property']} property violation", expected['property']
+        return violations[0][1], sides, f"{expected['property']} property violation", expected['property'], expected['property']
     return None

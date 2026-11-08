@@ -1055,9 +1055,10 @@ The oracle tests compare fixture expectations, exact adapter errors, malformed r
 
 ## Campaign runs and replay
 
-`scripts/campaign.py` checks Q1 to Q7 from [design record 0009](design/0009-bug-finding-campaign.md#11-properties).
+`scripts/campaign.py --campaign generated` checks Q1 to Q7 from [design record 0009](design/0009-bug-finding-campaign.md#11-properties).
 It reuses `compare` from `scripts/compare_core.py` without changing the CI comparison stream.
-The default campaign shuffles existing requests with the selected seed and sends fixed-size batches.
+The default campaign checks Q6 alone.
+It shuffles existing requests with the selected seed and sends fixed-size batches.
 The generated campaign adds signed plans and independent property checks.
 
 Build the oracle and harness as described above, then run these commands:
@@ -1134,6 +1135,8 @@ The `failures` total includes both per-case disagreements and process failures, 
 `unsupported` and harness `refusal` count apart from disagreements, and each gets a saved record.
 `known` counts accepted fixed-digest cases and early recovery with CLTV disabled, after the property checks pass.
 The duplicate-key behaviour is registered but unreachable in this template, whose keys are distinct.
+Saved `unsupported` records name Q6 and its agreement expectation, as exclusions from comparison.
+Every Q6 result retains that expectation rather than the generated plan's independent property.
 A Q6 disagreement has failing side `undetermined`: agreement alone cannot establish which implementation violates an independent property.
 
 Saved records use `dogelib-campaign-failure/1`, with the fields of [section 7.3](design/0009-bug-finding-campaign.md#73-the-saved-failure).

@@ -49,6 +49,8 @@ def wrap(mode, program, args):
                 return 3
             if action == 'timeout':
                 time.sleep(30)
+        if mode == 'q6-after' and '-after-' in request['id']:
+            response['ok']['digest_hex'] = '00' * 32
         if request['id'] == 'campaign-3':
             if mode == 'batch-only' and len(requests) > 1:
                 return 3

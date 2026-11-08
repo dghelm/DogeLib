@@ -42,7 +42,7 @@ if [ -n "$revision" ]; then
   PIN=$(git -C "$repo" rev-parse --verify "$revision^{commit}")
   # An explicit replay build cannot reuse the default CI directory.
   case "$(realpath -m "$2")" in
-    "$(cd "$(dirname "$0")/.." && pwd)/build/core-harness")
+    "$(realpath -m "$(dirname "$0")/../build/core-harness")")
       echo "error: use a separate directory for --revision" >&2; exit 2 ;;
   esac
   revision_flags=("-DCORE_BUILD_REVISION=\"$PIN\"")
@@ -163,6 +163,9 @@ cat "$build/core.stamp"
 echo "built $build/core-signer"
 
 # Explicit replay builds label their binaries without changing default output.
+# A pin build removes the label of an earlier revision build in the same directory.
 if [ -n "$revision" ]; then
   printf "%s\n" "$PIN" > "$build/core.revision"
+else
+  rm -f "$build/core.revision"
 fi

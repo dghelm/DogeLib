@@ -109,7 +109,16 @@ build/core-harness/core-oracle < requests.jsonl
 
 `tx` is the spending transaction: version 1, one input with a null outpoint, no outputs and lock time 2.
 Both programs reject `5152b35187` with `EVAL_FALSE` and accept `0102b37551` with `OK`.
-The oracle has no operation for a proposal (design record 0007, section 9), so the faulty rule runs only in Lean.
+The oracle has no operation for a proposal (design record 0007, section 9).
+The test executable `proposal-replay` runs the revised rule on the same requests, and Core never runs it:
+
+```bash
+lake build proposal-replay
+.lake/build/bin/proposal-replay ExampleFaultyLocktime faulty --active < requests.jsonl
+```
+
+The active faulty rule accepts `5152b35187` and rejects `0102b37551` with `INVALID_STACK_OPERATION`.
+The campaign uses this program to search for the counterexample without the hand-written case ([docs/oracle.md](oracle.md#the-planted-proposal-search)).
 
 ### The theorems that refute the claim
 

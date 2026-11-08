@@ -27,7 +27,7 @@ UniValue signRequest(const UniValue& request) {
     if (!request.isObject()) throw std::runtime_error("expected object");
     const Bytes bytes = requestHex(request, "tx_hex");
     if (bytes.size() > 100000) throw std::runtime_error("transaction exceeds 100000 bytes");
-    // D21, src/streams.h: 192–195, 242, 342–352, 379–383.
+    // D21, src/streams.h: 192–195, 238, 342–352, 402–407.
     // D4, transaction.h: 210–243,
     // 399–401: base-only transaction deserialization.
     CDataStream stream(bytes, SER_NETWORK, PROTOCOL_VERSION | SERIALIZE_TRANSACTION_NO_WITNESS);

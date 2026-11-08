@@ -88,7 +88,7 @@ Section 12 of the record gives two stages:
 | 1 | The `Proposals` and `ProposalProofs` libraries, the import check, the activation model and the Script loop with a step parameter | Specified in `DogeLib.Proposals.Framework`, with the framework targets of section 11 except `checkBlockHeader_not_versionBitsCondition` (decision 11), and the import-check self-test |
 | 2 | The worked example `ExampleVersionVerify`, with its theorem targets and known answers | Specified in `DogeLib.Proposals.ExampleVersionVerify`, with every target of section 10.3 and known answers through the compiled code |
 
-The current milestone is header-sequence validation, under [design record 0008](docs/design/0008-header-sequence-validation.md).
+Header-sequence validation is implemented through stage 5, under [design record 0008](docs/design/0008-header-sequence-validation.md).
 The maintainer adopted the record on 2026-11-07, with every decision of its section 13.
 It specifies Core's `AcceptBlockHeader` and `ProcessNewBlockHeaders` over an explicit model of the block index.
 The model includes the duplicate test, the predecessor lookup, the failed-ancestor walk and the chain work of each entry.
@@ -100,8 +100,9 @@ Section 10 of the record gives five stages, and section 11 gives their theorem t
 | 2 | One step, `acceptBlockHeader`, with its characterization theorems | Specified in `Block.HeaderSequence`, with every step target of section 11. Section 13.1 of the record replaces `accept_genesis` with `accept_genesis_known`, `accept_genesis_insert` and `accept_genesis_parent`. Known answers from the regtest fixture and from mainnet full headers |
 | 3 | The sequence, `processNewBlockHeaders`, with the linear theorem `process_linear` | Specified in `Block.HeaderSequence`, with every sequence target of section 11. `process_complete` also takes `n ≤ 2147483647` for an index without entries (section 13.2 of the record). Known answers from all 34 regtest cases in full and from 14 mainnet sequences |
 | 4 | `GetBlockProof` and the chain work of each entry | Specified as `Work.blockProof` in `Work.ChainWork` and `IndexEntry.chainWork` in `Block.HeaderSequence`, with the targets `blockProof_eq` and `chainWork_add` and the chain work of `accept_genesis_insert` (section 13.1). Known answers of `GetBlockProof` for 11 compact values, the chain work of every added regtest entry, and two mainnet sequences |
-| 5 | The oracle operation `block.header_sequence`, the Core harness and the comparison | Not started |
+| 5 | The oracle operation `block.header_sequence`, the Core harness and the comparison | Implemented with H2, anchor guards, fixture expectations, seeded mutations and comparator self-tests. [Comparison boundary and streams](docs/oracle.md#header-sequence-comparison-evidence) |
 
+The next milestone needs maintainer scope approval.
 One other candidate is unscheduled, and it needs an approved scope before work starts:
 
 - **Arithmetic agreement with Core's verifier.** A Lean proof that `Point.mulAdd` computes Core's `secp256k1_ecmult` result ([design record 0005](docs/design/0005-signature-verifier.md), section 4.3).

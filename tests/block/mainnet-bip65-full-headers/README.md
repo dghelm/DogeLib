@@ -41,7 +41,7 @@ It parses each base coinbase transaction, both Merkle branches, both indices and
 The check also compares the work-bearing header's `hashlib.scrypt` digest with the child target.
 It does not check AuxPoW commitments or execute header-sequence validation.
 `lake test` runs single steps of `acceptBlockHeader` and sequences of `processNewBlockHeaders` on these headers (`tests/KnownAnswers/HeaderSequence.lean`, `checkMainnetSteps` and `checkMainnetSequences`).
-No oracle or comparator consumes them yet.
+`scripts/test_oracle.py` and `scripts/compare_core.py` consume this range through `block.header_sequence`.
 
 Core revision `e0a1c157791544e818c901bd9341896965afbf9d` fixes the layouts in `src/primitives/pureheader.h:29-54` and `src/auxpow.h:79-85,153-160`.
 The work check follows `src/dogecoin.cpp:101-119` and `src/pow.cpp:115-129` at that revision.

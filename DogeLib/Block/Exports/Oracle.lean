@@ -4,6 +4,7 @@ public import DogeLib.Exports.Json
 public import DogeLib.Block.Header
 public import DogeLib.Block.Merkle
 public import DogeLib.Block.ContextualCheck
+public import DogeLib.Block.HeaderSequence
 public import DogeLib.Transaction.Exports.Oracle
 public import DogeLib.Work.Exports.Oracle
 
@@ -229,8 +230,93 @@ def contextualCheck : Operation where
         | _ => throw (.spec (Json.mkObj [("kind", .str "work_view"),
             ("reason", .str (if error == .emptyView then "empty_view" else "short_view"))]))
 
+/-- One supplied index entry, with exact pure bytes and explicit node state. -/
+def sequenceEntry (json : Json) : Except Failure (Hash256 × IndexEntry) := do
+  let .obj fields := json | throw (.request "index entries must be objects")
+  for (key, _) in fields do
+    unless ["header_hex", "height", "anchor", "failed_valid", "failed_child", "scripts_valid", "chain_work"].contains key do
+      throw (.request s!"unknown index field {key}")
+  let raw ← argHex fields "header_hex"
+  unless raw.length == 80 do throw (.request "header_hex must contain exactly 80 bytes")
+  let some (header, _) := Codec.decode (α := PureBlockHeader) raw
+    | throw (.request "header_hex must contain exactly 80 bytes")
+  let height := (← argInt fields "height" 0 2147483646).toNat
+  let anchor ← Work.Exports.argBool fields "anchor"
+  let work ← argHex fields "chain_work"
+  unless work.length == 32 do throw (.request "chain_work must contain exactly 32 bytes")
+  return (header.getHash, ⟨header, height,
+    if anchor || height == 0 then none else some header.hashPrevBlock,
+    ← Work.Exports.argBool fields "failed_valid", ← Work.Exports.argBool fields "failed_child",
+    ← Work.Exports.argBool fields "scripts_valid",
+    Work.ArithUint256.ofNat (work.foldl (fun n b => n * 256 + b.toNat) 0)⟩)
+
+/-- The display-order hash used by the sequence interface. -/
+def sequenceHash (hash : Hash256) : Json := .str (hexOf hash.displayBytes)
+
+/-- Process full headers against a supplied, checked index, preserving prefix insertions and failure marks. -/
+def headerSequence : Operation where
+  name := "block.header_sequence"
+  args := ["network", "mode", "adjusted_time", "checkpoints_enabled", "index", "failed_blocks", "headers"]
+  run fields := do
+    let network ← Work.Exports.argNetwork fields
+    let mode ← argMode fields
+    let time ← argInt fields "adjusted_time" (-9223372036854775808) maxAdjustedTime
+    let enabled ← Work.Exports.argBool fields "checkpoints_enabled"
+    let .arr entries ← arg fields "index" | throw (.request "index must be an array")
+    let .arr failed ← arg fields "failed_blocks" | throw (.request "failed_blocks must be an array")
+    let .arr raws ← arg fields "headers" | throw (.request "headers must be an array")
+    unless entries.size ≤ 4096 && failed.size ≤ 4096 && raws.size ≤ 4096 do
+      throw (.request "sequence arrays must have at most 4096 entries")
+    let pairs ← entries.toList.mapM sequenceEntry
+    unless (pairs.map Prod.fst).eraseDups.length == pairs.length do
+      throw (.request "duplicate index hash")
+    let failedHashes ← failed.toList.mapM fun json => do
+      let hash ← argHash (Std.TreeMap.Raw.ofList [("hash", json)]) "hash"
+      return ⟨hash.val.reverse, by simp [hash.property]⟩
+    let index : HeaderIndex := ⟨pairs, failedHashes⟩
+    unless checkWellFormed network index do throw (.request "index is not well formed")
+    let mut total := 0
+    for json in raws do
+      let .str raw := json | throw (.request "headers must contain hexadecimal strings")
+      unless raw.utf8ByteSize ≤ 2097152 do throw (.request "header exceeds 1 MiB")
+      total := total + raw.utf8ByteSize / 2
+    unless total ≤ 16777216 do throw (.request "headers exceed 16 MiB")
+    let headers ← raws.toList.mapM fun json =>
+      argHex (Std.TreeMap.Raw.ofList [("header", json)]) "header"
+    let headers ← headers.mapM fun raw => argPowHeader (Std.TreeMap.Raw.ofList ([] : List (String × Json))) mode raw
+    let (after, result) := processNewBlockHeaders ⟨network, Int64.ofInt time, enabled⟩ index headers
+    let (position, rejection, last, diagnostic) ← match result with
+      | .ok last => pure (Json.null, none, last.map sequenceHash |>.getD .null, Json.null)
+      | .error error => match error.error with
+        | .rejection rejection => pure (natJson error.position, some rejection, Json.null, .str (reprStr error))
+        | .adapter error => match error with
+          | .contextual (.invalidView e) | .contextual (.nextWork e) =>
+            throw (.spec (Work.Exports.viewErrorJson e))
+          | .contextual .shortView | .contextual .emptyView =>
+            throw (.spec (Json.mkObj [("kind", .str "work_view"), ("reason", .str "short_view")]))
+          | _ => throw (.request (reprStr error))
+    let added := ((headers.map (fun header => header.pure.getHash)).eraseDups.filter fun hash =>
+      (index.lookup hash).isNone).filterMap fun hash => (after.lookup hash).map (hash, ·)
+    let marked := match result with
+      | .error ⟨position, .rejection (.failedAncestor member)⟩ =>
+        match headers[position]? with
+        | some header =>
+          match after.lookup header.pure.hashPrevBlock with
+          | some prev => failedChildPath after (prev.height + 1) header.pure.hashPrevBlock prev member
+          | none => []
+        | none => []
+      | _ => []
+    return Json.mkObj [("valid", .bool rejection.isNone), ("failed_at", position),
+      ("reject_reason", rejection.map (Json.str ∘ HeaderRejection.rejectReason) |>.getD .null),
+      ("dos", rejection.map (natJson ∘ HeaderRejection.dosScore) |>.getD .null),
+      ("reject_code", rejection.map (natJson ∘ HeaderRejection.rejectCode) |>.getD .null),
+      ("last_hash", last), ("diagnostic", diagnostic),
+      ("added", .arr (added.map fun (hash, entry) => Json.mkObj [("hash", sequenceHash hash),
+        ("height", natJson entry.height), ("chain_work", .str (Work.Exports.targetHex entry.chainWork))]).toArray),
+      ("marked_failed_child", .arr ((marked.map (fun hash => hexOf hash.displayBytes)).eraseDups.mergeSort (· ≤ ·) |>.map Json.str).toArray)]
+
 /-- The block, Merkle and header proof-of-work operations of the oracle. -/
 def operations : List Operation := [readHeader, encodeHeader, hashHeader, computeMerkle,
-  scryptHash, readBlockHeader, checkAuxPow, checkPow, checkHeaderVersion, contextualCheck]
+  scryptHash, readBlockHeader, checkAuxPow, checkPow, checkHeaderVersion, contextualCheck, headerSequence]
 
 end DogeLib.Block.Exports

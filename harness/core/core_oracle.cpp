@@ -47,6 +47,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -487,6 +488,198 @@ void checkWorkHistory(const std::vector<CBlockIndex>& chain, const CBlockHeader&
 }
 
 
+// Anchor adapter for C8, src/chain.cpp:113-137 at e0a1c157791544e818c901bd9341896965afbf9d.
+// GetAncestor asserts below an anchor. Establish the reachable height before calling it.
+CBlockIndex* sequenceAncestor(CBlockIndex* entry, int height)
+{
+    CBlockIndex* walk = entry;
+    while (walk && walk->nHeight > height) walk = walk->pprev;
+    return walk && walk->nHeight == height ? entry->GetAncestor(height) : nullptr;
+}
+
+void sequenceSkip(CBlockIndex* entry)
+{
+    const CBlockIndex* anchor = entry;
+    while (anchor->pprev) anchor = anchor->pprev;
+    // C8, chain.cpp:140-147: BuildSkip calls GetAncestor at GetSkipHeight.
+    if (entry->pprev && availableSkipHeight(entry->nHeight) >= anchor->nHeight)
+        entry->BuildSkip();
+}
+
+// H2 transcription of e0a1c157791544e818c901bd9341896965afbf9d,
+// src/validation.cpp:2755-2788,3205-3286 (D33), MIT/X11 licence.
+// Copyright (c) 2009-2010 Satoshi Nakamoto
+// Copyright (c) 2009-2016 The Bitcoin Core developers
+// Copyright (c) 2022-2023 The Dogecoin Core developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+// The request owns the index and failed-list order. Disk state, best-header
+// selection, notifications, locks and peer penalties are outside this operation.
+UniValue headerSequence(const UniValue& req)
+{
+    checkArgs(req, "block.header_sequence", {"network", "mode", "adjusted_time", "checkpoints_enabled", "index", "failed_blocks", "headers"});
+    selectWorkNetwork(req);
+    const int version = headerStreamVersion(req);
+    const int64_t adjusted = argInt(req, "adjusted_time", INT64_MIN, INT64_MAX - 7200);
+    fCheckpointsEnabled = argBool(req, "checkpoints_enabled");
+    const auto& entries = arg(req, "index");
+    const auto& failed = arg(req, "failed_blocks");
+    const auto& headers = arg(req, "headers");
+    for (const auto* array : {&entries, &failed, &headers})
+        if (!array->isArray() || array->size() > 4096) throw RequestError{"sequence arrays must have at most 4096 entries"};
+    // Keep map keys alive until all CBlockIndex objects have been destroyed.
+    mapBlockIndex.clear();
+    struct ClearMap { ~ClearMap() { mapBlockIndex.clear(); } } clearMap;
+    std::vector<std::unique_ptr<CBlockIndex>> owned;
+    std::vector<bool> anchors;
+    std::vector<uint256> prevHashes;
+    auto insert = [&](const CBlockHeader& header) {
+        owned.emplace_back(new CBlockIndex(header));
+        CBlockIndex* entry = owned.back().get();
+        auto found = mapBlockIndex.emplace(header.GetHash(), entry).first;
+        entry->phashBlock = &found->first;
+        return entry;
+    };
+    for (size_t i = 0; i < entries.size(); ++i) {
+        const auto& raw = entries[i];
+        if (!raw.isObject()) throw RequestError{"index entries must be objects"};
+        for (const auto& key : raw.getKeys())
+            if (key != "header_hex" && key != "height" && key != "anchor" && key != "failed_valid" && key != "failed_child" && key != "scripts_valid" && key != "chain_work")
+                throw RequestError{"unknown index field"};
+        auto bytes = argHex(raw, "header_hex");
+        if (bytes.size() != 80) throw RequestError{"header_hex must contain exactly 80 bytes"};
+        CBlockHeader header;
+        CDataStream ds(bytes, SER_NETWORK, version);
+        ds >> static_cast<CPureBlockHeader&>(header);
+        if (mapBlockIndex.count(header.GetHash())) throw RequestError{"duplicate index hash"};
+        prevHashes.push_back(header.hashPrevBlock);
+        auto* entry = insert(header);
+        entry->nHeight = argInt(raw, "height", 0, 2147483646);
+        anchors.push_back(argBool(raw, "anchor") || entry->nHeight == 0);
+        entry->nStatus = argBool(raw, "scripts_valid") ? BLOCK_VALID_SCRIPTS : BLOCK_VALID_TREE;
+        if (argBool(raw, "failed_valid")) entry->nStatus |= BLOCK_FAILED_VALID;
+        if (argBool(raw, "failed_child")) entry->nStatus |= BLOCK_FAILED_CHILD;
+        if (argHex(raw, "chain_work").size() != 32) throw RequestError{"chain_work must contain exactly 32 bytes"};
+        entry->nChainWork.SetHex(arg(raw, "chain_work").get_str());
+    }
+    for (size_t i = 0; i < owned.size(); ++i) {
+        auto* entry = owned[i].get();
+        if (!anchors[i]) {
+            const auto parent = mapBlockIndex.find(prevHashes[i]);
+            if (parent == mapBlockIndex.end() || entry->nHeight != parent->second->nHeight + 1)
+                throw RequestError{"index is not well formed"};
+            entry->pprev = parent->second;
+        } else if (entry->nHeight == 0 && entry->GetBlockHash() != Params().GetConsensus(0).hashGenesisBlock)
+            throw RequestError{"index is not well formed"};
+    }
+    std::vector<CBlockIndex*> ordered;
+    for (auto& entry : owned) ordered.push_back(entry.get());
+    std::sort(ordered.begin(), ordered.end(), [](const CBlockIndex* a, const CBlockIndex* b) { return a->nHeight < b->nHeight; });
+    for (auto* entry : ordered) sequenceSkip(entry);
+    std::vector<CBlockIndex*> failedList;
+    for (size_t i = 0; i < failed.size(); ++i) {
+        UniValue field(UniValue::VOBJ);
+        field.pushKV("hash", failed[i]);
+        if (argHex(field, "hash").size() != 32) throw RequestError{"failed hash must contain exactly 32 bytes"};
+        uint256 hash; hash.SetHex(arg(field, "hash").get_str());
+        const auto found = mapBlockIndex.find(hash);
+        if (found == mapBlockIndex.end() || !(found->second->nStatus & BLOCK_FAILED_VALID))
+            throw RequestError{"index is not well formed"};
+        failedList.push_back(found->second);
+    }
+    std::vector<CBlockHeader> decoded;
+    size_t total = 0;
+    for (size_t i = 0; i < headers.size(); ++i) {
+        UniValue field(UniValue::VOBJ); field.pushKV("header", headers[i]);
+        const auto bytes = argHex(field, "header");
+        total += bytes.size();
+        if (bytes.size() > 1048576 || total > 16777216) throw RequestError{"sequence header byte limit"};
+        CDataStream ds(bytes, SER_NETWORK, version);
+        CBlockHeader header;
+        try { ds >> header; } catch (const std::ios_base::failure& e) { throw SpecError{mapCoreFailure(e)}; }
+        requireEmpty(ds);
+        decoded.push_back(header);
+    }
+    UniValue added(UniValue::VARR), marks(UniValue::VARR), last, failedAt, reason, dos, code;
+    std::vector<std::string> marked;
+    auto reject = [&](size_t position, const std::string& why, int score, int rejectCode) {
+        failedAt = UniValue(static_cast<uint64_t>(position)); reason = UniValue(why);
+        dos = UniValue(score); code = UniValue(rejectCode); last = UniValue();
+    };
+    for (size_t i = 0; i < decoded.size(); ++i) {
+        const auto& block = decoded[i];
+        const uint256 hash = block.GetHash();
+        const auto known = mapBlockIndex.find(hash);
+        // C1, validation.cpp:3212-3222: genesis bypass and duplicate fast path.
+        if (hash != Params().GetConsensus(0).hashGenesisBlock) {
+            if (known != mapBlockIndex.end()) {
+                if (known->second->nStatus & BLOCK_FAILED_MASK) { reject(i, "duplicate", 0, 0); break; }
+                last = UniValue(hash.GetHex()); continue;
+            }
+            // C4, validation.cpp:2927-2937 and C1:3224-3234.
+            if (!CheckAuxPowProofOfWork(block, Params().GetConsensus(0))) { reject(i, "high-hash", 50, 16); break; }
+            const auto parent = mapBlockIndex.find(block.hashPrevBlock);
+            if (parent == mapBlockIndex.end()) { reject(i, "bad-prevblk", 10, 0); break; }
+            auto* prev = parent->second;
+            if (prev->nStatus & BLOCK_FAILED_MASK) { reject(i, "bad-prevblk", 100, 16); break; }
+            if (prev->nHeight >= 2147483646) throw RequestError{"heightOutOfRange"};
+            // Adapter preflight: refuse truncated median and retarget views before
+            // contextualReject calls GetNextWorkRequired (pow.cpp:84).
+            std::vector<CBlockIndex> view;
+            for (auto* walk = prev; walk; walk = walk->pprev) view.push_back(*walk);
+            if (view.size() < static_cast<size_t>(std::min(11, prev->nHeight + 1)))
+                throw RequestError{"short contextual view"};
+            checkWorkHistory(view, block, Params().GetConsensus(prev->nHeight + 1));
+            // C1:3238-3239, with scores from C5:3066-3119.
+            const std::string why = contextualReject(block, prev, adjusted);
+            if (!why.empty()) {
+                const bool scored = why == "late-legacy-block" || why == "early-auxpow-block" || why == "bad-diffbits" || why == "bad-fork-prior-to-checkpoint";
+                reject(i, why, scored ? 100 : 0, why == "bad-fork-prior-to-checkpoint" ? 67 : why.find("bad-version") == 0 ? 17 : 16); break;
+            }
+            // C1:3241-3256. Request order replaces pointer-address order.
+            if (!prev->IsValid(BLOCK_VALID_SCRIPTS)) {
+                for (const auto* member : failedList) {
+                    if (sequenceAncestor(prev, member->nHeight) == member) {
+                        for (auto* walk = prev; walk != member; walk = walk->pprev) {
+                            marked.push_back(walk->GetBlockHash().GetHex());
+                            walk->nStatus |= BLOCK_FAILED_CHILD;
+                        }
+                        reject(i, "bad-prevblk", 100, 16); break;
+                    }
+                }
+                if (!reason.isNull()) break;
+            }
+        }
+        // C3, validation.cpp:2757-2781. Search before insertion follows the
+        // accepted fixed-point convention of design 0008, amendment 13.1.
+        if (known == mapBlockIndex.end()) {
+            const auto parent = mapBlockIndex.find(block.hashPrevBlock);
+            CBlockIndex* parentEntry = parent == mapBlockIndex.end() ? nullptr : parent->second;
+            if (parentEntry && parentEntry->nHeight >= 2147483646)
+                throw RequestError{"heightOutOfRange"};
+            // Insertion can rehash BlockMap. Retain the stable entry pointer,
+            // rather than an iterator into the map (D69, validation.h:169).
+            auto* entry = insert(block);
+            if (parentEntry) { entry->pprev = parentEntry; entry->nHeight = parentEntry->nHeight + 1; }
+            sequenceSkip(entry);
+            entry->nChainWork = (entry->pprev ? entry->pprev->nChainWork : 0) + GetBlockProof(*entry);
+            entry->RaiseValidity(BLOCK_VALID_TREE);
+            UniValue value(UniValue::VOBJ);
+            value.pushKV("hash", hash.GetHex()); value.pushKV("height", entry->nHeight);
+            value.pushKV("chain_work", entry->nChainWork.GetHex()); added.push_back(value);
+        }
+        last = UniValue(hash.GetHex());
+    }
+    std::sort(marked.begin(), marked.end());
+    for (const auto& hash : marked) marks.push_back(UniValue(hash));
+    UniValue result(UniValue::VOBJ);
+    result.pushKV("valid", reason.isNull()); result.pushKV("failed_at", failedAt);
+    result.pushKV("reject_reason", reason); result.pushKV("dos", dos); result.pushKV("reject_code", code);
+    result.pushKV("last_hash", last); result.pushKV("added", added); result.pushKV("marked_failed_child", marks);
+    return result;
+}
+// End of the H2 sequence transcription.
+
 // Check every pinned enum position when Core headers compile this table.
 constexpr ScriptError SCRIPT_ERRORS[] = {
 #define SCRIPT_ERROR(value, name) value,
@@ -794,6 +987,8 @@ UniValue run(const UniValue& req)
         last.nBits = argU32(req, "last_bits");
         const auto bits = CalculateDogecoinNextWorkRequired(&last, argU32(req, "first_time"), params);
         ok.pushKV("bits", static_cast<uint64_t>(bits));
+    } else if (op == "block.header_sequence") {
+        ok = headerSequence(req);
     } else if (op == "work.next" || op == "block.contextual_check") {
         const bool contextual = op == "block.contextual_check";
         if (contextual) checkArgs(req, op, {"bytes_hex", "network", "chain", "adjusted_time", "checkpoints_enabled", "known_checkpoints"});

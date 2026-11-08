@@ -354,13 +354,65 @@ def check_contextual(oracle):
     return failures
 
 
+def check_header_sequences(oracle):
+    from oracle_header_sequence import sequence_sets, EXPECTATIONS, key, digest
+    sequence_sets()
+    requests = [r for _, cases in sequence_sets()[:3] for r in cases]
+    expected = [EXPECTATIONS[key(r)] for r in requests]
+    import copy
+    sample = requests[0]
+    for field, value in [('index', sample['index'] * 2),
+                         ('failed_blocks', ['00' * 32]), ('headers', ['00']),
+                         ('adjusted_time', 2**63-7200), ('adjusted_time', -2**63-1),
+                         ('headers', [''] * 4097),
+                         ('headers', ['00' * 1048577]), ('headers', ['00' * 1048576] * 17)]:
+        req = copy.deepcopy(sample)
+        req[field] = value
+        requests.append(req)
+        expected.append({'error': {'kind': 'read', 'reason': 'truncated'}} if field == 'headers' and value == ['00'] else {'error': {'kind': 'request'}})
+    # Exceed each state-array cap with an otherwise well-formed index and list.
+    req = copy.deepcopy(sample)
+    req['index'][0]['failed_valid'] = True
+    req['failed_blocks'] = [digest(req['index'][0]['header_hex'])] * 4097
+    requests.append(req); expected.append({'error': {'kind': 'request'}})
+    req = copy.deepcopy(sample)
+    base = bytes.fromhex(req['index'][0]['header_hex'])
+    req['index'] = [dict(req['index'][0], header_hex=(base[:76] + n.to_bytes(4, 'little')).hex(),
+                         height=1, anchor=True) for n in range(4097)]
+    assert len({digest(e['header_hex']) for e in req['index']}) == 4097
+    req['headers'] = []
+    requests.append(req); expected.append({'error': {'kind': 'request'}})
+    for field, value in [('height', 2147483647), ('chain_work', '00'), ('unknown', False),
+                         ('height', 1), ('failed_valid', 'true')]:
+        req = copy.deepcopy(sample); req['index'][0][field] = value
+        # Height 1 is an anchor only when explicitly requested, so this link is missing.
+        requests.append(req); expected.append({'error': {'kind': 'request'}})
+    requests = [{**r, 'id': i} for i, r in enumerate(requests)]
+    got = run_requests(oracle, 'header sequence', requests)
+    if got is None: return 1
+    failures = 0
+    for req, response, want in zip(requests, got, expected):
+        if 'error' in want:
+            actual = response.get('error', {})
+            ok = all(actual.get(k) == v for k, v in want['error'].items())
+        else:
+            actual = dict(response.get('ok', {}))
+            diagnostic = actual.pop('diagnostic', False)
+            ok = (diagnostic is None or isinstance(diagnostic, str)) and actual == want
+        if not ok:
+            print(f"FAIL header sequence {req['id']}: {response} != {want}")
+            failures += 1
+    print(f'header sequence oracle: {len(requests)} cases, {failures} failures')
+    return failures
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print(__doc__)
         return 2
     oracle = sys.argv[1]
     failures = (check_fixtures(oracle) + check_sighash_corpus(oracle) + check_tx_corpus(oracle)
-                + check_contextual(oracle) + check_header_pow(oracle) + check_witness_corpus(oracle) + check_hash_block_fixtures(oracle) + check_process(oracle) + check_script_adapter_limits(oracle))
+                + check_header_sequences(oracle) + check_contextual(oracle) + check_header_pow(oracle) + check_witness_corpus(oracle) + check_hash_block_fixtures(oracle) + check_process(oracle) + check_script_adapter_limits(oracle))
     print("PASS" if failures == 0 else f"FAIL: {failures} failures")
     return 0 if failures == 0 else 1
 

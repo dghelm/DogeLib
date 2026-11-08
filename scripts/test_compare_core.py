@@ -28,6 +28,8 @@ from oracle_script import harness_refused, refused_set, refusal_precedence_set, 
 # mode: (role of the wrapper, expected failure code). The role "core" stands
 # in for the harness, "oracle" for dogelib-oracle.
 MUTATIONS = {
+    **{f"sequence_{field}": ("core", "HEADER_SEQUENCE") for field in
+       ("valid", "failed_at", "reject_reason", "dos", "reject_code", "last_hash", "added", "marked_failed_child", "height", "chain_work", "hash")},
     "contextual_valid": ("core", "CONTEXTUAL_HEADER"),
     "contextual_reason": ("core", "CONTEXTUAL_HEADER"),
     "contextual_reason_value": ("core", "CONTEXTUAL_HEADER"),
@@ -159,6 +161,8 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
         if role == "core" and mode != "core_preimage":
             ok.pop("preimage_hex", None)
             ok.pop("diagnostic", None)
+        if role == "core" and request["op"] == "block.header_sequence" and resp.get("error", {}).get("kind") == "work_view":
+            resp["error"] = {"kind": "request", "message": "anchor view refused"}
         if role == "core" and harness_refused(request):
             resp.pop("ok", None)
             resp["error"] = {"kind": "request", "message": "Core VerifyScript flag dependencies are not satisfied"}
@@ -367,6 +371,20 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
         mutate_first(responses, is_plan("hash_bytes"), flip_last)
     elif mode == "oracle_preimage_malformed":
         mutate_first(responses, is_plan("hash_bytes"), set_ok("preimage_hex", "zz"))
+    if mode.startswith("sequence_"):
+        field = mode[len("sequence_"):]
+        for request, response in zip(requests, responses):
+            if request["op"] == "block.header_sequence" and response.get("ok", {}).get("added"):
+                ok = response["ok"]
+                if field in ("height", "chain_work", "hash"):
+                    ok['added'][0][field] = 999 if field == 'height' else '00' * 32
+                else:
+                    ok[field] = {'valid': False, 'failed_at': 0, 'reject_reason': 'planted',
+                                 'dos': 123, 'reject_code': 123, 'last_hash': '00' * 32,
+                                 'added': [], 'marked_failed_child': ['00' * 32]}[field]
+                break
+        else:
+            raise SystemExit("wrapper: no sequence response to mutate")
     if mode in ("contextual_valid", "contextual_reason"):
         for request, response in zip(requests, responses):
             if request["op"] == "block.contextual_check" and "ok" in response:
@@ -422,6 +440,35 @@ def compare(oracle: str, harness: str, extra: list[str], env=None, driver=COMPAR
                           capture_output=True, text=True, env=env, timeout=900)
 
 
+def check_sequence_comparison():
+    """Check mark exclusions, other compared fields and case-insensitive hash identity."""
+    from compare_core import compare as compare_response
+    import copy
+    from oracle_header_sequence import sequence_sets, EXPECTATIONS as sequence_expected, key as sequence_key, exclude_marks
+    sequence_sets()
+    sequence_requests = sequence_sets()[0][1]
+    assert sum(exclude_marks(r) for r in sequence_requests) == 2
+    for req in sequence_requests:
+        upper = copy.deepcopy(req)
+        upper['failed_blocks'] = [h.upper() for h in req['failed_blocks']]
+        assert exclude_marks(upper) == exclude_marks(req)
+        expected = sequence_expected[sequence_key(req)]
+        if 'error' in expected: continue
+        core = {'id': 1, 'ok': copy.deepcopy(expected)}
+        lean = {'id': 1, 'ok': dict(expected, diagnostic=None)}
+        assert compare_response(req, lean, core) is None
+        core['ok']['marked_failed_child'] = ['00' * 32]
+        result = compare_response(req, lean, core)
+        assert (result is None) == exclude_marks(req)
+        if exclude_marks(req):
+            core['ok']['dos'] = 999
+            assert compare_response(req, lean, core)[0] == 'HEADER_SEQUENCE'
+    # Duplicate failed-list members do not create two distinct failed ancestors.
+    req = copy.deepcopy(next(r for r in sequence_requests if len(r['failed_blocks']) == 1))
+    req['failed_blocks'] += [req['failed_blocks'][0].upper()]
+    assert not exclude_marks(req)
+
+
 def main() -> int:
     if len(sys.argv) > 1 and sys.argv[1] == "--compare-sanity-gap":
         # Move one required acceptance into the actual refusal path, without a verdict error.
@@ -446,6 +493,7 @@ def main() -> int:
     oracle = str(pathlib.Path(sys.argv[1]).resolve())
     failures = 0
     from compare_core import compare as compare_response
+    check_sequence_comparison()
     from oracle_contextual import contextual_sets
     contextual_sets()
     contextual = {"op": "block.contextual_check"}

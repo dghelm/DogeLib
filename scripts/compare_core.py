@@ -41,6 +41,7 @@ from oracle_hash_block import header_fields, header_records, header_fixtures, me
 from oracle_script import script_sets, corpus_records, evaluation, validate_eval, adapter_limit_cases, legacy_sets, harness_refused, refused_set, tx_spend_sets, locktime_sets, refusal_precedence_set
 
 from oracle_pubkey import pubkey_sets, signature_spends
+from oracle_header_sequence import sequence_sets, EXPECTATIONS as SEQUENCE_EXPECTATIONS, key as sequence_key, exclude_marks
 from oracle_contextual import contextual_sets, EXPECTATIONS as CONTEXT_EXPECTATIONS, key as context_key
 from oracle_header_pow import header_pow_sets, CODES as HEADER_CODES, EXPECTATIONS as HEADER_EXPECTATIONS, key as header_key
 
@@ -614,7 +615,7 @@ def set_hash_boundaries(algorithm: str) -> list[dict]:
             for n in sorted(lengths)]
 
 
-QUICK_SETS = ("contextual boundaries", "header PoW fixtures", "full header readers", "header version boundaries", "pubkey Core signatures", "Script signature verdict", "fixtures", "compactsize", "sighash endpoints", "witness flags and stacks",
+QUICK_SETS = ("header sequence regtest 34", "header sequence state boundaries", "contextual boundaries", "header PoW fixtures", "full header readers", "header version boundaries", "pubkey Core signatures", "Script signature verdict", "fixtures", "compactsize", "sighash endpoints", "witness flags and stacks",
               "work compact boundaries", "regtest legacy wrap case", "work missing skip traversal", "header field boundaries", "Merkle generated",
               "RIPEMD-160 padding boundaries", "Hash160 padding boundaries", "SHA-1 padding boundaries", "Script reader truncations", "Script resource boundaries", "Script resource boundaries base",
               "Script legacy corpus base", "Script legacy corpus transaction", "Script harness refusal domain", "Script refusal precedence",
@@ -676,6 +677,7 @@ def request_sets() -> tuple[list[tuple[str, list[dict]]], list[str]]:
     ])
     sets.extend(header_pow_sets())
     sets.extend(contextual_sets())
+    sets.extend(sequence_sets())
     sets.extend(pubkey_sets())
     sets.append(("Script signature verdict", signature_spends()))
     sets.extend(script_sets())
@@ -751,6 +753,39 @@ def compare_refused(req, ours, core):
 
 def compare(req: dict, ours: dict, core: dict, peer: str = "core") -> tuple[str, str] | None:
     """None when the responses agree, else a failure code and a message."""
+    if req["op"] == "block.header_sequence":
+        expected = SEQUENCE_EXPECTATIONS.get(sequence_key(req))
+        if expected is not None and "error" in expected:
+            # Core refuses an incomplete view before invoking assertion-bearing helpers.
+            if not json_equal(ours.get("error"), expected["error"]) or core.get("error", {}).get("kind") != "request":
+                return "HEADER_SEQUENCE", "adapter error or Core refusal differs from fixture"
+            return None
+        from oracle_header_sequence import well_shaped
+        projected = []
+        for side, response in (("oracle", ours), (peer, core)):
+            if set(response) != {"id", "ok"} or not isinstance(response["ok"], dict):
+                return "HEADER_SEQUENCE", f"{side} must return a sequence verdict"
+            ok = dict(response["ok"])
+            if side == "oracle":
+                if "diagnostic" not in ok or (ok["diagnostic"] is not None and not isinstance(ok["diagnostic"], str)):
+                    return "HEADER_SEQUENCE", "missing or malformed Lean diagnostic"
+                ok.pop("diagnostic")
+            if not well_shaped(ok):
+                return "HEADER_SEQUENCE", "malformed sequence verdict"
+            if expected is not None and not json_equal(ok, expected):
+                # The known answer fixes list order too, but the comparison has
+                # exactly the mark exclusion adopted in decision 12.
+                want = dict(expected)
+                actual = dict(ok)
+                if exclude_marks(req):
+                    want.pop("marked_failed_child"); actual.pop("marked_failed_child")
+                if not json_equal(actual, want):
+                    return "HEADER_SEQUENCE", f"{side} disagrees with independent expectation"
+            if exclude_marks(req): ok.pop("marked_failed_child")
+            projected.append({"id": response["id"], "ok": ok})
+        if not json_equal(*projected):
+            return "HEADER_SEQUENCE", f"first difference at {first_difference(*projected)}"
+        return None
     for side, resp in (("oracle", ours), (peer, core)):
         if resp.get("error", {}).get("kind") == "request":
             return "REQUEST_ERROR", f"{side} rejected the request: {resp['error'].get('message')}"

@@ -443,6 +443,7 @@ The latter uses Core's network stream version without `SERIALIZE_TRANSACTION_NO_
 | `block.header.read` | `bytes_hex`, `mode` | `header`, `consumed`, `rest_hex` |
 | `auxpow.check` | `bytes_hex`, `mode`, `hash_hex`, `chain_id`, `strict_chain_id` | Boolean `valid`, and Lean-only `diagnostic` |
 | `block.check_pow` | `bytes_hex`, `mode`, `network`, `selection_height` | Boolean `valid`, and Lean-only `diagnostic` |
+| `block.header_sequence` | `network`, `mode`, `adjusted_time`, `checkpoints_enabled`, `index`, `failed_blocks`, `headers` | Sequence verdict, added entries and child marks, as below |
 | `block.contextual_check` | `bytes_hex`, exactly 80 bytes, `network`, `chain`, `adjusted_time`, `checkpoints_enabled`, `known_checkpoints` | Boolean `valid`, `reject_reason` (null on acceptance), and Lean-only `diagnostic` |
 | `block.check_version` | `bytes_hex`, exactly 80 bytes, `network`, `selection_height` | Boolean `valid`, and Lean-only `diagnostic` |
 
@@ -531,6 +532,62 @@ The comparator checks `valid` and `reject_reason`, including signed base-version
 It excludes only the Lean diagnostic.
 The oracle format stays `dogelib-oracle/1` under the 0.x development policy.
 
+### Header-sequence validation
+
+`block.header_sequence` runs `Block.processNewBlockHeaders` on full headers and a supplied index (design record 0008).
+The format remains `dogelib-oracle/1` under the 0.x development policy.
+The request has these required fields:
+
+| Field | Meaning |
+| --- | --- |
+| `network`, `mode` | Network and embedded-transaction read mode, as for `block.check_pow` |
+| `adjusted_time` | One signed safe-range value for the whole call |
+| `checkpoints_enabled` | Boolean checkpoint option |
+| `index` | Array of initial entries, described below |
+| `failed_blocks` | Display-order hashes in visit order, each identifying an index entry with `failed_valid` |
+| `headers` | Array of hexadecimal full headers, including AuxPoW payloads when flagged |
+
+Each index entry has exactly these fields:
+
+- `header_hex`: exactly 80 pure-header bytes, from which the adapter derives the key.
+- `height`: integer from 0 to 2147483646.
+- `anchor`: Boolean that cuts the predecessor link.
+  Height 0 also has no predecessor.
+  Otherwise the predecessor comes from the header's `hashPrevBlock`.
+- `failed_valid`, `failed_child`, `scripts_valid`: Boolean node-state flags.
+- `chain_work`: exactly 64 hexadecimal digits, most significant digit first, supplied without a full-chain work check.
+
+Duplicate index keys and indices that `checkWellFormed` rejects are request errors.
+Each array has at most 4096 members.
+Each full header has at most 1 MiB, and their combined bytes have at most 16 MiB.
+These adapter limits give request errors and are separate from Core's peer-message limit.
+Malformed header bytes give the existing read or trailing-byte errors.
+An insufficient anchor view gives `work_view`, and a candidate height at 2147483647 gives a request error.
+
+The result in `ok` has exactly these fields:
+
+| Field | Meaning |
+| --- | --- |
+| `valid` | Boolean sequence verdict |
+| `failed_at` | Zero-based failure position, or null on acceptance |
+| `reject_reason`, `dos`, `reject_code` | First Core rejection's reason, score and code, or null on acceptance |
+| `last_hash` | Last accepted header's display hash on complete acceptance, or null for an empty call or any rejection |
+| `added` | Entries inserted before the first failure, in insertion order: `hash` in display order, `height`, and fixed-width `chain_work` |
+| `marked_failed_child` | Sorted display hashes visited by the step-6 marking loop, including flags already set and entries added in the accepted prefix |
+| `diagnostic` | Lean-only diagnostic string on rejection, or null on acceptance |
+
+Known headers add no entry and bypass work and contextual checks.
+The network genesis hash also bypasses failure flags.
+A failed-ancestor rejection retains both prefix insertions and child marks.
+The operation permits several branches in one call.
+
+The comparator compares every response field except `diagnostic`.
+It also excludes the value of `marked_failed_child` exactly when two distinct failed-list members are ancestors of one request predecessor.
+It computes that condition from request ancestry, including predecessors supplied by earlier headers, without a fixture-name exemption.
+Duplicate members of the failed list do not satisfy that condition alone.
+A failed member below an anchor is no ancestor under the finite-index convention.
+All other fields remain comparable in the excluded-mark cases.
+
 ## The Core harness
 
 `harness/core/core_oracle.cpp` answers the same requests by running Dogecoin Core's own code.
@@ -574,6 +631,7 @@ These pinned sources supply the additional objects:
 
 | `op` | Core's code |
 | --- | --- |
+| `block.header_sequence` | H2 transcription of `AcceptBlockHeader`, the index part of `AddToBlockIndex` and the sequence loop, with Core helpers |
 | `block.contextual_check` | H2 transcription of `ContextualCheckBlockHeader`, with Core helpers for every compared value |
 | `compactsize.encode` | `WriteCompactSize` into a `CDataStream` |
 | `compactsize.read` | `ReadCompactSize` from a `CDataStream` |
@@ -948,3 +1006,43 @@ A third mutation swaps one rejection string for another on a request without an 
 That mutation preserves the response shape and must fail the stream comparison of result values.
 It also checks Boolean types, result fields, acceptance reasons, rejection reasons and the exclusion of Lean diagnostics.
 These runs give finite evidence, not an all-input equivalence theorem with compiled Core.
+
+### Header-sequence comparison evidence
+
+The harness follows H2 of [design record 0008](design/0008-header-sequence-validation.md#82-the-core-side).
+It transcribes D33, lines 3205 to 3286 and 2755 to 2781, with citations beside the ordered branches.
+It calls Core's `CheckAuxPowProofOfWork`, `GetAncestor`, `BuildSkip`, `GetBlockProof` and `Checkpoints::GetLastCheckpoint`.
+The contextual step reuses `contextualReject`, with the Core helpers listed above.
+The harness owns the index and visits the failed list in request order, rather than pointer-address order.
+Source review must check these transcriptions against the pinned passages.
+
+Two guards keep anchor walks inside their represented chains.
+`sequenceSkip` calls `BuildSkip` only when the skip destination is at or above the branch anchor.
+`sequenceAncestor` returns null for a height below that anchor and otherwise calls Core's `GetAncestor`.
+Before contextual validation, the harness refuses short median, recovery and retarget histories.
+So `GetNextWorkRequired` cannot call `GetAncestor` below an anchor at `pow.cpp:84`.
+
+For the three fixture adapter errors, the comparator requires the exact Lean `work_view` error and a Core request refusal.
+Neither response is a consensus rejection.
+
+`scripts/oracle_header_sequence.py` defines these streams:
+
+| Stream | Requests | Evidence |
+| --- | ---: | --- |
+| Regtest | 34 | D83's complete requests and hand-derived expected fields |
+| Mainnet | 15 | Five full-header ranges, three pure-header initial indices, checkpoint branches, two anchor refusals and three version mutations |
+| State boundaries | 3 | Prefix insertion followed by marks, a pre-existing child flag and a failed member below an anchor |
+| Mutations, seed `20261110` | 200 | Header order, bits, time, predecessor bytes, failure/validity flags and failed-list order |
+
+The mainnet sequences use every full candidate after the first eleven context entries of each non-genesis range.
+The genesis sequence starts with an empty index.
+Chain acceptance supplies expected verdicts.
+Python integer arithmetic independently computes block proofs and wrapped sums from D35, lines 150 to 162.
+No expectation comes from DogeLib or the harness.
+
+The comparator prints both source revisions and each selected stream with its seed and count.
+These finite comparisons do not prove agreement on all inputs.
+
+The self-test plants disagreements in every response field and each added-entry field.
+It checks both failed-list orders, keeps the other fields comparable when marks are excluded, and rejects duplicate-member over-exclusion.
+The oracle tests compare fixture expectations, exact adapter errors, malformed requests and resource-limit refusals.

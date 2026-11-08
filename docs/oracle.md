@@ -1305,7 +1305,7 @@ It refuses a stamp of another commit, an L3 call without `--signer` and `--node`
 SIGTERM stops the node and deletes its data directory before the replay exits.
 The node also gets SIGKILL from Linux when the replay process dies by SIGKILL (`PR_SET_PDEATHSIG`).
 After a SIGKILL, the data directory stays under `build/campaign/`.
-The console shows the level, the commit, the outcome and the classification, without requests.
+The console shows the level, the commit, the outcome and the labels at the pin and at upstream, without requests.
 
 #### Builds at another commit
 
@@ -1367,7 +1367,7 @@ The node checks the spend twice:
 
 | Path | Script flags | Source |
 | --- | --- | --- |
-| `sendrawtransaction` and `AcceptToMemoryPool` | The plan's flags, through `-promiscuousmempoolflags`. Regtest does not require standard transactions, so the node accepts the option. | D95, D97, D14 |
+| `sendrawtransaction` and `AcceptToMemoryPool` | The flags of the spend request, through `-promiscuousmempoolflags`. A hash-type mutation or a `hash_byte` signature clears STRICTENC from the plan's flags (`spend_flags` in `scripts/campaign_generator.py`). Regtest does not require standard transactions, so the node accepts the option. | D95, D97, D14 |
 | `submitblock` with an AuxPoW block that holds the spend | The consensus flags of the block's height: P2SH, DERSIG and CHECKLOCKTIMEVERIFY, flags 517. CHECKSEQUENCEVERIFY is not active at that height, and `IsWitnessEnabled` returns false. | D96, D36 |
 
 Both paths call `VerifyScript` through `CScriptCheck` with `CachingTransactionSignatureChecker`, the production caller.
@@ -1375,7 +1375,8 @@ The replay starts the node with `-par=1`, so a block's script check runs in the 
 The replay maps each rejection reason to an error name through `ScriptErrorString` (D99).
 Another rejection, such as `non-final` or `bad-txns-vout-empty`, makes the path `not-comparable`.
 
-The mempool result decides the L3 outcome, because the mempool uses the plan's own flags.
+The mempool result decides the L3 outcome, because the mempool uses the flags of the spend request.
+If the rebuilt request has other flags, the outcome is `not-comparable`.
 After the plan's flags, the mempool checks P2SH alone again, and it reports only the first failing input (D97).
 So L3 refuses a plan without P2SH or with CLEANSTACK, which the bare `OP_TRUE` inputs would fail.
 The outcome is `reproduced` when the node's verdict or error name differs from the saved expectation, and `not-reproduced` when it agrees.
@@ -1387,7 +1388,8 @@ The block result separates them.
 The evidence sets `policy_only` when the mempool rejects the spend and the block accepts it.
 For example, a high-S signature fails LOW_S in the mempool, and flags 517 accept it in a block.
 
-L3 can compare only a spend that is final at the funded height, 1,354.
+After funding, the tip is at height 1,353, and `CheckFinalTx` tests the spend for the next block, height 1,354.
+L3 can compare only a spend that is final in that block.
 A spend is final when every sequence is `0xffffffff`.
 It is also final when its lock time is a height below 1,354, or a time before the median time past.
 The node rejects any other spend with `non-final`, so its outcome is `not-comparable`.
@@ -1409,7 +1411,7 @@ A Core-side candidate has the failing side `core`, `both` or `undetermined`.
 | Core-side `verdict` | L3 `not-reproduced`, L1 `reproduced` or `not-reproduced` | `harness-fault` |
 | Core-side `verdict` | L1 `reproduced`, no comparable L3 result | `reproduced-at-l1`: the candidate still needs L3 |
 | Core-side `digest` | L1 `reproduced` | `reproduced` |
-| Core-side `digest` | L1 `not-reproduced` | `harness-fault` |
+| Core-side `digest` | L1 `not-reproduced` with a harness whose SHA-256 differs from the harness that found the candidate | `harness-fault` |
 | Any other | A `reproduced` outcome at either level | `reproduced` |
 | Any | Every other combination, including an L1 `error` | `undetermined` |
 
@@ -1441,11 +1443,12 @@ The node must reject the reduced spend with `UNSATISFIED_LOCKTIME` in its mempoo
 The candidate must then have the label `harness-fault`.
 The stamped faulty build must also become `harness-fault` after L3.
 With `--candidate-harness` set to the unchanged harness, the trigger is lost, and the outcome must be `not-comparable`.
-`--node` also checks four other spends:
+`--node` also checks five other spends:
 
 - An ordinary 2-of-3 spend, which the mempool and a block accept.
 - An early recovery spend at lock time 1,000, which both reject with `UNSATISFIED_LOCKTIME`.
 - A commitment-mode spend whose version changes after signing, which both reject with `mandatory-script-verify-flag-failed`.
+- A spend whose first signature has its ANYONECANPAY bit flipped (`hash_byte`). The node and the harness must both use flags 541, without STRICTENC.
 - A high-S spend, which the mempool rejects with `SIG_HIGH_S` and a block accepts, so `policy_only` is true.
 
 `--upstream-harness` adds L1 against another harness build, with `--target upstream`.
@@ -1453,5 +1456,5 @@ It sends the requests of 500 generated cases to both harness builds and reports 
 When the node build names the same commit, it also runs L3 with `--target upstream`.
 
 `scripts/test_campaign.py` runs the L1 part, without `--node`.
-With `--node` and `--upstream-harness`, the self-test passed 16 cases in 31 seconds on the development machine.
+With `--node` and `--upstream-harness`, the self-test passed 17 cases in 32 seconds on the development machine.
 Each L3 replay took about 1.5 seconds, and the search and reduction took about 18 seconds.

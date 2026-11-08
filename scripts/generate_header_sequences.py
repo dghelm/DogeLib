@@ -12,6 +12,15 @@ DIRECTORY = ROOT / 'tests/block/regtest-header-sequences'
 PIN = 'e0a1c157791544e818c901bd9341896965afbf9d'
 LIMIT = 0x207fffff
 TIME = 1296688602
+# GetBlockProof (src/chain.cpp:150-163) of every bits value that an added entry carries, 0x207fffff and 0x207ffffe.
+# SetCompact gives the target t = m * 2^232 with m = 0x7fffff or 0x7ffffe, no sign and no overflow.
+# 2 * (t + 1) = 2m * 2^232 + 2 <= (2^24 - 2) * 2^232 + 2 < 2^256, and 3 * (t + 1) > 3 * 2^254 > 2^256.
+# So floor(2^256 / (t + 1)) = 2 for both values.
+PROOF = 2
+# AddToBlockIndex (src/validation.cpp:2780) adds PROOF to the predecessor's nChainWork, modulo 2^256.
+# Genesis has no predecessor and gets PROOF alone, so an entry at height h of a chain from genesis has PROOF * (h + 1).
+# Each version case supplies its own anchor work instead; the 1351 anchor makes the last added entry wrap.
+ANCHOR_WORK = {1251: 2**128, 1351: 2**256 - 23}
 
 
 def sha256d(data):
@@ -24,6 +33,17 @@ def pow_value(data):
 
 def target(bits):
     return (bits & 0x7fffff) << (8 * ((bits >> 24) - 3))
+
+
+assert all(2**256 // (target(bits) + 1) == PROOF for bits in (LIMIT, LIMIT - 1))
+
+
+def from_genesis(height):
+    return PROOF * (height + 1)
+
+
+def work_hex(work):
+    return format(work % 2**256, '064x')
 
 
 def generate(seed):
@@ -76,11 +96,16 @@ def generate(seed):
     def key(name):
         return sha256d(headers[name][:80])[::-1].hex()
 
-    def entry(name, height, **flags):
+    def entry(name, height, work=None, **flags):
         result = dict(header_hex=headers[name][:80].hex(), height=height, anchor=False,
-                      failed_valid=False, failed_child=False, scripts_valid=False)
+                      failed_valid=False, failed_child=False, scripts_valid=False,
+                      chain_work=work_hex(from_genesis(height) if work is None else work))
         result.update(flags)
         return result
+
+    def added_entry(item):
+        name, height, *work = item
+        return dict(hash=key(name), height=height, chain_work=work_hex(work[0] if work else from_genesis(height)))
 
     cases = []
 
@@ -90,7 +115,7 @@ def generate(seed):
         position, reason, dos, code = failure if failure else (None, None, None, None)
         expected = dict(valid=valid, failed_at=position, reject_reason=reason, dos=dos, reject_code=code,
                         last_hash=key(sequence[-1]) if valid and sequence else None,
-                        added=[dict(hash=key(item), height=height) for item, height in added],
+                        added=[added_entry(item) for item in added],
                         marked_failed_child=[key(item) for item in marks])
         cases.append(dict(name=name,
                           request=dict(network='regtest', mode='base', adjusted_time=TIME + 100,
@@ -153,10 +178,13 @@ def generate(seed):
     for activation, old_version in ((1251, 2), (1351, 3)):
         context = []
         previous = '22' * 32
+
+        def work(height):
+            return ANCHOR_WORK[activation] + PROOF * (height - (activation - 12))
         for height in range(activation - 12, activation - 1):
             name = f'context_{height}'
             mine(name, previous, TIME + height * 3)
-            context.append(entry(name, height, anchor=(height == activation - 12)))
+            context.append(entry(name, height, work(height), anchor=(height == activation - 12)))
             previous = name
         before = f'old_before_{activation}'
         rejected = f'old_at_{activation}'
@@ -167,9 +195,11 @@ def generate(seed):
         note = ('src/chainparams.cpp:390-391; src/validation.cpp:3113-3116: base version '
                 + str(old_version) + ' passes immediately below the threshold, then fails at it. '
                 + 'Eleven predecessors supply the median and retarget context; three-second spacing keeps limit bits.')
-        case(f'version-boundary-{activation}', context, [before, rejected], [(before, activation - 1)], note,
+        case(f'version-boundary-{activation}', context, [before, rejected],
+             [(before, activation - 1, work(activation - 1))], note,
              failure=(1, f'bad-version(0x{old_version:08x})', 0, 17))
-        case(f'version-upgraded-{activation}', context, [before, accepted], [(before, activation - 1), (accepted, activation)], note)
+        case(f'version-upgraded-{activation}', context, [before, accepted],
+             [(before, activation - 1, work(activation - 1)), (accepted, activation, work(activation))], note)
     return dict(reference_revision=PIN, seed=seed,
                 headers={name: dict(header_hex=data.hex(), hash=key(name), scrypt_hex=pow_value(data).to_bytes(32, 'little').hex()) for name, data in headers.items()},
                 cases=cases)

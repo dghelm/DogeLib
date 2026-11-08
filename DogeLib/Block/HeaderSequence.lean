@@ -2,6 +2,7 @@ module
 
 public import DogeLib.Block.ContextualCheck
 public import DogeLib.Block.ProofOfWork
+public import DogeLib.Work.ChainWork
 
 /-!
 # The block-index model
@@ -34,7 +35,7 @@ The step runs the seven steps of design record 0008, section 3.1, in Core's orde
 5. `contextualCheckBlockHeader` on the view and the last checkpoint that the index gives.
 6. Unless the predecessor has `scriptsValid`, no member of the failed list may be an ancestor of the predecessor.
    A failure marks the entries from the predecessor down to that member with `failedChild`, and then rejects.
-7. `addToBlockIndex`, the index part of Core's `AddToBlockIndex` (D33, lines 2755 to 2788), without chain work.
+7. `addToBlockIndex`, the index part of Core's `AddToBlockIndex` (D33, lines 2755 to 2788).
 
 The genesis hash skips steps 1 to 6.
 Between steps 4 and 5, the adapter error `heightOutOfRange` excludes a candidate at height 2147483647 (decision 17).
@@ -42,7 +43,12 @@ Between steps 4 and 5, the adapter error `heightOutOfRange` excludes a candidate
 Stage 3 adds the sequence, `processNewBlockHeaders`: Core's `ProcessNewBlockHeaders` (D33, lines 3270 to 3286) on the model.
 It tests `checkWellFormed`, then runs the step on each header in order and stops at the first error.
 `composeSequence` combines the results of two lists (section 7.2).
-The fields for chain work enter in stage 4.
+
+Stage 4 adds chain work (decision 8, option W2).
+Each entry holds Core's `nChainWork` in `chainWork`.
+`addToBlockIndex` sets it to the predecessor's chain work plus `Work.blockProof` of the header's `nBits`, modulo 2^256, or to `blockProof` alone without a predecessor (D33, line 2780).
+An anchor holds a chain work that the caller supplies.
+The model has no best header: it omits `pindexBestHeader` (lines 2782 and 2783).
 The theorems are in `DogeLib.Block.Proofs.HeaderSequence`.
 
 ## Source
@@ -61,7 +67,7 @@ namespace DogeLib.Block
 open DogeLib.Work
 
 /--
-One entry of the block index: the fields of Core's `CBlockIndex` (D18) that `AcceptBlockHeader` reads, apart from chain work.
+One entry of the block index: the fields of Core's `CBlockIndex` (D18) that `AcceptBlockHeader` reads, and the chain work that `AddToBlockIndex` writes.
 `prev` is the hash of the predecessor's entry, where Core holds the pointer `pprev`.
 It is `none` for the genesis entry and for an anchor.
 -/
@@ -78,6 +84,9 @@ structure IndexEntry where
   failedChild : Bool
   /-- `IsValid(BLOCK_VALID_SCRIPTS)` without the failure bits: the validity level is at least `BLOCK_VALID_SCRIPTS` (D18, line 136). -/
   scriptsValid : Bool
+  /-- `nChainWork`: the work of the chain up to and including this block, modulo 2^256 (D18, line 183).
+  `addToBlockIndex` sets it for a new entry. The caller supplies it for an anchor. -/
+  chainWork : ArithUint256
   deriving DecidableEq
 
 /-- The fields of an entry that a work view reads: `nHeight`, `nTime` and `nBits`. -/
@@ -429,12 +438,15 @@ def markFailedChild (index : HeaderIndex) (hashes : List Hash256) : HeaderIndex 
     | none => acc) index
 
 /--
-The index part of Core's `AddToBlockIndex` (D33, lines 2755 to 2788), without chain work, `nTimeMax`, `pindexBestHeader` and the dirty set.
+The index part of Core's `AddToBlockIndex` (D33, lines 2755 to 2788), without `nTimeMax`, `pindexBestHeader` and the dirty set.
 
 If the index has the hash of the header, the index does not change (lines 2757 to 2761).
 Otherwise the function inserts a new entry under the hash.
 If the index has `hashPrevBlock`, the entry gets that predecessor and the predecessor's height plus one (lines 2772 to 2778).
 Otherwise it has no predecessor and height 0.
+
+The entry's chain work is the predecessor's chain work plus `blockProof` of the header's `nBits`, modulo 2^256.
+Without a predecessor it is `blockProof` alone, as Core adds the proof to 0 (line 2780).
 The entry has no failure flag and the validity level `BLOCK_VALID_TREE`, so `scriptsValid` is false (line 2781).
 
 Core searches for `hashPrevBlock` after it inserts the new entry (line 2772).
@@ -450,8 +462,9 @@ def addToBlockIndex (index : HeaderIndex) (header : PureBlockHeader) : HeaderInd
   | none =>
     match index.lookup header.hashPrevBlock with
     | some parent =>
-      index.insert hash ⟨header, parent.height + 1, some header.hashPrevBlock, false, false, false⟩
-    | none => index.insert hash ⟨header, 0, none, false, false, false⟩
+      index.insert hash ⟨header, parent.height + 1, some header.hashPrevBlock, false, false, false,
+        parent.chainWork + blockProof header.nBits⟩
+    | none => index.insert hash ⟨header, 0, none, false, false, false, blockProof header.nBits⟩
 
 /-- The height bound of decision 17: a predecessor at height 2147483646 or above gives `heightOutOfRange`. -/
 def maxPrevHeight : Nat := 2147483646

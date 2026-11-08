@@ -368,7 +368,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000002"
           }
         ],
         "failed_blocks": [],
@@ -388,15 +389,18 @@
         "added": [
           {
             "hash": "ff9e78fae77b17ad3cff2b6cb53d7efe3e4402bbdf9d3ce6ba9847693f6cbb60",
-            "height": 1
+            "height": 1,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000004"
           },
           {
             "hash": "ba33d8bef9c3ddbb069a66e5890434d91d311fff3c7125e56c758beb0f45724d",
-            "height": 2
+            "height": 2,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000006"
           },
           {
             "hash": "872f14373ed5b82201e29b1914ccc65b6666b835cec5ae2c6d1b1cccf28d6e14",
-            "height": 3
+            "height": 3,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000008"
           }
         ],
         "marked_failed_child": []
@@ -418,7 +422,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000002"
           }
         ],
         "failed_blocks": [],
@@ -451,7 +456,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000002"
           }
         ],
         "failed_blocks": [],
@@ -486,7 +492,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000002"
           }
         ],
         "failed_blocks": [],
@@ -506,7 +513,8 @@
         "added": [
           {
             "hash": "ff9e78fae77b17ad3cff2b6cb53d7efe3e4402bbdf9d3ce6ba9847693f6cbb60",
-            "height": 1
+            "height": 1,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000004"
           }
         ],
         "marked_failed_child": []
@@ -528,7 +536,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000002"
           },
           {
             "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d4bafdaa0d60c9ea9f3db71e837145b31b49b50952d11481af7d83afe0ecffad5dde5494dffff7f2002000000",
@@ -536,7 +545,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000004"
           }
         ],
         "failed_blocks": [],
@@ -572,7 +582,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000002"
           }
         ],
         "failed_blocks": [],
@@ -592,7 +603,8 @@
         "added": [
           {
             "hash": "ff9e78fae77b17ad3cff2b6cb53d7efe3e4402bbdf9d3ce6ba9847693f6cbb60",
-            "height": 1
+            "height": 1,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000004"
           }
         ],
         "marked_failed_child": []
@@ -614,7 +626,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000002"
           },
           {
             "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213dec22afcbdc5a2d7e1fbc61cc7a6bf3e9236182ea1560ebf2ac891d91f0e1deb9dbe5494dfeff7f2000000000",
@@ -622,7 +635,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000004"
           }
         ],
         "failed_blocks": [],
@@ -642,7 +656,8 @@
         "added": [
           {
             "hash": "cabc45fd6e1910ac273ee19c3f5c9a8a645297410ab4ba7da2a5001d398cd0ed",
-            "height": 2
+            "height": 2,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000006"
           }
         ],
         "marked_failed_child": []
@@ -664,7 +679,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000002"
           }
         ],
         "failed_blocks": [],
@@ -683,7 +699,8 @@
         "added": [
           {
             "hash": "ff9e78fae77b17ad3cff2b6cb53d7efe3e4402bbdf9d3ce6ba9847693f6cbb60",
-            "height": 1
+            "height": 1,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000004"
           }
         ],
         "marked_failed_child": []
@@ -705,7 +722,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000002"
           }
         ],
         "failed_blocks": [],
@@ -725,11 +743,13 @@
         "added": [
           {
             "hash": "ff9e78fae77b17ad3cff2b6cb53d7efe3e4402bbdf9d3ce6ba9847693f6cbb60",
-            "height": 1
+            "height": 1,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000004"
           },
           {
             "hash": "ba33d8bef9c3ddbb069a66e5890434d91d311fff3c7125e56c758beb0f45724d",
-            "height": 2
+            "height": 2,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000006"
           }
         ],
         "marked_failed_child": []
@@ -751,7 +771,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000002"
           },
           {
             "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d4bafdaa0d60c9ea9f3db71e837145b31b49b50952d11481af7d83afe0ecffad5dde5494dffff7f2002000000",
@@ -759,7 +780,8 @@
             "anchor": false,
             "failed_valid": true,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000004"
           }
         ],
         "failed_blocks": [],
@@ -794,7 +816,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000002"
           },
           {
             "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d4bafdaa0d60c9ea9f3db71e837145b31b49b50952d11481af7d83afe0ecffad5dde5494dffff7f2002000000",
@@ -802,7 +825,8 @@
             "anchor": false,
             "failed_valid": true,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000004"
           }
         ],
         "failed_blocks": [],
@@ -837,7 +861,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000002"
           },
           {
             "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d4bafdaa0d60c9ea9f3db71e837145b31b49b50952d11481af7d83afe0ecffad5dde5494dffff7f2002000000",
@@ -845,7 +870,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": true,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000004"
           }
         ],
         "failed_blocks": [],
@@ -880,7 +906,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000002"
           },
           {
             "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d4bafdaa0d60c9ea9f3db71e837145b31b49b50952d11481af7d83afe0ecffad5dde5494dffff7f2002000000",
@@ -888,7 +915,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": true,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000004"
           }
         ],
         "failed_blocks": [],
@@ -923,7 +951,8 @@
             "anchor": false,
             "failed_valid": true,
             "failed_child": true,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000002"
           }
         ],
         "failed_blocks": [],
@@ -967,7 +996,8 @@
         "added": [
           {
             "hash": "3d2160a3b5dc4a9d62e7e66a295f70313ac808440ef7400d6c0772171ce973a5",
-            "height": 0
+            "height": 0,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000002"
           }
         ],
         "marked_failed_child": []
@@ -989,7 +1019,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000002"
           },
           {
             "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d4bafdaa0d60c9ea9f3db71e837145b31b49b50952d11481af7d83afe0ecffad5dde5494dffff7f2002000000",
@@ -997,7 +1028,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000004"
           },
           {
             "header_hex": "0400620060bb6c3f694798bae63c9ddfbb02443efe7e3db56c2bff3cad177be7fa789eff290ef0c1119acb5d808d0c9dd5485c7c68ea4a42f732715c53b61f80e4ad76d8e0e5494dffff7f2001000000",
@@ -1005,7 +1037,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000006"
           }
         ],
         "failed_blocks": [],
@@ -1040,7 +1073,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000002"
           },
           {
             "header_hex": "04016200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213dffafdf99b4bb2b2a9573e630eb689da92981e89dd32f7f5299302b9d11b074c9dde5494dffff7f2004000000",
@@ -1048,7 +1082,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000004"
           }
         ],
         "failed_blocks": [],
@@ -1083,7 +1118,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000002"
           },
           {
             "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d4bafdaa0d60c9ea9f3db71e837145b31b49b50952d11481af7d83afe0ecffad5dde5494dffff7f2002000000",
@@ -1091,7 +1127,8 @@
             "anchor": false,
             "failed_valid": true,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000004"
           },
           {
             "header_hex": "0400620060bb6c3f694798bae63c9ddfbb02443efe7e3db56c2bff3cad177be7fa789eff290ef0c1119acb5d808d0c9dd5485c7c68ea4a42f732715c53b61f80e4ad76d8e0e5494dffff7f2000000000",
@@ -1099,7 +1136,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000006"
           }
         ],
         "failed_blocks": [
@@ -1138,7 +1176,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000002"
           },
           {
             "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d4bafdaa0d60c9ea9f3db71e837145b31b49b50952d11481af7d83afe0ecffad5dde5494dffff7f2002000000",
@@ -1146,7 +1185,8 @@
             "anchor": false,
             "failed_valid": true,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000004"
           },
           {
             "header_hex": "0400620060bb6c3f694798bae63c9ddfbb02443efe7e3db56c2bff3cad177be7fa789eff290ef0c1119acb5d808d0c9dd5485c7c68ea4a42f732715c53b61f80e4ad76d8e0e5494dffff7f2000000000",
@@ -1154,7 +1194,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": true
+            "scripts_valid": true,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000006"
           }
         ],
         "failed_blocks": [
@@ -1174,7 +1215,8 @@
         "added": [
           {
             "hash": "872f14373ed5b82201e29b1914ccc65b6666b835cec5ae2c6d1b1cccf28d6e14",
-            "height": 3
+            "height": 3,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000008"
           }
         ],
         "marked_failed_child": []
@@ -1196,7 +1238,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000002"
           },
           {
             "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d4bafdaa0d60c9ea9f3db71e837145b31b49b50952d11481af7d83afe0ecffad5dde5494dffff7f2002000000",
@@ -1204,7 +1247,8 @@
             "anchor": false,
             "failed_valid": true,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000004"
           },
           {
             "header_hex": "0400620060bb6c3f694798bae63c9ddfbb02443efe7e3db56c2bff3cad177be7fa789eff290ef0c1119acb5d808d0c9dd5485c7c68ea4a42f732715c53b61f80e4ad76d8e0e5494dffff7f2000000000",
@@ -1212,7 +1256,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000006"
           }
         ],
         "failed_blocks": [],
@@ -1230,7 +1275,8 @@
         "added": [
           {
             "hash": "872f14373ed5b82201e29b1914ccc65b6666b835cec5ae2c6d1b1cccf28d6e14",
-            "height": 3
+            "height": 3,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000008"
           }
         ],
         "marked_failed_child": []
@@ -1252,7 +1298,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000002"
           },
           {
             "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d4bafdaa0d60c9ea9f3db71e837145b31b49b50952d11481af7d83afe0ecffad5dde5494dffff7f2002000000",
@@ -1260,7 +1307,8 @@
             "anchor": false,
             "failed_valid": true,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000004"
           },
           {
             "header_hex": "0400620060bb6c3f694798bae63c9ddfbb02443efe7e3db56c2bff3cad177be7fa789eff290ef0c1119acb5d808d0c9dd5485c7c68ea4a42f732715c53b61f80e4ad76d8e0e5494dffff7f2000000000",
@@ -1268,7 +1316,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000006"
           }
         ],
         "failed_blocks": [
@@ -1305,7 +1354,8 @@
             "anchor": false,
             "failed_valid": true,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000002"
           },
           {
             "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d4bafdaa0d60c9ea9f3db71e837145b31b49b50952d11481af7d83afe0ecffad5dde5494dffff7f2002000000",
@@ -1313,7 +1363,8 @@
             "anchor": false,
             "failed_valid": true,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000004"
           },
           {
             "header_hex": "0400620060bb6c3f694798bae63c9ddfbb02443efe7e3db56c2bff3cad177be7fa789eff290ef0c1119acb5d808d0c9dd5485c7c68ea4a42f732715c53b61f80e4ad76d8e0e5494dffff7f2000000000",
@@ -1321,7 +1372,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000006"
           }
         ],
         "failed_blocks": [
@@ -1362,7 +1414,8 @@
             "anchor": false,
             "failed_valid": true,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000002"
           },
           {
             "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d4bafdaa0d60c9ea9f3db71e837145b31b49b50952d11481af7d83afe0ecffad5dde5494dffff7f2002000000",
@@ -1370,7 +1423,8 @@
             "anchor": false,
             "failed_valid": true,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000004"
           },
           {
             "header_hex": "0400620060bb6c3f694798bae63c9ddfbb02443efe7e3db56c2bff3cad177be7fa789eff290ef0c1119acb5d808d0c9dd5485c7c68ea4a42f732715c53b61f80e4ad76d8e0e5494dffff7f2000000000",
@@ -1378,7 +1432,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000006"
           }
         ],
         "failed_blocks": [
@@ -1418,7 +1473,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000002"
           }
         ],
         "failed_blocks": [],
@@ -1439,19 +1495,23 @@
         "added": [
           {
             "hash": "ff9e78fae77b17ad3cff2b6cb53d7efe3e4402bbdf9d3ce6ba9847693f6cbb60",
-            "height": 1
+            "height": 1,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000004"
           },
           {
             "hash": "62f84d927803cfbf19e81e3eae1ddff8ac0d9042b71fa4d1d84b9d8f7b7d58ad",
-            "height": 1
+            "height": 1,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000004"
           },
           {
             "hash": "1220ee8d93604f0c9959bef6e4f171c6399ab0b37e837a619913b183de392fd7",
-            "height": 2
+            "height": 2,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000006"
           },
           {
             "hash": "ba33d8bef9c3ddbb069a66e5890434d91d311fff3c7125e56c758beb0f45724d",
-            "height": 2
+            "height": 2,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000006"
           }
         ],
         "marked_failed_child": []
@@ -1473,7 +1533,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000002"
           },
           {
             "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d4bafdaa0d60c9ea9f3db71e837145b31b49b50952d11481af7d83afe0ecffad5dde5494dffff7f2002000000",
@@ -1481,7 +1542,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000004"
           },
           {
             "header_hex": "0400620060bb6c3f694798bae63c9ddfbb02443efe7e3db56c2bff3cad177be7fa789eff290ef0c1119acb5d808d0c9dd5485c7c68ea4a42f732715c53b61f80e4ad76d8e0e5494dffff7f2000000000",
@@ -1489,7 +1551,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000006"
           }
         ],
         "failed_blocks": [],
@@ -1524,7 +1587,8 @@
             "anchor": true,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "000000000000000000000000000000000000000000000000000000000000000c"
           }
         ],
         "failed_blocks": [],
@@ -1560,7 +1624,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000002"
           },
           {
             "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d1ff126ee3b062a6c46a2f71c266d2c8a20733e977d017a12058e77a190eac586dde5494dffff7f2000000000",
@@ -1568,7 +1633,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000004"
           },
           {
             "header_hex": "040062006b9b18a815693a344b2c9f3458fc310bb7ddab37221b092441d4b40d818b9f81b9af3fc6c4cb9d56b8a792fb96e8086fa26c4465bdf7a72f7771fcf84e78e317e0e5494dffff7f2005000000",
@@ -1576,7 +1642,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000006"
           },
           {
             "header_hex": "04006200b8d38e20a6f3cd4932d256ae15169c92b3e3389741d2db56d771e2e6a613dd7d6743e6ba3d0b48426a815fc0cb3ab1c4ad0dc317331cdfc0aa46a326ac54cdcae3e5494dffff7f2000000000",
@@ -1584,7 +1651,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000008"
           },
           {
             "header_hex": "04006200d172005ac0f9b91c807fa51100519a315845eb2485180cf0bafe09b4ce903b1206ace7bf8ebafcfb9dcb459d7549346923830070a3910d0ade28325f2eeed174e6e5494dffff7f2001000000",
@@ -1592,7 +1660,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "000000000000000000000000000000000000000000000000000000000000000a"
           },
           {
             "header_hex": "040062006de09f87eb71f59c5570a817544858e16ca26f05f2ccf1eead1e96dda19ef558d13c4c8a1bc9c2c41202a545c49a0c47116a173df4b9da041a56db77a82ad81de9e5494dffff7f2000000000",
@@ -1600,7 +1669,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "000000000000000000000000000000000000000000000000000000000000000c"
           },
           {
             "header_hex": "0400620000de3b01ceef51528f909e9af5b7f3ede0cd9bc768d2a33765b035f3888e60a0dfbbb99edb33305f79e4fedde743c50c9642635bade5c6c7702a314d2e726a52ece5494dffff7f2001000000",
@@ -1608,7 +1678,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "000000000000000000000000000000000000000000000000000000000000000e"
           },
           {
             "header_hex": "040062009f07b2152fffc6784e64d76619eaaa60651efc46328c737198fb8a579132b54171e7b185c757b6dc31c18e46c3ebf76a7c41e5ee7815c7f14f2764eff2ec278defe5494dffff7f2001000000",
@@ -1616,7 +1687,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000010"
           },
           {
             "header_hex": "04006200a12007118c46f6b32b0f3f38588a1feb5921b5aaa9e05944135e7f513a087e6fc3bfed40ffb356a7c6949a1a7f720a2b54849484c18c3e380c27dddb4b71ed20f2e5494dffff7f2000000000",
@@ -1624,7 +1696,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000012"
           }
         ],
         "failed_blocks": [],
@@ -1644,15 +1717,18 @@
         "added": [
           {
             "hash": "c42ccdd1e50dd3d4b92d1c4614383aba29e4ec3a490e6ab9c9b5cbd6624bf6ba",
-            "height": 9
+            "height": 9,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000014"
           },
           {
             "hash": "42a74e147bea42812eddafd91bd02695a4ddcf30b983330ad95e7cb9a8c187f6",
-            "height": 10
+            "height": 10,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000016"
           },
           {
             "hash": "332338ef31313e4a6940671657c567629f18aeeeb872060d94a284dfbc71805d",
-            "height": 11
+            "height": 11,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000018"
           }
         ],
         "marked_failed_child": []
@@ -1674,7 +1750,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000002"
           },
           {
             "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d1ff126ee3b062a6c46a2f71c266d2c8a20733e977d017a12058e77a190eac586dde5494dffff7f2000000000",
@@ -1682,7 +1759,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000004"
           },
           {
             "header_hex": "040062006b9b18a815693a344b2c9f3458fc310bb7ddab37221b092441d4b40d818b9f81b9af3fc6c4cb9d56b8a792fb96e8086fa26c4465bdf7a72f7771fcf84e78e317e0e5494dffff7f2005000000",
@@ -1690,7 +1768,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000006"
           },
           {
             "header_hex": "04006200b8d38e20a6f3cd4932d256ae15169c92b3e3389741d2db56d771e2e6a613dd7d6743e6ba3d0b48426a815fc0cb3ab1c4ad0dc317331cdfc0aa46a326ac54cdcae3e5494dffff7f2000000000",
@@ -1698,7 +1777,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000008"
           },
           {
             "header_hex": "04006200d172005ac0f9b91c807fa51100519a315845eb2485180cf0bafe09b4ce903b1206ace7bf8ebafcfb9dcb459d7549346923830070a3910d0ade28325f2eeed174e6e5494dffff7f2001000000",
@@ -1706,7 +1786,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "000000000000000000000000000000000000000000000000000000000000000a"
           },
           {
             "header_hex": "040062006de09f87eb71f59c5570a817544858e16ca26f05f2ccf1eead1e96dda19ef558d13c4c8a1bc9c2c41202a545c49a0c47116a173df4b9da041a56db77a82ad81de9e5494dffff7f2000000000",
@@ -1714,7 +1795,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "000000000000000000000000000000000000000000000000000000000000000c"
           },
           {
             "header_hex": "0400620000de3b01ceef51528f909e9af5b7f3ede0cd9bc768d2a33765b035f3888e60a0dfbbb99edb33305f79e4fedde743c50c9642635bade5c6c7702a314d2e726a52ece5494dffff7f2001000000",
@@ -1722,7 +1804,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "000000000000000000000000000000000000000000000000000000000000000e"
           },
           {
             "header_hex": "040062009f07b2152fffc6784e64d76619eaaa60651efc46328c737198fb8a579132b54171e7b185c757b6dc31c18e46c3ebf76a7c41e5ee7815c7f14f2764eff2ec278defe5494dffff7f2001000000",
@@ -1730,7 +1813,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000010"
           },
           {
             "header_hex": "04006200a12007118c46f6b32b0f3f38588a1feb5921b5aaa9e05944135e7f513a087e6fc3bfed40ffb356a7c6949a1a7f720a2b54849484c18c3e380c27dddb4b71ed20f2e5494dffff7f2000000000",
@@ -1738,7 +1822,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000012"
           },
           {
             "header_hex": "040062002c025d1fb4a731839937b22f3408ff7a3c4c20190fae33d84606d653a7dfc23b5aac131f6f74ee84c736b3ed4c2fdd57ac944677a020e014f291a4591efddf41f5e5494dffff7f2003000000",
@@ -1746,7 +1831,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000014"
           },
           {
             "header_hex": "04006200baf64b62d6cbb5c9b96a0e493aece429ba3a3814461c2db9d4d30de5d1cd2cc4ec19114214505c1735f73b79f1bb4248b296ee83887e731661f26ccef49cd03ef8e5494dffff7f2002000000",
@@ -1754,7 +1840,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000016"
           },
           {
             "header_hex": "04006200f687c1a8b97c5ed90a3383b930cfdda49526d01bd9afdd2e8142ea7b144ea7423aa639a87fdcb1a3394dfd540b2368d7087ae54159982d5c1bd4c70652368226fbe5494dffff7f2001000000",
@@ -1762,7 +1849,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000018"
           },
           {
             "header_hex": "040062005d8071bcdf84a2940d0672b8eeae189f6267c557166740694a3e3131ef3823336f480ab8b58adbd74711eef1323cf979aa3a60aff0ff7f8287724ba798692536fee5494dffff7f2000000000",
@@ -1770,7 +1858,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "000000000000000000000000000000000000000000000000000000000000001a"
           },
           {
             "header_hex": "04006200e233aaf15ac7802d5d725a66135450224060986ca214b89186195e0a3183a0ee18908ca85bb83b40e1ee2bd47354c6f322330d0c72d355f50f501a1911eafedf01e6494dffff7f2000000000",
@@ -1778,7 +1867,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "000000000000000000000000000000000000000000000000000000000000001c"
           },
           {
             "header_hex": "040062009c952db21004d0fbb29d3de79397351cce44ac29b5f3568f4e7c0f7fc189611fb5c07e8e986c42ec31cfcccc7e4f5301c80b15165a2f47b4cc1f5935a86c89a804e6494dffff7f2002000000",
@@ -1786,7 +1876,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "000000000000000000000000000000000000000000000000000000000000001e"
           },
           {
             "header_hex": "04006200f796bd4adaa17e202266b9f5cd5dc77402582879800341507c4c33f66fb6caa81a1411fe75058e0225e0f6046b10f773d379c8b293c573ddeb72962048ddb2ca07e6494dffff7f2000000000",
@@ -1794,7 +1885,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000020"
           },
           {
             "header_hex": "04006200424d33d3525a55810463dd83ef6b0d1dfa919752c753a2259f689b3fe8d75410be7338b7a2ddeed4d0379034ed910328da6c9fb1e58eb767bb84cbb7047370320ae6494dffff7f2001000000",
@@ -1802,7 +1894,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000022"
           },
           {
             "header_hex": "0400620041c0955da8a7b83bc54d4331ff7bea6e442329af2e4aa435cd107090c7963fe41b1a73efca07a93bd9daef31311076eb71668cb322c028430e7336f7e684367d0de6494dffff7f2000000000",
@@ -1810,7 +1903,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000024"
           },
           {
             "header_hex": "04006200376ca33156a8ea582c0ee7a8e563d978ded995388b232a33ebf1ffc3210f5289ca259f7c1bfdfdd20dd9679fa656e2ea2ce09173d0b4cc05a1193a6049075fae10e6494dffff7f2001000000",
@@ -1818,7 +1912,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000026"
           }
         ],
         "failed_blocks": [],
@@ -1838,15 +1933,18 @@
         "added": [
           {
             "hash": "bb4467cafedab4443543159e79ce98ec7b39d2019ff111a19552ac737dff708a",
-            "height": 19
+            "height": 19,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000028"
           },
           {
             "hash": "af801791ea5e6bf1b1aa8b9415772347491657081e2c5916066c96aba390c91d",
-            "height": 20
+            "height": 20,
+            "chain_work": "000000000000000000000000000000000000000000000000000000000000002a"
           },
           {
             "hash": "31c6d608bae101ad43716e7779b4e16c7ba71d331e87c7a89a5ba74deb37500d",
-            "height": 21
+            "height": 21,
+            "chain_work": "000000000000000000000000000000000000000000000000000000000000002c"
           }
         ],
         "marked_failed_child": []
@@ -1868,7 +1966,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000002"
           },
           {
             "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d1ff126ee3b062a6c46a2f71c266d2c8a20733e977d017a12058e77a190eac586dde5494dffff7f2000000000",
@@ -1876,7 +1975,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000004"
           },
           {
             "header_hex": "040062006b9b18a815693a344b2c9f3458fc310bb7ddab37221b092441d4b40d818b9f81b9af3fc6c4cb9d56b8a792fb96e8086fa26c4465bdf7a72f7771fcf84e78e317e0e5494dffff7f2005000000",
@@ -1884,7 +1984,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000006"
           },
           {
             "header_hex": "04006200b8d38e20a6f3cd4932d256ae15169c92b3e3389741d2db56d771e2e6a613dd7d6743e6ba3d0b48426a815fc0cb3ab1c4ad0dc317331cdfc0aa46a326ac54cdcae3e5494dffff7f2000000000",
@@ -1892,7 +1993,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000008"
           },
           {
             "header_hex": "04006200d172005ac0f9b91c807fa51100519a315845eb2485180cf0bafe09b4ce903b1206ace7bf8ebafcfb9dcb459d7549346923830070a3910d0ade28325f2eeed174e6e5494dffff7f2001000000",
@@ -1900,7 +2002,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "000000000000000000000000000000000000000000000000000000000000000a"
           },
           {
             "header_hex": "040062006de09f87eb71f59c5570a817544858e16ca26f05f2ccf1eead1e96dda19ef558d13c4c8a1bc9c2c41202a545c49a0c47116a173df4b9da041a56db77a82ad81de9e5494dffff7f2000000000",
@@ -1908,7 +2011,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "000000000000000000000000000000000000000000000000000000000000000c"
           },
           {
             "header_hex": "0400620000de3b01ceef51528f909e9af5b7f3ede0cd9bc768d2a33765b035f3888e60a0dfbbb99edb33305f79e4fedde743c50c9642635bade5c6c7702a314d2e726a52ece5494dffff7f2001000000",
@@ -1916,7 +2020,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "000000000000000000000000000000000000000000000000000000000000000e"
           },
           {
             "header_hex": "040062009f07b2152fffc6784e64d76619eaaa60651efc46328c737198fb8a579132b54171e7b185c757b6dc31c18e46c3ebf76a7c41e5ee7815c7f14f2764eff2ec278defe5494dffff7f2001000000",
@@ -1924,7 +2029,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000010"
           },
           {
             "header_hex": "04006200a12007118c46f6b32b0f3f38588a1feb5921b5aaa9e05944135e7f513a087e6fc3bfed40ffb356a7c6949a1a7f720a2b54849484c18c3e380c27dddb4b71ed20f2e5494dffff7f2000000000",
@@ -1932,7 +2038,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000012"
           },
           {
             "header_hex": "040062002c025d1fb4a731839937b22f3408ff7a3c4c20190fae33d84606d653a7dfc23b5aac131f6f74ee84c736b3ed4c2fdd57ac944677a020e014f291a4591efddf41f5e5494dffff7f2003000000",
@@ -1940,7 +2047,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000014"
           },
           {
             "header_hex": "04006200baf64b62d6cbb5c9b96a0e493aece429ba3a3814461c2db9d4d30de5d1cd2cc4ec19114214505c1735f73b79f1bb4248b296ee83887e731661f26ccef49cd03ef8e5494dffff7f2002000000",
@@ -1948,7 +2056,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000016"
           },
           {
             "header_hex": "04006200f687c1a8b97c5ed90a3383b930cfdda49526d01bd9afdd2e8142ea7b144ea7423aa639a87fdcb1a3394dfd540b2368d7087ae54159982d5c1bd4c70652368226fbe5494dffff7f2001000000",
@@ -1956,7 +2065,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000018"
           },
           {
             "header_hex": "040062005d8071bcdf84a2940d0672b8eeae189f6267c557166740694a3e3131ef3823336f480ab8b58adbd74711eef1323cf979aa3a60aff0ff7f8287724ba798692536fee5494dffff7f2000000000",
@@ -1964,7 +2074,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "000000000000000000000000000000000000000000000000000000000000001a"
           },
           {
             "header_hex": "04006200e233aaf15ac7802d5d725a66135450224060986ca214b89186195e0a3183a0ee18908ca85bb83b40e1ee2bd47354c6f322330d0c72d355f50f501a1911eafedf01e6494dffff7f2000000000",
@@ -1972,7 +2083,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "000000000000000000000000000000000000000000000000000000000000001c"
           },
           {
             "header_hex": "040062009c952db21004d0fbb29d3de79397351cce44ac29b5f3568f4e7c0f7fc189611fb5c07e8e986c42ec31cfcccc7e4f5301c80b15165a2f47b4cc1f5935a86c89a804e6494dffff7f2002000000",
@@ -1980,7 +2092,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "000000000000000000000000000000000000000000000000000000000000001e"
           },
           {
             "header_hex": "04006200f796bd4adaa17e202266b9f5cd5dc77402582879800341507c4c33f66fb6caa81a1411fe75058e0225e0f6046b10f773d379c8b293c573ddeb72962048ddb2ca07e6494dffff7f2000000000",
@@ -1988,7 +2101,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000020"
           },
           {
             "header_hex": "04006200424d33d3525a55810463dd83ef6b0d1dfa919752c753a2259f689b3fe8d75410be7338b7a2ddeed4d0379034ed910328da6c9fb1e58eb767bb84cbb7047370320ae6494dffff7f2001000000",
@@ -1996,7 +2110,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000022"
           },
           {
             "header_hex": "0400620041c0955da8a7b83bc54d4331ff7bea6e442329af2e4aa435cd107090c7963fe41b1a73efca07a93bd9daef31311076eb71668cb322c028430e7336f7e684367d0de6494dffff7f2000000000",
@@ -2004,7 +2119,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000024"
           },
           {
             "header_hex": "04006200376ca33156a8ea582c0ee7a8e563d978ded995388b232a33ebf1ffc3210f5289ca259f7c1bfdfdd20dd9679fa656e2ea2ce09173d0b4cc05a1193a6049075fae10e6494dffff7f2001000000",
@@ -2012,7 +2128,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000026"
           }
         ],
         "failed_blocks": [],
@@ -2030,7 +2147,8 @@
         "added": [
           {
             "hash": "8e309fe3f7cd1fdf29322db888e9eaaa4a3bc527a2f72c0048da7f636513bbe2",
-            "height": 19
+            "height": 19,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000028"
           }
         ],
         "marked_failed_child": []
@@ -2052,7 +2170,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000002"
           },
           {
             "header_hex": "04006200a573e91c1772076c0d40f70e4408c83a31705f296ae6e7629d4adcb5a360213d1ff126ee3b062a6c46a2f71c266d2c8a20733e977d017a12058e77a190eac586dde5494dffff7f2000000000",
@@ -2060,7 +2179,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000004"
           },
           {
             "header_hex": "040062006b9b18a815693a344b2c9f3458fc310bb7ddab37221b092441d4b40d818b9f81b9af3fc6c4cb9d56b8a792fb96e8086fa26c4465bdf7a72f7771fcf84e78e317e0e5494dffff7f2005000000",
@@ -2068,7 +2188,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000006"
           },
           {
             "header_hex": "04006200b8d38e20a6f3cd4932d256ae15169c92b3e3389741d2db56d771e2e6a613dd7d6743e6ba3d0b48426a815fc0cb3ab1c4ad0dc317331cdfc0aa46a326ac54cdcae3e5494dffff7f2000000000",
@@ -2076,7 +2197,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000008"
           },
           {
             "header_hex": "04006200d172005ac0f9b91c807fa51100519a315845eb2485180cf0bafe09b4ce903b1206ace7bf8ebafcfb9dcb459d7549346923830070a3910d0ade28325f2eeed174e6e5494dffff7f2001000000",
@@ -2084,7 +2206,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "000000000000000000000000000000000000000000000000000000000000000a"
           },
           {
             "header_hex": "040062006de09f87eb71f59c5570a817544858e16ca26f05f2ccf1eead1e96dda19ef558d13c4c8a1bc9c2c41202a545c49a0c47116a173df4b9da041a56db77a82ad81de9e5494dffff7f2000000000",
@@ -2092,7 +2215,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "000000000000000000000000000000000000000000000000000000000000000c"
           },
           {
             "header_hex": "0400620000de3b01ceef51528f909e9af5b7f3ede0cd9bc768d2a33765b035f3888e60a0dfbbb99edb33305f79e4fedde743c50c9642635bade5c6c7702a314d2e726a52ece5494dffff7f2001000000",
@@ -2100,7 +2224,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "000000000000000000000000000000000000000000000000000000000000000e"
           },
           {
             "header_hex": "040062009f07b2152fffc6784e64d76619eaaa60651efc46328c737198fb8a579132b54171e7b185c757b6dc31c18e46c3ebf76a7c41e5ee7815c7f14f2764eff2ec278defe5494dffff7f2001000000",
@@ -2108,7 +2233,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000010"
           },
           {
             "header_hex": "04006200a12007118c46f6b32b0f3f38588a1feb5921b5aaa9e05944135e7f513a087e6fc3bfed40ffb356a7c6949a1a7f720a2b54849484c18c3e380c27dddb4b71ed20f2e5494dffff7f2000000000",
@@ -2116,7 +2242,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000012"
           },
           {
             "header_hex": "040062002c025d1fb4a731839937b22f3408ff7a3c4c20190fae33d84606d653a7dfc23b5aac131f6f74ee84c736b3ed4c2fdd57ac944677a020e014f291a4591efddf41f5e5494dffff7f2003000000",
@@ -2124,7 +2251,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000014"
           },
           {
             "header_hex": "04006200baf64b62d6cbb5c9b96a0e493aece429ba3a3814461c2db9d4d30de5d1cd2cc4ec19114214505c1735f73b79f1bb4248b296ee83887e731661f26ccef49cd03ef8e5494dffff7f2002000000",
@@ -2132,7 +2260,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000016"
           },
           {
             "header_hex": "04006200f687c1a8b97c5ed90a3383b930cfdda49526d01bd9afdd2e8142ea7b144ea7423aa639a87fdcb1a3394dfd540b2368d7087ae54159982d5c1bd4c70652368226fbe5494dffff7f2001000000",
@@ -2140,7 +2269,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000018"
           },
           {
             "header_hex": "040062005d8071bcdf84a2940d0672b8eeae189f6267c557166740694a3e3131ef3823336f480ab8b58adbd74711eef1323cf979aa3a60aff0ff7f8287724ba798692536fee5494dffff7f2000000000",
@@ -2148,7 +2278,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "000000000000000000000000000000000000000000000000000000000000001a"
           },
           {
             "header_hex": "04006200e233aaf15ac7802d5d725a66135450224060986ca214b89186195e0a3183a0ee18908ca85bb83b40e1ee2bd47354c6f322330d0c72d355f50f501a1911eafedf01e6494dffff7f2000000000",
@@ -2156,7 +2287,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "000000000000000000000000000000000000000000000000000000000000001c"
           },
           {
             "header_hex": "040062009c952db21004d0fbb29d3de79397351cce44ac29b5f3568f4e7c0f7fc189611fb5c07e8e986c42ec31cfcccc7e4f5301c80b15165a2f47b4cc1f5935a86c89a804e6494dffff7f2002000000",
@@ -2164,7 +2296,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "000000000000000000000000000000000000000000000000000000000000001e"
           },
           {
             "header_hex": "04006200f796bd4adaa17e202266b9f5cd5dc77402582879800341507c4c33f66fb6caa81a1411fe75058e0225e0f6046b10f773d379c8b293c573ddeb72962048ddb2ca07e6494dffff7f2000000000",
@@ -2172,7 +2305,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000020"
           },
           {
             "header_hex": "04006200424d33d3525a55810463dd83ef6b0d1dfa919752c753a2259f689b3fe8d75410be7338b7a2ddeed4d0379034ed910328da6c9fb1e58eb767bb84cbb7047370320ae6494dffff7f2001000000",
@@ -2180,7 +2314,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000022"
           },
           {
             "header_hex": "0400620041c0955da8a7b83bc54d4331ff7bea6e442329af2e4aa435cd107090c7963fe41b1a73efca07a93bd9daef31311076eb71668cb322c028430e7336f7e684367d0de6494dffff7f2000000000",
@@ -2188,7 +2323,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000024"
           },
           {
             "header_hex": "04006200376ca33156a8ea582c0ee7a8e563d978ded995388b232a33ebf1ffc3210f5289ca259f7c1bfdfdd20dd9679fa656e2ea2ce09173d0b4cc05a1193a6049075fae10e6494dffff7f2001000000",
@@ -2196,7 +2332,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000026"
           },
           {
             "header_hex": "0400620060e87de5ad160980a50d81e50783f337c1188dab78dc08b90077be2a95cf4a4df995cb220be94769e6ec4fd4a3d5cf6f23c13289c202377b1b3c49b73e9d03dd13e6494dffff7f2006000000",
@@ -2204,7 +2341,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000028"
           }
         ],
         "failed_blocks": [],
@@ -2239,7 +2377,8 @@
             "anchor": true,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000100000000000000000000000000000000"
           },
           {
             "header_hex": "040062005e7d0016f3f70fa72d0ccec894a05c27ee23e43fb464711e89af5261b5b3a38dc7677db88d0a7f8d251ca1d79769ac1113c529cbf7ae47cdc7903aa6e16eb41262f4494dffff7f2000000000",
@@ -2247,7 +2386,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000100000000000000000000000000000002"
           },
           {
             "header_hex": "04006200d333df3bdd0a7183c2188d1dbdb23964d6c885d19571749ed576aa63f216c9d211f60689f73e8938361229db41c7e2742552bd0431ea203ce6e7a47c97d2cd2c65f4494dffff7f2008000000",
@@ -2255,7 +2395,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000100000000000000000000000000000004"
           },
           {
             "header_hex": "040062006f62fec59caa2bfbf6cf4856c29ca1d17d12832d7ac4bb6a62ec3ae87ac12ebf1a1131c9a35a0312c901fab675126a44b6bee081e0ba79ef0e5142815f3b4fc168f4494dffff7f2001000000",
@@ -2263,7 +2404,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000100000000000000000000000000000006"
           },
           {
             "header_hex": "040062006c1394f3304f08b8136916a5dbc41c9d594c54be34df784a5e77a103c7cd9c3514f30f548f29c7c58b5e2172523eddd4c20a1a5334e47ee3da982681b44fd19e6bf4494dffff7f2000000000",
@@ -2271,7 +2413,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000100000000000000000000000000000008"
           },
           {
             "header_hex": "040062005d2a83eaa8f7da2bab7fa458b9813edae7d6ba83929f27c1c41ace8c42b40380c2771d2d97ea3b0e3f4c08f042fa9df9683b84afc65384658975e5fa0c986d046ef4494dffff7f2000000000",
@@ -2279,7 +2422,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "000000000000000000000000000000010000000000000000000000000000000a"
           },
           {
             "header_hex": "04006200e0929a83d0c9b39f4bbaf625bc6d6f9ec8386b9945740cc4ccfdba8154bf173c121b44cd81280e2f0387ba4f17684134bf79b1877b095b6083bd816e055d7ddb71f4494dffff7f2001000000",
@@ -2287,7 +2431,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "000000000000000000000000000000010000000000000000000000000000000c"
           },
           {
             "header_hex": "0400620033227de5068dc356ff3cecc66897b12c344f0a198b0a7bea62474f395498b458289c40be6968a86b602926897485da502fe6f3507b15433facf035fcb24f2ba574f4494dffff7f2000000000",
@@ -2295,7 +2440,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "000000000000000000000000000000010000000000000000000000000000000e"
           },
           {
             "header_hex": "04006200809a68e6d0f635a36686b65e28d7b015f8c13c3cc01bba61a4b217728621a2db4f453c0f49bb33532f7c2ec0fea1f3fbf29447e95ee20be340db5e5101cd0dfb77f4494dffff7f2006000000",
@@ -2303,7 +2449,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000100000000000000000000000000000010"
           },
           {
             "header_hex": "0400620055997461a530e9397934322c444afbfe4837a3a1a5f300c15f6ccac9a0bfb21e86e68bbe36150e17aec390e36b97db150a9e5b0680e16d337b1b3c4cb0c906b67af4494dffff7f2002000000",
@@ -2311,7 +2458,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000100000000000000000000000000000012"
           },
           {
             "header_hex": "04006200d1446659b3dd673851f755e8b96c036317ceaa47962ebe4438cbafc97e52d19ef363f4c6df0b4736f1585faf5bba609c26802f59970a39cb7732de8a2a087bc87df4494dffff7f2000000000",
@@ -2319,7 +2467,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000100000000000000000000000000000014"
           }
         ],
         "failed_blocks": [],
@@ -2338,7 +2487,8 @@
         "added": [
           {
             "hash": "f3c047bc0c4888aeec346bde9a2c5473daf267b4711526cde050ee02038f4917",
-            "height": 1250
+            "height": 1250,
+            "chain_work": "0000000000000000000000000000000100000000000000000000000000000016"
           }
         ],
         "marked_failed_child": []
@@ -2360,7 +2510,8 @@
             "anchor": true,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000100000000000000000000000000000000"
           },
           {
             "header_hex": "040062005e7d0016f3f70fa72d0ccec894a05c27ee23e43fb464711e89af5261b5b3a38dc7677db88d0a7f8d251ca1d79769ac1113c529cbf7ae47cdc7903aa6e16eb41262f4494dffff7f2000000000",
@@ -2368,7 +2519,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000100000000000000000000000000000002"
           },
           {
             "header_hex": "04006200d333df3bdd0a7183c2188d1dbdb23964d6c885d19571749ed576aa63f216c9d211f60689f73e8938361229db41c7e2742552bd0431ea203ce6e7a47c97d2cd2c65f4494dffff7f2008000000",
@@ -2376,7 +2528,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000100000000000000000000000000000004"
           },
           {
             "header_hex": "040062006f62fec59caa2bfbf6cf4856c29ca1d17d12832d7ac4bb6a62ec3ae87ac12ebf1a1131c9a35a0312c901fab675126a44b6bee081e0ba79ef0e5142815f3b4fc168f4494dffff7f2001000000",
@@ -2384,7 +2537,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000100000000000000000000000000000006"
           },
           {
             "header_hex": "040062006c1394f3304f08b8136916a5dbc41c9d594c54be34df784a5e77a103c7cd9c3514f30f548f29c7c58b5e2172523eddd4c20a1a5334e47ee3da982681b44fd19e6bf4494dffff7f2000000000",
@@ -2392,7 +2546,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000100000000000000000000000000000008"
           },
           {
             "header_hex": "040062005d2a83eaa8f7da2bab7fa458b9813edae7d6ba83929f27c1c41ace8c42b40380c2771d2d97ea3b0e3f4c08f042fa9df9683b84afc65384658975e5fa0c986d046ef4494dffff7f2000000000",
@@ -2400,7 +2555,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "000000000000000000000000000000010000000000000000000000000000000a"
           },
           {
             "header_hex": "04006200e0929a83d0c9b39f4bbaf625bc6d6f9ec8386b9945740cc4ccfdba8154bf173c121b44cd81280e2f0387ba4f17684134bf79b1877b095b6083bd816e055d7ddb71f4494dffff7f2001000000",
@@ -2408,7 +2564,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "000000000000000000000000000000010000000000000000000000000000000c"
           },
           {
             "header_hex": "0400620033227de5068dc356ff3cecc66897b12c344f0a198b0a7bea62474f395498b458289c40be6968a86b602926897485da502fe6f3507b15433facf035fcb24f2ba574f4494dffff7f2000000000",
@@ -2416,7 +2573,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "000000000000000000000000000000010000000000000000000000000000000e"
           },
           {
             "header_hex": "04006200809a68e6d0f635a36686b65e28d7b015f8c13c3cc01bba61a4b217728621a2db4f453c0f49bb33532f7c2ec0fea1f3fbf29447e95ee20be340db5e5101cd0dfb77f4494dffff7f2006000000",
@@ -2424,7 +2582,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000100000000000000000000000000000010"
           },
           {
             "header_hex": "0400620055997461a530e9397934322c444afbfe4837a3a1a5f300c15f6ccac9a0bfb21e86e68bbe36150e17aec390e36b97db150a9e5b0680e16d337b1b3c4cb0c906b67af4494dffff7f2002000000",
@@ -2432,7 +2591,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000100000000000000000000000000000012"
           },
           {
             "header_hex": "04006200d1446659b3dd673851f755e8b96c036317ceaa47962ebe4438cbafc97e52d19ef363f4c6df0b4736f1585faf5bba609c26802f59970a39cb7732de8a2a087bc87df4494dffff7f2000000000",
@@ -2440,7 +2600,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "0000000000000000000000000000000100000000000000000000000000000014"
           }
         ],
         "failed_blocks": [],
@@ -2459,11 +2620,13 @@
         "added": [
           {
             "hash": "f3c047bc0c4888aeec346bde9a2c5473daf267b4711526cde050ee02038f4917",
-            "height": 1250
+            "height": 1250,
+            "chain_work": "0000000000000000000000000000000100000000000000000000000000000016"
           },
           {
             "hash": "6af24e9d68c8f64426d7b71ac6b15247024a6a24a9309cb3a509470974d1fae9",
-            "height": 1251
+            "height": 1251,
+            "chain_work": "0000000000000000000000000000000100000000000000000000000000000018"
           }
         ],
         "marked_failed_child": []
@@ -2485,7 +2648,8 @@
             "anchor": true,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe9"
           },
           {
             "header_hex": "04006200f758c9c689a2269d7fd066e7b8fd60ebbc0c1c16c11918148265306826fc2bf0ffe3dd757dcce81f31db17d9776fd6fb48a0d4c3294c3e3760391188c57982a58ef5494dffff7f2000000000",
@@ -2493,7 +2657,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffeb"
           },
           {
             "header_hex": "04006200271c56b15758329e42fec1661d75747003d1726e3cd082ac28b409cb8d1872e3701b54a994cdaa87876d610391257f65eec24044558dcf2f965aceef3ef67e5c91f5494dffff7f2000000000",
@@ -2501,7 +2666,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffed"
           },
           {
             "header_hex": "04006200f1e8ab4791829f375e386cdd56cb13a1a10a821382a24901257a5c5cb5ba871e00b5ac50b4baba639358379138f22b15f7e41314fb42dcf4129099e3c8e67ea594f5494dffff7f2002000000",
@@ -2509,7 +2675,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffef"
           },
           {
             "header_hex": "04006200ffdb879a265760f5578207d266c622207c998b6c6fa9bc8ac27f0c2bea2eda3bde80d8fb709c9c589d602f40ed1ff3e6bb737db7c3514bbf2ba5372cacac3d5797f5494dffff7f2001000000",
@@ -2517,7 +2684,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff1"
           },
           {
             "header_hex": "0400620027ddabeb174fb91d58568d2998e006faa307d99064b9d489ee999c8d271a0122bf64dc9ef266d4e04e404b9b964be24ab65329417dc4a906d1fe648eca929ee19af5494dffff7f2000000000",
@@ -2525,7 +2693,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff3"
           },
           {
             "header_hex": "040062002a71c055532332508ae9caf7d017d3267add76052fdab5d837e2b29c82d246addb536329270c8a74a25959992a81c0350012333b76a04e9a6908b0d08166aa5c9df5494dffff7f2001000000",
@@ -2533,7 +2702,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff5"
           },
           {
             "header_hex": "040062003284597b04dd8a48621b891d02b8eea6d8641704a2fa2f5e58c0390a2065edfeacd2f60c82e3e178aee9c24b406eab1a6e5e30b98debbcc2f7f9dc165012bc56a0f5494dffff7f2002000000",
@@ -2541,7 +2711,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7"
           },
           {
             "header_hex": "040062002cb9dd42a010098b4473cdab3e21f89874b7d95be4a31e58090f8b4102be55f9916dfe53fcfec5a5feb16d45ac267baea2f5c7771a724e1ef9547f9c825589c2a3f5494dffff7f2002000000",
@@ -2549,7 +2720,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff9"
           },
           {
             "header_hex": "040062003d65e9ef65214c39885275110c174ffe8751a1bc0db7054f606f82ad325f870b13260b6ac0d6522d7d5dba77b47ee811dbbcbc09ab99dbf5df547a3d1af0d40ea6f5494dffff7f2001000000",
@@ -2557,7 +2729,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffb"
           },
           {
             "header_hex": "04006200123abc98989268ac7bca2c380e71b84b1982cf5e94c3855565042fb399ee358b4b6d7ce212f72f3140279b40f24cd96565468948c8afffb616db5fb3d31cc1f9a9f5494dffff7f2000000000",
@@ -2565,7 +2738,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffd"
           }
         ],
         "failed_blocks": [],
@@ -2584,7 +2758,8 @@
         "added": [
           {
             "hash": "ffe0d366e7515714915c8931fdaabf1658ecd4cbdcac6574774cac8027e3102c",
-            "height": 1350
+            "height": 1350,
+            "chain_work": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
           }
         ],
         "marked_failed_child": []
@@ -2606,7 +2781,8 @@
             "anchor": true,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe9"
           },
           {
             "header_hex": "04006200f758c9c689a2269d7fd066e7b8fd60ebbc0c1c16c11918148265306826fc2bf0ffe3dd757dcce81f31db17d9776fd6fb48a0d4c3294c3e3760391188c57982a58ef5494dffff7f2000000000",
@@ -2614,7 +2790,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffeb"
           },
           {
             "header_hex": "04006200271c56b15758329e42fec1661d75747003d1726e3cd082ac28b409cb8d1872e3701b54a994cdaa87876d610391257f65eec24044558dcf2f965aceef3ef67e5c91f5494dffff7f2000000000",
@@ -2622,7 +2799,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffed"
           },
           {
             "header_hex": "04006200f1e8ab4791829f375e386cdd56cb13a1a10a821382a24901257a5c5cb5ba871e00b5ac50b4baba639358379138f22b15f7e41314fb42dcf4129099e3c8e67ea594f5494dffff7f2002000000",
@@ -2630,7 +2808,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffef"
           },
           {
             "header_hex": "04006200ffdb879a265760f5578207d266c622207c998b6c6fa9bc8ac27f0c2bea2eda3bde80d8fb709c9c589d602f40ed1ff3e6bb737db7c3514bbf2ba5372cacac3d5797f5494dffff7f2001000000",
@@ -2638,7 +2817,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff1"
           },
           {
             "header_hex": "0400620027ddabeb174fb91d58568d2998e006faa307d99064b9d489ee999c8d271a0122bf64dc9ef266d4e04e404b9b964be24ab65329417dc4a906d1fe648eca929ee19af5494dffff7f2000000000",
@@ -2646,7 +2826,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff3"
           },
           {
             "header_hex": "040062002a71c055532332508ae9caf7d017d3267add76052fdab5d837e2b29c82d246addb536329270c8a74a25959992a81c0350012333b76a04e9a6908b0d08166aa5c9df5494dffff7f2001000000",
@@ -2654,7 +2835,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff5"
           },
           {
             "header_hex": "040062003284597b04dd8a48621b891d02b8eea6d8641704a2fa2f5e58c0390a2065edfeacd2f60c82e3e178aee9c24b406eab1a6e5e30b98debbcc2f7f9dc165012bc56a0f5494dffff7f2002000000",
@@ -2662,7 +2844,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7"
           },
           {
             "header_hex": "040062002cb9dd42a010098b4473cdab3e21f89874b7d95be4a31e58090f8b4102be55f9916dfe53fcfec5a5feb16d45ac267baea2f5c7771a724e1ef9547f9c825589c2a3f5494dffff7f2002000000",
@@ -2670,7 +2853,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff9"
           },
           {
             "header_hex": "040062003d65e9ef65214c39885275110c174ffe8751a1bc0db7054f606f82ad325f870b13260b6ac0d6522d7d5dba77b47ee811dbbcbc09ab99dbf5df547a3d1af0d40ea6f5494dffff7f2001000000",
@@ -2678,7 +2862,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffb"
           },
           {
             "header_hex": "04006200123abc98989268ac7bca2c380e71b84b1982cf5e94c3855565042fb399ee358b4b6d7ce212f72f3140279b40f24cd96565468948c8afffb616db5fb3d31cc1f9a9f5494dffff7f2000000000",
@@ -2686,7 +2871,8 @@
             "anchor": false,
             "failed_valid": false,
             "failed_child": false,
-            "scripts_valid": false
+            "scripts_valid": false,
+            "chain_work": "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffd"
           }
         ],
         "failed_blocks": [],
@@ -2705,11 +2891,13 @@
         "added": [
           {
             "hash": "ffe0d366e7515714915c8931fdaabf1658ecd4cbdcac6574774cac8027e3102c",
-            "height": 1350
+            "height": 1350,
+            "chain_work": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
           },
           {
             "hash": "08b58069f038245d9c8a2baed423c06b7964eef8ac6804239b6cabda108ed44b",
-            "height": 1351
+            "height": 1351,
+            "chain_work": "0000000000000000000000000000000000000000000000000000000000000001"
           }
         ],
         "marked_failed_child": []

@@ -32,6 +32,9 @@ The checks of stage 2 run one step, `acceptBlockHeader`, through the compiled co
 The checks of stage 3 run whole sequences, `processNewBlockHeaders`, through the compiled code.
 `checkRegtestSequences` runs every case of the regtest fixture in full, and compares every expected field of the fixture.
 `checkMainnetSequences` runs sequences on the mainnet fixtures, with expectations from chain acceptance and hand derivation.
+
+The checks of stage 4 compare the chain work of added entries.
+`checkRegtestSequences` compares the fixture's `chain_work` of each added entry, and `checkMainnetSequences` compares two mainnet sequences.
 -/
 
 namespace KnownAnswers.HeaderSequence
@@ -57,10 +60,12 @@ private def sameResult (a b : Except ContextualHeaderError Unit) : Bool :=
 def displayHex (h : Hash256) : String := toHex ⟨h.displayBytes.toArray⟩
 
 /-- The entry of the record at position `i`.
-The record at position `lo` has no predecessor: the genesis entry when its height is 0, and otherwise an anchor. -/
+The record at position `lo` has no predecessor: the genesis entry when its height is 0, and otherwise an anchor.
+Each entry carries the caller-supplied chain work 0.
+So an entry that a sequence adds has the sum of the block proofs of the headers from the first new one to its own. -/
 def entryAt (records : Array Record) (lo i : Nat) : IndexEntry :=
   let r := records[i]!
-  ⟨r.header, r.height, if i = lo then none else some r.header.hashPrevBlock, false, false, false⟩
+  ⟨r.header, r.height, if i = lo then none else some r.header.hashPrevBlock, false, false, false, 0⟩
 
 /-- The index of the records at positions `lo` to `hi - 1`, inserted in height order, with an empty failed list. -/
 def indexOf (records : Array Record) (lo hi : Nat) : HeaderIndex :=
@@ -339,6 +344,12 @@ def optField {α : Type} (j : Lean.Json) (key : String) (read : Lean.Json → Ex
   | .null => return none
   | v => return some (← read v)
 
+/-- A chain work of the fixture: 64 hexadecimal digits, most significant first, as a number below 2^256. -/
+def chainWorkOf (hex : String) : Except String Nat := do
+  let bytes ← KnownAnswers.Sha256Cavp.parseHex hex
+  unless bytes.size == 32 do throw "expected a 32-byte chain work"
+  return bytes.foldl (fun n b => 256 * n + b.toNat) 0
+
 /-- The index of a fixture request.
 The key of each entry is the hash of its 80-byte header.
 Its predecessor is `hashPrevBlock`, except for an anchor and for an entry at height 0. -/
@@ -351,8 +362,9 @@ def fixtureIndex (request : Lean.Json) : Except String HeaderIndex := do
     let height ← (← e.getObjVal? "height").getNat?
     let anchor ← e.getObjValAs? Bool "anchor"
     let prev := if anchor || height == 0 then none else some header.hashPrevBlock
+    let work ← chainWorkOf (← e.getObjValAs? String "chain_work")
     index := index.insert header.getHash ⟨header, height, prev, ← e.getObjValAs? Bool "failed_valid",
-      ← e.getObjValAs? Bool "failed_child", ← e.getObjValAs? Bool "scripts_valid"⟩
+      ← e.getObjValAs? Bool "failed_child", ← e.getObjValAs? Bool "scripts_valid", ArithUint256.ofNat work⟩
   let failed ← (← request.getObjVal? "failed_blocks").getArr?
   let failedBlocks ← failed.toList.mapM fun j => do KnownAnswers.Block.parseHash (← j.getStr?)
   return { index with failedBlocks := failedBlocks }
@@ -536,7 +548,7 @@ def checkMainnetSteps : IO Nat := do
     [(145000, "cc47cae70d7c5c92828d3214a266331dde59087d4a39071fa76ddfff9b7bde72")])
   let at145000 := records[145000 - first]!
   let withCheckpoint := (indexOf records 0 (144990 - first)).insert at145000.header.getHash
-    ⟨at145000.header, 145000, none, false, false, false⟩
+    ⟨at145000.header, 145000, none, false, false, false, 0⟩
   let fork := headers[144990 - first]!
   failures := failures + (← checkStep "mainnet fork below checkpoint 145000" (mainnetCtx fork.pure true)
     withCheckpoint fork (.reject "bad-fork-prior-to-checkpoint" 100 0x43 []))
@@ -598,14 +610,14 @@ def checkSyntheticSteps : IO Nat := do
   let .ok a := read "a" | return (← require "regtest header a" false)
   let ctx : HeaderContext := ⟨.regtest, Int64.ofInt 1296688702, false⟩
   let anchorAt (height : Nat) : HeaderIndex := (⟨[], []⟩ : HeaderIndex).insert genesis.getHash
-    ⟨genesis, height, none, false, false, false⟩
+    ⟨genesis, height, none, false, false, false, 0⟩
   let mut failures := 0
   failures := failures + (← checkStep "predecessor at 2147483646" ctx (anchorAt 2147483646) ⟨a, none⟩
     (.adapter "heightOutOfRange"))
   failures := failures + (← checkStep "predecessor at 2147483645" ctx (anchorAt 2147483645) ⟨a, none⟩
     (.adapter "shortView"))
-  let chain : HeaderIndex := (anchorAt 0).insert a.getHash ⟨a, 1, some genesis.getHash, false, false, false⟩
-  let skipped : HeaderIndex := (anchorAt 0).insert a.getHash ⟨a, 2, some genesis.getHash, false, false, false⟩
+  let chain : HeaderIndex := (anchorAt 0).insert a.getHash ⟨a, 1, some genesis.getHash, false, false, false, 0⟩
+  let skipped : HeaderIndex := (anchorAt 0).insert a.getHash ⟨a, 2, some genesis.getHash, false, false, false, 0⟩
   failures := failures + (← require "well-formed chain" (checkWellFormed .regtest chain))
   failures := failures + (← require "anchor at 2147483646" (checkWellFormed .regtest (anchorAt 2147483646)))
   failures := failures + (← require "height gap" (!checkWellFormed .regtest skipped))
@@ -629,15 +641,22 @@ inductive SequenceOutcome where
 /-- The entries that the sequence added, in insertion order, as display hash and height. -/
 def addedInOrder (before after : HeaderIndex) : List (String × Nat) := (addedBy before after).reverse
 
+/-- Whether the entry under each display hash of `work` has that chain work in the index. -/
+def hasChainWork (index : HeaderIndex) (work : List (String × Nat)) : Bool :=
+  work.all fun (hash, expected) =>
+    (keysOf index).any fun key =>
+      displayHex key == hash && (index.lookup key).any (·.chainWork.val == expected)
+
 /--
 Runs `processNewBlockHeaders` and compares its result with the expectation.
 The comparison covers the outcome and its position, the reason, DoS score and reject code, the marks, and the added entries in insertion order.
 It also requires that no field of an existing entry changed except `failedChild`, and that the failed list did not change.
+Each pair of `work` gives the display hash of an entry of the result and its expected chain work.
 -/
 def checkSequence (label : String) (ctx : HeaderContext) (index : HeaderIndex) (headers : List BlockHeader)
-    (expected : SequenceOutcome) (added : List (String × Nat)) : IO Nat := do
+    (expected : SequenceOutcome) (added : List (String × Nat)) (work : List (String × Nat) := []) : IO Nat := do
   let (after, result) := processNewBlockHeaders ctx index headers
-  let common := addedInOrder index after == added && onlyMarksChanged index after
+  let common := addedInOrder index after == added && onlyMarksChanged index after && hasChainWork after work
   let ok := common && match expected, result with
     | .accept last, .ok hash => hash.map displayHex == last && markedBy index after == []
     | .reject position reason dos code marked, .error ⟨p, .rejection r⟩ =>
@@ -649,6 +668,11 @@ def checkSequence (label : String) (ctx : HeaderContext) (index : HeaderIndex) (
   unless ok do
     IO.eprintln s!"FAIL header sequence {label}: {repr result}, added {(addedInOrder index after).length} entries, marked {markedBy index after}"
   return if ok then 0 else 1
+
+/-- The expected chain work of each added entry of a regtest fixture case, by display hash (D83). -/
+def fixtureAddedWork (expected : Lean.Json) : Except String (List (String × Nat)) := do
+  (← (← expected.getObjVal? "added").getArr?).toList.mapM fun a => do
+    return (← a.getObjValAs? String "hash", ← chainWorkOf (← a.getObjValAs? String "chain_work"))
 
 /-- The expected outcome and added entries of a regtest fixture case, from its `expected` object (D83). -/
 def fixtureOutcome (expected : Lean.Json) : Except String (SequenceOutcome × List (String × Nat)) := do
@@ -673,7 +697,8 @@ def fixtureOutcome (expected : Lean.Json) : Except String (SequenceOutcome × Li
 /--
 The regtest fixture (D83): every case runs in full through `processNewBlockHeaders`.
 Each case uses the request's network, read mode, adjusted time, checkpoint option, index, failed list and all its headers.
-The expected outcome, failure position, reason, DoS score, reject code, marks, added entries in insertion order and last hash are the fixture's hand-derived values.
+The fixture derives each expected field by hand: the outcome, failure position, reason, DoS score, reject code and marks.
+It also derives the added entries in insertion order, their chain work and the last hash.
 -/
 def checkRegtestSequences : IO Nat := do
   let fixture ← KnownAnswers.Block.jsonFile "tests/block/regtest-header-sequences/sequences.json"
@@ -683,7 +708,7 @@ def checkRegtestSequences : IO Nat := do
   let mut count := 0
   for case in cases do
     let parsed : Except String (String × HeaderContext × HeaderIndex × List BlockHeader ×
-        SequenceOutcome × List (String × Nat)) := do
+        SequenceOutcome × List (String × Nat) × List (String × Nat)) := do
       let name ← case.getObjValAs? String "name"
       let request ← case.getObjVal? "request"
       let network ← networkOf (← request.getObjValAs? String "network")
@@ -700,12 +725,13 @@ def checkRegtestSequences : IO Nat := do
         | .ok h => pure h
         | .error e => throw s!"{name}: cannot decode a header: {repr e}"
       let (outcome, added) ← fixtureOutcome (← case.getObjVal? "expected")
-      return (name, ctx, index, headers, outcome, added)
+      let work ← fixtureAddedWork (← case.getObjVal? "expected")
+      return (name, ctx, index, headers, outcome, added, work)
     match parsed with
     | .error e => failures := failures + (← require s!"regtest fixture: {e}" false)
-    | .ok (name, ctx, index, headers, outcome, added) =>
+    | .ok (name, ctx, index, headers, outcome, added, work) =>
       count := count + 1
-      failures := failures + (← checkSequence s!"{name} ({headers.length} headers)" ctx index headers outcome added)
+      failures := failures + (← checkSequence s!"{name} ({headers.length} headers)" ctx index headers outcome added work)
   failures := failures + (← require "regtest fixture has 34 cases" (count == 34))
   IO.println s!"header sequence, regtest fixture: {count} cases; {failures} failures"
   return failures
@@ -758,6 +784,16 @@ Each sequence ends below the last record of its fixture, so each expected hash i
   With base version 2 at 1034383, step 2 fails at position 20 with `high-hash`, because the payload commits to the real header's hash.
 - `BIP65Height` 3464751: the headers 3464750 to 3464759 from the anchor 3464739 accept.
   With base version 3 at 3464751, step 2 fails at position 1 with `high-hash`.
+
+Two sequences also compare chain work (design record 0008, stage 4).
+The expected values come from the `nBits` fields of the fixture headers, with `GetBlockProof` derived by hand or with Python integers, never from `blockProof`.
+
+- Genesis: every header at heights 0 to 11 has `nBits` `0x1e0ffff0`, whose block proof is `0x100010` (`KnownAnswers.Work.checkBlockProof`).
+  The genesis entry gets the proof alone, so the entry at height `h` has chain work `0x100010 * (h + 1)`.
+- Retarget and DigiShield: the supplied entries carry chain work 0 (`entryAt`).
+  The expected chain work at height `h` is the sum of `2**256 // (t + 1)` over the headers 144730 to `h`.
+  Here `t` is the target of each header's `nBits`.
+  A Python script with its own `SetCompact` computed the sums at 144730, 144959, 144960, 145000 and 145029 from `tests/work/mainnet-headers/headers.txt`.
 -/
 def checkMainnetSequences : IO Nat := do
   let mut failures := 0
@@ -769,7 +805,9 @@ def checkMainnetSequences : IO Nat := do
   let fromGenesis := headersBetween genesisHeaders 0 0 11
   failures := failures + (← checkSequence "mainnet 0-11 from an empty index" (sequenceCtx fromGenesis true)
     ⟨[], []⟩ fromGenesis (.accept (some (expectedHashAt genesisRecords 0 11 [])))
-    (addedBetween genesisRecords 0 0 11 [(0, KnownAnswers.MedianTimePast.genesisHash)]))
+    (addedBetween genesisRecords 0 0 11 [(0, KnownAnswers.MedianTimePast.genesisHash)])
+    ((List.range 12).map fun h =>
+      (expectedHashAt genesisRecords 0 h [(0, KnownAnswers.MedianTimePast.genesisHash)], 0x100010 * (h + 1))))
   failures := failures + (← checkSequence "mainnet empty list" (sequenceCtx [] true) (indexOf genesisRecords 0 1) []
     (.accept none) [])
   -- Retarget, DigiShield and checkpoint 145000.
@@ -781,7 +819,10 @@ def checkMainnetSequences : IO Nat := do
   let anchored := indexOf records 0 11
   let across := headersBetween headers first 144730 145029
   failures := failures + (← checkSequence "mainnet 144730-145029" (sequenceCtx across true) anchored across
-    (.accept (some (expectedHashAt records first 145029 []))) (addedBetween records first 144730 145029))
+    (.accept (some (expectedHashAt records first 145029 []))) (addedBetween records first 144730 145029)
+    ([(144730, 4791586119275), (144959, 1102064807433250), (144960, 1105888305196411),
+      (145000, 1258828215722851), (145029, 1371095710706703)].map fun (h, w) =>
+        (expectedHashAt records first h [], w)))
   let branch := headersBetween headers first 144730 145000 ++ [genesisHeaders[11]!]
   let twoBranches := mergeIndex anchored (indexOf genesisRecords 0 11)
   failures := failures + (← checkSequence "mainnet branch below checkpoint 145000" (sequenceCtx branch true)

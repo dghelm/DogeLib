@@ -36,6 +36,13 @@ The stage-3 theorems describe the sequence, `processNewBlockHeaders`:
 - The target `process_adjustedTime_mono`: a later adjusted time keeps an acceptance and its result.
 - The target `process_complete`: without anchors, within the height budget and with an adjusted time in the domain, the sequence returns no adapter error.
 
+The stage-4 theorem describes chain work:
+
+- The target `chainWork_add`: an entry that a step adds has the chain work of its predecessor plus `blockProof` of its `nBits`, modulo 2^256.
+  Without a predecessor, it has `blockProof` alone, which `accept_genesis_insert` also states for the genesis entry.
+  `accept_ok_addToBlockIndex` gives the index after the acceptance of a hash that the index lacks.
+  `blockProof_eq` in `DogeLib.Work.Proofs.ChainWork` gives the value of `blockProof`.
+
 Section 13.1 of the record replaces the target `accept_genesis` with `accept_genesis_known`, `accept_genesis_insert` and `accept_genesis_parent`.
 `addToBlockIndex` follows Core and searches the index for `hashPrevBlock`.
 So a genesis entry gets no predecessor and height 0 only when the index lacks the genesis header's `hashPrevBlock`.
@@ -429,7 +436,9 @@ theorem accept_genesis_known (_wf : WellFormed ctx.network index) (entry : Index
 /--
 Let the hash of the header be the network's genesis hash, and let the index have neither that hash nor the header's `hashPrevBlock`.
 Then the step accepts the hash and inserts an entry with no predecessor, height 0 and no flags.
+The entry's chain work is `blockProof` of the header's `nBits`, as Core adds the proof to 0 without a predecessor (D33, line 2780).
 Design record 0008, section 13.1, names this theorem as one of the three that replace the target `accept_genesis`.
+Section 13.1 also adds the chain work in stage 4.
 The real genesis header has the null `hashPrevBlock` (item 2).
 
 The theorem also covers a genesis header whose `hashPrevBlock` is its own hash, for example with an empty index.
@@ -440,13 +449,15 @@ theorem accept_genesis_insert (_wf : WellFormed ctx.network index)
     (unknown : index.lookup header.pure.getHash = none)
     (noParent : index.lookup header.pure.hashPrevBlock = none) :
     acceptBlockHeader ctx index header =
-      (index.insert header.pure.getHash ⟨header.pure, 0, none, false, false, false⟩, .ok header.pure.getHash) := by
+      (index.insert header.pure.getHash ⟨header.pure, 0, none, false, false, false, blockProof header.pure.nBits⟩,
+        .ok header.pure.getHash) := by
   simp [acceptBlockHeader, addToBlockIndex, genesis, unknown, noParent]
 
 /--
 Let the hash of the header be the network's genesis hash, and let the index lack that hash.
 Let the index have an entry `parent` under the header's `hashPrevBlock`.
 Then `addToBlockIndex` links the new entry to `parent`, as Core's `AddToBlockIndex` does (D33, lines 2772 to 2778).
+The new entry's chain work is the chain work of `parent` plus `blockProof` of the header's `nBits`, modulo 2^256 (line 2780).
 If `parent` is at `maxPrevHeight` or above, the step returns `heightOutOfRange` and the input index (decision 17).
 The hypotheses exclude a header whose `hashPrevBlock` is its own hash: `accept_genesis_insert` covers that header.
 -/
@@ -457,7 +468,8 @@ theorem accept_genesis_parent (_wf : WellFormed ctx.network index)
     acceptBlockHeader ctx index header =
       if maxPrevHeight ≤ parent.height then (index, .error (.adapter .heightOutOfRange))
       else (index.insert header.pure.getHash
-          ⟨header.pure, parent.height + 1, some header.pure.hashPrevBlock, false, false, false⟩,
+          ⟨header.pure, parent.height + 1, some header.pure.hashPrevBlock, false, false, false,
+            parent.chainWork + blockProof header.pure.nBits⟩,
         .ok header.pure.getHash) := by
   simp [acceptBlockHeader, addToBlockIndex, genesis, unknown, found]
 
@@ -537,12 +549,14 @@ theorem accept_unknown_ok (notGenesis : genesisHash? ctx.network ≠ some header
   all_goals (try simp_all)
   all_goals (intro h₁ h₂; subst h₁; simp_all)
 
-/-- For an unknown hash with an entry `prev` under `hashPrevBlock`, `addToBlockIndex` inserts an entry linked to `prev`, at `prev`'s height plus one, without flags. -/
+/-- For an unknown hash with an entry `prev` under `hashPrevBlock`, `addToBlockIndex` inserts an entry linked to `prev`, at `prev`'s height plus one, without flags.
+Its chain work is the chain work of `prev` plus `blockProof` of the header's `nBits`, modulo 2^256. -/
 theorem addToBlockIndex_of_unknown (header : PureBlockHeader) (prev : IndexEntry)
     (unknown : index.lookup header.getHash = none)
     (found : index.lookup header.hashPrevBlock = some prev) :
     addToBlockIndex index header =
-      index.insert header.getHash ⟨header, prev.height + 1, some header.hashPrevBlock, false, false, false⟩ := by
+      index.insert header.getHash ⟨header, prev.height + 1, some header.hashPrevBlock, false, false, false,
+        prev.chainWork + blockProof header.nBits⟩ := by
   simp [addToBlockIndex, unknown, found]
 
 /--
@@ -550,6 +564,7 @@ The target `accept_ok_insert` of design record 0008, section 11.
 Let the index be well formed, and let the step accept an unknown hash other than genesis.
 Then the result index is the input index with one inserted entry under the hash.
 The entry has the predecessor hash `hashPrevBlock`, the predecessor's height plus one and no flags.
+Its chain work is the predecessor's chain work plus `blockProof` of the header's `nBits`, modulo 2^256, as `chainWork_add` states.
 The failed list does not change.
 -/
 theorem accept_ok_insert (_wf : WellFormed ctx.network index)
@@ -558,7 +573,8 @@ theorem accept_ok_insert (_wf : WellFormed ctx.network index)
     (result : Hash256) (ok : (acceptBlockHeader ctx index header).2 = .ok result) :
     ∃ prev, index.lookup header.pure.hashPrevBlock = some prev ∧
       (acceptBlockHeader ctx index header).1 = index.insert header.pure.getHash
-        ⟨header.pure, prev.height + 1, some header.pure.hashPrevBlock, false, false, false⟩ ∧
+        ⟨header.pure, prev.height + 1, some header.pure.hashPrevBlock, false, false, false,
+          prev.chainWork + blockProof header.pure.nBits⟩ ∧
       (acceptBlockHeader ctx index header).1.failedBlocks = index.failedBlocks := by
   obtain ⟨-, step⟩ := accept_unknown_ok ctx index header notGenesis result ok
   obtain ⟨prev, found, -, eq⟩ := step unknown
@@ -580,6 +596,43 @@ theorem accept_link (wf : WellFormed ctx.network index)
       entry.prev = some header.pure.hashPrevBlock ∧ entry.height = prev.height + 1 := by
   obtain ⟨prev, found, eq, -⟩ := accept_ok_insert ctx index header wf notGenesis unknown result ok
   exact ⟨_, prev, by rw [eq, HeaderIndex.lookup_insert_self], found, rfl, rfl⟩
+
+/-- Let the step accept a hash that the index lacks, the genesis hash or any other.
+Then the result index is `addToBlockIndex` of the input index, for every context and index. -/
+theorem accept_ok_addToBlockIndex (unknown : index.lookup header.pure.getHash = none)
+    (result : Hash256) (ok : (acceptBlockHeader ctx index header).2 = .ok result) :
+    (acceptBlockHeader ctx index header).1 = addToBlockIndex index header.pure := by
+  simp only [acceptBlockHeader] at ok ⊢
+  revert ok
+  repeat' split
+  all_goals simp_all
+
+/--
+The target `chainWork_add` of design record 0008, section 11.
+Let the index be well formed, and let the step accept a hash that the index lacks, the genesis hash or any other.
+Then the result index has an entry under the hash.
+
+- If the input index has an entry `prev` under the header's `hashPrevBlock`, the new entry links to it.
+  Its chain work is the chain work of `prev` plus `blockProof` of the header's `nBits`, modulo 2^256 (D33, line 2780).
+- Otherwise the new entry has no predecessor, and its chain work is `blockProof` of `nBits`.
+  For a hash other than genesis, `accept_eq_ok_iff` excludes this case.
+-/
+theorem chainWork_add (_wf : WellFormed ctx.network index)
+    (unknown : index.lookup header.pure.getHash = none)
+    (result : Hash256) (ok : (acceptBlockHeader ctx index header).2 = .ok result) :
+    ∃ entry, (acceptBlockHeader ctx index header).1.lookup header.pure.getHash = some entry ∧
+      match index.lookup header.pure.hashPrevBlock with
+      | some prev => entry.prev = some header.pure.hashPrevBlock ∧
+          entry.chainWork.val = (prev.chainWork.val + (blockProof header.pure.nBits).val) % 2 ^ 256
+      | none => entry.prev = none ∧ entry.chainWork = blockProof header.pure.nBits := by
+  rw [accept_ok_addToBlockIndex ctx index header unknown result ok]
+  cases found : index.lookup header.pure.hashPrevBlock with
+  | some prev =>
+    simp only [addToBlockIndex, unknown, found, HeaderIndex.lookup_insert_self, Option.some.injEq,
+      exists_eq_left']
+    exact ⟨trivial, Fin.val_add _ _⟩
+  | none =>
+    simp [addToBlockIndex, unknown, found, HeaderIndex.lookup_insert_self]
 
 /-! ## One step: rejections -/
 
@@ -1355,9 +1408,11 @@ private theorem ancestorHashAt_succ (index : HeaderIndex) (fuel : Nat) (hash : H
           | none => none
         | none => none := rfl
 
-/-- The entry that an acceptance adds above the entry `tip`: the header, the height of `tip` plus one, the predecessor `hashPrevBlock` and no flags. -/
+/-- The entry that an acceptance adds above the entry `tip`: the header, the height of `tip` plus one, the predecessor `hashPrevBlock` and no flags.
+Its chain work is the chain work of `tip` plus `blockProof` of the header's `nBits`. -/
 def linkedEntry (tip : IndexEntry) (header : BlockHeader) : IndexEntry :=
-  ⟨header.pure, tip.height + 1, some header.pure.hashPrevBlock, false, false, false⟩
+  ⟨header.pure, tip.height + 1, some header.pure.hashPrevBlock, false, false, false,
+    tip.chainWork + blockProof header.pure.nBits⟩
 
 /--
 Let `tip` be an entry of a well-formed index under `tipHash`, and let a header with an unknown hash link to it.

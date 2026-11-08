@@ -49,8 +49,26 @@ The initial validity level is tree-valid unless `scripts_valid` is true.
 `anchor` cuts the predecessor walk without changing the raw header bytes.
 All other initial flags are explicit.
 
-The expected `added` list fixes insertion order, hash and height.
-Chain work is reserved for the implementation of stage 4 and has no expectation here.
+The expected `added` list fixes insertion order, hash, height and chain work.
+
+## Chain work
+
+Each request index entry supplies `chain_work`, and each expected `added` entry gives it.
+The value is a 256-bit number as 64 hexadecimal digits, most significant digit first.
+The model does not check the chain work of a supplied entry, so a supplied value is context, as an anchor is.
+
+Every added entry has bits `0x207fffff` or `0x207ffffe`.
+`SetCompact` gives the target `t = m * 2^232` with `m = 0x7fffff` or `0x7ffffe`, without sign or overflow.
+Then `2(t + 1) < 2^256 < 3(t + 1)`, so `GetBlockProof` gives `floor(2^256 / (t + 1)) = 2` (`src/chain.cpp:150-163`).
+The generator asserts this value with Python integers, as `PROOF`.
+
+`AddToBlockIndex` adds the proof to the predecessor's `nChainWork`, modulo 2^256, and gives genesis the proof alone (`src/validation.cpp:2780`).
+So an entry at height `h` on a chain from genesis has chain work `2(h + 1)`.
+Each supplied entry of such a chain carries that value.
+
+The version cases supply their own anchor work: 2^128 below height 1251, and 2^256 − 23 below height 1351.
+An entry `k` heights above the anchor has the anchor work plus `2k`.
+In `version-upgraded-1351`, the entry at height 1350 has chain work 2^256 − 1, and the entry at height 1351 wraps to 1.
 `last_hash` is null after rejection because the sequence result carries an error, rather than Core's retained pointer to a successful prefix.
 Failure positions are zero-based.
 

@@ -638,7 +638,7 @@ def main() -> int:
             else:
                 w = wrapper(tmp, mode, role, oracle)
                 oracle_side, harness_side = (w, wrapper(tmp, "none", "core", oracle)) if role == "oracle" else (oracle, w)
-            extra = ([] if mode in ("composition_stack", "targeted_early_error", "contextual_reason_value", "sequence_projected") else ["--quick"]) + ["--timeout", "5" if mode == "hang" else "120"]
+            extra = ([] if mode in ("composition_stack", "targeted_early_error", "contextual_reason_value") else ["--quick"]) + ["--timeout", "5" if mode == "hang" else "120"]
             result = compare(oracle_side, harness_side, extra, env)
             codes = {line.split()[1] for line in result.stdout.splitlines() if line.startswith("FAIL ")}
             if result.returncode != 1 or code not in codes:

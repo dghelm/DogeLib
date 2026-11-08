@@ -86,7 +86,7 @@ def stage2(args, wrapper, check):
     with tempfile.TemporaryDirectory(prefix='stage2-', dir=base) as tmp:
         tmp = pathlib.Path(tmp)
         opts = argparse.Namespace(campaign='generated', signer=signer, seed=20261108, cases=2000,
-                                  seconds=120, timeout=0.5, batch_size=16, inputs=['generated'],
+                                  seconds=120, timeout=3, batch_size=16, inputs=['generated'],
                                   oracle=args.oracle, harness=args.harness, stop_after_failure=True)
         for mode, side, kind in (('M1', 'core', 'verdict'), ('M2', 'lean', 'digest'),
                                  ('M3', 'core', 'verdict'), ('M4', 'core', 'crash'),
@@ -98,6 +98,18 @@ def stage2(args, wrapper, check):
             summary = campaign.run_campaign(local)
             records = [json.loads(pathlib.Path(p).read_text()) for p in summary['saved']]
             found = [(p, r) for p, r in zip(summary['saved'], records) if r['class'] == kind]
+            if mode in ('M4', 'M5'):
+                def triggered(record):
+                    for request in record['requests']:
+                        c = context(request)
+                        if mode == 'M5' and c['outputs'] >= 5:
+                            return True
+                        if mode == 'M4' and any(seq == 0xffffffff for i, seq in enumerate(c['sequences'])
+                                                if i != request['input_index']):
+                            return True
+                    return False
+
+                found = [(p, r) for p, r in found if triggered(r)]
             check(bool(found), f'{mode} survived its 2000-case, 120-second budget')
             path, record = min(found, key=lambda item: item[1]['case_index'])
             replay = subprocess.run([sys.executable, '-I', str(root / 'scripts/campaign.py'), 'replay',

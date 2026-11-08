@@ -114,7 +114,8 @@ def plans(seed, count):
         for lock in LOCK_TIMES:
             for seq in SEQUENCES:
                 for mode in ('preserve', 'commitment'):
-                    boundaries.append(('lock', (branch, lock, seq, mode)))
+                    for cltv in (False, True):
+                        boundaries.append(('lock', (branch, lock, seq, mode, cltv)))
     for selector in (*TRUE, *FALSE):
         boundaries.append(('selector', selector))
     for flag in (2, 4, 8, 16, 512, 1024):
@@ -146,11 +147,11 @@ def plans(seed, count):
                 p['mode'] = 'commitment'
                 p['mutations'] = [dict(field='version', value=2)]
         elif kind == 'lock':
-            branch, lock, seq, mode = value
+            branch, lock, seq, mode, cltv = value
             p.update(branch=branch, selector='01' if branch == 'ordinary' else '',
                      key_ids=[1, 2] if branch == 'ordinary' else [4], mode=mode,
                      hash_types=[1, 1] if branch == 'ordinary' else [1])
-            p['flags'] |= 512
+            p['flags'] = p['flags'] | 512 if cltv else p['flags'] & ~512
             p['tx']['lock_time'] = lock
             p['tx']['inputs'][p['n']]['sequence'] = seq
             if mode == 'commitment':
@@ -303,7 +304,7 @@ def expectation(plan, spend):
                       verdict='rejected' if committed else 'accepted')
     if fixed:
         result.update(property='Q7', relation='fixed', verdict='accepted', known='single-fixed-digest')
-    elif recovery and not spend['flags'] & 512 and early:
+    elif recovery and not spend['flags'] & 512 and early and result['verdict'] == 'accepted':
         result['known'] = 'recovery-without-cltv'
     mutation = plan['signature_mutation']
     if mutation != 'none':

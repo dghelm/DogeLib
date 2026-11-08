@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import pathlib
 import platform
 import random
@@ -51,8 +52,6 @@ def execute(program, requests, timeout):
         return dict(responses=responses, timeout=timeout, **capture)
     except RunError as error:
         return dict(error=dict(code=error.code, message=str(error)), timeout=timeout, **error.capture)
-    except OSError as error:
-        return dict(error=dict(code='EXIT', message=str(error)), timeout=timeout, stdout='', stderr=str(error), returncode=None)
 
 
 def classify(request, ours, core):
@@ -261,6 +260,9 @@ def main():
     args.oracle = str(pathlib.Path(args.oracle).resolve())
     args.harness = str(pathlib.Path(args.harness).resolve())
     try:
+        for program in (args.oracle, args.harness):
+            if not pathlib.Path(program).is_file() or not os.access(program, os.X_OK):
+                raise OSError(f'program is absent or not executable: {program}')
         if args.command == 'replay':
             return replay(args)
         output = pathlib.Path(args.output).resolve()

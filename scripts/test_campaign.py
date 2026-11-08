@@ -122,6 +122,20 @@ def main():
                                      str(record_path), local.oracle, local.harness], capture_output=True, text=True)
             assert replay.returncode == 0, replay.stderr + replay.stdout
             assert json.loads(replay.stdout)['reproduced'] is True
+            if mode == 'crash':
+                blocked = tmp / 'non-executable'
+                blocked.write_text('not executable\n')
+                for bad in (tmp / 'missing', blocked):
+                    for side in (0, 1):
+                        programs = [local.oracle, local.harness]
+                        programs[side] = str(bad)
+                        for command in (['replay', str(record_path)],
+                                        ['run', '--seed', '1', '--output', str(tmp / 'invalid')]):
+                            invalid = subprocess.run([sys.executable, '-I', str(ROOT / 'scripts/campaign.py'),
+                                                      *command, *programs], capture_output=True, text=True)
+                            if invalid.returncode != 2 or invalid.stdout:
+                                raise RuntimeError(f'invocation error became evidence: {invalid}')
+                print('ok invocation: run and replay reject missing and non-executable programs on both sides')
             if mode not in ('unsupported', 'refusal'):
                 clean = subprocess.run([sys.executable, '-I', str(ROOT / 'scripts/campaign.py'), 'replay',
                                         str(record_path), args.oracle, args.harness], capture_output=True, text=True)

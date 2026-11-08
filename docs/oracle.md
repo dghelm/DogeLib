@@ -1162,7 +1162,7 @@ The self-test checks six outcome classes, crash attribution within a batch, malf
 It also requires semantic mutants M1 to M6 to be detected and replayed within fixed budgets.
 It writes their seed, first detected case, class and timing to `build/campaign/mutant-detection.json`.
 Signer checks cover repeated-request determinism, refusal replay and malformed-response replay.
-Production-path replay remains a later stage of design record 0009.
+[Production replay](#production-replay) replays a saved candidate through Core's production path.
 The campaign commands do not run in CI at this stage.
 
 ### The planted proposal search
@@ -1265,3 +1265,196 @@ The self-test reduces its first three detections, and each reduced plan must kee
 The unmodified harness must also give the expected verdict on the reduced spend, so the template runs.
 A stand-in replay that answers every request with an error must fail all 200 cases of a corrected search.
 It writes the labels, candidate counts and plan sizes to `build/campaign/mutant-reduction.json`.
+
+### Production replay
+
+Design record 0009, [section 9.1](design/0009-bug-finding-campaign.md#91-levels), counts a candidate as a finding only after a replay through Core's production path.
+`campaign.py replay --level` replays one saved failure of one generated signed-spend case at level L1 or L3.
+Each replay appends its evidence to the saved failure, in the `production` field.
+The field is an addition to `dogelib-campaign-failure/1`, so the format name stays the same.
+
+Build the programs at one Core commit, each in its own directory:
+
+```bash
+scripts/build_core_harness.sh <dogecoin-git-clone> build/core-harness
+taskset -c 16-23 nice -n 19 scripts/build_core_node.sh --revision e0a1c157791544e818c901bd9341896965afbf9d <dogecoin-git-clone> build/core-node
+```
+
+Replay a saved failure at each level:
+
+```bash
+python3 -I scripts/campaign.py replay --level L1 <failure> .lake/build/bin/dogelib-oracle build/core-harness/core-oracle
+python3 -I scripts/campaign.py replay --level L3 --signer build/core-harness/core-signer --node build/core-node <failure> .lake/build/bin/dogelib-oracle build/core-harness/core-oracle
+```
+
+`--target pin` is the default, and it needs builds at the pin `e0a1c15`.
+`--target upstream` labels builds of another commit, as [section 9.2](design/0009-bug-finding-campaign.md#92-the-current-upstream-revision) requires.
+`--revision COMMIT` also requires each build to name that full commit.
+Every result records the commit, the build stamps and the SHA-256 of each program.
+
+The replay refuses a program without a build stamp, such as a wrapper of the self-test.
+It refuses a stamp of another commit, an L3 call without `--signer` and `--node`, and a saved failure outside `build/campaign/`.
+
+| Exit status | Outcome |
+| --- | --- |
+| 0 | `reproduced` |
+| 1 | `not-reproduced` |
+| 2 | A refusal, SIGTERM or an unexpected error. The saved failure does not change. |
+| 3 | `not-comparable` at L3, or `error` at L1. The replay decides nothing. |
+
+SIGTERM stops the node and deletes its data directory before the replay exits.
+The node also gets SIGKILL from Linux when the replay process dies by SIGKILL (`PR_SET_PDEATHSIG`).
+After a SIGKILL, the data directory stays under `build/campaign/`.
+The console shows the level, the commit, the outcome and the labels at the pin and at upstream, without requests.
+
+#### Builds at another commit
+
+`scripts/build_core_harness.sh --revision COMMIT <clone> <build-dir>` builds the harness and `core-signer` at that commit.
+The directory must not be `build/core-harness`.
+The first line of `core.stamp` is then `revision <commit>`, and `core.revision` holds the commit.
+Both programs add `core_revision` to their `--version` output.
+Without `--revision`, the build and its output do not change, and the pin in SOURCES.md and in CI stays `e0a1c15`.
+
+For the upstream check, read the current commit of the pin's branch, and build from it:
+
+```bash
+git ls-remote https://github.com/dogecoin/dogecoin refs/heads/1.14-maint
+scripts/build_core_harness.sh --revision <commit> <dogecoin-git-clone> build/core-harness-upstream
+python3 -I scripts/campaign.py replay --level L1 --target upstream <failure> .lake/build/bin/dogelib-oracle build/core-harness-upstream/core-oracle
+```
+
+The clone must contain that commit.
+On 2026-11-08 the branch was at the pin itself, `e0a1c157791544e818c901bd9341896965afbf9d`.
+
+`scripts/build_core_node.sh --revision COMMIT <clone> <build-dir>` builds a `dogecoind` without a wallet, GUI, tests or ZMQ.
+It exports the commit with `git archive` and writes `node.stamp` and `node.revision`.
+It reuses the node when the stamp matches.
+
+Pinned Core needs the Boost libraries system, filesystem, program_options, thread and chrono.
+Recent distributions omit `boost_system`, so the script builds Boost 1.70.0 into the build directory.
+It checks the SHA-256 of the archive first.
+Boost 1.70.0 does not compile with glibc 2.34 or later, so the script applies the one-line change that Boost 1.78.0 made to `boost/thread/pthread/thread_data.hpp`.
+`BOOST_ROOT` selects an installed Boost instead, and `BOOST_ARCHIVE` selects a local copy of the archive.
+On this project's development machine, the node and its Boost built in 62 seconds with 8 jobs.
+
+#### L1
+
+L1 sends the stored requests, unchanged, to the oracle and to the harness build.
+For the signed-spend family, `script.verify_legacy` calls `VerifyScript`, and `sighash.legacy` calls `SignatureHash` ([what the harness runs](#what-the-harness-runs)).
+The outcome is `reproduced` when the stored class and failing side recur.
+It is `error` when either program fails, crashes or times out, and `not-reproduced` otherwise.
+L1 does not include the caller of [section 4, item 8](design/0009-bug-finding-campaign.md#4-behaviour-to-preserve): a node uses `CachingTransactionSignatureChecker` through `CScriptCheck`.
+
+#### L3
+
+L3 starts `dogecoind -regtest` in a new temporary data directory under `build/campaign/`.
+The node binds RPC to 127.0.0.1 on the first free port from 24440 to 24479.
+It does not listen for peers and does not connect to them.
+These ports are outside the range of Core's functional test framework, 11000 to 20999, and differ from the default ports.
+The replay stops the node on every exit path and deletes the data directory.
+
+The outpoints of a saved case are random bytes, so L3 builds the same case on real outputs:
+
+1. It mines 19 legacy blocks and 1,333 AuxPoW blocks, to height 1,352, with `generatetoaddress` (D96). Regtest starts AuxPoW at height 20, DERSIG at 1,251 and CHECKLOCKTIMEVERIFY at 1,351 (D14).
+2. One funding transaction makes an output for each input. Input `n` gets the P2SH output of the redeem script, and each other input gets a bare `OP_TRUE` output. A block confirms the transaction.
+3. The plan's inputs get these outpoints. In preserve mode, L3 first applies the mutations, because the signer signs the mutated transaction. In commitment mode, the mutations stay. A mutation of an outpoint or of the input count is refused, because no output can match it.
+4. If the spend has no output, L3 adds one zero-value `OP_TRUE` output, because `CheckTransaction` rejects a transaction without outputs (D90). The evidence records this change.
+5. `core-signer --sign` signs the same plan again: the same mode, keys, hash types, selector and signature mutation. The oracle and the harness check each signing digest, as in a run.
+6. The rebuilt case must keep the saved property, verdict, error name and digest relation. Otherwise the outcome is `not-comparable`.
+7. The harness that found the candidate must show the saved class and failing side on the rebuilt bytes. It is the harness of the record's replay command, or `--candidate-harness`. Otherwise the rebuilt case lost the candidate's trigger, and a node that agrees with the property gives `not-comparable`.
+
+The node checks the spend twice:
+
+| Path | Script flags | Source |
+| --- | --- | --- |
+| `sendrawtransaction` and `AcceptToMemoryPool` | The flags of the spend request, through `-promiscuousmempoolflags`. A hash-type mutation or a `hash_byte` signature clears STRICTENC from the plan's flags (`spend_flags` in `scripts/campaign_generator.py`). Regtest does not require standard transactions, so the node accepts the option. | D95, D97, D14 |
+| `submitblock` with an AuxPoW block that holds the spend | The consensus flags of the block's height: P2SH, DERSIG and CHECKLOCKTIMEVERIFY, flags 517. CHECKSEQUENCEVERIFY is not active at that height, and `IsWitnessEnabled` returns false. | D96, D36 |
+
+Both paths call `VerifyScript` through `CScriptCheck` with `CachingTransactionSignatureChecker`, the production caller.
+The replay starts the node with `-par=1`, so a block's script check runs in the calling thread and its error reaches `submitblock`.
+The replay maps each rejection reason to an error name through `ScriptErrorString` (D99).
+Another rejection, such as `non-final` or `bad-txns-vout-empty`, makes the path `not-comparable`.
+
+The mempool result decides the L3 outcome, because the mempool uses the flags of the spend request.
+If the rebuilt request has other flags, the outcome is `not-comparable`.
+After the plan's flags, the mempool checks P2SH alone again, and it reports only the first failing input (D97).
+So L3 refuses a plan without P2SH or with CLEANSTACK, which the bare `OP_TRUE` inputs would fail.
+The outcome is `reproduced` when the node's verdict or error name differs from the saved expectation, and `not-reproduced` when it agrees.
+
+Core prefixes a Script rejection with `non-mandatory-script-verify-flag` when the spend passes without the flags of `STANDARD_NOT_MANDATORY_VERIFY_FLAGS` (D98).
+At the pin, `MANDATORY_SCRIPT_VERIFY_FLAGS` is P2SH alone.
+So that prefix does not separate policy from consensus: a block also reports a CHECKLOCKTIMEVERIFY failure with it.
+The block result separates them.
+The evidence sets `policy_only` when the mempool rejects the spend and the block accepts it.
+For example, a high-S signature fails LOW_S in the mempool, and flags 517 accept it in a block.
+
+After funding, the tip is at height 1,353, and `CheckFinalTx` tests the spend for the next block, height 1,354.
+L3 can compare only a spend that is final in that block.
+A spend is final when every sequence is `0xffffffff`.
+It is also final when its lock time is a height below 1,354, or a time before the median time past.
+The node rejects any other spend with `non-final`, so its outcome is `not-comparable`.
+
+A valid recovery spend (Q2) is never final there, because the template's CLTV operand is the height 1,000,000.
+The generator's acceptance cases also set lock time 1,000,000 with a nonfinal sequence on input `n`.
+So most generated Q1, Q4 and Q5 cases, and every Q2 case, are `not-comparable` at L3.
+Q3 cases at a lock time below 1,354 or a time lock time, and spends at lock time 0, are comparable.
+
+#### Classification
+
+After each replay, `production.classification` labels the candidate from the latest outcome of each level.
+`label` uses the replays at the pin, and `upstream` uses the replays at upstream, or is null.
+A Core-side candidate has the failing side `core`, `both` or `undetermined`.
+
+| Candidate | Outcomes | Label |
+| --- | --- | --- |
+| Core-side `verdict` | L3 `reproduced` | `reproduced` |
+| Core-side `verdict` | L3 `not-reproduced`, L1 `reproduced` or `not-reproduced` | `harness-fault` |
+| Core-side `verdict` | L1 `reproduced`, no comparable L3 result | `reproduced-at-l1`: the candidate still needs L3 |
+| Core-side `digest` | L1 `reproduced` | `reproduced` |
+| Core-side `digest` | L1 `not-reproduced` with a harness whose SHA-256 differs from the harness that found the candidate | `harness-fault` |
+| Any other | A `reproduced` outcome at either level | `reproduced` |
+| Any | Every other combination, including an L1 `error` | `undetermined` |
+
+For a `verdict`, L3 overrides L1, because only a node runs the production caller of [section 9.1](design/0009-bug-finding-campaign.md#91-levels).
+Suppose that L1 reproduces the candidate and L3 does not.
+Then the fault is in the harness's own code around `VerifyScript`, such as its transaction or flag handling.
+For a `digest`, L1 decides: `sighash.legacy` calls `SignatureHash` itself, and L3 checks only verdicts.
+
+`production.replays` keeps every replay in order, with its level, target, commit, build identities, requests, full responses and node rejection reasons.
+L3 evidence also keeps the funding transaction, the new outpoints and the signer's requests and responses.
+It keeps the end of the node's `debug.log` and the time of the replay.
+Keep this evidence private under `build/campaign/`, as [SECURITY.md](../SECURITY.md) requires.
+
+#### The stage 4 self-test
+
+```bash
+python3 -I scripts/test_campaign_production.py .lake/build/bin/dogelib-oracle build/core-harness/core-oracle --node build/core-node --upstream-harness build/core-harness-upstream/core-oracle
+```
+
+The self-test plants the harness fault M3 of [section 8.2](design/0009-bug-finding-campaign.md#82-planted-harness-and-model-faults), which treats lock time 500,000,000 as a height on the recovery branch.
+It runs the generated campaign until it finds the fault, then reduces the first detection.
+The unchanged harness must not reproduce the reduced candidate at L1, and the replay must refuse the planted wrapper.
+It checks the table of labels on stated outcomes.
+A stamped build that exits with status 3 must give the L1 outcome `error`.
+A stamped build that contains the planted fault stands for a faulty adapter: it must reproduce at L1 and get `reproduced-at-l1`.
+
+`--node` adds L3.
+The node must reject the reduced spend with `UNSATISFIED_LOCKTIME` in its mempool and in a block, and the planted wrapper must accept the same bytes.
+The candidate must then have the label `harness-fault`.
+The stamped faulty build must also become `harness-fault` after L3.
+With `--candidate-harness` set to the unchanged harness, the trigger is lost, and the outcome must be `not-comparable`.
+`--node` also checks five other spends:
+
+- An ordinary 2-of-3 spend, which the mempool and a block accept.
+- An early recovery spend at lock time 1,000, which both reject with `UNSATISFIED_LOCKTIME`.
+- A commitment-mode spend whose version changes after signing, which both reject with `mandatory-script-verify-flag-failed`.
+- A spend whose first signature has bit `0x20` of its hash-type byte flipped (`hash_byte`). The node and the harness must both use flags 541, without STRICTENC.
+- A high-S spend, which the mempool rejects with `SIG_HIGH_S` and a block accepts, so `policy_only` is true.
+
+`--upstream-harness` adds L1 against another harness build, with `--target upstream`.
+It sends the requests of 500 generated cases to both harness builds and reports how many responses differ.
+When the node build names the same commit, it also runs L3 with `--target upstream`.
+
+`scripts/test_campaign.py` runs the L1 part, without `--node`.
+With `--node` and `--upstream-harness`, the self-test passed 17 cases in 32 seconds on the development machine.
+Each L3 replay took about 1.5 seconds, and the search and reduction took about 18 seconds.

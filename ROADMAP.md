@@ -104,7 +104,23 @@ Section 10 of the record gives five stages, and section 11 gives their theorem t
 | 4 | `GetBlockProof` and the chain work of each entry | Specified as `Work.blockProof` in `Work.ChainWork` and `IndexEntry.chainWork` in `Block.HeaderSequence`, with the targets `blockProof_eq` and `chainWork_add` and the chain work of `accept_genesis_insert` (section 13.1). Known answers of `GetBlockProof` for 11 compact values, the chain work of every added regtest entry, and two mainnet sequences |
 | 5 | The oracle operation `block.header_sequence`, the Core harness and the comparison | Implemented with H2, anchor guards, fixture expectations, seeded mutations and comparator self-tests. [Comparison boundary and streams](docs/oracle.md#header-sequence-comparison-evidence) |
 
-The next milestone needs maintainer scope approval.
+The proposed next milestone is a property-driven bug-finding campaign, under [design record 0009](docs/design/0009-bug-finding-campaign.md).
+The record is a proposal, and its section 14 waits for a maintainer decision.
+It proposes to search for counterexamples to stated properties of the multisig-with-recovery template, in signed spends that Core signs.
+Each failure gets a saved record, a replay command, a reducer and a replay through Core's production path before it counts as a finding.
+The planted fault of `ExampleFaultyLocktime` tests the campaign itself.
+Section 13 of the record gives five stages, and section 11 gives the properties and theorem targets:
+
+| Stage | Deliverable | Status |
+| --- | --- | --- |
+| 1 | The campaign driver, the saved-failure format, replay and the outcome classes | Not started |
+| 2 | The signer's request mode, the generator in two mutation modes and the properties Q1 to Q7 | Not started |
+| 3 | The reducer, and the search for the planted fault through a test executable | Not started |
+| 4 | Replay through Core's production path, and the check against current upstream Core | Not started |
+| 5 | Regression fixtures and theorem targets for understood counterexamples | Not started |
+
+No stage starts before the maintainer adopts the record.
+
 One other candidate is unscheduled, and it needs an approved scope before work starts:
 
 - **Arithmetic agreement with Core's verifier.** A Lean proof that `Point.mulAdd` computes Core's `secp256k1_ecmult` result ([design record 0005](docs/design/0005-signature-verifier.md), section 4.3).

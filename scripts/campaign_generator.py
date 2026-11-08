@@ -124,7 +124,13 @@ def plans(seed, count):
     for h in HASH_TYPES:
         for field in FIELDS:
             for mode in ('preserve', 'commitment'):
-                boundaries.append(('field', (h, field, mode)))
+                boundaries.append(('field', (h, field, mode, 1, None)))
+        for n, target in ((0, 1), (0, 2), (1, 2), (2, 0), (2, 1)):
+            for mode in ('preserve', 'commitment'):
+                boundaries.append(('field', (h, 'position', mode, n, target)))
+        if h & 31 == 3:
+            for mode in ('preserve', 'commitment'):
+                boundaries.append(('field', (h, 'other_output', mode, 1, 2)))
     for first in HASH_TYPES:
         for second in HASH_TYPES:
             boundaries.append(('mixed', (first, second)))
@@ -167,14 +173,16 @@ def plans(seed, count):
             p['hash_types'] = [1] * len(p['key_ids'])
             p['flags'] = (1567 if enabled else 1567 & ~flag)
         elif kind == 'field':
-            h, field, mode = value
+            h, field, mode, n, target = value
             p['hash_types'] = [h] * len(p['key_ids'])
-            p['n'] = 1
+            p['n'] = n
             p['tx']['inputs'] = [dict(outpoint=rng.randbytes(36).hex(), sequence=0xfffffffe,
                                       script_sig='') for _ in range(3)]
             p['tx']['outputs'] = [dict(value=j + 1, script='51') for j in range(3)]
             p['mode'] = mode
             p['mutations'] = [dict(field=field, value=2)]
+            if target is not None:
+                p['mutations'][0]['index'] = target
             accepted(p)
         elif kind == 'signature':
             accepted(p)
@@ -210,14 +218,15 @@ def mutated(plan):
         elif field in ('own_sequence', 'other_sequence'):
             tx['inputs'][n if field.startswith('own') else other]['sequence'] = value
         elif field in ('own_output', 'other_output'):
-            tx['outputs'][n if field.startswith('own') else other]['value'] += value
+            tx['outputs'][n if field.startswith('own') else mutation.get('index', other)]['value'] += value
         elif field == 'input_count':
             tx['inputs'].append(dict(outpoint='ab' * 36, sequence=0, script_sig=''))
         elif field == 'output_count':
             tx['outputs'].append(dict(value=value, script='51'))
         elif field == 'position':
-            tx['inputs'][0], tx['inputs'][n] = tx['inputs'][n], tx['inputs'][0]
-            p['n'] = 0
+            target = mutation.get('index', 0)
+            tx['inputs'][target], tx['inputs'][n] = tx['inputs'][n], tx['inputs'][target]
+            p['n'] = target
         elif field == 'script_sig':
             # Keep input n's unlocking stack, as Q5 requires.
             tx['inputs'][other]['script_sig'] = '51'
@@ -243,7 +252,7 @@ def describe_mutations(plan):
         elif field in ('own_outpoint', 'other_outpoint', 'own_sequence', 'other_sequence'):
             value = tx['inputs'][n if field.startswith('own') else other][field.split('_', 1)[1]]
         elif field in ('own_output', 'other_output'):
-            value = tx['outputs'][n if field.startswith('own') else other]
+            value = tx['outputs'][n if field.startswith('own') else m.get('index', other)]
         elif field == 'script_sig':
             value = tx['inputs'][other]['script_sig']
         elif field in ('input_count', 'output_count'):

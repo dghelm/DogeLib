@@ -83,6 +83,25 @@ def stage2(args, wrapper, check):
     base = root / 'build/campaign'
     detection = []
     checks = 0
+    from campaign_generator import mutated
+    moves, single_outputs = set(), set()
+    for plan in plans(20261108, 2000):
+        for mutation in plan['mutations']:
+            if mutation['field'] == 'position':
+                after = mutated(plan)
+                moves.add((plan['n'], after['n']))
+                check(after['tx']['inputs'][after['n']] == plan['tx']['inputs'][plan['n']],
+                      'position mutation lost the signed input')
+            if mutation['field'] == 'other_output':
+                target = mutation.get('index', 0 if plan['n'] else 1)
+                for h in plan['hash_types']:
+                    if h & 31 == 3:
+                        single_outputs.add((h, plan['mode'], target > plan['n']))
+    check(moves == {(n, target) for n in range(3) for target in range(3) if n != target}, moves)
+    check(single_outputs == {(h, mode, after) for h in (3, 131)
+                             for mode in ('preserve', 'commitment') for after in (False, True)}, single_outputs)
+    print('ok boundaries: both SINGLE output directions and all six position moves')
+    checks += 1
     with tempfile.TemporaryDirectory(prefix='stage2-', dir=base) as tmp:
         tmp = pathlib.Path(tmp)
         opts = argparse.Namespace(campaign='generated', signer=signer, seed=20261108, cases=2000,

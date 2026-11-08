@@ -261,7 +261,7 @@ def run_campaign(args, cases=None):
     saved, completed, attempts = [], 0, 0
     coverage = {key: {} for key in ('branches', 'hash_types', 'errors', 'mutations', 'properties', 'modes',
                                    'input_positions', 'input_counts', 'output_counts', 'selectors', 'flags',
-                                   'flag_bits', 'lock_times', 'own_sequences', 'other_sequences', 'signer_pairs', 'known')}
+                                   'flag_bits', 'lock_times', 'own_sequences', 'other_sequences', 'signer_pairs', 'known', 'position_moves', 'single_other_outputs')}
     q6_requests = 0
 
     def reach(key, value):
@@ -389,6 +389,14 @@ def run_campaign(args, cases=None):
                     reach('hash_types', h)
                 for m in p['mutations']:
                     reach('mutations', m['field'])
+                    if m['field'] == 'position':
+                        reach('position_moves', f"{p['n']}->{m['new_value']}")
+                    if m['field'] == 'other_output':
+                        target = m.get('index', 0 if p['n'] else 1)
+                        direction = 'before' if target < p['n'] else 'after'
+                        for h in set(p['hash_types']):
+                            if h & 31 == 3:
+                                reach('single_other_outputs', f"{h}:{p['mode']}:{direction}")
                 reach('mutations', p['signature_mutation'])
                 if 'error' not in runs['core']:
                     reach('errors', runs['core']['responses'][offset + size - 1].get('ok', {}).get('script_error', 'OK'))

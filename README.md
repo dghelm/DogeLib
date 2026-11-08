@@ -83,6 +83,7 @@ The [verifier section](SOUNDNESS.md#secp256k1-public-key-parser-and-cores-verifi
 | Document | Contents |
 | --- | --- |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Contribution and review policy |
+| [SECURITY.md](SECURITY.md) | How to report a vulnerability privately |
 | [AGENTS.md](AGENTS.md) | How to work here: checks, files to update, pull requests |
 | [docs/agents.md](docs/agents.md) | Optional lane worktrees for several agents at once |
 | [WRITING.md](WRITING.md) | The writing standard |

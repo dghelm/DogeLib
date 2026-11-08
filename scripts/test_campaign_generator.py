@@ -147,6 +147,16 @@ def stage2(args, wrapper, check):
         check(replay.returncode == 0, replay.stderr + replay.stdout)
         print('ok signer: saved structured refusal reproduces with replay --signer')
         checks += 1
+        local.signer = wrapper(tmp / 'malformed-signer', 'signer-shape', signer)
+        local.output = str(tmp / 'malformed-signer-run')
+        summary = campaign.run_campaign(local, [dict(plan=next(plans(20261108, 1)))])
+        check(summary['counts']['crash'] == 1, 'malformed signer response was not saved')
+        replay = subprocess.run([sys.executable, '-I', str(root / 'scripts/campaign.py'), 'replay',
+                                 '--signer', local.signer, summary['saved'][0], args.oracle, args.harness],
+                                capture_output=True, text=True)
+        check(replay.returncode == 0, replay.stderr + replay.stdout)
+        print('ok signer: malformed response reproduces with replay --signer')
+        checks += 1
     path = base / 'mutant-detection.json'
     path.write_text(json.dumps(detection, indent=2) + '\n')
     return checks

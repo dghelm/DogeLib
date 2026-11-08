@@ -171,15 +171,12 @@ def assess_cases(cases, runs):
     return grouped
 
 
-def prepare_generated(args, plans, timeout):
-    """Sign a batch and check every signing digest before constructing spends."""
-    from campaign_generator import signing_requests, materialize
-    signing = [signing_requests(case['plan'], f"generated-{case['case_index']}") for case in plans]
-    flat = [r for group in signing for r in group]
-    signed = execute(args.signer, flat, timeout, ['--sign'])
+def execute_signer(program, requests, timeout):
+    """Validate signer response shapes before using signatures or replaying failures."""
+    signed = execute(program, requests, timeout, ['--sign'])
     if 'error' not in signed:
         try:
-            for request, response in zip(flat, signed['responses']):
+            for request, response in zip(requests, signed['responses']):
                 if 'error' in response:
                     if (set(response) != {'id', 'error'} or response['error'].get('kind') != 'refusal' or
                             not isinstance(response['error'].get('reason'), str)):
@@ -197,6 +194,15 @@ def prepare_generated(args, plans, timeout):
                     raise ValueError('invalid signer result')
         except (KeyError, TypeError, ValueError, AttributeError) as error:
             signed['error'] = dict(code='MALFORMED', message=f'malformed signer response: {error}')
+    return signed
+
+
+def prepare_generated(args, plans, timeout):
+    """Sign a batch and check every signing digest before constructing spends."""
+    from campaign_generator import signing_requests, materialize
+    signing = [signing_requests(case['plan'], f"generated-{case['case_index']}") for case in plans]
+    flat = [r for group in signing for r in group]
+    signed = execute_signer(args.signer, flat, timeout)
     if 'error' in signed:
         entries = [dict(request=r, process=signed) for r in flat]
     else:
@@ -431,7 +437,7 @@ def replay(args):
         if not getattr(args, 'signer', None):
             raise ValueError('signer failures require replay --signer PATH')
         entries = record['signer']
-        rerun = execute(args.signer, [e['request'] for e in entries], record['timeout'], ['--sign'])
+        rerun = execute_signer(args.signer, [e['request'] for e in entries], record['timeout'])
         if 'process' in entries[0]:
             stored = entries[0]['process']
             reproduced = (rerun.get('error', {}).get('code') == stored.get('error', {}).get('code') and

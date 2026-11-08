@@ -28,6 +28,11 @@ def check(condition, detail='campaign self-test check failed'):
 
 def wrap(mode, program, args):
     """Mutate one exact request's response, or fail after flushing its predecessors."""
+    if mode == 'signer-shape' and args == ['--sign']:
+        for line in sys.stdin:
+            request = json.loads(line)
+            print(json.dumps(dict(id=request['id'], ok=dict(digest_hex='broken'))), flush=True)
+        return 0
     if args:
         if mode == 'version-hang':
             time.sleep(30)

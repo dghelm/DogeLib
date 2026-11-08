@@ -1,6 +1,7 @@
 """Stage 3 of design record 0009: the planted proposal search and the reducer."""
 
 import argparse
+import copy
 import json
 import pathlib
 import subprocess
@@ -9,7 +10,7 @@ import tempfile
 
 import campaign
 from campaign_proposal import SPACE_SIZE, ALPHABET, LOCK_TIMES, SEQUENCES, parse_script, script_case, script_plan
-from campaign_reduce import condition, reduce_failure
+from campaign_reduce import P2SH, condition, reduce_failure, truthy
 from test_campaign_generator import context
 
 # Scripts of one and two instructions, in every context, come first in the enumeration.
@@ -58,6 +59,7 @@ def check_reduction(mode, path, local, check):
     label = reduced['reduction']['label']
     check(label in ('minimal', 'budget'), f'{mode}: unknown label {label}')
     check(any(trigger(mode, r) for r in reduced['requests']), f'{mode}: reduction lost the trigger')
+    check_domain(mode, reduced['plan']['inputs'][0]['plan'], check)
     replay = subprocess.run([sys.executable, '-I', str(campaign.ROOT / 'scripts/campaign.py'), 'replay',
                              str(target), local.oracle, local.harness], capture_output=True, text=True)
     check(replay.returncode == 0, f'{mode}: reduced failure does not replay: {replay.stdout}{replay.stderr}')
@@ -70,12 +72,54 @@ def check_reduction(mode, path, local, check):
     return result
 
 
+def check_domain(name, plan, check):
+    """A reduced generated plan keeps P2SH and a selector of its branch's truth value (section 7.4)."""
+    check(plan['flags'] & P2SH, f'{name}: the reduced plan cleared P2SH, so the redeem script never runs')
+    check(truthy(plan['selector']) == (plan['branch'] == 'ordinary'),
+          f"{name}: the selector {plan['selector']!r} does not select the {plan['branch']} branch")
+
+
+def check_flip82(opts, tmp, wrapper, check):
+    """Plant a Core fault on NONE|ANYONECANPAY spends, and require reductions that still run the template."""
+    local = copy.deepcopy(opts)
+    local.output = str(tmp / 'flip82')
+    local.stop_after_failure = False
+    local.cases = 1200
+    local.harness = wrapper(tmp / 'flip82-wrapper', 'Mflip82', opts.harness)
+    summary = campaign.run_campaign(local)
+    found = sorted(((json.loads(pathlib.Path(p).read_text()), p) for p in summary['saved']),
+                   key=lambda item: item[0]['case_index'])
+    found = [(r, p) for r, p in found if r['class'] == 'verdict' and r['failing_side'] == 'core'][:3]
+    check(found, f"the planted 0x82 fault was not detected: {summary['counts']} {summary['completed']}")
+    results = []
+    for original, path in found:
+        target, reduced = reduce_failure(path, local.oracle, local.harness, local.signer)
+        plan = reduced['plan']['inputs'][0]['plan']
+        name = f"flip82 case {original['case_index']}"
+        check(condition(reduced) == condition(original), f'{name}: reduction changed the failure condition')
+        check_domain(name, plan, check)
+        check(0x82 in plan['hash_types'], f'{name}: the reduced plan has no NONE|ANYONECANPAY signature')
+        # The unmodified harness must run the template on the reduced spend and reach its expected verdict.
+        spend = reduced['requests'][-1]
+        clean = campaign.execute(opts.harness, [spend], 10)
+        check(clean['responses'][0].get('ok', {}).get('result') == reduced['expected']['verdict'],
+              f'{name}: the unmodified harness does not reach the expected verdict')
+        replay = subprocess.run([sys.executable, '-I', str(campaign.ROOT / 'scripts/campaign.py'), 'replay',
+                                 str(target), local.oracle, local.harness], capture_output=True, text=True)
+        check(replay.returncode == 0, f'{name}: reduced failure does not replay')
+        print(f"ok {name}: reduced with label {reduced['reduction']['label']}, P2SH and the "
+              f"{plan['branch']} selector kept, 0x82 signature kept, Core verdict {reduced['expected']['verdict']}")
+        results.append(dict(mutant='flip82', case_index=original['case_index'], label=reduced['reduction']['label'],
+                            candidates=reduced['reduction']['candidates'], after=shape(plan)))
+    return results
+
+
 def instructions(record):
     """The script plan of a saved proposal failure."""
     return record['plan']['inputs'][0]['plan']
 
 
-def stage3(args, check):
+def stage3(args, check, wrapper):
     """Run the blind search on both variants and reduce the five-instruction seed."""
     replay_program = str(pathlib.Path(args.proposal_replay).resolve())
     base = campaign.ROOT / 'build/campaign'
@@ -110,6 +154,16 @@ def stage3(args, check):
         check(summary['failures'] == 0 and not summary['saved'], 'the corrected variant has a violation')
         check(all(summary['counts'][k] == 0 for k in campaign.CLASSES), summary['counts'])
         print(f'ok proposal corrected: no violation in all {SPACE_SIZE} cases of one to five instructions')
+        checks += 1
+        stand_in = copy.deepcopy(options)
+        stand_in.cases, stand_in.output = 200, str(tmp / 'stand-in')
+        stand_in.harness = wrapper(tmp / 'stand-in-replay', 'error-all', replay_program)
+        summary = campaign.run_campaign(stand_in)
+        records = [json.loads(pathlib.Path(p).read_text()) for p in summary['saved']]
+        check(summary['failures'] == 200 and summary['counts']['crash'] == 200, summary['counts'])
+        check(all(r['failing_side'] == 'revised' and r['detail']['code'] == 'RESULT' for r in records),
+              'an error response was not a revised-side crash')
+        print('ok proposal stand-in: a replay that answers with errors fails all 200 corrected cases')
         checks += 1
         options.variant, options.cases, options.output = 'faulty', 1, str(tmp / 'seed')
         seed = script_case(script_plan(parse_script('5152b35187'), 2, 0xfffffffe), 0)

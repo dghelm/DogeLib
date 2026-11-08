@@ -70,6 +70,12 @@ def mutate_response(mode, request, response, height_response=None):
         sigs = c['stack'][:-2]
         if any(sig and sig[-1] == 0x82 for sig in sigs) and result.get('result') == 'rejected':
             response['ok'] = dict(result='accepted', script_error='OK')
+    if (mode == 'Mflip82' and op == 'script.verify_legacy' and result.get('result') in ('accepted', 'rejected') and
+            any(sig and sig[-1] == 0x82 for sig in c['stack'][:-2])):
+        # A planted Core fault: flip the verdict of every spend with a NONE|ANYONECANPAY signature.
+        flipped = result.get('result') == 'accepted'
+        response['ok'] = (dict(result='rejected', script_error='EVAL_FALSE') if flipped else
+                          dict(result='accepted', script_error='OK'))
     if mode == 'M2' and op == 'sighash.legacy' and request['hash_type'] & 31 == 3 and n > 0:
         digest = bytearray.fromhex(result['digest_hex'])
         digest[0] ^= 1
@@ -158,6 +164,9 @@ def stage2(args, wrapper, check):
             from test_campaign_reducer import check_reduction
             reductions.append(check_reduction(mode, path, local, check))
             checks += 1
+        from test_campaign_reducer import check_flip82
+        reductions.extend(check_flip82(opts, tmp, wrapper, check))
+        checks += 1
         local = copy.deepcopy(opts)
         local.output = str(tmp / 'q6-only')
         local.oracle = wrapper(tmp / 'q6-only-lean', 'q6-after', args.oracle)

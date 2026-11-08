@@ -97,7 +97,7 @@ Section 10 of the record gives five stages, and section 11 gives their theorem t
 | Stage | Deliverable | Status |
 | --- | --- | --- |
 | 1 | The block-index model, the ancestor view and the checkpoint search over the index | Specified in `Block.HeaderSequence`, with the targets `ancestorView_congr` and `lastCheckpointInIndex_eq` and known answers from five mainnet ranges |
-| 2 | One step, `acceptBlockHeader`, with its characterization theorems | Not started |
+| 2 | One step, `acceptBlockHeader`, with its characterization theorems | Specified in `Block.HeaderSequence`, with every step target of section 11 except `accept_genesis`, which waits on a maintainer question. Known answers from the regtest fixture and from mainnet full headers |
 | 3 | The sequence, `processNewBlockHeaders`, with the linear theorem `process_linear` | Not started |
 | 4 | `GetBlockProof` and the chain work of each entry | Not started |
 | 5 | The oracle operation `block.header_sequence`, the Core harness and the comparison | Not started |

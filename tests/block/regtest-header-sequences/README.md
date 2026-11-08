@@ -1,7 +1,8 @@
 # Synthetic regtest header sequences
 
 `sequences.json` supplies exact requests and hand-derived expectations for design record 0008, section 9.4.
-The fixture is available evidence, not yet consumed by Lean tests, the oracle or the Core comparator.
+`lake test` runs the first header of each case through `acceptBlockHeader` (`tests/KnownAnswers/HeaderSequence.lean`, `checkRegtestSteps`).
+The sequences after the first header, the oracle and the Core comparator do not consume it yet.
 Its record shape is local to the fixture and does not settle the stage 5 oracle interface.
 
 ## Reproduction (D83)

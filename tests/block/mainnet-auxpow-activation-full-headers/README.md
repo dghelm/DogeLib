@@ -40,7 +40,8 @@ The Python check compares every 80-byte prefix with the existing pure fixture an
 It parses each base coinbase transaction, both Merkle branches, both indices and the parent header through the exact record boundary.
 The check also compares the work-bearing header's `hashlib.scrypt` digest with the child target.
 It does not check AuxPoW commitments or execute header-sequence validation.
-These fixtures are available evidence, not yet consumed by a Lean test, oracle or comparator.
+`lake test` runs single steps of `acceptBlockHeader` on these headers (`tests/KnownAnswers/HeaderSequence.lean`, `checkMainnetSteps`).
+No oracle or comparator consumes them yet.
 
 Core revision `e0a1c157791544e818c901bd9341896965afbf9d` fixes the layouts in `src/primitives/pureheader.h:29-54` and `src/auxpow.h:79-85,153-160`.
 The work check follows `src/dogecoin.cpp:101-119` and `src/pow.cpp:115-129` at that revision.

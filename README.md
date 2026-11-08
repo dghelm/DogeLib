@@ -93,6 +93,7 @@ The [verifier section](SOUNDNESS.md#secp256k1-public-key-parser-and-cores-verifi
 | [COVERAGE.md](COVERAGE.md) | Implemented definitions, theorems, and evidence |
 | [SOUNDNESS.md](SOUNDNESS.md) | Logical assumptions and trust boundaries |
 | [docs/oracle.md](docs/oracle.md) | The oracle format and the Core comparison |
+| [docs/in-practice.md](docs/in-practice.md) | Worked examples: vetting a proposed soft fork, a known Merkle property and reading a Core disagreement |
 | [docs/release.md](docs/release.md) | How to cut a release |
 | [docs/design/](docs/design/) | Frozen design records |
 

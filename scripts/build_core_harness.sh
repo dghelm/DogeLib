@@ -2,7 +2,7 @@
 # Build the Dogecoin Core harness, harness/core/core_oracle.cpp, against
 # Core's own libraries at the commit that SOURCES.md pins.
 #
-# Usage: scripts/build_core_harness.sh <core-git-repo> <build-dir>
+# Usage: scripts/build_core_harness.sh [--revision COMMIT] <core-git-repo> <build-dir>
 #
 # The script exports the pinned tree with `git archive`, so the build never
 # touches the clone's working tree, and the clone may be checked out at any
@@ -16,6 +16,12 @@
 set -euo pipefail
 
 PIN=e0a1c157791544e818c901bd9341896965afbf9d
+revision=
+if [ "${1:-}" = --revision ]; then
+  [ "$#" -ge 4 ] || { echo "--revision needs a commit, repository and build directory" >&2; exit 2; }
+  revision=$2
+  shift 2
+fi
 
 if [ "$#" -ne 2 ]; then
   echo "usage: $0 <core-git-repo> <build-dir>" >&2
@@ -23,6 +29,16 @@ if [ "$#" -ne 2 ]; then
 fi
 
 repo=$1
+revision_flags=()
+if [ -n "$revision" ]; then
+  PIN=$(git -C "$repo" rev-parse --verify "$revision^{commit}")
+  # An explicit replay build cannot reuse the default CI directory.
+  case "$(realpath -m "$2")" in
+    "$(cd "$(dirname "$0")/.." && pwd)/build/core-harness")
+      echo "error: use a separate directory for --revision" >&2; exit 2 ;;
+  esac
+  revision_flags=("-DCORE_BUILD_REVISION=\"$PIN\"")
+fi
 mkdir -p "$2"
 build=$(cd "$2" && pwd)
 here=$(cd "$(dirname "$0")/.." && pwd)
@@ -121,7 +137,7 @@ set -x
 "$cxx" -std=c++11 $core_cxxflags -Wl,--gc-sections -DHAVE_CONFIG_H \
   -I"$src" -I"$src/config" -I"$src/univalue/include" -I"$src/secp256k1/include" \
   -o "$build/core-oracle" \
-  "$here/harness/core/core_oracle.cpp" "$src/support/cleanse.cpp" "${univalue_paths[@]}" \
+  "${revision_flags[@]}" "$here/harness/core/core_oracle.cpp" "$src/support/cleanse.cpp" "${univalue_paths[@]}" \
   "${libs[@]}" -lcrypto
 set +x
 echo "built $build/core-oracle against:"
@@ -133,7 +149,12 @@ cat "$build/core.stamp"
   "-DCORE_SIGNER_BLOB=\"$(git hash-object "$here/harness/core/core_signer.cpp")\"" \
   "-DCORE_SIGNER_REQUEST_BLOB=\"$(git hash-object "$here/harness/core/core_signer_main.cpp")\"" \
   -o "$build/core-signer" \
-  "$here/harness/core/core_signer_main.cpp" "$src/key.cpp" "$src/random.cpp" \
+  "${revision_flags[@]}" "$here/harness/core/core_signer_main.cpp" "$src/key.cpp" "$src/random.cpp" \
   "$src/support/lockedpool.cpp" "$src/support/cleanse.cpp" "${univalue_paths[@]}" \
   "${libs[@]}" -lcrypto -pthread
 echo "built $build/core-signer"
+
+# Explicit replay builds label their binaries without changing default output.
+if [ -n "$revision" ]; then
+  printf "%s\n" "$PIN" > "$build/core.revision"
+fi

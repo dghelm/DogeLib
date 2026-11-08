@@ -1294,8 +1294,17 @@ Every result records the commit, the build stamps and the SHA-256 of each progra
 
 The replay refuses a program without a build stamp, such as a wrapper of the self-test.
 It refuses a stamp of another commit, an L3 call without `--signer` and `--node`, and a saved failure outside `build/campaign/`.
-It exits with status 0 when the candidate reproduces, 1 when it does not, and 2 for a refusal.
-A refusal changes nothing in the saved failure.
+
+| Exit status | Outcome |
+| --- | --- |
+| 0 | `reproduced` |
+| 1 | `not-reproduced` |
+| 2 | A refusal, SIGTERM or an unexpected error. The saved failure does not change. |
+| 3 | `not-comparable` at L3, or `error` at L1. The replay decides nothing. |
+
+SIGTERM stops the node and deletes its data directory before the replay exits.
+The node also gets SIGKILL from Linux when the replay process dies by SIGKILL (`PR_SET_PDEATHSIG`).
+After a SIGKILL, the data directory stays under `build/campaign/`.
 The console shows the level, the commit, the outcome and the classification, without requests.
 
 #### Builds at another commit
@@ -1332,7 +1341,8 @@ On this project's development machine, the node and its Boost built in 62 second
 
 L1 sends the stored requests, unchanged, to the oracle and to the harness build.
 For the signed-spend family, `script.verify_legacy` calls `VerifyScript`, and `sighash.legacy` calls `SignatureHash` ([what the harness runs](#what-the-harness-runs)).
-The outcome is `reproduced` when the stored property, class and failing side reproduce, and `not-reproduced` otherwise.
+The outcome is `reproduced` when the stored class and failing side recur.
+It is `error` when either program fails, crashes or times out, and `not-reproduced` otherwise.
 L1 does not include the caller of [section 4, item 8](design/0009-bug-finding-campaign.md#4-behaviour-to-preserve): a node uses `CachingTransactionSignatureChecker` through `CScriptCheck`.
 
 #### L3
@@ -1351,6 +1361,7 @@ The outpoints of a saved case are random bytes, so L3 builds the same case on re
 4. If the spend has no output, L3 adds one zero-value `OP_TRUE` output, because `CheckTransaction` rejects a transaction without outputs (D90). The evidence records this change.
 5. `core-signer --sign` signs the same plan again: the same mode, keys, hash types, selector and signature mutation. The oracle and the harness check each signing digest, as in a run.
 6. The rebuilt case must keep the saved property, verdict, error name and digest relation. Otherwise the outcome is `not-comparable`.
+7. The harness that found the candidate must show the saved class and failing side on the rebuilt bytes. It is the harness of the record's replay command, or `--candidate-harness`. Otherwise the rebuilt case lost the candidate's trigger, and a node that agrees with the property gives `not-comparable`.
 
 The node checks the spend twice:
 
@@ -1365,6 +1376,8 @@ The replay maps each rejection reason to an error name through `ScriptErrorStrin
 Another rejection, such as `non-final` or `bad-txns-vout-empty`, makes the path `not-comparable`.
 
 The mempool result decides the L3 outcome, because the mempool uses the plan's own flags.
+After the plan's flags, the mempool checks P2SH alone again, and it reports only the first failing input (D97).
+So L3 refuses a plan without P2SH or with CLEANSTACK, which the bare `OP_TRUE` inputs would fail.
 The outcome is `reproduced` when the node's verdict or error name differs from the saved expectation, and `not-reproduced` when it agrees.
 
 Core prefixes a Script rejection with `non-mandatory-script-verify-flag` when the spend passes without the flags of `STANDARD_NOT_MANDATORY_VERIFY_FLAGS` (D98).
@@ -1374,20 +1387,36 @@ The block result separates them.
 The evidence sets `policy_only` when the mempool rejects the spend and the block accepts it.
 For example, a high-S signature fails LOW_S in the mempool, and flags 517 accept it in a block.
 
-A recovery spend can never be valid at L3 within the time of a test.
-The template's CLTV operand is the height 1,000,000, and a spend is final only at a later height.
-So L3 replays Q2 cases as `not-comparable`, with the reason `non-final`.
-Early recovery cases (Q3) and ordinary spends (Q1) are comparable.
+L3 can compare only a spend that is final at the funded height, 1,354.
+A spend is final when every sequence is `0xffffffff`.
+It is also final when its lock time is a height below 1,354, or a time before the median time past.
+The node rejects any other spend with `non-final`, so its outcome is `not-comparable`.
+
+A valid recovery spend (Q2) is never final there, because the template's CLTV operand is the height 1,000,000.
+The generator's acceptance cases also set lock time 1,000,000 with a nonfinal sequence on input `n`.
+So most generated Q1, Q4 and Q5 cases, and every Q2 case, are `not-comparable` at L3.
+Q3 cases at a lock time below 1,354 or a time lock time, and spends at lock time 0, are comparable.
 
 #### Classification
 
-After each replay, `production.classification` summarizes the evidence of all replays:
+After each replay, `production.classification` labels the candidate from the latest outcome of each level.
+`label` uses the replays at the pin, and `upstream` uses the replays at upstream, or is null.
+A Core-side candidate has the failing side `core`, `both` or `undetermined`.
 
-| Label | Condition |
-| --- | --- |
-| `reproduced` | At least one replay, at either level and either target, reproduced the candidate. |
-| `harness-fault` | The candidate is a `verdict` or `digest` failure with the failing side `core`, `both` or `undetermined`. L1 at the pin did not reproduce it, and, for a `verdict` failure, L3 at the pin did not reproduce it either. |
-| `undetermined` | Any other combination, such as a missing level. |
+| Candidate | Outcomes | Label |
+| --- | --- | --- |
+| Core-side `verdict` | L3 `reproduced` | `reproduced` |
+| Core-side `verdict` | L3 `not-reproduced`, L1 `reproduced` or `not-reproduced` | `harness-fault` |
+| Core-side `verdict` | L1 `reproduced`, no comparable L3 result | `reproduced-at-l1`: the candidate still needs L3 |
+| Core-side `digest` | L1 `reproduced` | `reproduced` |
+| Core-side `digest` | L1 `not-reproduced` | `harness-fault` |
+| Any other | A `reproduced` outcome at either level | `reproduced` |
+| Any | Every other combination, including an L1 `error` | `undetermined` |
+
+For a `verdict`, L3 overrides L1, because only a node runs the production caller of [section 9.1](design/0009-bug-finding-campaign.md#91-levels).
+Suppose that L1 reproduces the candidate and L3 does not.
+Then the fault is in the harness's own code around `VerifyScript`, such as its transaction or flag handling.
+For a `digest`, L1 decides: `sighash.legacy` calls `SignatureHash` itself, and L3 checks only verdicts.
 
 `production.replays` keeps every replay in order, with its level, target, commit, build identities, requests, full responses and node rejection reasons.
 L3 evidence also keeps the funding transaction, the new outpoints and the signer's requests and responses.
@@ -1403,10 +1432,15 @@ python3 -I scripts/test_campaign_production.py .lake/build/bin/dogelib-oracle bu
 The self-test plants the harness fault M3 of [section 8.2](design/0009-bug-finding-campaign.md#82-planted-harness-and-model-faults), which treats lock time 500,000,000 as a height on the recovery branch.
 It runs the generated campaign until it finds the fault, then reduces the first detection.
 The unchanged harness must not reproduce the reduced candidate at L1, and the replay must refuse the planted wrapper.
+It checks the table of labels on stated outcomes.
+A stamped build that exits with status 3 must give the L1 outcome `error`.
+A stamped build that contains the planted fault stands for a faulty adapter: it must reproduce at L1 and get `reproduced-at-l1`.
 
 `--node` adds L3.
 The node must reject the reduced spend with `UNSATISFIED_LOCKTIME` in its mempool and in a block, and the planted wrapper must accept the same bytes.
 The candidate must then have the label `harness-fault`.
+The stamped faulty build must also become `harness-fault` after L3.
+With `--candidate-harness` set to the unchanged harness, the trigger is lost, and the outcome must be `not-comparable`.
 `--node` also checks four other spends:
 
 - An ordinary 2-of-3 spend, which the mempool and a block accept.
@@ -1419,5 +1453,5 @@ It sends the requests of 500 generated cases to both harness builds and reports 
 When the node build names the same commit, it also runs L3 with `--target upstream`.
 
 `scripts/test_campaign.py` runs the L1 part, without `--node`.
-With `--node` and `--upstream-harness`, the self-test passed 11 cases in 28 seconds on the development machine.
+With `--node` and `--upstream-harness`, the self-test passed 16 cases in 31 seconds on the development machine.
 Each L3 replay took about 1.5 seconds, and the search and reduction took about 18 seconds.

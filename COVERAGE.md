@@ -195,7 +195,10 @@ Every case of this space is supported, so an `unsupported` result also makes the
 L1 resends the stored requests to a harness build whose stamp names a Core commit.
 L3 funds real outputs on an isolated regtest `dogecoind`, signs the same plan again and submits the spend.
 The mempool checks it with the plan's flags, and an AuxPoW block checks it with the consensus flags of its height, P2SH, DERSIG and CHECKLOCKTIMEVERIFY.
-Each replay appends evidence to an additive `production` field of the saved failure and labels the candidate `reproduced`, `harness-fault` or `undetermined`.
+
+Each replay appends evidence to an additive `production` field of the saved failure.
+It labels the candidate `reproduced`, `reproduced-at-l1`, `harness-fault` or `undetermined`.
+For a Core-side verdict, a comparable L3 result overrides L1.
 [Commands and limits](docs/oracle.md#production-replay) describe the levels, the flags and the classification.
 
 `scripts/test_campaign_production.py` runs the exit check of stage 4 with the planted harness fault M3.
@@ -217,7 +220,9 @@ On 2026-11-08, the branch `1.14-maint` of `dogecoin/dogecoin` was at the pin `e0
 A separate harness build with `--revision` gave the same L1 result for the planted candidate, and the same L3 result with `--target upstream`.
 It also gave the same responses as the pin harness to all 2,046 requests of 500 generated cases.
 
-L3 cannot make a valid recovery spend (Q2), because the template's operand is height 1,000,000.
-The node reports `non-final`, and the replay labels the case `not-comparable`.
-With the L1 part of stage 4, `scripts/test_campaign.py` passes 44 cases.
+L3 compares only spends that are final at the funded height, 1,354.
+A valid recovery spend (Q2) is never final there, because the template's operand is height 1,000,000.
+The generator's acceptance cases use lock time 1,000,000 with a nonfinal sequence, so most generated Q1, Q4 and Q5 cases are not final either.
+For these spends the node reports `non-final`, and the replay labels the case `not-comparable`.
+With the L1 part of stage 4, `scripts/test_campaign.py` passes 47 cases.
 These results test the replay procedure, and they add no theorem.

@@ -114,7 +114,7 @@ Section 13 of the record gives five stages, and section 11 gives the properties 
 | Stage | Deliverable | Status |
 | --- | --- | --- |
 | 1 | The campaign driver, the saved-failure format, replay and the outcome classes | Implemented in `scripts/campaign.py` for existing signed spends and targeted timelocks, with process-wrapper self-tests and saved replay records. [Commands and boundary](docs/oracle.md#campaign-runs-and-replay) |
-| 2 | The signer's request mode, the generator in two mutation modes and the properties Q1 to Q7 | Not started |
+| 2 | The signer's request mode, the generator in two mutation modes and the properties Q1 to Q7 | Implemented with a hand-derived commitment table, signing-digest preflight checks and separate known-behaviour counts. The self-test detects M1 to M6 and checks signer determinism and refusal replay. [Evidence](COVERAGE.md#campaign-infrastructure) |
 | 3 | The reducer, and the search for the planted fault through a test executable | Not started |
 | 4 | Replay through Core's production path, and the check against current upstream Core | Not started |
 | 5 | Regression fixtures and theorem targets for understood counterexamples | Not started |

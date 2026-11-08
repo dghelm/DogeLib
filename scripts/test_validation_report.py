@@ -215,6 +215,7 @@ class Reports(unittest.TestCase):
             'signed-spend-regeneration': 'python3 -I scripts/check_signed_spends.py build/core-harness/core-signer',
             'campaign-self-test': 'python3 -I scripts/test_campaign.py .lake/build/bin/dogelib-oracle build/core-harness/core-oracle',
             'campaign-existing-requests': 'python3 -I scripts/campaign.py run --seed 20261108 --cases 10000 --seconds 600 --output build/campaign/check .lake/build/bin/dogelib-oracle build/core-harness/core-oracle',
+            'campaign-generated-requests': 'python3 -I scripts/campaign.py run --campaign generated --signer build/core-harness/core-signer --seed 20261108 --cases 3000 --seconds 600 --batch-size 64 --output build/campaign/generated .lake/build/bin/dogelib-oracle build/core-harness/core-oracle',
             'comparator-self-test': 'python3 -I scripts/test_compare_core.py .lake/build/bin/dogelib-oracle',
             'writing-checker-tests': 'uv run --no-project --python 3.12 python -m unittest scripts/test_check_writing.py',
             'script-corpus-freshness': 'python3 -I scripts/convert_script_tests.py --check',

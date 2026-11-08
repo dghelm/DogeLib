@@ -139,7 +139,7 @@ Add rows in sorted order by operation name. Change only the cells your evidence 
 
 ## Campaign infrastructure
 
-`scripts/campaign.py` implements stage 1 of [design record 0009](docs/design/0009-bug-finding-campaign.md#stage-1-driver-saved-failures-and-replay).
+`scripts/campaign.py` implements stages 1 and 2 of [design record 0009](docs/design/0009-bug-finding-campaign.md#13-stages-and-exit-conditions).
 It runs Q6 agreement on existing signed spends, targeted CLTV and CSV requests, and optional digest requests from the recovery records.
 It saves complete failure records and bisects stream failures for replay.
 The six outcome classes keep unsupported results and harness refusals apart from disagreements.
@@ -148,8 +148,23 @@ The six outcome classes keep unsupported results and harness refusals apart from
 `scripts/test_campaign.py` checks process wrappers for all six classes and replay of each saved class.
 It also checks malformed output, missing responses, wrong identifiers, batch-only failures and an exhausted budget.
 These checks test the driver, without adding a theorem or extending the input domain of a specification operation.
-Generation, signing requests, Q1 to Q5, Q7, reduction and production-path replay belong to later stages.
+
+The generated campaign checks Q1 to Q5 and Q7 against expectations from plans and the hand-derived commitment table.
+It keeps Q6 agreement separate and checks every signing digest against both programs before constructing the spend.
+`core-signer --sign` accepts all hash-type bytes and test scalars 1 to 4, with several inputs and outputs.
+The preserve mode signs after mutation, and the commitment mode retains signatures while changing the spend.
+Reduction and production-path replay belong to later stages.
 
 At seed `20261108`, the default campaign compares 1,897 requests with Core at `e0a1c15`, with zero in all six outcome classes.
 The optional signed-digest group compares 25 requests at the same seed, also with zero in all six classes.
-The campaign self-test passes 13 cases, including saved replay for each class.
+The campaign self-test also checks M1 to M6 with semantic triggers and fixed budgets, signer determinism, refusal replay and malformed-response replay.
+
+At seed `20261108`, the generated campaign completes 3,000 cases with 9,408 assessed Q6 requests and zero disagreements or process failures.
+It records 2,930 passes, 67 known behaviours and 3 unsupported cases. The unsupported cases are labelled Q6.
+The known counts are 38 fixed-digest cases and 29 early recoveries with CLTV disabled.
+
+The 2,043 generated plans cover both branches, all eleven selected hash-type bytes, input positions 0 to 3 and output counts 0 to 5.
+They reach Q1 to Q5 and Q7, both mutation modes and every operator in the field table.
+The field boundaries move the signed input in all six directions among positions 0 to 2. Under SINGLE, with and without ANYONECANPAY, they change an output before and an output after the signed input.
+
+The self-test passes 29 cases. Each mutant is detected within 3,000 cases and 120 seconds, with a three-second invocation timeout.

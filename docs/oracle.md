@@ -1055,10 +1055,11 @@ The oracle tests compare fixture expectations, exact adapter errors, malformed r
 
 ## Campaign runs and replay
 
-`scripts/campaign.py` checks Q6 agreement from [design record 0009](design/0009-bug-finding-campaign.md#11-properties).
+`scripts/campaign.py --campaign generated` checks Q1 to Q7 from [design record 0009](design/0009-bug-finding-campaign.md#11-properties).
 It reuses `compare` from `scripts/compare_core.py` without changing the CI comparison stream.
-The driver shuffles existing requests with the selected seed and sends fixed-size batches.
-It constructs no mutations and signs nothing.
+The default campaign checks Q6 alone.
+It shuffles existing requests with the selected seed and sends fixed-size batches.
+The generated campaign adds signed plans and independent property checks.
 
 Build the oracle and harness as described above, then run these commands:
 
@@ -1066,6 +1067,7 @@ Build the oracle and harness as described above, then run these commands:
 python3 -I scripts/campaign.py run --seed 20261108 --cases 10000 --seconds 600 --output build/campaign/check .lake/build/bin/dogelib-oracle build/core-harness/core-oracle
 python3 -I scripts/campaign.py replay build/campaign/check/<run>/failures/<digest>.json .lake/build/bin/dogelib-oracle build/core-harness/core-oracle
 python3 -I scripts/test_campaign.py .lake/build/bin/dogelib-oracle build/core-harness/core-oracle
+python3 -I scripts/campaign.py run --campaign generated --signer build/core-harness/core-signer --seed 20261108 --cases 3000 --seconds 600 --batch-size 64 --output build/campaign/generated .lake/build/bin/dogelib-oracle build/core-harness/core-oracle
 ```
 
 `--inputs` selects `signed-spends`, `cltv`, `csv` or `signed-digests`.
@@ -1073,9 +1075,40 @@ The default selects the first three groups.
 The digest group uses the existing recovery transactions, redeem scripts and hash types.
 The timelock groups retain their original construction seed `20261107`.
 The campaign seed selects the order, and `--cases` limits the prefix without repeating inputs.
-`--campaign` records a name and does not select a generator.
 
-`--batch-size` defaults to 2,000 requests and `--timeout` to 60 seconds per program invocation.
+`--campaign generated` selects the signed recovery-family generator and requires `--signer`.
+Other names select existing requests and record the supplied name.
+
+The generated stream starts with the 25 recovery fixtures and the targeted CLTV stream, including its boundary cases.
+It then enumerates shuffled boundaries and draws plans with `random.Random(seed)`.
+Plans cover both branches, signer pairs, mixed hash types, input positions, counts, selectors, supported flags and signature encodings.
+The preserve mode mutates a plan before signing it.
+The commitment mode signs first, then changes the spend while keeping its signatures.
+
+The explicit `FIELDS` table in `scripts/campaign_generator.py` follows pinned `interpreter.cpp`, lines 1054 to 1143 and 1225 to 1246 (D3).
+It records the committed and open fields of [section 6.3](design/0009-bug-finding-campaign.md#63-committed-and-open-fields).
+SINGLE output-count changes stay above the input index, except in separate fixed-digest cases.
+
+Before constructing a spend, the driver checks every signing digest against both programs through `sighash.legacy`.
+Q1 to Q5 and Q7 derive expectations from the plan and field table, without using a program's verdict.
+Q6 still checks agreement on every request, including the before and after digests.
+Q4 checks Lean preimages as well as both digests and rejection.
+Its security assumptions remain those of [section 11](design/0009-bug-finding-campaign.md#11-properties).
+These finite checks add no theorem.
+
+`core-signer --sign` reads JSONL requests with `id`, `tx_hex`, `input_index`, `script_code_hex`, `hash_type` and `key_ids`.
+It accepts base transactions of at most 100,000 bytes, with 1 to 4 inputs, 0 to 5 outputs and an existing input index.
+Script code has at most 10,000 bytes, and the hash type is a byte.
+The 1 to 3 key identifiers select public test scalars 1 to 4.
+A response echoes `id` and supplies `ok` with `digest_hex`, `signatures_hex`, `CORE_SIGNER_BLOB` and `request_source_blob`.
+The digest uses wire byte order, and each DER signature includes its hash-type byte.
+
+A refusal supplies `error` with `kind: "refusal"` and a `reason` string.
+The request mode calls Core's `SignatureHash` and deterministic `CKey::Sign`, without returning a Script verdict.
+The no-argument fixture generator and `--verification-vectors` retain their byte-for-byte regeneration checks.
+
+`--batch-size` defaults to 2,000 cases and `--timeout` to 60 seconds per program invocation.
+Each generated case sends one signing request per signature and several oracle requests.
 `--seconds` limits scheduling and each invocation's remaining time.
 Each version probe has a fixed 0.25-second timeout.
 Probe time counts against the campaign budget.
@@ -1092,12 +1125,18 @@ Exit status 1 means a disagreement, a process failure or an incomplete run.
 
 Each run creates a fresh directory below `--output` and prints its path and counts.
 Its `summary.json` records revisions, versions, seed, budgets, input selection and counts for all six outcome classes.
+Generated summaries also record coverage counts for branches, hash types, errors, mutations, properties, modes and transaction boundaries.
+The `q6_requests` count records assessed requests separately from cases and signing preflight requests.
 The per-case `counts`, including passes, sum to `completed`.
+
 `batch_counts` records stream failures that bisection did not attribute to individual requests.
 The `failures` total includes both per-case disagreements and process failures, and these separate batch failures.
 
 `unsupported` and harness `refusal` count apart from disagreements, and each gets a saved record.
-`known` stays zero because this stage checks agreement alone, without the properties that classify known baseline behaviours.
+`known` counts accepted fixed-digest cases and early recovery with CLTV disabled, after the property checks pass.
+The duplicate-key behaviour is registered but unreachable in this template, whose keys are distinct.
+Saved `unsupported` records name Q6 and its agreement expectation, as exclusions from comparison.
+Every Q6 result retains that expectation rather than the generated plan's independent property.
 A Q6 disagreement has failing side `undetermined`: agreement alone cannot establish which implementation violates an independent property.
 
 Saved records use `dogelib-campaign-failure/1`, with the fields of [section 7.3](design/0009-bug-finding-campaign.md#73-the-saved-failure).
@@ -1106,13 +1145,22 @@ Records contain exact requests, full responses, process status, standard error a
 Per-request records retain the full raw stream in `stdout`, with its request order in `stdout_requests`.
 Invalid UTF-8 bytes use JSON surrogate escapes and round-trip with Python's `surrogateescape` codec.
 
-The `signer` array is empty and `CORE_SIGNER_BLOB` is null because the driver never invokes a signer.
+Existing cases have an empty `signer` array and a null `CORE_SIGNER_BLOB`.
+Generated failures retain exact signing requests and responses, or process evidence, together with both signer source blobs.
 The adjacent `core.stamp` records the harness build provenance, or null for a wrapper without a stamp.
 
 Replay uses the configured `timeout` from the record and reports whether the class and failing side reproduce.
 It exits with status 0 for reproduction, 1 otherwise, or 2 for an invalid invocation or saved record.
+Oracle and harness failures replay stored requests without signing again.
+Signer failures require `replay --signer build/core-harness/core-signer <failure> <oracle> <harness>`.
+This path repeats the signing requests and checks refusals, malformed responses, process failures or digest discrepancies.
 
 Keep saved candidates private under `build/campaign/`, as [SECURITY.md](../SECURITY.md) requires.
 Console output contains counts, without candidate requests or responses.
 The self-test checks six outcome classes, crash attribution within a batch, malformed output, response counts and response identifiers.
+
+It also requires semantic mutants M1 to M6 to be detected and replayed within fixed budgets.
+It writes their seed, first detected case, class and timing to `build/campaign/mutant-detection.json`.
+Signer checks cover repeated-request determinism, refusal replay and malformed-response replay.
+Reduction and production-path replay remain later stages of design record 0009.
 The campaign commands do not run in CI at this stage.

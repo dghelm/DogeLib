@@ -28,6 +28,11 @@ def check(condition, detail='campaign self-test check failed'):
 
 def wrap(mode, program, args):
     """Mutate one exact request's response, or fail after flushing its predecessors."""
+    if mode == 'signer-shape' and args == ['--sign']:
+        for line in sys.stdin:
+            request = json.loads(line)
+            print(json.dumps(dict(id=request['id'], ok=dict(digest_hex='broken'))), flush=True)
+        return 0
     if args:
         if mode == 'version-hang':
             time.sleep(30)
@@ -37,6 +42,21 @@ def wrap(mode, program, args):
                          capture_output=True, text=True, check=True)
     responses = [json.loads(line) for line in run.stdout.splitlines()]
     for request, response in zip(requests, responses):
+        if mode.startswith('M'):
+            from test_campaign_generator import m3_trigger, mutate_response
+            height_response = None
+            if mode == 'M3' and m3_trigger(request, response):
+                probe = dict(request, flags=request['flags'] & ~512)
+                height = subprocess.run([program], input=json.dumps(probe) + '\n',
+                                        capture_output=True, text=True, check=True)
+                height_response = json.loads(height.stdout)
+            action = mutate_response(mode, request, response, height_response)
+            if action == 'crash':
+                return 3
+            if action == 'timeout':
+                time.sleep(30)
+        if mode == 'q6-after' and '-after-' in request['id']:
+            response['ok']['digest_hex'] = '00' * 32
         if request['id'] == 'campaign-3':
             if mode == 'batch-only' and len(requests) > 1:
                 return 3
@@ -79,6 +99,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('oracle')
     parser.add_argument('harness')
+    parser.add_argument('--signer', help='defaults to core-signer beside the harness')
     args = parser.parse_args()
     args.oracle = str(pathlib.Path(args.oracle).resolve())
     args.harness = str(pathlib.Path(args.harness).resolve())
@@ -252,6 +273,8 @@ def main():
         check(campaign.selected_cases(['cltv'], 1) != campaign.selected_cases(['cltv'], 2), 'check failed at line 236')
         print('ok clean: eight passes, zero in all six outcome classes')
         checks += 1
+    from test_campaign_generator import stage2
+    checks += stage2(args, wrapper, check)
     print(f'{checks} cases, 0 failures')
     return 0
 

@@ -208,13 +208,16 @@ The node at `e0a1c15` then rejects the re-signed spend with `UNSATISFIED_LOCKTIM
 The planted harness accepts the same bytes.
 The classification is `harness-fault`.
 
-The same check shows three production verdicts at L3 that agree with their properties.
+The same check shows four production verdicts at L3 that agree with their properties.
 The node accepts an ordinary 2-of-3 spend (Q1). It rejects an early recovery spend at lock time 1,000 with `UNSATISFIED_LOCKTIME` (Q3).
+It rejects a commitment-mode spend whose version changed after signing (Q4).
 A high-S signature fails LOW_S in the mempool and passes in a block, so the replay reports the rejection as policy only.
 
 On 2026-11-08, the branch `1.14-maint` of `dogecoin/dogecoin` was at the pin `e0a1c15`, so the upstream check used builds of that commit.
 A separate harness build with `--revision` gave the same L1 result for the planted candidate, and the same L3 result with `--target upstream`.
 It also gave the same responses as the pin harness to all 2,046 requests of 500 generated cases.
+
 L3 cannot make a valid recovery spend (Q2), because the template's operand is height 1,000,000.
 The node reports `non-final`, and the replay labels the case `not-comparable`.
+With the L1 part of stage 4, `scripts/test_campaign.py` passes 44 cases.
 These results test the replay procedure, and they add no theorem.

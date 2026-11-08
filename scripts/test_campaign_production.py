@@ -6,7 +6,7 @@ Usage: python3 -I scripts/test_campaign_production.py <dogelib-oracle> <core-ora
 The campaign searches with the planted harness fault M3 of section 8.2, reduces
 the first detection, and replays it at L1 with the unchanged harness at the pin.
 --node adds the L3 replay on regtest, which must classify the candidate as a
-harness fault, and three ordinary L3 spends with known node verdicts.
+harness fault, and four L3 spends with known node verdicts.
 --upstream-harness adds the L1 replay against a harness build of another
 commit, and compares its responses with the pin harness on generated cases.
 """
@@ -49,7 +49,7 @@ def spend_plan(branch, lock_time=0, sequence=0xffffffff, signature_mutation='non
 
 
 def l3_positives(args, check, signer, node):
-    """Three spends with known production verdicts, and the comparison that reports a reproduction."""
+    """Four spends with known production verdicts, and the comparison that reports a reproduction."""
     programs = dict(lean=args.oracle, core=args.harness, signer=signer,
                     node=str(pathlib.Path(node) / 'core/src/dogecoind'))
     checks = 0
@@ -79,6 +79,18 @@ def l3_positives(args, check, signer, node):
     check(campaign_production.outcome(evidence['mempool'], contradicted, expected) == 'not-comparable',
           'a rebuilt case with another expectation was comparable')
     print('ok L3 comparison: a contradicting node verdict reproduces, and a changed case is not comparable')
+    checks += 1
+    # Commitment mode: Core signs version 1, and the spend has version 3, which ALL commits to.
+    committed, _ = spend_plan('ordinary')
+    committed.update(mode='commitment', mutations=[dict(field='version', value=2)])
+    expected = expectation(committed, mutated(committed))
+    check(expected['property'] == 'Q4' and expected['verdict'] == 'rejected', expected)
+    evidence = campaign_production.run_l3(committed, expected, programs, 60)
+    for side in ('mempool', 'block'):
+        check(evidence[side]['result'] == 'rejected' and not evidence[side]['nonmandatory'], evidence[side])
+    check(evidence['outcome'] == 'not-reproduced', evidence['outcome'])
+    print(f"ok L3 Q4: a commitment-mode spend with a changed version fails in the mempool and in a block: "
+          f"{evidence['block']['reason']} ({evidence['seconds']} s)")
     checks += 1
     high_s, expected = spend_plan('ordinary', signature_mutation='high_s')
     check(expected['script_error'] == 'SIG_HIGH_S', expected)

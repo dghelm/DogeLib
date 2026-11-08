@@ -1407,10 +1407,11 @@ The unchanged harness must not reproduce the reduced candidate at L1, and the re
 `--node` adds L3.
 The node must reject the reduced spend with `UNSATISFIED_LOCKTIME` in its mempool and in a block, and the planted wrapper must accept the same bytes.
 The candidate must then have the label `harness-fault`.
-`--node` also checks three ordinary spends:
+`--node` also checks four other spends:
 
 - An ordinary 2-of-3 spend, which the mempool and a block accept.
 - An early recovery spend at lock time 1,000, which both reject with `UNSATISFIED_LOCKTIME`.
+- A commitment-mode spend whose version changes after signing, which both reject with `mandatory-script-verify-flag-failed`.
 - A high-S spend, which the mempool rejects with `SIG_HIGH_S` and a block accepts, so `policy_only` is true.
 
 `--upstream-harness` adds L1 against another harness build, with `--target upstream`.
@@ -1418,5 +1419,5 @@ It sends the requests of 500 generated cases to both harness builds and reports 
 When the node build names the same commit, it also runs L3 with `--target upstream`.
 
 `scripts/test_campaign.py` runs the L1 part, without `--node`.
-With `--node` and `--upstream-harness`, the self-test took 26 seconds on the development machine.
+With `--node` and `--upstream-harness`, the self-test passed 11 cases in 28 seconds on the development machine.
 Each L3 replay took about 1.5 seconds, and the search and reduction took about 18 seconds.

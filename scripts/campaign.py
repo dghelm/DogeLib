@@ -583,6 +583,8 @@ def main():
             parser.error('--script requires --campaign proposal')
         if args.command == 'run' and args.campaign == 'generated' and not args.signer:
             parser.error('--campaign generated requires --signer')
+        if args.command == 'replay' and not args.level and (args.revision or args.node or args.target != 'pin'):
+            parser.error('--target, --revision and --node require --level')
         for program in (args.oracle, args.harness, *([args.signer] if args.signer else [])):
             if not pathlib.Path(program).is_file() or not os.access(program, os.X_OK):
                 raise OSError(f'program is absent or not executable: {program}')

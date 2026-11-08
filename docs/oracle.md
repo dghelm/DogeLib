@@ -1080,6 +1080,7 @@ The campaign seed selects the order, and `--cases` limits the prefix without rep
 Each version probe has a fixed 0.25-second timeout.
 Probe time counts against the campaign budget.
 An invocation stopped by the remaining budget marks the run incomplete without recording a program timeout.
+
 The driver bisects a failed stream until it isolates individual requests, while time remains.
 Bisection assumes that responses depend only on their requests.
 If one half isolates a crash, the driver does not also save the parent batch.
@@ -1094,6 +1095,7 @@ Its `summary.json` records revisions, versions, seed, budgets, input selection a
 The per-case `counts`, including passes, sum to `completed`.
 `batch_counts` records stream failures that bisection did not attribute to individual requests.
 The `failures` total includes both per-case disagreements and process failures, and these separate batch failures.
+
 `unsupported` and harness `refusal` count apart from disagreements, and each gets a saved record.
 `known` stays zero because this stage checks agreement alone, without the properties that classify known baseline behaviours.
 A Q6 disagreement has failing side `undetermined`: agreement alone cannot establish which implementation violates an independent property.
@@ -1103,6 +1105,7 @@ A file name hashes the canonical request text with SHA-256, or the request array
 Records contain exact requests, full responses, process status, standard error and the raw output of failed batches before bisection.
 Per-request records retain the full raw stream in `stdout`, with its request order in `stdout_requests`.
 Invalid UTF-8 bytes use JSON surrogate escapes and round-trip with Python's `surrogateescape` codec.
+
 The `signer` array is empty and `CORE_SIGNER_BLOB` is null because the driver never invokes a signer.
 The adjacent `core.stamp` records the harness build provenance, or null for a wrapper without a stamp.
 

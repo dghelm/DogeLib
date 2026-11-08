@@ -5,13 +5,16 @@
 
 namespace {
 // All Core references here use e0a1c157791544e818c901bd9341896965afbf9d.
+// D94, univalue/include/univalue.h: 24–47, 64–82, 84–153, 172–180:
+// JSON construction, access, type tests, arrays, object members, read and write.
+// D93, utilstrencodings.h: 94–111: HexStr, called by the fixture hex helper.
 Bytes requestHex(const UniValue& request, const char* name) {
     const UniValue& value = find_value(request, name);
     if (!value.isStr()) throw std::runtime_error(std::string(name) + " must be hex");
     const std::string text = value.get_str();
     if (text.size() % 2 || text.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos)
         throw std::runtime_error(std::string(name) + " must be hex");
-    // D38, src/utilstrencodings.cpp: 60–85, ParseHex.
+    // D38, src/utilstrencodings.cpp: 74–99, ParseHex.
     return ParseHex(text);
 }
 int requestInt(const UniValue& value, int lo, int hi) {
@@ -24,7 +27,8 @@ UniValue signRequest(const UniValue& request) {
     if (!request.isObject()) throw std::runtime_error("expected object");
     const Bytes bytes = requestHex(request, "tx_hex");
     if (bytes.size() > 100000) throw std::runtime_error("transaction exceeds 100000 bytes");
-    // D21, src/streams.h: 183–187, 342–352. D4, transaction.h: 210–243,
+    // D21, src/streams.h: 192–195, 242, 342–352, 379–383.
+    // D4, transaction.h: 210–243,
     // 399–401: base-only transaction deserialization.
     CDataStream stream(bytes, SER_NETWORK, PROTOCOL_VERSION | SERIALIZE_TRANSACTION_NO_WITNESS);
     CMutableTransaction tx;
@@ -79,6 +83,14 @@ void signStream() {
 }
 }
 int main(int argc, char** argv) {
+    if (argc == 2 && std::string(argv[1]) == "--version") {
+        UniValue version(UniValue::VOBJ);
+        version.pushKV("core_pin", PIN);
+        version.pushKV("CORE_SIGNER_BLOB", CORE_SIGNER_BLOB);
+        version.pushKV("request_source_blob", CORE_SIGNER_REQUEST_BLOB);
+        std::cout << version.write() << std::endl;
+        return 0;
+    }
     if (argc != 2 || std::string(argv[1]) != "--sign") return fixtureMain(argc, argv);
     // D91, key.cpp: 300–324. D50, pubkey.cpp: 299–316, ECCVerifyHandle.
     ECC_Start();

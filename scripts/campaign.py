@@ -177,6 +177,26 @@ def prepare_generated(args, plans, timeout):
     signing = [signing_requests(case['plan'], f"generated-{case['case_index']}") for case in plans]
     flat = [r for group in signing for r in group]
     signed = execute(args.signer, flat, timeout, ['--sign'])
+    if 'error' not in signed:
+        try:
+            for request, response in zip(flat, signed['responses']):
+                if 'error' in response:
+                    if (set(response) != {'id', 'error'} or response['error'].get('kind') != 'refusal' or
+                            not isinstance(response['error'].get('reason'), str)):
+                        raise ValueError('invalid signer refusal')
+                    continue
+                ok = response['ok']
+                digest = ok['digest_hex']
+                sigs = ok['signatures_hex']
+                if (set(response) != {'id', 'ok'} or not isinstance(digest, str) or len(digest) != 64 or
+                        bytes.fromhex(digest).hex() != digest or not isinstance(sigs, list) or
+                        len(sigs) != len(request['key_ids']) or
+                        any(not isinstance(s, str) or not 9 <= len(bytes.fromhex(s)) <= 73 or
+                            bytes.fromhex(s)[-1] != request['hash_type'] for s in sigs) or
+                        any(not isinstance(ok[k], str) for k in ('CORE_SIGNER_BLOB', 'request_source_blob'))):
+                    raise ValueError('invalid signer result')
+        except (KeyError, TypeError, ValueError, AttributeError) as error:
+            signed['error'] = dict(code='MALFORMED', message=f'malformed signer response: {error}')
     if 'error' in signed:
         entries = [dict(request=r, process=signed) for r in flat]
     else:
@@ -214,6 +234,16 @@ def run_campaign(args, cases=None):
     cases = cases[:args.cases]
     # Probe the programs first, so that an invocation error leaves no empty run directory.
     revisions = metadata(args.oracle, args.harness, 0.25)
+    if generated:
+        capture = {}
+        try:
+            raw = run_captured(args.signer, ['--version'], '', 0.25, capture)
+            version = json.loads(raw)
+            revisions['CORE_SIGNER_BLOB'] = version['CORE_SIGNER_BLOB']
+            revisions['signer_request_blob'] = version['request_source_blob']
+        except (RunError, ValueError, KeyError):
+            pass
+        revisions['versions']['signer'] = capture
     output = pathlib.Path(args.output) / f'run-{args.seed}-{time.time_ns()}'
     output.mkdir(parents=True, exist_ok=False)
     (output / 'failures').mkdir()
@@ -224,7 +254,9 @@ def run_campaign(args, cases=None):
     batch_counts = dict(crash=0, timeout=0)
     saved, completed, attempts = [], 0, 0
     coverage = {key: {} for key in ('branches', 'hash_types', 'errors', 'mutations', 'properties', 'modes',
-                                   'input_positions', 'input_counts', 'output_counts', 'selectors', 'flags')}
+                                   'input_positions', 'input_counts', 'output_counts', 'selectors', 'flags',
+                                   'flag_bits', 'lock_times', 'own_sequences', 'other_sequences', 'signer_pairs', 'known')}
+    q6_requests = 0
 
     def reach(key, value):
         name = str(value)
@@ -257,7 +289,7 @@ def run_campaign(args, cases=None):
         saved.append(str(path))
 
     def visit(batch, history):
-        nonlocal completed, attempts
+        nonlocal completed, attempts, q6_requests
         if time.monotonic() >= deadline:
             return False
         pending = [case for case in batch if 'plan' in case and 'requests' not in case]
@@ -326,6 +358,7 @@ def run_campaign(args, cases=None):
                 batch_counts[results[0][1][0]] += 1
             return left and right
         completed += len(batch)
+        q6_requests += len(requests)
         counts['pass_count'] += len(batch) - len(results)
         failed = {index for index, _ in results}
         offset = 0
@@ -336,8 +369,15 @@ def run_campaign(args, cases=None):
                 for key, value in (('branches', p['branch']), ('modes', p['mode']),
                                    ('properties', case['expected']['property']), ('input_positions', p['n']),
                                    ('input_counts', len(p['tx']['inputs'])), ('output_counts', len(p['tx']['outputs'])),
-                                   ('selectors', p['selector']), ('flags', p['flags'])):
+                                   ('selectors', p['selector']), ('flags', p['flags']),
+                                   ('lock_times', p['tx']['lock_time']), ('own_sequences', p['tx']['inputs'][p['n']]['sequence']),
+                                   ('signer_pairs', p['key_ids'])):
                     reach(key, value)
+                for bit in (1, 2, 4, 8, 16, 512, 1024):
+                    reach('flag_bits', f'{bit}:{bool(p["flags"] & bit)}')
+                for j, item in enumerate(p['tx']['inputs']):
+                    if j != p['n']:
+                        reach('other_sequences', item['sequence'])
                 for h in p['hash_types']:
                     reach('hash_types', h)
                 for m in p['mutations']:
@@ -348,6 +388,7 @@ def run_campaign(args, cases=None):
                 if index not in failed and case['expected'].get('known'):
                     counts['pass_count'] -= 1
                     counts['known'] += 1
+                    reach('known', case['expected']['known'])
             offset += size
         for index, result in results:
             counts[result[0]] += 1
@@ -367,9 +408,12 @@ def run_campaign(args, cases=None):
     for offset in range(0, len(cases), args.batch_size):
         if not visit(cases[offset:offset + args.batch_size], []):
             break
+        if getattr(args, 'stop_after_failure', False) and any(counts[k] for k in ('verdict', 'digest', 'crash', 'timeout')):
+            break
     failures = sum(counts[k] for k in ('verdict', 'digest', 'crash', 'timeout')) + sum(batch_counts.values())
     summary = dict(output=str(output), campaign=args.campaign, seed=args.seed, budget=dict(cases=args.cases, seconds=args.seconds),
-                   inputs=args.inputs, selection=[{k: v for k, v in case.items() if k != 'request'} for case in cases], coverage=coverage,
+                   inputs=args.inputs, selection=[{k: v for k, v in case.items() if k != 'request'} for case in cases],
+                   coverage=coverage, q6_requests=q6_requests,
                    selected=len(cases), completed=completed,
                    exhausted=completed < len(cases), counts=counts, batch_counts=batch_counts, failures=failures,
                    saved=saved, revisions=revisions, batch_size=args.batch_size,

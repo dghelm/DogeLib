@@ -16,6 +16,12 @@ SEQUENCES = (0, 0xfffffffe, 0xffffffff)
 TRUE = ('01', '02', '81')
 FALSE = ('', '00', '80', '0000')
 ONE = '01' + '00' * 31
+KNOWN = {
+    'single-fixed-digest': 'D3, interpreter.cpp:1225–1237',
+    'recovery-without-cltv': 'D3, interpreter.cpp:350–358',
+    # The exact 2-of-3 template has distinct keys, so this entry is not reached.
+    'duplicate-key-match': 'D3, interpreter.cpp:944–1009 (key matching without a uniqueness check)',
+}
 
 # Design record 0009 §6.3, derived by hand from pinned interpreter.cpp
 # 1054–1143 and 1225–1246 (D3). Columns: ALL, ALL|ACP, NONE,
@@ -116,7 +122,11 @@ def plans(seed, count):
             boundaries.append(('flag', (flag, enabled)))
     for h in HASH_TYPES:
         for field in FIELDS:
-            boundaries.append(('field', (h, field)))
+            for mode in ('preserve', 'commitment'):
+                boundaries.append(('field', (h, field, mode)))
+    for first in HASH_TYPES:
+        for second in HASH_TYPES:
+            boundaries.append(('mixed', (first, second)))
     for mutation in ('high_s', 'hash_byte', 'reverse', 'padding'):
         boundaries.append(('signature', mutation))
     boundaries.append(('unsupported', None))
@@ -132,6 +142,9 @@ def plans(seed, count):
             p['tx']['outputs'] = [dict(value=j + 1, script='51') for j in range(outputs)]
             accepted(p)
             p['flags'] |= 2 if h in DEFINED else 0
+            if h & 31 == 3 and n >= outputs:
+                p['mode'] = 'commitment'
+                p['mutations'] = [dict(field='version', value=2)]
         elif kind == 'lock':
             branch, lock, seq, mode = value
             p.update(branch=branch, selector='01' if branch == 'ordinary' else '',
@@ -153,23 +166,26 @@ def plans(seed, count):
             p['hash_types'] = [1] * len(p['key_ids'])
             p['flags'] = (1567 if enabled else 1567 & ~flag)
         elif kind == 'field':
-            h, field = value
+            h, field, mode = value
             p['hash_types'] = [h] * len(p['key_ids'])
             p['n'] = 1
             p['tx']['inputs'] = [dict(outpoint=rng.randbytes(36).hex(), sequence=0xfffffffe,
                                       script_sig='') for _ in range(3)]
             p['tx']['outputs'] = [dict(value=j + 1, script='51') for j in range(3)]
-            p['mode'] = 'commitment'
+            p['mode'] = mode
             p['mutations'] = [dict(field=field, value=2)]
             accepted(p)
         elif kind == 'signature':
             accepted(p)
             p.update(branch='ordinary', selector='01', key_ids=[1, 2], hash_types=[1, 1],
                      signature_mutation=value, flags=543)
+        elif kind == 'mixed':
+            p.update(branch='ordinary', selector='01', key_ids=[1, 3], hash_types=list(value))
+            accepted(p)
         elif kind == 'unsupported':
             accepted(p)
             p['flags'] |= 64
-        if p['hash_types'][0] not in DEFINED:
+        if any(h not in DEFINED for h in p['hash_types']):
             p['flags'] &= ~2
         p['boundary'] = kind
         describe_mutations(p)
@@ -338,6 +354,8 @@ def materialize(plan, prefix, signer):
 
 def property_result(case, runs):
     """Check each side against a property, keeping Q6 agreement separate."""
+    if case['plan']['flags'] & ~1567:
+        return None  # Q1–Q7 require a subset of the supported flag set.
     expected = case['expected']
     violations = []
     for side, run in runs.items():

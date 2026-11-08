@@ -37,6 +37,13 @@ def wrap(mode, program, args):
                          capture_output=True, text=True, check=True)
     responses = [json.loads(line) for line in run.stdout.splitlines()]
     for request, response in zip(requests, responses):
+        if mode.startswith('M'):
+            from test_campaign_generator import mutate_response
+            action = mutate_response(mode, request, response)
+            if action == 'crash':
+                return 3
+            if action == 'timeout':
+                time.sleep(30)
         if request['id'] == 'campaign-3':
             if mode == 'batch-only' and len(requests) > 1:
                 return 3
@@ -79,6 +86,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('oracle')
     parser.add_argument('harness')
+    parser.add_argument('--signer', help='defaults to core-signer beside the harness')
     args = parser.parse_args()
     args.oracle = str(pathlib.Path(args.oracle).resolve())
     args.harness = str(pathlib.Path(args.harness).resolve())
@@ -252,6 +260,8 @@ def main():
         check(campaign.selected_cases(['cltv'], 1) != campaign.selected_cases(['cltv'], 2), 'check failed at line 236')
         print('ok clean: eight passes, zero in all six outcome classes')
         checks += 1
+    from test_campaign_generator import stage2
+    checks += stage2(args, wrapper, check)
     print(f'{checks} cases, 0 failures')
     return 0
 

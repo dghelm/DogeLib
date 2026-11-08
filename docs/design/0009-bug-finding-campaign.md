@@ -122,7 +122,7 @@ The oracle has no operation for a proposal (design record 0007, decision 8), so 
 
 ### 3.5 Planted harness faults
 
-The review of pull request #129 planted eight faults in the harness by hand, and the comparison caught seven of them (the message of commit `c2aa0ed`).
+The independent review of pull request #129 planted eight faults in the harness by hand, and the comparison caught seven of them ([review comment](https://github.com/dghelm/DogeLib/pull/129#issuecomment-6717383148)).
 The fault that survived matched only the last member of the failed list.
 That review showed that a planted fault measures what a comparison can detect, but the repository keeps no list of such faults.
 
@@ -136,7 +136,7 @@ The generator, the properties and the reducer must keep each behaviour.
 3. **The hash type of a spend.** `CheckSig` takes the last byte of the signature as `nHashType`, a value from 0 to 255 (C3, line 1263). The preimage ends with that value as four bytes (C2, line 1244). So a change of the last byte changes the preimage. This holds even for two values of one class, such as `0x01` and `0x21`.
 4. **Defined hash types.** With `STRICTENC`, the hash type without the ANYONECANPAY bit must be 1, 2 or 3. Otherwise the signature fails with `SIG_HASHTYPE` (C6, lines 186–195 and 208–209). Without `STRICTENC`, this check accepts every byte. C1 then reads each byte by its low five bits and its ANYONECANPAY bit.
 5. **The lock-time check.** `CheckLockTime` (C4) succeeds only when three conditions hold. The operand and `nLockTime` lie on the same side of 500,000,000. The operand is at most `nLockTime`. The sequence of input `n` is not `0xffffffff`. Without the flag `CHECKLOCKTIMEVERIFY`, the opcode is `OP_NOP2` (C5, lines 352–358).
-6. **Fields that execution reads.** Apart from the signature hash, the template reads two transaction fields: `nLockTime` and the sequence of input `n`, through C4. Every hash type commits to both (item 1). So no open field of section 6.3 changes the execution of the template.
+6. **Fields that execution reads.** Apart from the signature hash, the template reads two transaction fields: `nLockTime` and the sequence of input `n`, through C4. Every hash type commits to both (item 1). Execution also reads the `scriptSig` of input `n`, which no digest commits to (C1). Its pushes form the unlocking stack: the dummy, the signatures with their encodings, the selector and the redeem script. A change of that `scriptSig` can change the branch or the verdict with both digests unchanged. For example, the fixture `multisig-selector` keeps `digest_hex` equal to `spend_digest_hex` and gets `EVAL_FALSE`. No other open field of section 6.3 changes the execution of the template.
 7. **Flag assertions.** `VerifyScript` asserts that `WITNESS` implies `P2SH` and that `CLEANSTACK` implies both (C7). The harness refuses those combinations, and the comparator classifies them (section 3.3).
 8. **The production caller.** A node calls `VerifyScript` through `CScriptCheck` with `CachingTransactionSignatureChecker` (C8). The harness calls it with `TransactionSignatureChecker` ([docs/oracle.md](../oracle.md#what-the-harness-runs)). The two differ in the signature cache, and in the precomputed hashes, which only `SIGVERSION_WITNESS_V0` reads (C2, line 1180).
 
@@ -177,7 +177,7 @@ The search for the planted fault needs the baseline and the faulty rule on the s
 **Recommendation: E1.**
 One reducer serves both the signed-spend family and the proposal.
 The executable is not part of `Exports`, and `dogelib-oracle` gets no proposal operation, so decision 8 of design record 0007 holds.
-The maintainer decides whether a test executable of this kind is within that decision (decision 11, and the questions in section 14).
+Decision 8 of design record 0007 concerns operations of the oracle, and `proposal-replay` adds none. The maintainer confirmed this reading on 2026-11-08 (section 14).
 
 ## 6. Generation
 
@@ -246,7 +246,7 @@ Some parts are enumerated in full at their boundaries, as `locktime_sets` does:
 - Lock times 0, 999,999, 1,000,000, 1,000,001, 499,999,999, 500,000,000 and `0xffffffff`.
 - Sequences 0, `0xfffffffe` and `0xffffffff` on input `n` and on the other inputs.
 - All six defined hash types with `STRICTENC`, and the bytes `0x00`, `0x04`, `0x21`, `0x84` and `0xff` without it.
-- Positions `n` from 0 to 3, with 1 to 4 inputs and 0 to 4 outputs. So SINGLE reaches both sides of the fixed digest.
+- Positions `n` from 0 to 3, with 1 to 4 inputs and 0 to 5 outputs. So SINGLE reaches both sides of the fixed digest, and mutant M5 of section 8.2 has reachable cases.
 - Selectors `01`, `02` and `81` for true, and the empty push, `00`, `80` and `0000` for false.
 - Each flag of the supported set `1567` set and clear, with `P2SH` set. A few cases set an unsupported flag, so the unsupported class stays visible.
 
@@ -283,7 +283,7 @@ The driver gives each failure one class:
 | `crash` | A program exits with a nonzero status or a signal, or its output fails `run_stream`'s checks. |
 | `timeout` | A batch, or the bisected request alone, exceeds the time limit. |
 | `unsupported` | Lean returns `unsupported` where the property needs a verdict. It is not a disagreement. |
-| `refusal` | The harness refuses the request under `harness_refused`, or the signer refuses it. It is not a disagreement. |
+| `refusal` | The harness refuses the request under `harness_refused`, or the signer refuses a signing request. It is not a disagreement. |
 
 The driver counts `unsupported` and `refusal` outcomes and saves a sample of each, so that a loss of coverage stays visible.
 
@@ -311,6 +311,7 @@ The proposed format is `dogelib-campaign-failure/1`, one JSON object with these 
 | `class`, `failing_side` | The class and the side of section 7.2 |
 | `plan` | The construction plan of section 6.1, with the mode and the mutations |
 | `requests` | Each exact request, with its flags and context, in send order |
+| `signer` | Each exact signing request and the signer's complete response, or its exit status and standard error. Empty when the case signs nothing |
 | `responses` | Both complete responses to each request, without truncation |
 | `expected` | The expected verdict or digest relation, and the property text it comes from |
 | `revisions` | The DogeLib commit and a dirty-tree flag, the Core pin, `core.stamp`, both `--version` outputs and the signer's `CORE_SIGNER_BLOB` |
@@ -323,8 +324,11 @@ The proposed format is `dogelib-campaign-failure/1`, one JSON object with these 
 ### 7.4 Replay and the reducer
 
 `scripts/campaign.py replay <failure> <oracle> <harness>` sends the stored requests unchanged and reclassifies the responses.
-It never signs again, so a replay needs no signer.
+It never signs again, so a replay of a failure on the oracle or the harness needs no signer.
 It reports whether the stored class and failing side reproduce.
+A failure of the signer itself, such as a refusal or a digest that differs from both programs, has its own path.
+`scripts/campaign.py replay --signer <signer> <failure> <oracle> <harness>` sends the stored signing requests to the signer again and compares its responses with the stored ones.
+Every replay guarantee of this record covers signer failures only through that path.
 
 `scripts/campaign.py reduce <failure> <oracle> <harness> <signer>` changes the plan, not the bytes.
 A candidate plan replaces the current one when it keeps the *failure condition*: the same property, the same class and the same failing side.
@@ -344,8 +348,13 @@ In the mode that preserves execution, it signs each candidate again.
 In the mode that tests a commitment, it changes the unmutated transaction, signs that, then applies the remaining mutations and keeps the signatures.
 A candidate must also stay in the domain of its property: for example, Q4 never accepts a candidate with the fixed digest.
 
-The output is *1-minimal* for the reducer's changes: no single change keeps the failure condition.
 The reducer is deterministic, and it stops after a fixed number of candidates.
+Its output has one of two labels:
+
+- `minimal`: the reducer finished a complete final pass of steps 1 to 6 in which no change kept the failure condition. The output is *1-minimal* for the reducer's changes.
+- `budget`: the limit of candidates ended the reduction before such a pass. The output still keeps the failure condition, but the reducer claims no minimality.
+
+Only an output with the label `minimal` meets an exit condition that asks for a 1-minimal output.
 
 ### 7.5 Known behaviours
 
@@ -420,7 +429,7 @@ The campaign also needs a measure of its reach: a fault that triggers only on a 
 | M6 | Core | The fixed digest of section 4, item 2 | Return a digest other than one | `digest` |
 
 The list is a proposal, and the stage settles the triggers.
-For each mutant the self-test records whether the driver detects it within the budget, and the case index of the first detection.
+For each mutant the self-test requires detection within the budget, and it records the case index of the first detection.
 It also checks that the reducer keeps the trigger, and that replay reproduces the stored class.
 
 Source-level mutants, such as a change of one line of `core_oracle.cpp`, measure the same reach with more fidelity.
@@ -449,7 +458,9 @@ A candidate that reproduces at the pin is replayed against the current upstream 
 The replay builds the harness from that revision into a separate build directory.
 `scripts/build_core_harness.sh` fixes `PIN` (line 18), so the replay needs a revision argument for this purpose only.
 The result is a comparison with that revision, labelled with its commit, and never a change to the pin in SOURCES.md.
-The maintainer decides whether such an argument is acceptable (decision 14).
+The maintainer accepted such an argument on 2026-11-08 (decision 14).
+
+The pin in SOURCES.md and in the CI comparison stays `e0a1c15`. An upstream build is evidence about upstream, never a change to the compatibility target.
 
 ### 9.3 Operations with a transcription
 
@@ -506,9 +517,9 @@ Without `P2SH`, the output accepts any `scriptSig` that pushes the redeem script
 | Q2 Recovery under its lock time | Take key 4, a re-signed spend and a false selector. Take a lock time from 1,000,000 to 499,999,999, and a sequence of input `n` other than `0xffffffff`. Then the spend is accepted. | Item 5 | `multisigRecovery_recovery_complete`, relative to the verifier |
 | Q3 Early recovery fails | Take `CHECKLOCKTIMEVERIFY` and a false selector. Then `UNSATISFIED_LOCKTIME` follows from each of these: a lock time below 1,000,000 or of at least 500,000,000, or a final sequence of input `n`. The result holds in both modes. | Item 5, and the order of the template: the lock-time check runs before `OP_CHECKSIG` | `multisigRecovery_lockTime_lt` for the first case only |
 | Q4 Committed fields | Take the mode that tests a commitment, and change a field that the hash type commits to (section 6.3). Then the Lean preimage and Core's digest change, and the spend is rejected. The fixed digest is outside the domain. | The table of section 6.3 | `legacySignatureHashPlan_allOnly_commits` for ALL without ACP |
-| Q5 Open fields | In the mode that tests a commitment, a change of an open field leaves both digests and the accepted verdict unchanged. | The table of section 6.3, and item 6 | The theorems of section 6.3, except NONE and SINGLE with ACP |
+| Q5 Open fields | Take the mode that tests a commitment. The mutation keeps the `scriptSig` of input `n`, so it keeps the unlocking stack, the branch and the signature encodings. It changes only fields that are open for the hash type of every signature that the spend uses. Then both digests and the accepted verdict stay unchanged. | The table of section 6.3, and item 6 | The theorems of section 6.3, except NONE and SINGLE with ACP |
 | Q6 Agreement | Lean and Core give the same response to each request of the campaign, under `compare` of `compare_core.py`. | The comparison itself | None. A compatibility claim |
-| Q7 The fixed digest | Take SINGLE with `n` at least the number of outputs. Both programs return plan `fixed_digest` and the digest one. The spend stays accepted after each change that keeps the condition and leaves the fields of item 6 unchanged. | Item 2 | `legacySignatureHashPlan_eq_fixedDigest_iff` |
+| Q7 The fixed digest | Take SINGLE with `n` at least the number of outputs. Both programs return plan `fixed_digest` and the digest one. Take a change that keeps the condition and the hash type of every signature. If it also keeps the fields of item 6, including the `scriptSig` of input `n`, the spend stays accepted. | Item 2 | `legacySignatureHashPlan_eq_fixedDigest_iff` |
 
 Q4 assumes that double SHA-256 has no collision on the inputs of the run, as the commitment checks of `lake test` do ([SOUNDNESS.md](../../SOUNDNESS.md#legacy-signature-hash-what-all-commits-to)).
 Its rejection also assumes that no one can forge a signature for the changed digest.
@@ -558,7 +569,7 @@ Its first input is the existing signed-spend and targeted lock-time requests, wi
 
 The stage exits with these results:
 
-- `scripts/test_campaign.py` with wrapper mutants for each class of section 7.2. Each mutant gives a saved failure whose replay reproduces the class.
+- `scripts/test_campaign.py` with wrapper mutants for each class of section 7.2. Each mutant gives a saved failure whose replay reproduces the class. Signer refusals enter in stage 2, with the signer path of section 7.4.
 - Zero failures on the existing requests, with the counts of each class.
 
 ### Stage 2: the signer and the generator
@@ -568,8 +579,8 @@ The stage adds `core-signer --sign` and the generator of section 6, with the tab
 The stage exits with these results:
 
 - A run at a fixed seed with zero failures other than `known`, and the coverage counts of section 6.4.
-- The mutants M1 to M6 of section 8.2, each detected within the budget, or a recorded reason for each survivor.
-- A check that the signer gives the same bytes for the same request twice.
+- The mutants M1 to M6 of section 8.2, each detected within the budget. A survivor fails the stage until the generator or the trigger changes.
+- A check that the signer gives the same bytes for the same request twice, and a signer refusal whose replay with `--signer` reproduces it.
 
 ### Stage 3: the reducer and the planted fault
 
@@ -578,12 +589,12 @@ The stage adds `reduce` and the test executable `proposal-replay` (section 5.3).
 The stage exits with these results:
 
 - The blind search of section 8.1 finds a violation of three instructions, and it finds none for the corrected variant.
-- The reducer takes `51 52 b3 51 87` to a three-instruction violation, and the output is 1-minimal.
+- The reducer takes `51 52 b3 51 87` to a three-instruction violation, with the label `minimal` of section 7.4.
 - The reducer keeps the trigger of each mutant of section 8.2.
 
 ### Stage 4: production replay
 
-The stage adds the replay procedure of section 9 for the signed-spend family at L1 and L3. It adds the revision argument of section 9.2 if the maintainer accepts it.
+The stage adds the replay procedure of section 9 for the signed-spend family at L1 and L3. It also adds the revision argument of section 9.2.
 
 The stage exits with an end-to-end run on a planted harness fault.
 The campaign finds the fault, reduces it, replays it at L1 with the unchanged harness and at L3, and classifies it as a harness fault.
@@ -609,7 +620,7 @@ These proposals wait for a maintainer decision:
 | 6 | Saved failures | `dogelib-campaign-failure/1`, one file for each failure under `build/campaign/`, never committed (section 7.3). | One appended log for each run. | Proposed |
 | 7 | Outcome classes | The six classes and the side table of section 7.2, with known behaviours counted apart (section 7.5). | Pass and fail only. | Proposed |
 | 8 | Isolation | Batches with bisection on a stream-level failure (section 7.1). | One process for each request. | Proposed |
-| 9 | Reducer | Changes to the plan in the order of section 7.4, aware of the signing mode, deterministic and 1-minimal. | Byte-level delta debugging alone. | Proposed |
+| 9 | Reducer | Changes to the plan in the order of section 7.4, aware of the signing mode and deterministic. It claims 1-minimality only after a complete final pass, and labels other output `budget`. | Byte-level delta debugging alone. | Proposed |
 | 10 | Oracle format | No change to `dogelib-oracle/1`. The signer's request mode is a change to a harness tool under the 0.x policy (section 7.6). | A campaign operation in the oracle. | Proposed |
 | 11 | Planted fault | E1: the test executable `proposal-replay`, outside `Exports`, and the exit results of section 8.1. | E2: a search and reducer in Lean. | Proposed |
 | 12 | Reach | Semantic wrapper mutants M1 to M6 with a detection record (section 8.2). Source mutants stay a review practice. | Source mutants built for each run. | Proposed |
@@ -619,11 +630,16 @@ These proposals wait for a maintainer decision:
 | 16 | Regression | Fixtures in `tests/script/campaign/` with `SHA256SUMS`, a named comparison set and theorem targets of section 11 (section 10). | Saved failures without fixtures. | Proposed |
 | 17 | Exclusions | Transaction validation and the UTXO set, resource bounds, native fuzzing, Plausible and header targets stay outside this scope (sections 1 and 12). | None in this scope. | Proposed |
 
-These questions also need the maintainer:
+The maintainer answered three questions of the proposal on 2026-11-08.
+The decisions stay Proposed until adoption:
 
-- Decision 11: is a test executable that runs a proposal on requests in the shape of `script.verify_legacy` within decision 8 of design record 0007?
-- Decision 14: is a revision argument of the build script, used only for replay, acceptable without a change to SOURCES.md?
-- Decision 15: which contact does a DogeLib `SECURITY.md` give?
+- Decision 11: a test-only `proposal-replay` outside `Exports` is consistent with decision 8 of design record 0007, because that decision concerns oracle operations.
+- Decision 14: the harness build may take a revision argument for labelled upstream replay builds. The pin in SOURCES.md and in the CI comparison stays `e0a1c15`.
+- Section 8.1: the exit condition is a three-instruction violation, not the five-instruction case.
+
+One question stays open:
+
+- Decision 15: which contact does a DogeLib `SECURITY.md` give? The two options are GitHub private vulnerability reporting and an email address.
 
 ## 15. Remaining risks
 

@@ -159,6 +159,12 @@ def run_campaign(args, cases=None):
                     break
                 return False
             runs[side] = execute(program, requests, min(args.timeout, remaining))
+            if remaining < args.timeout and runs[side].get('error', {}).get('code') == 'TIMEOUT':
+                # The campaign deadline does not establish a program timeout.
+                if any('error' in run for name, run in runs.items() if name != side):
+                    runs[side] = dict(not_run='campaign time budget expired')
+                    break
+                return False
         attempts += 1
         results = assess(requests, runs)
         if results and results[0][0] is None and len(batch) > 1:
@@ -213,7 +219,7 @@ def replay(args):
     if record['signer']:
         raise ValueError('signer replay belongs to stage 2')
     requests = record['requests']
-    runs = {side: execute(program, requests, record['responses'][side].get('timeout', record['timeout']))
+    runs = {side: execute(program, requests, record['timeout'])
             for side, program in (('lean', args.oracle), ('core', args.harness))}
     results = assess(requests, runs)
     reproduced = any(result[0] == record['class'] and result[1] == record['failing_side']

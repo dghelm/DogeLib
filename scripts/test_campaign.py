@@ -169,14 +169,21 @@ def main():
         limited.timeout, limited.seconds = 5, 0.5
         limited.harness = wrapper(tmp / 'limited-core', 'timeout', args.harness)
         summary = campaign.run_campaign(limited, [copy.deepcopy(cases[3])])
-        assert summary['counts']['timeout'] == 1 and len(summary['saved']) == 1
-        record = json.loads(pathlib.Path(summary['saved'][0]).read_text())
-        assert record['responses']['core']['timeout'] < limited.timeout
-        reproduced = subprocess.run([sys.executable, '-I', str(ROOT / 'scripts/campaign.py'), 'replay',
-                                     summary['saved'][0], limited.oracle, limited.harness],
-                                    capture_output=True, text=True)
-        assert reproduced.returncode == 0, reproduced.stderr + reproduced.stdout
-        print('ok time limit: replay retains the effective invocation timeout')
+        if not summary['exhausted'] or summary['completed'] != 0 or summary['saved'] or summary['counts']['timeout']:
+            raise RuntimeError(f'budget exhaustion became a timeout: {summary}')
+        # A saved timeout must replay with its configured limit, even for older records.
+        from unittest.mock import patch
+        record = dict(format=campaign.FORMAT, signer=[], requests=[cases[3]['request']],
+                      timeout=10, responses={'lean': {'timeout': 0.01}, 'core': {'timeout': 0.01}},
+                      failing_side='core', **{'class': 'timeout'})
+        old = tmp / 'old-timeout.json'
+        old.write_text(json.dumps(record))
+        with patch.object(campaign, 'execute', return_value={'responses': []}) as execute, \
+                patch.object(campaign, 'assess', return_value=[]):
+            campaign.replay(argparse.Namespace(failure=str(old), oracle=args.oracle, harness=args.harness))
+            if [call.args[2] for call in execute.call_args_list] != [10, 10]:
+                raise RuntimeError('replay used a budget-shortened timeout')
+        print('ok time limit: incomplete without evidence, replay uses configured timeout')
         checks += 1
         options.output = str(tmp / 'clean')
         summary = campaign.run_campaign(options, cases)

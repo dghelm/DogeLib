@@ -141,7 +141,7 @@ def checkGenesisRange : IO Nat := do
   let mut failures := failures
   let index := indexOf records 0 13
   failures := failures + (← require "mainnet genesis hash"
-    (genesisHash? .mainnet == some records[0]!.header.getHash))
+    ((genesisHash? .mainnet).map displayHex == some KnownAnswers.MedianTimePast.genesisHash))
   for i in [0:13] do
     let some prev := index.lookup records[i]!.header.getHash
       | do failures := failures + (← require s!"genesis lookup at {i}" false); continue
@@ -170,10 +170,10 @@ def checkDigishieldRange : IO Nat := do
     | return 1
   let (failures, count) ← checkRange "144719-145030" records (some 145000)
   let mut failures := failures
-  let at145000 := records[145000 - first]!.header.getHash
   let some checkpoint := (checkpoints .mainnet).find? (·.height == 145000)
     | return failures + (← require "checkpoint 145000 in the table" false)
-  failures := failures + (← require "checkpoint 145000 hash" (checkpoint.blockHash? == some at145000))
+  failures := failures + (← require "checkpoint 145000 hash"
+    (checkpoint.blockHash?.map displayHex == some "cc47cae70d7c5c92828d3214a266331dde59087d4a39071fa76ddfff9b7bde72"))
   -- The index without the checkpoint block.
   let below := indexOf records 0 (145000 - first)
   failures := failures + (← require "no checkpoint below 145000"
@@ -463,13 +463,25 @@ def loadFullRange (path : System.FilePath) (first count anchor : Nat) (hash : St
 def mainnetCtx (header : PureBlockHeader) (checkpoints : Bool) : HeaderContext :=
   ⟨.mainnet, timeOf header, checkpoints⟩
 
-/-- Accepts the real header at `candidate` against the index of the records from `lo` to the candidate, with the anchor at `lo`.
-The expected added entry is the candidate's display hash at its height. -/
+/--
+The expected display hash of the fixture header at `height`, independent of `PureBlockHeader.getHash`.
+It is a pinned literal from `literals`, or else the `hashPrevBlock` field of the next fixture header, which the chain data supplies.
+-/
+def expectedHashAt (records : Array Record) (first height : Nat) (literals : List (Nat × String)) : String :=
+  match literals.lookup height with
+  | some hash => hash
+  | none => displayHex records[height + 1 - first]!.header.hashPrevBlock
+
+/--
+Accepts the real header at `candidate` against the index of the records from `lo` to the candidate, with the anchor at `lo`.
+The expected hash and added key come from `expectedHashAt`, and the added entry is at the candidate's height.
+The index keys are inputs, derived from each header with `PureBlockHeader.getHash`, as design record 0008, section 8.1, derives them.
+-/
 def acceptReal (label : String) (records : Array Record) (headers : Array BlockHeader) (first lo candidate : Nat)
-    (checkpoints : Bool) : IO Nat := do
+    (checkpoints : Bool) (literals : List (Nat × String) := []) : IO Nat := do
   let index := indexOf records (lo - first) (candidate - first)
   let header := headers[candidate - first]!
-  let hash := displayHex header.pure.getHash
+  let hash := expectedHashAt records first candidate literals
   checkStep s!"{label} {candidate}" (mainnetCtx header.pure checkpoints) index header
     (.accept hash [(hash, candidate)])
 
@@ -488,6 +500,8 @@ Mainnet steps with real full headers, expected from chain acceptance and hand de
 - AuxPoW activation: each candidate from 371331 to 371340 against the records from the anchor 371320, with checkpoints enabled.
   The candidate 371337 is the first AuxPoW header, and step 2 checks its payload.
 - `BIP66Height` 1034383, `BIP65Height` 3464751 and the heights below them, each against the 20 records below it.
+
+Each expected hash is a pinned literal or the `hashPrevBlock` field of the next fixture header (`expectedHashAt`), never a value of `PureBlockHeader.getHash`.
 - The header at `BIP66Height` with the base version 2 (`0x00620102`).
   The AuxPoW payload commits to the real header's hash.
   So step 2 rejects the changed header with `high-hash`, DoS 50 and `REJECT_INVALID`, before check 7 runs (D33, lines 3224 and 3225).
@@ -499,7 +513,7 @@ def checkMainnetSteps : IO Nat := do
       [(0, KnownAnswers.MedianTimePast.genesisHash)]
     | return 1
   let genesisHeader : BlockHeader := ⟨genesisRecords[0]!.header, none⟩
-  let genesisHex := displayHex genesisRecords[0]!.header.getHash
+  let genesisHex := KnownAnswers.MedianTimePast.genesisHash
   failures := failures + (← checkStep "mainnet genesis into an empty index" (mainnetCtx genesisHeader.pure true)
     ⟨[], []⟩ genesisHeader (.accept genesisHex [(genesisHex, 0)]))
   let flagged := (indexOf genesisRecords 0 1).insert genesisRecords[0]!.header.getHash
@@ -514,14 +528,15 @@ def checkMainnetSteps : IO Nat := do
     | return failures + 1
   let headers := records.map (⟨·.header, none⟩ : Record → BlockHeader)
   failures := failures + (← acceptReal "mainnet retarget" records headers first first 144960 true)
-  failures := failures + (← acceptReal "mainnet DigiShield" records headers first first 145000 true)
+  failures := failures + (← acceptReal "mainnet DigiShield" records headers first first 145000 true
+    [(145000, "cc47cae70d7c5c92828d3214a266331dde59087d4a39071fa76ddfff9b7bde72")])
   let at145000 := records[145000 - first]!
   let withCheckpoint := (indexOf records 0 (144990 - first)).insert at145000.header.getHash
     ⟨at145000.header, 145000, none, false, false, false⟩
   let fork := headers[144990 - first]!
   failures := failures + (← checkStep "mainnet fork below checkpoint 145000" (mainnetCtx fork.pure true)
     withCheckpoint fork (.reject "bad-fork-prior-to-checkpoint" 100 0x43 []))
-  let forkHex := displayHex fork.pure.getHash
+  let forkHex := expectedHashAt records first 144990 []
   failures := failures + (← checkStep "mainnet fork with checkpoints disabled" (mainnetCtx fork.pure false)
     withCheckpoint fork (.accept forkHex [(forkHex, 144990)]))
   let raised := indexOf records 1 (144960 - first)
@@ -532,8 +547,11 @@ def checkMainnetSteps : IO Nat := do
   let some (auxRecords, auxHeaders) ← loadFullRange "tests/block/mainnet-auxpow-activation-full-headers/headers.txt"
       371320 21 371337 checkpoint371337
     | return failures + 1
+  -- The hash of 371340, the last record, from `python3 -I` with `hashlib.sha256` applied twice to its first 80 bytes, in display order.
+  let last371340 := "0655edc2a7db012a8e2a1b742f962a7bd2d6101145cd88ce482c2b7f22f5c064"
   for candidate in [371331:371341] do
-    failures := failures + (← acceptReal "mainnet AuxPoW activation" auxRecords auxHeaders 371320 371320 candidate true)
+    failures := failures + (← acceptReal "mainnet AuxPoW activation" auxRecords auxHeaders 371320 371320 candidate true
+      [(371337, checkpoint371337), (371340, last371340)])
   failures := failures + (← require "AuxPoW payload at 371337" auxHeaders[371337 - 371320]!.auxpow.isSome)
   -- BIP66 and BIP65.
   let some (records66, headers66) ← loadFullRange "tests/block/mainnet-bip66-full-headers/headers.txt"

@@ -869,7 +869,8 @@ Two hypotheses read the record's wording in a specific way:
   Such a list needs a fixed point or a cycle of double SHA-256, and no theorem excludes it without a cryptographic assumption.
 - `process_complete` also takes `n ≤ 2147483647`.
   The record states its budget as every height in the index below `2147483647 − n`, which holds for every `n` when the index has no entry.
-  From the empty index, the header at position `k` after genesis gets height `k`, so the header at position 2147483647 is the first that can get `heightOutOfRange`.
+  From the empty index, the header at position `k` gets height `k`, with genesis at position 0.
+  So the header at position 2147483647 is the first that can get `heightOutOfRange`.
   A list of 2147483648 or more valid headers reaches it, and `n ≤ 2147483647` excludes exactly those lists (design record 0008, section 13.2).
 
 The proof module defines `LinksFrom`, `linearView`, `addHeaders`, `linkedEntry` and `LinearSetting` for these statements.

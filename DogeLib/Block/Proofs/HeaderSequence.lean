@@ -1983,9 +1983,11 @@ The target `process_complete` of design record 0008, section 11.
 Let the index be well formed and without anchors: every entry without a predecessor is at height 0, the genesis entry.
 Let the adjusted time be in the domain, at most `maxAdjustedTime`.
 Let `headers` have `n` headers, with the height budget of section 11: the greatest height in the index plus `n` is below 2147483647.
-The theorem states the budget for each entry, and also takes `n ≤ 2147483647` for an index without entries (design record 0008, section 13.2).
-From an empty index, the genesis header and the headers after it reach `heightOutOfRange` only at position 2147483647, so only a list of 2147483648 or more headers can reach it.
 Then the sequence returns no adapter error.
+
+The theorem states the budget for each entry, and also takes `n ≤ 2147483647` for an index without entries (design record 0008, section 13.2).
+From an empty index, the first header that can get `heightOutOfRange` is at position 2147483647.
+So only a list of 2147483648 or more headers can reach it.
 -/
 theorem process_complete (ctx : HeaderContext) (index : HeaderIndex) (wf : WellFormed ctx.network index)
     (headers : List BlockHeader)

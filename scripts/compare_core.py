@@ -62,45 +62,39 @@ class RunError(Exception):
         self.capture = capture or {}
 
 
-def run_program(program: str, args: list[str], data: str, timeout: float, capture: dict | None = None) -> str:
+def run_program(program: str, args: list[str], data: str, timeout: float) -> str:
     """Run `program` with `data` on standard input and return its standard output.
 
-    The program and any children it starts are killed when the timeout passes.
-    The optional capture retains full output and status, including on failure."""
+    The program and any children it starts are killed when the timeout passes."""
     proc = subprocess.Popen([program, *args], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, text=True, start_new_session=True)
-    evidence = capture if capture is not None else {}
     try:
         out, err = proc.communicate(data, timeout=timeout)
     except subprocess.TimeoutExpired:
         os.killpg(proc.pid, signal.SIGKILL)
-        out, err = proc.communicate()
-        evidence.update(stdout=out, stderr=err, returncode=proc.returncode)
-        raise RunError("TIMEOUT", f"{program} did not finish within {timeout} seconds", evidence)
-    evidence.update(stdout=out, stderr=err, returncode=proc.returncode)
+        proc.communicate()
+        raise RunError("TIMEOUT", f"{program} did not finish within {timeout} seconds")
     if proc.returncode != 0:
-        raise RunError("EXIT", f"{program} exited with status {proc.returncode}: {err.strip()[:500]}", evidence)
+        raise RunError("EXIT", f"{program} exited with status {proc.returncode}: {err.strip()[:500]}")
     return out
 
 
-def run_stream(program: str, requests: list[dict], timeout: float, args: list[str] | None = None,
-               capture: dict | None = None) -> list[dict]:
+def run_stream(program: str, requests: list[dict], timeout: float, args: list[str] | None = None) -> list[dict]:
     """The responses of `program` to `requests`, one per request, ids checked in order."""
     data = "".join(json.dumps(r, sort_keys=True, separators=(",", ":")) + "\n" for r in requests)
-    evidence = capture if capture is not None else {}
-    lines = run_program(program, args or [], data, timeout, evidence).splitlines()
+    lines = run_program(program, args or [], data, timeout).splitlines()
     if len(lines) != len(requests):
-        raise RunError("COUNT", f"{program}: {len(lines)} responses to {len(requests)} requests", evidence)
+        raise RunError("COUNT", f"{program}: {len(lines)} responses to {len(requests)} requests")
     responses = []
     for req, line in zip(requests, lines):
         try:
             resp = json.loads(line)
         except json.JSONDecodeError:
-            raise RunError("MALFORMED", f"{program}: response to {req['id']} is not JSON: {line[:200]}", evidence)
+            raise RunError("MALFORMED", f"{program}: response to {req['id']} is not JSON: {line[:200]}")
         if not isinstance(resp, dict):
-            raise RunError("MALFORMED", f"{program}: response to {req['id']} is not an object: {line[:200]}", evidence)
+            raise RunError("MALFORMED", f"{program}: response to {req['id']} is not an object: {line[:200]}")
         if resp.get("id") != req["id"]:
-            raise RunError("ID", f"{program}: expected id {req['id']}, got {json.dumps(resp.get('id'))}", evidence)
+            raise RunError("ID", f"{program}: expected id {req['id']}, got {json.dumps(resp.get('id'))}")
         responses.append(resp)
     return responses
 

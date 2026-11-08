@@ -151,10 +151,11 @@ def run_campaign(args, cases=None):
     deadline = started + args.seconds
     cases = selected_cases(args.inputs, args.seed) if cases is None else cases
     cases = cases[:args.cases]
+    # Probe the programs first, so that an invocation error leaves no empty run directory.
+    revisions = metadata(args.oracle, args.harness, 0.25)
     output = pathlib.Path(args.output) / f'run-{args.seed}-{time.time_ns()}'
     output.mkdir(parents=True, exist_ok=False)
     (output / 'failures').mkdir()
-    revisions = metadata(args.oracle, args.harness, 0.25)
     build = dict(lean_toolchain=(ROOT / 'lean-toolchain').read_text().strip(),
                  python=sys.version, machine=platform.uname()._asdict())
     counts = dict.fromkeys(CLASSES, 0)

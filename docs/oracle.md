@@ -1182,7 +1182,7 @@ Without `--active`, the revised step equals the baseline step.
 It answers every other operation with an unknown-operation error, and `--version` prints the format with `"program": "proposal-replay"`.
 
 The driver enumerates every script of one to five instructions from the alphabet of section 8.1, shortest first, with no seed.
-Each script runs with five lock times and two sequences, so the space has 374,480 cases.
+Each of the 37,448 scripts runs with five lock times and two sequences, so the space has 374,480 cases.
 The spending transaction has version 1, one input with a null outpoint and an empty `scriptSig`, no outputs and flags 0.
 `--variant` selects the variant, and `--cases` limits the prefix of the enumeration.
 
@@ -1190,7 +1190,11 @@ A violation is a request that `proposal-replay` accepts and `dogelib-oracle` rej
 Its saved failure names the property `RestrictsAcceptance`, the class `verdict` and the failing side `revised`.
 The record keeps the replay's arguments in `program_arguments`, so `replay` runs the same variant.
 Process failures, `unsupported` results and refusals keep the classes of section 7.2.
-Other differences between the two programs are not violations of this property.
+
+A failure of `proposal-replay` names the side `revised`.
+A response that is not an `ok` object with the result `accepted`, `rejected` or `unsupported` checks nothing.
+On either side, it is a `crash` with the code `RESULT`, so a search cannot pass without verdicts.
+Other differences between two verdicts are not violations of this property.
 
 `--script` runs one script instead of the enumeration, with `--lock-time` (default 2) and `--sequence` (default `0xfffffffe`).
 It accepts hex bytes, and it splits them into instructions at push boundaries.
@@ -1219,12 +1223,20 @@ It tries the changes of [section 7.4](design/0009-bug-finding-campaign.md#74-rep
 1. Remove one element, then two adjacent elements, then each half of four or more elements. An element is a mutation, the signature-encoding mutation or a script instruction.
 2. Remove each other input and each output, then move input `n` to position 0 or one position towards it.
 3. Replace the value of each push in a script with 0. Then set the version to 1, each nonfinal sequence to 0 and each output value to 0. Replace the lock time with the least value of its class.
-4. Clear each flag, except where the result would leave the assertion domain of C7.
-5. Set every hash type to ALL, then each one. Then set the selector to `01` or the empty push, but never from the empty push to `01`.
+4. Clear each flag that is not P2SH in a generated plan. Keep each result inside the assertion domain of C7.
+5. Set every hash type to ALL, then each one. Then replace a true selector with `01` and a false selector with the empty push.
 6. Remove one byte of each other script.
 
 The lock-time classes are the values below 1,000,000, the values from 1,000,000 to 499,999,999, and the values from 500,000,000.
-The template's CLTV operand is 1,000,000, and 500,000,000 separates heights from times (C4).
+The classes are specific to the 2-of-3 recovery template of decision 1.
+Its CLTV operand is 1,000,000, and 500,000,000 separates heights from times (C4).
+The template has no `OP_CHECKSEQUENCEVERIFY`, so 0 represents every nonfinal sequence.
+A plan for another template needs its own classes.
+
+A candidate must also stay in the domain of its property (section 7.4).
+Every property of section 11 assumes a P2SH spend, so a generated candidate keeps the P2SH flag.
+The ordinary branch (Q1) needs a true selector, and the recovery branch (Q2 and Q3) needs a false one.
+The reducer skips a candidate that leaves this domain, when the stored plan is inside it.
 
 After each accepted change, the reducer starts its current step again on the new plan.
 It repeats the six steps until a complete pass accepts no change, and then it gives the label `minimal`.
@@ -1245,4 +1257,10 @@ It runs the corrected search over the whole space and requires no violation.
 It reduces `51 52 b3 51 87` and requires three instructions with the label `minimal`.
 It also reduces the first saved detection of each mutant M1 to M6.
 Each reduction must keep the failure condition and the mutant's trigger, and its output must replay.
+Each reduced generated plan must keep the P2SH flag and a selector of its branch's truth value.
+
+A planted Core fault flips the verdict of each spend with a hash type `0x82` signature.
+The self-test reduces its first three detections, and each reduced plan must keep a `0x82` signature.
+The unmodified harness must also give the expected verdict on the reduced spend, so the template runs.
+A stand-in replay that answers every request with an error must fail all 200 cases of a corrected search.
 It writes the labels, candidate counts and plan sizes to `build/campaign/mutant-reduction.json`.

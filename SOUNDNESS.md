@@ -734,6 +734,8 @@ The step makes three choices where Core's source gives no behaviour on the model
 - Core's `AddToBlockIndex` inserts the new entry and then searches for `hashPrevBlock` (D33, lines 2770 and 2772).
   `addToBlockIndex` searches the input index.
   The two differ only for a header whose `hashPrevBlock` is its own hash, a fixed point of double SHA-256.
+  Core links that genesis entry to itself at height 1, and the model inserts a root at height 0 (`accept_genesis_insert`).
+  Design record 0008, section 13.1, accepts this difference, because a self-link would break `WellFormed` and `wellFormed_preserved`.
 
 The theorems in `Block.Proofs.HeaderSequence` hold for every network and context.
 Each target of the record's section 11 takes an index that satisfies `WellFormed`, as the record requires, even when its proof does not use it:
@@ -759,12 +761,12 @@ Each target of the record's section 11 takes an index that satisfies `WellFormed
 - `failedAncestor_verdict_perm`: with a permutation of the failed list, the two results are equal, or both are `failedAncestor`.
 - `checkWellFormed_iff`: `checkWellFormed` returns true exactly when the index satisfies `WellFormed`.
 
-The target `accept_genesis` is not proved.
-It says that the genesis entry gets no predecessor and height 0.
+Design record 0008, section 13.1, replaces the target `accept_genesis` with `accept_genesis_known`, `accept_genesis_insert` and `accept_genesis_parent`.
+The original target said that the genesis entry gets no predecessor and height 0.
 `addToBlockIndex` follows Core and links the genesis header to an entry under its `hashPrevBlock` when the index has one.
 For the real genesis header, that entry needs a header that hashes to zero, and for another header a collision with the genesis hash.
-`WellFormed` does not exclude it, and no theorem can exclude it without a cryptographic assumption, so `accept_genesis_insert` states the hypothesis instead.
-The question is open for the maintainer.
+`WellFormed` does not exclude it, and no theorem can exclude it without a cryptographic assumption.
+So `accept_genesis_insert` states the hypothesis that the index lacks `hashPrevBlock`, and `accept_genesis_parent` covers the other case.
 
 These theorems establish the behaviour of DogeLib's definitions.
 The index, its anchors, failure flags, validity flags and failed list, the adjusted time and the checkpoint option are inputs.
@@ -780,6 +782,8 @@ No theorem says that they are the state and the context that a node holds.
   It then adds the first entry of the fixture's `added` list.
 - 23 mainnet steps with real headers, from the pure fixtures and from the full fixtures D80–D82.
   The expected acceptances come from chain acceptance, and each other result comes from hand derivation from D33 and the record.
+  Each expected hash is a literal from the fixture READMEs, the chain parameters or an independent `hashlib` computation, or the `hashPrevBlock` field of the next fixture header.
+  No expected hash comes from `PureBlockHeader.getHash`, which derives only the keys of the input index.
   A fork at 144990 below an anchor at checkpoint 145000 gives `bad-fork-prior-to-checkpoint` with checkpoints enabled, with DoS 100 and code `0x43`.
   With checkpoints disabled, the step accepts it.
   A raised anchor at 144720 gives `nextWork missingAncestor` at the retarget 144960.

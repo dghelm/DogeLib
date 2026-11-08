@@ -437,6 +437,8 @@ The entry has no failure flag and the validity level `BLOCK_VALID_TREE`, so `scr
 Core searches for `hashPrevBlock` after it inserts the new entry (line 2772).
 The function searches the index before the insertion.
 The two differ only for a header whose `hashPrevBlock` is its own hash, a fixed point of double SHA-256.
+Core links that entry to itself at height 1, and the function inserts it with no predecessor at height 0.
+Design record 0008, section 13.1, accepts this difference, because a self-link would break `WellFormed`.
 -/
 def addToBlockIndex (index : HeaderIndex) (header : PureBlockHeader) : HeaderIndex :=
   let hash := header.getHash

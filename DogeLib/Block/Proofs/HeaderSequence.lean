@@ -26,10 +26,9 @@ The stage-2 theorems describe one step, `acceptBlockHeader`:
 - The target `wellFormed_preserved`: each step keeps `WellFormed`.
 - The target `failedAncestor_verdict_perm`: the verdict does not depend on the order of the failed list.
 
-The target `accept_genesis` of section 11 is not proved.
-Its statement says that the genesis entry gets no predecessor and height 0.
-`addToBlockIndex` follows Core and searches the index for `hashPrevBlock`, so that holds only when the index lacks the genesis header's `hashPrevBlock`.
-`accept_genesis_insert` proves the statement with that hypothesis, and `accept_genesis_parent` gives the other case.
+Section 13.1 of the record replaces the target `accept_genesis` with `accept_genesis_known`, `accept_genesis_insert` and `accept_genesis_parent`.
+`addToBlockIndex` follows Core and searches the index for `hashPrevBlock`.
+So a genesis entry gets no predecessor and height 0 only when the index lacks the genesis header's `hashPrevBlock`.
 
 The theorems establish the behaviour of DogeLib's definitions.
 They say nothing about whether an index is the state that a node holds: the anchors, the failure flags and the failed list are inputs.
@@ -420,8 +419,11 @@ theorem accept_genesis_known (_wf : WellFormed ctx.network index) (entry : Index
 /--
 Let the hash of the header be the network's genesis hash, and let the index have neither that hash nor the header's `hashPrevBlock`.
 Then the step accepts the hash and inserts an entry with no predecessor, height 0 and no flags.
-The theorem states the target `accept_genesis` of design record 0008, section 11, without chain work, under the hypothesis on `hashPrevBlock`.
+Design record 0008, section 13.1, names this theorem as one of the three that replace the target `accept_genesis`.
 The real genesis header has the null `hashPrevBlock` (item 2).
+
+The theorem also covers a genesis header whose `hashPrevBlock` is its own hash, for example with an empty index.
+Core links that entry to itself at height 1, and the model inserts a root at height 0, a difference that section 13.1 accepts.
 -/
 theorem accept_genesis_insert (_wf : WellFormed ctx.network index)
     (genesis : genesisHash? ctx.network = some header.pure.getHash)
@@ -436,6 +438,7 @@ Let the hash of the header be the network's genesis hash, and let the index lack
 Let the index have an entry `parent` under the header's `hashPrevBlock`.
 Then `addToBlockIndex` links the new entry to `parent`, as Core's `AddToBlockIndex` does (D33, lines 2772 to 2778).
 If `parent` is at `maxPrevHeight` or above, the step returns `heightOutOfRange` and the input index (decision 17).
+The hypotheses exclude a header whose `hashPrevBlock` is its own hash: `accept_genesis_insert` covers that header.
 -/
 theorem accept_genesis_parent (_wf : WellFormed ctx.network index)
     (genesis : genesisHash? ctx.network = some header.pure.getHash)

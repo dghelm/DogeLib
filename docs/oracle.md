@@ -1194,6 +1194,7 @@ Process failures, `unsupported` results and refusals keep the classes of section
 A failure of `proposal-replay` names the side `revised`.
 A response that is not an `ok` object with the result `accepted`, `rejected` or `unsupported` checks nothing.
 On either side, it is a `crash` with the code `RESULT`, so a search cannot pass without verdicts.
+Flags 0 make every case of the space supported, so a proposal run also exits with status 1 when its `unsupported` count is above zero.
 Other differences between two verdicts are not violations of this property.
 
 `--script` runs one script instead of the enumeration, with `--lock-time` (default 2) and `--sequence` (default `0xfffffffe`).

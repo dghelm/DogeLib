@@ -28,11 +28,13 @@ def check(condition, detail='campaign self-test check failed'):
 
 def wrap(mode, program, args):
     """Mutate one exact request's response, or fail after flushing its predecessors."""
-    if mode == 'error-all':
-        # A stand-in that ignores its arguments and answers every request with an error object.
+    if mode in ('error-all', 'unsupported-all'):
+        # A stand-in that ignores its arguments and answers every request with an error or an unsupported result.
         for line in sys.stdin:
             request = json.loads(line)
-            print(json.dumps(dict(id=request['id'], error=dict(kind='request', message='stand-in'))), flush=True)
+            answer = (dict(error=dict(kind='request', message='stand-in')) if mode == 'error-all' else
+                      dict(ok=dict(result='unsupported', reason='flags', bits=64)))
+            print(json.dumps(dict(id=request['id'], **answer)), flush=True)
         return 0
     if mode == 'signer-shape' and args == ['--sign']:
         for line in sys.stdin:

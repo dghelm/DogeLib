@@ -165,6 +165,16 @@ def stage3(args, check, wrapper):
               'an error response was not a revised-side crash')
         print('ok proposal stand-in: a replay that answers with errors fails all 200 corrected cases')
         checks += 1
+        unsupported = wrapper(tmp / 'unsupported-replay', 'unsupported-all', replay_program)
+        run = subprocess.run([sys.executable, '-I', str(campaign.ROOT / 'scripts/campaign.py'), 'run',
+                              '--campaign', 'proposal', '--variant', 'corrected', '--seed', '0', '--cases', '200',
+                              '--output', str(tmp / 'unsupported'), args.oracle, unsupported],
+                             capture_output=True, text=True)
+        counts = json.loads(run.stdout)['counts'] if run.stdout else {}
+        check(run.returncode == 1 and counts.get('unsupported') == 200 and counts.get('pass_count') == 0,
+              f'an all-unsupported proposal search did not fail: {run.returncode} {run.stdout}{run.stderr}')
+        print('ok proposal stand-in: a replay that answers unsupported makes the corrected search exit 1')
+        checks += 1
         options.variant, options.cases, options.output = 'faulty', 1, str(tmp / 'seed')
         seed = script_case(script_plan(parse_script('5152b35187'), 2, 0xfffffffe), 0)
         summary = campaign.run_campaign(options, [seed])

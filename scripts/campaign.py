@@ -581,7 +581,9 @@ def main():
         summary = run_campaign(args)
         # Public logs contain counts, never candidate requests or responses.
         print(json.dumps({k: summary[k] for k in ('output', 'completed', 'counts', 'batch_counts', 'failures', 'exhausted')}))
-        return 1 if summary['failures'] or summary['exhausted'] else 0
+        # Flags 0 make every case of the section 8.1 space supported, so an unsupported result means that the search checked nothing.
+        unchecked = args.campaign == 'proposal' and summary['counts']['unsupported']
+        return 1 if summary['failures'] or summary['exhausted'] or unchecked else 0
     except (OSError, ValueError, KeyError) as error:
         print(f'campaign: {error}', file=sys.stderr)
         return 2

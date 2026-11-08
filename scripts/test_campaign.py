@@ -43,8 +43,14 @@ def wrap(mode, program, args):
     responses = [json.loads(line) for line in run.stdout.splitlines()]
     for request, response in zip(requests, responses):
         if mode.startswith('M'):
-            from test_campaign_generator import mutate_response
-            action = mutate_response(mode, request, response)
+            from test_campaign_generator import m3_trigger, mutate_response
+            height_response = None
+            if mode == 'M3' and m3_trigger(request, response):
+                probe = dict(request, flags=request['flags'] & ~512)
+                height = subprocess.run([program], input=json.dumps(probe) + '\n',
+                                        capture_output=True, text=True, check=True)
+                height_response = json.loads(height.stdout)
+            action = mutate_response(mode, request, response, height_response)
             if action == 'crash':
                 return 3
             if action == 'timeout':

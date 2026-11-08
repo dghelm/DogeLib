@@ -47,7 +47,19 @@ def context(request):
                 lock_time=int.from_bytes(tx[-4:], 'little'))
 
 
-def mutate_response(mode, request, response):
+def m3_trigger(request, response):
+    """Select a recovery rejection caused by the lock-time type boundary."""
+    if request['op'] != 'script.verify_legacy' or not request['flags'] & 512:
+        return False
+    c = context(request)
+    selector = c['stack'][-2] if len(c['stack']) >= 2 else b'\x01'
+    truth = any(b and not (i == len(selector) - 1 and b == 128) for i, b in enumerate(selector))
+    return (c['lock_time'] == 500000000 and not truth and
+            c['sequences'][request['input_index']] != 0xffffffff and
+            response.get('ok') == dict(result='rejected', script_error='UNSATISFIED_LOCKTIME'))
+
+
+def mutate_response(mode, request, response, height_response=None):
     """Plant M1–M6 using only semantic request fields and the actual response."""
     if request['op'] not in ('sighash.legacy', 'script.verify_legacy'):
         return None
@@ -62,11 +74,11 @@ def mutate_response(mode, request, response):
         digest = bytearray.fromhex(result['digest_hex'])
         digest[0] ^= 1
         result['digest_hex'] = digest.hex()
-    if mode == 'M3' and op == 'script.verify_legacy' and c['lock_time'] == 500000000:
-        selector = c['stack'][-2] if len(c['stack']) >= 2 else b'\x01'
-        truth = any(b and not (i == len(selector) - 1 and b == 128) for i, b in enumerate(selector))
-        if not truth:
-            response['ok'] = dict(result='accepted', script_error='OK')
+    if mode == 'M3' and m3_trigger(request, response):
+        # Treating 500,000,000 as a height satisfies the template's CLTV operand.
+        # The wrapper checks all remaining execution with CLTV disabled.
+        if height_response and height_response.get('ok', {}).get('result') == 'accepted':
+            response['ok'] = height_response['ok']
     if mode == 'M4' and any(seq == 0xffffffff for i, seq in enumerate(c['sequences']) if i != n):
         return 'crash'
     if mode == 'M5' and c['outputs'] >= 5:

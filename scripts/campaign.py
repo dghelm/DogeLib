@@ -234,7 +234,7 @@ def run_campaign(args, cases=None):
     generated = args.campaign == 'generated'
     if cases is None and generated:
         from campaign_generator import plans
-        seeds = selected_cases(['signed-spends'], args.seed)
+        seeds = selected_cases(['signed-spends', 'cltv'], args.seed)
         cases = seeds + [dict(plan=p) for p in plans(args.seed, max(0, args.cases - len(seeds)))]
     cases = selected_cases(args.inputs, args.seed) if cases is None else cases
     cases = cases[:args.cases]

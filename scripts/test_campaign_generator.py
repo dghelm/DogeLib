@@ -85,7 +85,7 @@ def stage2(args, wrapper, check):
     checks = 0
     with tempfile.TemporaryDirectory(prefix='stage2-', dir=base) as tmp:
         tmp = pathlib.Path(tmp)
-        opts = argparse.Namespace(campaign='generated', signer=signer, seed=20261108, cases=800,
+        opts = argparse.Namespace(campaign='generated', signer=signer, seed=20261108, cases=2000,
                                   seconds=120, timeout=0.5, batch_size=16, inputs=['generated'],
                                   oracle=args.oracle, harness=args.harness, stop_after_failure=True)
         for mode, side, kind in (('M1', 'core', 'verdict'), ('M2', 'lean', 'digest'),
@@ -98,7 +98,7 @@ def stage2(args, wrapper, check):
             summary = campaign.run_campaign(local)
             records = [json.loads(pathlib.Path(p).read_text()) for p in summary['saved']]
             found = [(p, r) for p, r in zip(summary['saved'], records) if r['class'] == kind]
-            check(bool(found), f'{mode} survived its 800-case, 120-second budget')
+            check(bool(found), f'{mode} survived its 2000-case, 120-second budget')
             path, record = min(found, key=lambda item: item[1]['case_index'])
             replay = subprocess.run([sys.executable, '-I', str(root / 'scripts/campaign.py'), 'replay',
                                      path, local.oracle, local.harness], capture_output=True, text=True)

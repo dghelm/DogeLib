@@ -157,6 +157,26 @@ def main():
         assert reproduced.returncode == 0, reproduced.stderr + reproduced.stdout
         print('ok batch-only: retain and replay the failing pair after single requests pass')
         checks += 1
+        from unittest.mock import patch
+        interrupted = copy.deepcopy(options)
+        interrupted.output = str(tmp / 'interrupted-isolation')
+        clock = [0]
+        original_execute = campaign.execute
+
+        def expire_after_crash(program, requests, timeout):
+            result = original_execute(program, requests, timeout)
+            if len(requests) == 1 and requests[0]['id'] == 'campaign-3' and 'error' in result:
+                clock[0] = 100
+            return result
+
+        interrupted.harness = wrapper(tmp / 'interrupted-core', 'crash', args.harness)
+        with patch.object(campaign.time, 'monotonic', side_effect=lambda: clock[0]), \
+                patch.object(campaign, 'execute', side_effect=expire_after_crash):
+            summary = campaign.run_campaign(interrupted, copy.deepcopy(cases))
+        if summary['counts']['crash'] != 1 or len(summary['saved']) != 1 or not summary['exhausted']:
+            raise RuntimeError(f'ancestors duplicated an attributed crash: {summary}')
+        print('ok interrupted isolation: one crash remains one saved failure')
+        checks += 1
         exhausted = copy.deepcopy(options)
         exhausted.output = str(tmp / 'exhausted')
         exhausted.seconds = 0.000001

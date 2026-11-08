@@ -177,7 +177,7 @@ def run_campaign(args, cases=None):
                 # A batch-only failure must retain the original stream for replay.
                 counts[results[0][1][0]] += 1
                 save(batch, results[0][1], runs, history)
-            elif not (left and right):
+            elif not (left and right) and sum(counts[k] for k in ('crash', 'timeout')) == before:
                 save(batch, results[0][1], runs, history)
                 counts[results[0][1][0]] += 1
             return left and right

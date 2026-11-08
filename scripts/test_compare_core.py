@@ -400,7 +400,8 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
                 response['ok']['added'][0]['chain_work'] = '00' * 32 if value != '00' * 32 else '01' * 32
                 break
         else:
-            raise SystemExit("wrapper: no sequence insertion without an independent expectation")
+            if any(request['op'] == 'block.header_sequence' for request in requests):
+                raise SystemExit("wrapper: no sequence insertion without an independent expectation")
     if mode in ("contextual_valid", "contextual_reason"):
         for request, response in zip(requests, responses):
             if request["op"] == "block.contextual_check" and "ok" in response:

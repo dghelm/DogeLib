@@ -25,10 +25,14 @@ def proposalOperation (v : Variant) (active : Bool) : Operation :=
     (fun ctx script flags => baselineResult (revisedVerifyLegacySpend v active ctx script flags coreVerifier))
     (fun flags sig script => baselineResult (revisedVerifyScript v active baseChecker flags sig script))
 
+/-- The version object: the oracle's record format, and the name of this program, so that a saved run does not mistake it for `dogelib-oracle`. -/
+def replayVersionJson : Lean.Json :=
+  Lean.Json.mkObj [("format", .str formatName), ("program", .str "proposal-replay")]
+
 /-- Read JSON lines for the named test proposal, or print its version. -/
 def main (argv : List String) : IO UInt32 := do
   if argv == ["--version"] then
-    IO.println versionJson.compress
+    IO.println replayVersionJson.compress
     return 0
   let (name, variant, active) ← match argv with
     | [name, variant, "--active"] => pure (name, variant, true)

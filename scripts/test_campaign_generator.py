@@ -93,7 +93,7 @@ def stage2(args, wrapper, check):
     root = campaign.ROOT
     signer = str(pathlib.Path(args.signer or pathlib.Path(args.harness).with_name('core-signer')).resolve())
     base = root / 'build/campaign'
-    detection = []
+    detection, reductions = [], []
     checks = 0
     from campaign_generator import mutated
     moves, single_outputs = set(), set()
@@ -154,6 +154,9 @@ def stage2(args, wrapper, check):
                                   budget=dict(cases=local.cases, seconds=local.seconds),
                                   completed=summary['completed'], elapsed_seconds=summary['elapsed_seconds']))
             print(f"ok {mode}: detected {kind} at case {record['case_index']}, replay reproduced")
+            checks += 1
+            from test_campaign_reducer import check_reduction
+            reductions.append(check_reduction(mode, path, local, check))
             checks += 1
         local = copy.deepcopy(opts)
         local.output = str(tmp / 'q6-only')
@@ -233,4 +236,5 @@ def stage2(args, wrapper, check):
         checks += 1
     path = base / 'mutant-detection.json'
     path.write_text(json.dumps(detection, indent=2) + '\n')
+    (base / 'mutant-reduction.json').write_text(json.dumps(reductions, indent=2) + '\n')
     return checks

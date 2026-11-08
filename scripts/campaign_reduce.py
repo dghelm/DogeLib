@@ -17,7 +17,10 @@ import tempfile
 import campaign
 
 STEPS = ('elements', 'inputs-outputs', 'numbers', 'flags', 'hash-type-selector', 'other-scripts')
-# The template's CLTV operand is 1,000,000, and 500,000,000 separates heights from times (C4).
+# These classes are specific to the 2-of-3 recovery template of design record 0009, decision 1.
+# Its CLTV operand is 1,000,000, and 500,000,000 separates heights from times (C4).
+# The template has no CHECKSEQUENCEVERIFY, so every nonfinal sequence is in one class, and 0 represents it.
+# A plan for another template needs its own classes.
 LOCK_CLASSES = ((0, 1000000, 0), (1000000, 500000000, 1000000), (500000000, 1 << 32, 500000000))
 FINAL = 0xffffffff
 # VerifyScript asserts that WITNESS implies P2SH and that CLEANSTACK implies both (C7).
@@ -33,6 +36,23 @@ def in_assertion_domain(flags):
     """Keep a flag combination that the harness can run without an assertion."""
     return not ((flags & WITNESS and not flags & P2SH) or
                 (flags & CLEANSTACK and not (flags & P2SH and flags & WITNESS)))
+
+
+def truthy(push):
+    """CastToBool of the selector's pushed bytes: true unless every byte is zero, ignoring a final sign bit."""
+    data = bytes.fromhex(push)
+    return any(b and not (i == len(data) - 1 and b == 0x80) for i, b in enumerate(data))
+
+
+def in_property_domain(plan):
+    """The domain that every property of section 11 assumes for a generated plan.
+
+    The spend is P2SH, so the redeem script runs only with SCRIPT_VERIFY_P2SH.
+    The ordinary branch (Q1) needs a true selector, and the recovery branch (Q2, Q3) needs a false one.
+    """
+    if plan['mode'] == 'script':
+        return True
+    return bool(plan['flags'] & P2SH) and truthy(plan['selector']) == (plan['branch'] == 'ordinary')
 
 
 def elements(plan):
@@ -127,9 +147,12 @@ def step_numbers(plan):
 
 
 def step_flags(plan):
-    """Step 4: clear each flag, inside the assertion domain of C7."""
+    """Step 4: clear each flag, inside the assertion domain of C7, and keep P2SH in a generated plan."""
     bit = 1
     while bit <= plan['flags']:
+        if bit == P2SH and plan['mode'] != 'script':
+            bit <<= 1
+            continue
         if plan['flags'] & bit and in_assertion_domain(plan['flags'] & ~bit):
             p = copy.deepcopy(plan)
             p['flags'] &= ~bit
@@ -138,7 +161,7 @@ def step_flags(plan):
 
 
 def step_hash_type_selector(plan):
-    """Step 5: hash type ALL, then the selector 01 or the empty push."""
+    """Step 5: hash type ALL, then the simplest selector of the same truth value: 01 or the empty push."""
     if plan['mode'] == 'script':
         return
     types = plan['hash_types']
@@ -151,17 +174,12 @@ def step_hash_type_selector(plan):
                 p = copy.deepcopy(plan)
                 p['hash_types'][i] = 1
                 yield p, f'hash type ALL on signature {i}'
-    # The empty push is simpler than 01, so no change goes back from the empty push to 01.
-    if plan['selector'] == '01':
-        choices = ['']
-    elif plan['selector'] == '':
-        choices = []
-    else:
-        choices = ['01', '']
-    for selector in choices:
+    # The branch fixes the truth value, so the selector never changes branch.
+    simple = '01' if truthy(plan['selector']) else ''
+    if plan['selector'] != simple:
         p = copy.deepcopy(plan)
-        p['selector'] = selector
-        yield p, f'selector {selector or "empty"}'
+        p['selector'] = simple
+        yield p, f'selector {simple or "empty"}'
 
 
 def step_other_scripts(plan):
@@ -247,6 +265,8 @@ class Reducer:
         # Each change must reach a plan that the reducer has not held before, so no sequence of changes can cycle.
         # Every change of the six steps moves towards a fixed simpler value, so this guard skips no candidate today.
         held = {campaign.canonical(plan)}
+        # Section 7.4: a candidate must stay in the domain of its property.
+        domain = in_property_domain(plan)
         while True:
             changed = False
             for name in STEPS:
@@ -254,7 +274,8 @@ class Reducer:
                 while progress:
                     progress = False
                     for candidate, change in STEP_FUNCTIONS[name](plan):
-                        if candidate == plan or not valid(candidate) or campaign.canonical(candidate) in held:
+                        if (candidate == plan or not valid(candidate) or campaign.canonical(candidate) in held or
+                                (domain and not in_property_domain(candidate))):
                             continue
                         if campaign.canonical(candidate) not in self.cache and self.candidates >= self.limit:
                             return plan, current, trace, 'budget'

@@ -136,3 +136,20 @@ Add rows in sorted order by operation name. Change only the cells your evidence 
 | Framework, activation model | `Proposals.Framework.Activation`, `Activation.isActive` | `Activation.isActive_iff`: active exactly at heights at or above the network's activation height. `Activation.none_inactive`: never active on a network without a height. `Activation.isActive_lt`, `isActive_of_le`, `isActive_mono`: false below the activation height and monotone above it. For every activation, network and height | None | None | Version-bit signalling (design record 0007, decision 11) |
 | Framework, compatibility classes | `Proposals.Framework.Verdict`, `baselineVerdict`, `VerifyOutcome.verdict`, `verdictOfExcept`, `InactiveEq`, `RestrictsAcceptance`, `ExtendsAcceptance`, `StrictnessWitness`, `RelaxationWitness`, `UseWitness`, `SoftFork`, `Relaxation`, `Incompatible`, `Unclassified`, `LegacyProjection`, `LegacyProjection.identity` in `Proposals.Framework.Compatibility` | Script-local: `inactiveEq_verifyScriptWith`, a revision whose inactive step is the baseline step has the inactive equality. `restrictsAcceptance_verifyScriptWith`, a revision whose step restricts the baseline step for every `active` and context restricts acceptance. `baselineVerdict_eq_accepted`, `VerifyOutcome.verdict_eq_accepted`, `VerifyOutcome.verdict_ofBaseline` | None | None | Block-level and chain-level classes. No block-level or chain-level theorem uses a legacy projection yet. The worked example states Script-local projection theorems |
 | Framework, Script loop with a step parameter | `Proposals.Framework.evalLoopWith`, `evalScriptWith`, `verifyScriptWith`, `finishEvalWith`, `Step`, `baselineStep`, `Restricts`, `StepOutcome`, `EvalOutcome`, `VerifyOutcome`, `opcodeFreeFrom`, `opcodeFree` in `Proposals.Framework.Script` | `evalLoopWith_baseline`, `evalScriptWith_baseline`, `verifyScriptWith_baseline`: with the baseline step, each equals its baseline definition with the errors mapped. They hold for every error map, checker, flag set, script and state or stack. Script-local: `evalLoopWith_restricts`, `evalScriptWith_restricts`, `verifyScriptWith_restricts`, `verifyScript_of_restricts`, restriction of the step lifts to acceptance with the same final state, including P2SH. `evalLoopWith_congr`, `evalScriptWith_congr`, `verifyScriptWith_congr`: steps that agree outside an opcode set agree on scripts without those opcodes | Baseline comparisons apply through the agreement theorems | None | Witness programs, as in the baseline |
+
+## Campaign infrastructure
+
+`scripts/campaign.py` implements stage 1 of [design record 0009](docs/design/0009-bug-finding-campaign.md#stage-1-driver-saved-failures-and-replay).
+It runs Q6 agreement on existing signed spends, targeted CLTV and CSV requests, and optional digest requests from the recovery records.
+It saves complete failure records and bisects stream failures for replay.
+The six outcome classes keep unsupported results and harness refusals apart from disagreements.
+[Commands and limits](docs/oracle.md#campaign-runs-and-replay) describe its budgets, record format and replay boundary.
+
+`scripts/test_campaign.py` checks process wrappers for all six classes and replay of each saved class.
+It also checks malformed output, missing responses, wrong identifiers, batch-only failures and an exhausted budget.
+These checks test the driver, without adding a theorem or extending the input domain of a specification operation.
+Generation, signing requests, Q1 to Q5, Q7, reduction and production-path replay belong to later stages.
+
+At seed `20261108`, the default campaign compares 1,897 requests with Core at `e0a1c15`, with zero in all six outcome classes.
+The optional signed-digest group compares 25 requests at the same seed, also with zero in all six classes.
+The campaign self-test passes 13 cases, including saved replay for each class.

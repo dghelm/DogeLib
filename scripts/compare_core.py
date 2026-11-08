@@ -56,9 +56,10 @@ def sha256d(data: bytes) -> bytes:
 
 
 class RunError(Exception):
-    def __init__(self, code: str, message: str):
+    def __init__(self, code: str, message: str, capture: dict | None = None):
         super().__init__(message)
         self.code = code
+        self.capture = capture or {}
 
 
 def run_program(program: str, args: list[str], data: str, timeout: float) -> str:

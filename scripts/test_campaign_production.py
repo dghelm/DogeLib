@@ -15,6 +15,8 @@ import argparse
 import copy
 import json
 import pathlib
+import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -120,6 +122,43 @@ def upstream_sample(args, check, upstream, signer, count=500):
     return len(requests), differing
 
 
+def stamped(directory, script, harness):
+    """A stand-in harness build: an executable script beside a copy of the real build's stamp.
+
+    It stands for a harness build whose own code around the production
+    functions is faulty, or whose runs fail.
+    """
+    directory.mkdir()
+    shutil.copy(pathlib.Path(harness).with_name('core.stamp'), directory / 'core.stamp')
+    program = directory / 'core-oracle'
+    program.write_text(script)
+    program.chmod(0o755)
+    return str(program)
+
+
+def check_labels(check):
+    """The classification table of campaign_production.label, on stated outcomes."""
+    verdict = dict(failing_side='core', **{'class': 'verdict'})
+    digest = dict(failing_side='core', **{'class': 'digest'})
+    lean = dict(failing_side='lean', **{'class': 'verdict'})
+    for record, outcomes, expected in (
+            (verdict, dict(L1='reproduced', L3='not-reproduced'), 'harness-fault'),
+            (verdict, dict(L1='not-reproduced', L3='not-reproduced'), 'harness-fault'),
+            (verdict, dict(L1='reproduced', L3='reproduced'), 'reproduced'),
+            (verdict, dict(L1='reproduced', L3='not-comparable'), 'reproduced-at-l1'),
+            (verdict, dict(L1='reproduced'), 'reproduced-at-l1'),
+            (verdict, dict(L1='error', L3='not-reproduced'), 'undetermined'),
+            (verdict, dict(L1='not-reproduced'), 'undetermined'),
+            (digest, dict(L1='error'), 'undetermined'),
+            (digest, dict(L1='not-reproduced'), 'harness-fault'),
+            (digest, dict(L1='reproduced'), 'reproduced'),
+            (lean, dict(L1='not-reproduced', L3='not-reproduced'), 'undetermined'),
+            (lean, dict(L1='reproduced'), 'reproduced')):
+        got = campaign_production.label(record, outcomes)
+        check(got == expected, f'{record} {outcomes}: {got}, not {expected}')
+    print('ok labels: an L1 error never counts as not reproduced, and L3 overrides an L1 reproduction')
+
+
 def stage4(args, check, wrapper, node=None, upstream=None):
     """Find, reduce and replay the planted harness fault M3 of section 8.2."""
     signer = str(pathlib.Path(args.signer or pathlib.Path(args.harness).with_name('core-signer')).resolve())
@@ -172,6 +211,28 @@ def stage4(args, check, wrapper, node=None, upstream=None):
         print(f"ok L1 pin: the unchanged harness at {campaign.PIN[:7]} does not reproduce the candidate")
         checks += 1
 
+        check_labels(check)
+        checks += 1
+        # Finding: a run that fails decides nothing. A stamped build that exits with status 3.
+        failing = stamped(tmp / 'failing-build', '#!/bin/sh\n[ "$1" = --version ] && exec ' +
+                          shlex.quote(args.harness) + ' --version\nexit 3\n', args.harness)
+        errored = tmp / 'errored.json'
+        shutil.copy(target, errored)
+        status, output, error = command('replay', '--level', 'L1', str(errored), args.oracle, failing)
+        check(status == 3 and output['outcome'] == 'error', f'L1 error: {status} {output} {error}')
+        check(output['classification'] == 'undetermined', output)
+        print('ok L1 error: a harness that exits with status 3 gives the outcome error and exit status 3')
+        checks += 1
+        # A stamped build with the planted fault stands for a fault in the harness's own adapter code.
+        adapter = stamped(tmp / 'adapter-build', pathlib.Path(planted).read_text(), args.harness)
+        contradicted = tmp / 'contradicted.json'
+        shutil.copy(target, contradicted)
+        status, output, error = command('replay', '--level', 'L1', str(contradicted), args.oracle, adapter)
+        check(status == 0 and output['outcome'] == 'reproduced', f'L1 adapter: {status} {output} {error}')
+        check(output['classification'] == 'reproduced-at-l1', output)
+        print('ok L1 adapter fault: a stamped faulty build reproduces at L1, and the label waits for L3')
+        checks += 1
+
         if upstream:
             started = time.monotonic()
             status, output, error = command('replay', '--level', 'L1', '--target', 'upstream',
@@ -214,6 +275,22 @@ def stage4(args, check, wrapper, node=None, upstream=None):
                 checks += 1
             elif upstream:
                 print('skip L3 upstream: the node build and the upstream harness name different commits')
+            # L1 reproduced and L3 not: the fault is in the harness's code, not on the production path.
+            status, output, error = command('replay', '--level', 'L3', '--signer', signer, '--node', node,
+                                            str(contradicted), args.oracle, adapter)
+            check(status == 1 and output['outcome'] == 'not-reproduced', f'L3 adapter: {status} {output} {error}')
+            check(output['classification'] == 'harness-fault', output)
+            print('ok L3 adapter fault: L1 reproduces, the node does not, and the label is harness-fault')
+            checks += 1
+            # The unchanged harness does not fail on the rebuilt bytes, so the trigger is lost.
+            lost = tmp / 'lost.json'
+            shutil.copy(target, lost)
+            status, output, error = command('replay', '--level', 'L3', '--signer', signer, '--node', node,
+                                            '--candidate-harness', args.harness, str(lost), args.oracle, args.harness)
+            check(status == 3 and output['outcome'] == 'not-comparable', f'L3 lost trigger: {status} {output} {error}')
+            check(json.loads(lost.read_text())['production']['replays'][-1]['trigger']['kept'] is False, 'trigger')
+            print('ok L3 lost trigger: a rebuilt case that no longer fails is not comparable, exit status 3')
+            checks += 1
             checks += l3_positives(args, check, signer, node)
     return checks
 

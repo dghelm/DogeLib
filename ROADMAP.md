@@ -57,6 +57,8 @@ Each item below is complete.
   The oracle exposes `script.read_op`, `script.eval` and `script.verify_legacy`, and the Core comparison covers them ([counts](docs/oracle.md#the-comparison)).
 - **Worked property of design record 0003, section 7.** `multisigRecovery_sound` and its two converses characterize acceptance of the multisig-with-recovery template for `k` of `n` keys with `1 ≤ k ≤ n ≤ 16` ([worked property](SOUNDNESS.md#script-worked-property-multisig-with-recovery)).
   With 33-byte keys, the 520-byte push limit allows at most 13 keys for this template under P2SH.
+- **Guide to DogeLib in practice.** [docs/in-practice.md](docs/in-practice.md) gives worked examples for security work and for vetting a proposed revision.
+  Its deliberately faulty example `ExampleFaultyLocktime` is not a proposal. The framework refutes its soft-fork claim and proves the `SoftFork` of its corrected variant ([the faulty example](SOUNDNESS.md#proposed-revisions-the-deliberately-faulty-example)).
 
 ## Next work
 

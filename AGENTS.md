@@ -28,6 +28,7 @@ Read the [maintainer-only list](#changes-that-need-a-maintainer) before settling
 | [SOURCES.md](SOURCES.md) | Pinned upstream revisions and operation-to-source mappings |
 | [COVERAGE.md](COVERAGE.md) | What is defined, proved, compared, and refined, per operation |
 | [SOUNDNESS.md](SOUNDNESS.md) | What the proofs establish and what a user trusts, gap by gap |
+| [docs/in-practice.md](docs/in-practice.md) | Worked examples of security work and of vetting a proposed revision |
 | [docs/design/](docs/design/) | Frozen design records. Background, not current status. |
 
 Before you cite or copy from a clone of EthLib or btc-verified, check out the commit that [SOURCES.md](SOURCES.md) pins.

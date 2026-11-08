@@ -141,6 +141,10 @@ A proposal never gets a row in the baseline tables of [COVERAGE.md](COVERAGE.md)
 `DogeLib.Proposals.ExampleVersionVerify` is the worked example of design record 0007, section 10.
 It is not a proposal for Dogecoin. Decision 9 keeps it in the library as a permanent test of the framework.
 
+`DogeLib.Proposals.ExampleFaultyLocktime` is an invented rule with a deliberate fault, and its corrected variant.
+It is not a proposal for Dogecoin.
+It is a teaching example for [docs/in-practice.md](docs/in-practice.md), and a test that the framework refutes a false soft-fork claim.
+
 ## Adopted upstream code
 
 Adapted code follows this layout and the module system. It does not keep the layout of the project it came from.

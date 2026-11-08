@@ -154,8 +154,3 @@ def check : IO Nat := do
   return failures
 
 end KnownAnswers.Proposals.ExampleVersionVerify
-
-/-- Named checks for the known answers of the proposed-revisions library, in alphabetical order. -/
-def KnownAnswers.Proposals.checks : List (String × IO Nat) := [
-  ("exampleVersionVerify", KnownAnswers.Proposals.ExampleVersionVerify.check)
-]

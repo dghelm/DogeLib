@@ -7,7 +7,7 @@ import KnownAnswers.Hash
 import KnownAnswers.HeaderPow
 import KnownAnswers.HeaderSequence
 import KnownAnswers.MedianTimePast
-import KnownAnswers.Proposals.ExampleVersionVerify
+import KnownAnswers.Proposals
 import KnownAnswers.Script
 import KnownAnswers.Scrypt
 import KnownAnswers.ScryptPow

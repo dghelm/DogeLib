@@ -70,6 +70,26 @@ theorem merkleMutated_of_completeLevel (xs : List Hash256)
     (h : merkleMutated (merkleCompleteLevel xs) = true) : merkleMutated xs = true :=
   (merkleMutated_iff xs).mpr (Or.inr h)
 
+/--
+For every nonempty even-length prefix `pre` and leaf `last`: the leaves `pre ++ [last, last]` have the Merkle root of `pre ++ [last]`, and they set the mutation flag.
+For example, `[A, B, C, C]` has the root of `[A, B, C]`, with no hash collision.
+The theorem states the duplicate-leaf shape of CVE-2012-2459, which the comment at the top of Core's `src/consensus/merkle.cpp` describes (D42).
+The theorem is about the Lean definitions. It does not state what a block validator does with the flag.
+-/
+theorem computeMerkleRoot_duplicate_last (pre : List Hash256) (last : Hash256) (ne : pre ≠ [])
+    (even : pre.length % 2 = 0) :
+    computeMerkleRoot (pre ++ [last, last]) = ⟨(computeMerkleRoot (pre ++ [last])).root, true⟩ := by
+  match pre with
+  | [] => exact absurd rfl ne
+  | [a] => simp at even
+  | a :: b :: rest =>
+    simp only [List.length_cons] at even
+    have hr : rest.length % 2 = 0 := by omega
+    have hm := merkleMutated_of_equal (a :: b :: rest) [] last (by simp; omega)
+    simp only [List.cons_append] at hm ⊢
+    simp only [computeMerkleRoot, hm]
+    rw [merkleRoot, merkleRoot, merkleLevel_duplicate_last rest last hr]
+
 /-- Every pair hash contains exactly the double SHA-256 digest of its 64 input bytes. -/
 theorem merklePair_val (a b : Hash256) :
     (merklePair a b).val = (Cryptography.Hash.Sha256d.hash (a.val ++ b.val).toByteArray).toList :=

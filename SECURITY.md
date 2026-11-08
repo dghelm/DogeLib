@@ -31,7 +31,11 @@ For such a candidate:
 
 - Do not publish the input, an exploit or a description of its effect in this repository, an issue, a pull request or a CI log.
 - Tell the DogeLib maintainer privately, through one of the channels above.
+- Keep the saved failure in the uncommitted `build/campaign/` directory.
 - Report a confirmed vulnerability in Core through the process in [Dogecoin Core's SECURITY.md](https://github.com/dogecoin/dogecoin/blob/master/SECURITY.md) at its current revision.
 - Add a regression fixture or a public description only after the report is resolved.
+
+Run a campaign with a fresh seed on your own machine, never in CI.
+CI runs only fixed seeds whose results a person has already reviewed, so a public CI log never shows a first candidate.
 
 These rules take precedence over the rule in [CONTRIBUTING.md](CONTRIBUTING.md#sources-of-truth) that records a minimal reproducer in SOURCES.md, until the report is resolved.

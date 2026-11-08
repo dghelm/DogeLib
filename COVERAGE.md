@@ -173,6 +173,7 @@ The self-test passes 40 cases. Each mutant is detected within 3,000 cases and 12
 After each mutant detection, the self-test reduces the saved failure through the same wrapper.
 Each of the six reductions ends with the label `minimal`, after 14 to 25 candidates.
 Each keeps the property, class and failing side, keeps the mutant's trigger in its requests, and reproduces on replay.
+
 Each reduced plan also keeps the P2SH flag and a selector of its branch's truth value.
 A planted Core fault that flips the verdict of spends with a hash type `0x82` signature is detected and reduced three times.
 Each reduced plan keeps a `0x82` signature, and the unmodified harness accepts its spend, so the template runs.
@@ -182,6 +183,7 @@ These results test the reducer and the campaign, and they add no theorem.
 It is a self-test of the campaign, not a comparison with Core.
 Against the active faulty rule of `ExampleFaultyLocktime`, the first 5,840 cases give 16 violations of `RestrictsAcceptance`.
 All 16 have three instructions, such as `51 00 b3`, and the 720 cases of one or two instructions give none.
+
 Against the active corrected rule, all 374,480 cases give no violation, as `corrected_restrictsAcceptance` requires.
 A response without a Script verdict is a failure, so a stand-in replay that answers with errors fails the search.
 The reducer takes `51 52 b3 51 87`, at lock time 2 and sequence `0xfffffffe`, to `51 00 b3` at lock time 0 and sequence 0, with the label `minimal`.

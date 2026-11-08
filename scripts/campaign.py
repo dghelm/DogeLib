@@ -254,6 +254,7 @@ def run_campaign(args, cases=None, revisions=None):
     cases = selected_cases(args.inputs, args.seed) if cases is None else cases
     cases = cases if proposal else cases[:args.cases]
     # Probe the programs first, so that an invocation error leaves no empty run directory.
+    proposal_arguments = ['ExampleFaultyLocktime', getattr(args, 'variant', 'faulty'), '--active']
     probed = revisions is None
     revisions = metadata(args.oracle, args.harness, 0.25) if probed else copy.deepcopy(revisions)
     if generated and probed:
@@ -307,7 +308,7 @@ def run_campaign(args, cases=None, revisions=None):
                                 if property_name == 'Q6' else batch[0]['expected']),
                       revisions=revisions, build=build, replay=replay, reduced_from=None,
                       detail=dict(message=message, code=code), timeout=args.timeout,
-                      batch_failures=history, program_arguments={'core': ['ExampleFaultyLocktime', getattr(args, 'variant', 'faulty'), '--active']} if proposal else {})
+                      batch_failures=history, program_arguments={'core': proposal_arguments} if proposal else {})
         path.write_text(json.dumps(record, indent=2) + '\n')
         saved.append(str(path))
 
@@ -356,9 +357,9 @@ def run_campaign(args, cases=None, revisions=None):
                     runs[side] = dict(not_run='campaign time budget expired')
                     break
                 return False
-            runs[side] = execute(program, requests, min(args.timeout, remaining),
-                                 ['ExampleFaultyLocktime', getattr(args, 'variant', 'faulty'), '--active']
-                                 if proposal and side == 'core' else ())
+            # In a proposal run, the harness slot runs proposal-replay with its proposal arguments.
+            extra = [proposal_arguments] if proposal and side == 'core' else []
+            runs[side] = execute(program, requests, min(args.timeout, remaining), *extra)
             if remaining < args.timeout and runs[side].get('error', {}).get('code') == 'TIMEOUT':
                 # The campaign deadline does not establish a program timeout.
                 if any('error' in run for name, run in runs.items() if name != side):

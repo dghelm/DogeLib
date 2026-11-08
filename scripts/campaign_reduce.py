@@ -151,11 +151,17 @@ def step_hash_type_selector(plan):
                 p = copy.deepcopy(plan)
                 p['hash_types'][i] = 1
                 yield p, f'hash type ALL on signature {i}'
-    for selector in ('01', ''):
-        if plan['selector'] != selector:
-            p = copy.deepcopy(plan)
-            p['selector'] = selector
-            yield p, f'selector {selector or "empty"}'
+    # The empty push is simpler than 01, so no change goes back from the empty push to 01.
+    if plan['selector'] == '01':
+        choices = ['']
+    elif plan['selector'] == '':
+        choices = []
+    else:
+        choices = ['01', '']
+    for selector in choices:
+        p = copy.deepcopy(plan)
+        p['selector'] = selector
+        yield p, f'selector {selector or "empty"}'
 
 
 def step_other_scripts(plan):
@@ -238,6 +244,9 @@ class Reducer:
         if current is None:
             raise ValueError('the stored plan does not reproduce the failure condition')
         trace = []
+        # Each change must reach a plan that the reducer has not held before, so no sequence of changes can cycle.
+        # Every change of the six steps moves towards a fixed simpler value, so this guard skips no candidate today.
+        held = {campaign.canonical(plan)}
         while True:
             changed = False
             for name in STEPS:
@@ -245,13 +254,14 @@ class Reducer:
                 while progress:
                     progress = False
                     for candidate, change in STEP_FUNCTIONS[name](plan):
-                        if candidate == plan or not valid(candidate):
+                        if candidate == plan or not valid(candidate) or campaign.canonical(candidate) in held:
                             continue
                         if campaign.canonical(candidate) not in self.cache and self.candidates >= self.limit:
                             return plan, current, trace, 'budget'
                         found = self.evaluate(candidate)
                         if found is not None:
                             plan, current, progress, changed = candidate, found, True, True
+                            held.add(campaign.canonical(plan))
                             trace.append(dict(step=STEPS.index(name) + 1, name=name, change=change,
                                               candidates=self.candidates, elements=len(elements(plan))))
                             break

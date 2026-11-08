@@ -28,6 +28,10 @@ These checks do not establish proof of work, AuxPoW validity or agreement with c
 The checks of stage 2 run one step, `acceptBlockHeader`, through the compiled code.
 `checkRegtestSteps` takes each request and expectation of the regtest fixture (D83).
 `checkMainnetSteps` and `checkSyntheticSteps` take expectations that this module derives by hand from D33, design record 0008 and chain acceptance.
+
+The checks of stage 3 run whole sequences, `processNewBlockHeaders`, through the compiled code.
+`checkRegtestSequences` runs every case of the regtest fixture in full, and compares every expected field of the fixture.
+`checkMainnetSequences` runs sequences on the mainnet fixtures, with expectations from chain acceptance and hand derivation.
 -/
 
 namespace KnownAnswers.HeaderSequence
@@ -611,6 +615,236 @@ def checkSyntheticSteps : IO Nat := do
   IO.println s!"header step, height bound and well-formed checks: 2 steps and 5 checks; {failures} failures"
   return failures
 
+/-! ### The sequence -/
+
+/-- The expected outcome of a sequence. -/
+inductive SequenceOutcome where
+  /-- Acceptance, with the display hash of the last header, or `none` for an empty list. -/
+  | accept (last : Option String)
+  /-- A Core rejection at a position, with Core's reason, denial-of-service score and reject code, and the display hashes that step 6 marks. -/
+  | reject (position : Nat) (reason : String) (dos code : Nat) (marked : List String)
+  /-- An adapter error at a position, by the name that `adapterName` gives. -/
+  | adapter (position : Nat) (name : String)
+
+/-- The entries that the sequence added, in insertion order, as display hash and height. -/
+def addedInOrder (before after : HeaderIndex) : List (String × Nat) := (addedBy before after).reverse
+
+/--
+Runs `processNewBlockHeaders` and compares its result with the expectation.
+The comparison covers the outcome and its position, the reason, DoS score and reject code, the marks, and the added entries in insertion order.
+It also requires that no field of an existing entry changed except `failedChild`, and that the failed list did not change.
+-/
+def checkSequence (label : String) (ctx : HeaderContext) (index : HeaderIndex) (headers : List BlockHeader)
+    (expected : SequenceOutcome) (added : List (String × Nat)) : IO Nat := do
+  let (after, result) := processNewBlockHeaders ctx index headers
+  let common := addedInOrder index after == added && onlyMarksChanged index after
+  let ok := common && match expected, result with
+    | .accept last, .ok hash => hash.map displayHex == last && markedBy index after == []
+    | .reject position reason dos code marked, .error ⟨p, .rejection r⟩ =>
+      p == position && r.rejectReason == reason && r.dosScore == dos && r.rejectCode == code &&
+        sorted (markedBy index after) == sorted marked
+    | .adapter position name, .error ⟨p, .adapter e⟩ =>
+      p == position && adapterName e == name && markedBy index after == []
+    | _, _ => false
+  unless ok do
+    IO.eprintln s!"FAIL header sequence {label}: {repr result}, added {(addedInOrder index after).length} entries, marked {markedBy index after}"
+  return if ok then 0 else 1
+
+/-- The expected outcome and added entries of a regtest fixture case, from its `expected` object (D83). -/
+def fixtureOutcome (expected : Lean.Json) : Except String (SequenceOutcome × List (String × Nat)) := do
+  let valid ← expected.getObjValAs? Bool "valid"
+  let failedAt ← optField expected "failed_at" Lean.Json.getNat?
+  let lastHash ← optField expected "last_hash" Lean.Json.getStr?
+  let marked ← (← (← expected.getObjVal? "marked_failed_child").getArr?).toList.mapM (·.getStr?)
+  let added ← (← (← expected.getObjVal? "added").getArr?).toList.mapM fun a => do
+    return (← a.getObjValAs? String "hash", ← (← a.getObjVal? "height").getNat?)
+  if valid then
+    unless failedAt.isNone && marked.isEmpty do throw "an accepted case with a position or marks"
+    return (.accept lastHash, added)
+  let some position := failedAt | throw "a rejected case without a position"
+  if lastHash.isSome then throw "a rejected case with a last hash"
+  if let some name ← optField expected "adapter_error" Lean.Json.getStr? then
+    return (.adapter position name, added)
+  let reason ← expected.getObjValAs? String "reject_reason"
+  let dos ← (← expected.getObjVal? "dos").getNat?
+  let code ← (← expected.getObjVal? "reject_code").getNat?
+  return (.reject position reason dos code marked, added)
+
+/--
+The regtest fixture (D83): every case runs in full through `processNewBlockHeaders`.
+Each case uses the request's network, read mode, adjusted time, checkpoint option, index, failed list and all its headers.
+The expected outcome, failure position, reason, DoS score, reject code, marks, added entries in insertion order and last hash are the fixture's hand-derived values.
+-/
+def checkRegtestSequences : IO Nat := do
+  let fixture ← KnownAnswers.Block.jsonFile "tests/block/regtest-header-sequences/sequences.json"
+  let some cases := (fixture.getObjVal? "cases" >>= Lean.Json.getArr?).toOption
+    | return (← require "regtest fixture cases" false)
+  let mut failures := 0
+  let mut count := 0
+  for case in cases do
+    let parsed : Except String (String × HeaderContext × HeaderIndex × List BlockHeader ×
+        SequenceOutcome × List (String × Nat)) := do
+      let name ← case.getObjValAs? String "name"
+      let request ← case.getObjVal? "request"
+      let network ← networkOf (← request.getObjValAs? String "network")
+      let mode ← match ← request.getObjValAs? String "mode" with
+        | "base" => pure TxReadMode.base
+        | "allow_witness" => pure TxReadMode.allowWitness
+        | other => throw s!"unknown mode {other}"
+      let adjusted ← (← request.getObjVal? "adjusted_time").getInt?
+      let ctx : HeaderContext := ⟨network, Int64.ofInt adjusted, ← request.getObjValAs? Bool "checkpoints_enabled"⟩
+      let index ← fixtureIndex request
+      let headers ← (← (← request.getObjVal? "headers").getArr?).toList.mapM fun j => do
+        let bytes := (← KnownAnswers.Sha256Cavp.parseHex (← j.getStr?)).toList
+        match BlockHeader.decodeComplete mode bytes with
+        | .ok h => pure h
+        | .error e => throw s!"{name}: cannot decode a header: {repr e}"
+      let (outcome, added) ← fixtureOutcome (← case.getObjVal? "expected")
+      return (name, ctx, index, headers, outcome, added)
+    match parsed with
+    | .error e => failures := failures + (← require s!"regtest fixture: {e}" false)
+    | .ok (name, ctx, index, headers, outcome, added) =>
+      count := count + 1
+      failures := failures + (← checkSequence s!"{name} ({headers.length} headers)" ctx index headers outcome added)
+  failures := failures + (← require "regtest fixture has 34 cases" (count == 34))
+  IO.println s!"header sequence, regtest fixture: {count} cases; {failures} failures"
+  return failures
+
+/-- The latest header time of a list, as the adjusted time of a call, so that check 6 passes for every header. -/
+def latestTime (headers : List BlockHeader) : Int64 :=
+  Int64.ofNat (headers.foldl (fun m h => max m h.pure.nTime.toNat) 0)
+
+/-- The context of a mainnet sequence: the latest header time as the adjusted time, and the checkpoint option. -/
+def sequenceCtx (headers : List BlockHeader) (checkpoints : Bool) : HeaderContext :=
+  ⟨.mainnet, latestTime headers, checkpoints⟩
+
+/-- The full headers at heights `lo` to `hi`, inclusive, of a fixture that starts at `first`. -/
+def headersBetween (headers : Array BlockHeader) (first lo hi : Nat) : List BlockHeader :=
+  (List.range (hi + 1 - lo)).map fun i => headers[lo - first + i]!
+
+/-- The expected added entries for the fixture headers at heights `lo` to `hi`, from `expectedHashAt`, never from `PureBlockHeader.getHash`. -/
+def addedBetween (records : Array Record) (first lo hi : Nat) (literals : List (Nat × String) := []) :
+    List (String × Nat) :=
+  (List.range (hi + 1 - lo)).map fun i => (expectedHashAt records first (lo + i) literals, lo + i)
+
+/-- The index of two fixture ranges, each built by `indexOf`, with distinct keys and an empty failed list. -/
+def mergeIndex (a b : HeaderIndex) : HeaderIndex := ⟨b.entries ++ a.entries, []⟩
+
+/--
+Mainnet sequences with real full headers, expected from chain acceptance and hand derivation from D33 and design record 0008.
+Each call uses the latest header time of its list as the adjusted time.
+Each sequence ends below the last record of its fixture, so each expected hash is the `hashPrevBlock` field of the next fixture header (`expectedHashAt`).
+
+- Genesis: the headers at heights 0 to 11 from an empty index insert the genesis entry and extend it.
+  An empty list from the genesis index accepts with no last hash and no change.
+- Retarget and DigiShield: the index holds the anchor 144719 and ten records above it.
+  The headers 144730 to 145029 cross the retarget at 144960 and DigiShield at 145000.
+  The checkpoint block 145000 enters the index during the call.
+- Checkpoints: the index also holds the genesis range up to height 10.
+  The headers 144730 to 145000 are followed by the genesis-range header at height 11, on a branch below 145000.
+  With checkpoints enabled, the last checkpoint is 145000 after position 270, and the header at position 271 fails check 4.
+  The result is `bad-fork-prior-to-checkpoint`, DoS 100 and `REJECT_CHECKPOINT` 0x43 (D33, line 3099), and the 271 earlier entries stay.
+  Before 145000 enters, the last checkpoint is the genesis entry at height 0 (item 10).
+  With checkpoints disabled, the call accepts all 272 headers.
+- Anchors: from the anchor 144719 alone, the first header has a view of one entry, and the call returns `shortView` at position 0.
+  From the anchor 144720 with ten records above it, the retarget at 144960 lacks the ancestor 240 below its predecessor (D17, lines 77 to 85).
+  The call returns `nextWork missingAncestor` at position 229, and the 229 earlier entries stay.
+- AuxPoW activation: from the anchor 371320 with ten records above it, the headers 371331 to 371339 cross 371337, with checkpoints enabled.
+  The checkpoint 371337 enters during the call, so no earlier header fails check 4 (item 10).
+  The header at 371337 with the pre-activation version `0x00620002`, without the AuxPoW flag and its payload, fails step 2.
+  Its own scrypt digest does not meet its `nBits`, so the result is `high-hash`, DoS 50 and `REJECT_INVALID` at position 6.
+  Step 2 runs before step 5, so check 2 of the contextual check never runs.
+- `BIP66Height` 1034383: the headers 1034363 to 1034389 from the anchor 1034352 accept.
+  With base version 2 at 1034383, step 2 fails at position 20 with `high-hash`, because the payload commits to the real header's hash.
+- `BIP65Height` 3464751: the headers 3464750 to 3464759 from the anchor 3464739 accept.
+  With base version 3 at 3464751, step 2 fails at position 1 with `high-hash`.
+-/
+def checkMainnetSequences : IO Nat := do
+  let mut failures := 0
+  -- Genesis.
+  let some genesisRecords ← loadRange "tests/work/mainnet-genesis-headers/headers.txt" 0 13
+      [(0, KnownAnswers.MedianTimePast.genesisHash)]
+    | return 1
+  let genesisHeaders := genesisRecords.map (⟨·.header, none⟩ : Record → BlockHeader)
+  let fromGenesis := headersBetween genesisHeaders 0 0 11
+  failures := failures + (← checkSequence "mainnet 0-11 from an empty index" (sequenceCtx fromGenesis true)
+    ⟨[], []⟩ fromGenesis (.accept (some (expectedHashAt genesisRecords 0 11 [])))
+    (addedBetween genesisRecords 0 0 11 [(0, KnownAnswers.MedianTimePast.genesisHash)]))
+  failures := failures + (← checkSequence "mainnet empty list" (sequenceCtx [] true) (indexOf genesisRecords 0 1) []
+    (.accept none) [])
+  -- Retarget, DigiShield and checkpoint 145000.
+  let first := 144719
+  let some records ← loadRange "tests/work/mainnet-headers/headers.txt" first 312
+      [(145000, "cc47cae70d7c5c92828d3214a266331dde59087d4a39071fa76ddfff9b7bde72")]
+    | return failures + 1
+  let headers := records.map (⟨·.header, none⟩ : Record → BlockHeader)
+  let anchored := indexOf records 0 11
+  let across := headersBetween headers first 144730 145029
+  failures := failures + (← checkSequence "mainnet 144730-145029" (sequenceCtx across true) anchored across
+    (.accept (some (expectedHashAt records first 145029 []))) (addedBetween records first 144730 145029))
+  let branch := headersBetween headers first 144730 145000 ++ [genesisHeaders[11]!]
+  let twoBranches := mergeIndex anchored (indexOf genesisRecords 0 11)
+  failures := failures + (← checkSequence "mainnet branch below checkpoint 145000" (sequenceCtx branch true)
+    twoBranches branch (.reject 271 "bad-fork-prior-to-checkpoint" 100 0x43 [])
+    (addedBetween records first 144730 145000))
+  failures := failures + (← checkSequence "mainnet branch with checkpoints disabled" (sequenceCtx branch false)
+    twoBranches branch (.accept (some (expectedHashAt genesisRecords 0 11 [])))
+    (addedBetween records first 144730 145000 ++ [(expectedHashAt genesisRecords 0 11 [], 11)]))
+  -- Anchors.
+  let short := headersBetween headers first 144720 144721
+  failures := failures + (← checkSequence "mainnet anchor without history" (sequenceCtx short true)
+    (indexOf records 0 1) short (.adapter 0 "shortView") [])
+  let raised := headersBetween headers first 144731 144960
+  failures := failures + (← checkSequence "mainnet retarget above a raised anchor" (sequenceCtx raised true)
+    (indexOf records 1 12) raised (.adapter 229 "nextWork missingAncestor") (addedBetween records first 144731 144959))
+  -- AuxPoW activation.
+  let some (auxRecords, auxHeaders) ← loadFullRange "tests/block/mainnet-auxpow-activation-full-headers/headers.txt"
+      371320 21 371337 checkpoint371337
+    | return failures + 1
+  let auxIndex := indexOf auxRecords 0 11
+  let activation := headersBetween auxHeaders 371320 371331 371339
+  failures := failures + (← checkSequence "mainnet 371331-371339" (sequenceCtx activation true) auxIndex activation
+    (.accept (some (expectedHashAt auxRecords 371320 371339 [])))
+    (addedBetween auxRecords 371320 371331 371339 [(371337, checkpoint371337)]))
+  let real := auxHeaders[371337 - 371320]!
+  let legacy : BlockHeader := ⟨{ real.pure with nVersion := 0x00620002 }, none⟩
+  failures := failures + (← require "version at 371337" (real.pure.nVersion == 0x00620102 && real.auxpow.isSome))
+  let legacyList := headersBetween auxHeaders 371320 371331 371336 ++ [legacy]
+  failures := failures + (← checkSequence "mainnet version without AuxPoW at 371337" (sequenceCtx legacyList true) auxIndex
+    legacyList (.reject 6 "high-hash" 50 0x10 []) (addedBetween auxRecords 371320 371331 371336))
+  -- BIP66 and BIP65.
+  let some (records66, headers66) ← loadFullRange "tests/block/mainnet-bip66-full-headers/headers.txt"
+      1032483 1908 1032483 bip66CommentHash
+    | return failures + 1
+  let index66 := indexOf records66 (1034352 - 1032483) (1034363 - 1032483)
+  let list66 := headersBetween headers66 1032483 1034363 1034389
+  failures := failures + (← checkSequence "mainnet 1034363-1034389" (sequenceCtx list66 true) index66 list66
+    (.accept (some (expectedHashAt records66 1032483 1034389 [])))
+    (addedBetween records66 1032483 1034363 1034389))
+  let real66 := headers66[1034383 - 1032483]!
+  let old66 := { real66 with pure := { real66.pure with nVersion := 0x00620102 } }
+  let mutated66 := headersBetween headers66 1032483 1034363 1034382 ++ [old66] ++
+    headersBetween headers66 1032483 1034384 1034389
+  failures := failures + (← checkSequence "mainnet base version 2 at BIP66Height" (sequenceCtx mutated66 true)
+    index66 mutated66 (.reject 20 "high-hash" 50 0x10 []) (addedBetween records66 1032483 1034363 1034382))
+  let some (records65, headers65) ← loadFullRange "tests/block/mainnet-bip65-full-headers/headers.txt"
+      3464739 22 3464751 bip65CommentHash
+    | return failures + 1
+  let index65 := indexOf records65 0 11
+  let list65 := headersBetween headers65 3464739 3464750 3464759
+  failures := failures + (← checkSequence "mainnet 3464750-3464759" (sequenceCtx list65 true) index65 list65
+    (.accept (some (expectedHashAt records65 3464739 3464759 [])))
+    (addedBetween records65 3464739 3464750 3464759 [(3464751, bip65CommentHash)]))
+  let real65 := headers65[3464751 - 3464739]!
+  failures := failures + (← require "version at 3464751" (real65.pure.nVersion == 0x00620104))
+  let old65 := { real65 with pure := { real65.pure with nVersion := 0x00620103 } }
+  let mutated65 := headersBetween headers65 3464739 3464750 3464750 ++ [old65] ++
+    headersBetween headers65 3464739 3464752 3464759
+  failures := failures + (← checkSequence "mainnet base version 3 at BIP65Height" (sequenceCtx mutated65 true)
+    index65 mutated65 (.reject 1 "high-hash" 50 0x10 []) (addedBetween records65 3464739 3464750 3464750))
+  IO.println s!"header sequence, mainnet: 14 sequences; {failures} failures"
+  return failures
+
 end KnownAnswers.HeaderSequence
 
 /-- Named checks for the block-index model, in alphabetical order. -/
@@ -621,5 +855,7 @@ def KnownAnswers.HeaderSequence.checks : List (String × IO Nat) := [
   ("digishieldRange", KnownAnswers.HeaderSequence.checkDigishieldRange),
   ("genesisRange", KnownAnswers.HeaderSequence.checkGenesisRange),
   ("interface", KnownAnswers.HeaderSequence.checkInterface),
-  ("laterRanges", KnownAnswers.HeaderSequence.checkLaterRanges)
+  ("laterRanges", KnownAnswers.HeaderSequence.checkLaterRanges),
+  ("sequenceMainnet", KnownAnswers.HeaderSequence.checkMainnetSequences),
+  ("sequenceRegtest", KnownAnswers.HeaderSequence.checkRegtestSequences)
 ]

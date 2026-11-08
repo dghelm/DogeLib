@@ -804,6 +804,109 @@ By `#print axioms` with Lean `v4.35.0`:
 | `propext`, `Quot.sound` | `addToBlockIndex_of_unknown`, `ancestorWalk_withFailed`, `ancestorHashAt_withFailed`, `isAncestorInIndex_withFailed` |
 | `propext`, `Classical.choice`, `Quot.sound` | `checkWellFormed_iff`, `accept_known`, `accept_genesis_known`, `accept_genesis_insert`, `accept_genesis_parent`, `accept_ok_hash`, `accept_eq_ok_iff`, `accept_unknown_ok`, `accept_ok_insert`, `accept_link`, the six `accept_eq_*_iff` rejection theorems, `accept_eq_heightOutOfRange_iff`, `accept_eq_error_iff`, `lookup_markFailedChild`, `accept_error_index_other`, `accept_error_failedAncestor`, `accept_error_index`, `HeaderIndex.lookup_insert`, `wellFormed_insert`, `wellFormed_addToBlockIndex`, `wellFormed_of_shape`, `wellFormed_markFailedChild`, `wellFormed_preserved`, `contextualCheckInIndex_withFailed`, `failedAncestor_verdict_perm` |
 
+### The sequence: `processNewBlockHeaders`
+
+`processNewBlockHeaders` in `DogeLib.Block.HeaderSequence` specifies Core's `ProcessNewBlockHeaders` (D33, lines 3270 to 3286) on the block-index model (design record 0008, stage 3).
+It first tests `checkWellFormed`, and returns the adapter error `notWellFormed` at position 0 when the index fails it.
+It then runs `acceptBlockHeader` on each header in order, with one `HeaderContext` for the whole call, and stops at the first error (lines 3274 to 3282).
+
+The result holds the index after the last step that ran.
+So the entries of the earlier headers stay, and so do the marks of a rejection at step 6.
+On success, the result holds the hash of the last header, or `none` for an empty list.
+On failure, it holds a `HeaderSequenceError`: the position of the failing header and the error of its step.
+`composeSequence` combines the results of two lists, as section 7.2 of the record states.
+Source review, not a theorem, connects the loop to Core's.
+
+The function makes these choices where it differs from Core's code or leaves part of it out:
+
+- It does not require that a header links to the header before it, and neither does Core's function.
+  The `headers` message handler checks the count limit of 2000 and the links before it calls the function (D74, lines 2390 to 2475).
+  Design record 0008, decision 10, keeps these peer checks outside the model.
+- Core sets `ppindex` after each accepted header, so after a failure it points to the last accepted entry.
+  A failure of the model holds no hash.
+  The `headers` handler returns without reading `ppindex` after a rejection (D74, lines 2459 to 2467).
+- `NotifyHeaderTip` (line 3284) changes no state that the model holds.
+
+Three inputs are execution boundaries.
+No theorem says that a caller supplies the values that a node holds:
+
+- **The adjusted time.** Core reads `GetAdjustedTime()` once for each header, so the clock can advance during a call (item 11 of the record).
+  The model takes one value for the whole call (decision 6).
+  `process_adjustedTime_mono` covers one later value for the whole call.
+  No theorem covers a value that changes between two headers.
+- **The checkpoint option.** `checkpointsEnabled` stands for `fCheckpointsEnabled` (D69), as in [contextual header validation](#contextual-header-validation).
+  The last checkpoint itself comes from the index at each step.
+  So a checkpoint block that an earlier header of the call adds counts for the later headers.
+- **The initial index.** Its anchors, failure flags, validity flags and failed list are inputs.
+  `checkWellFormed` checks the conditions of `WellFormed`, but no theorem says that the index is the state that a node holds.
+
+The theorems in `Block.Proofs.HeaderSequence` hold for every network and context.
+Each target takes an index that satisfies `WellFormed`, as section 11 of the record requires, even when its proof does not use it:
+
+- `process_append`: processing `xs ++ ys` gives `composeSequence xs.length` of the result of `xs` and the result of `ys` from the index after `xs`.
+  The theorem needs no height budget.
+- `process_error_suffix`: if processing `xs` fails, processing `xs ++ ys` fails with the same position, the same error and the same index.
+- `process_prefix_ok`: if processing `xs ++ ys` succeeds, processing `xs` succeeds.
+- `process_linear`: the linear case of option S3, design record 0008, section 5.2.
+  Let the headers link in order from the entry `tip` (`LinksFrom`), with `tip.height + n < 2147483647`.
+  Let the index have none of their hashes, let the hashes be distinct, and let none be the genesis hash.
+  Let `tip` have no failure flag, and let no member of the failed list be `tip` or an ancestor of it.
+  Then the sequence succeeds exactly when each header passes step 2 and the contextual check.
+  The check of the header at position `i` runs on `linearView` of the `i` earlier headers, newest first.
+  `ancestorView` of `tip` in the input index follows them.
+  Its last checkpoint is `lastCheckpointInIndex` of the index after the earlier headers, `addHeaders index (headers.take i)`.
+- `process_height`: in the same setting, a success puts the entry of the header at position `i` at height `tip.height + i + 1`, with the predecessor `hashPrevBlock`.
+- `process_no_failure`: from an index without failure flags and with an empty failed list, no step returns `duplicate`, `prevBlockInvalid` or `failedAncestor`.
+  The result index has no failure flag and an empty failed list (item 19).
+- `process_adjustedTime_mono`: if the sequence accepts with one adjusted time, it gives the same result with every later adjusted time up to `maxAdjustedTime`.
+- `process_complete`: take an index without anchors, an adjusted time of at most `maxAdjustedTime`, and `n` headers.
+  If every height in the index plus `n` is below 2147483647, and `n` is at most 2147483647, the sequence returns no adapter error.
+
+Two hypotheses read the record's wording in a specific way:
+
+- `process_linear` reads "their hashes are unknown" as unknown when each step runs: the input index lacks them, and they are distinct.
+  A later header with the hash of an earlier header would be a known header, accepted without its checks.
+  Such a list needs a fixed point or a cycle of double SHA-256, and no theorem excludes it without a cryptographic assumption.
+- `process_complete` also takes `n ≤ 2147483647`.
+  The record states its budget as every height in the index below `2147483647 − n`, which holds for every `n` when the index has no entry.
+  From the empty index, the header at position `k` gets height `k`, with genesis at position 0.
+  So the header at position 2147483647 is the first that can get `heightOutOfRange`.
+  A list of 2147483648 or more valid headers reaches it, and `n ≤ 2147483647` excludes exactly those lists (design record 0008, section 13.2).
+
+The proof module defines `LinksFrom`, `linearView`, `addHeaders`, `linkedEntry` and `LinearSetting` for these statements.
+The specification does not use them.
+
+`lake test` runs the sequence through the compiled code:
+
+- The regtest fixture (D83): all 34 cases in full, each with the request's index, failed list, adjusted time, checkpoint option and headers.
+  The fixture derives every expected field by hand.
+  The fields are the outcome, failure position, reason, DoS score, reject code, adapter error, marks, added entries in insertion order and last hash.
+- 14 mainnet sequences with real headers, from the pure fixtures and from the full fixtures D80–D82.
+  Each call uses the latest header time of its list as the adjusted time.
+  The expected acceptances come from chain acceptance, and each other result comes from hand derivation from D33 and the record.
+  Each sequence ends below the last record of its fixture.
+  So each expected hash is the `hashPrevBlock` field of the next fixture header, or a pinned literal, never a value of `PureBlockHeader.getHash`.
+  - The genesis range from an empty index inserts the genesis entry and extends it to height 11.
+    An empty list accepts with no hash and no change.
+  - From the anchor 144719, 300 headers cross the retarget at 144960, DigiShield at 145000 and the checkpoint 145000, which enters the index during the call.
+  - With the genesis range in the same index, the header at height 11 follows the headers up to 145000, on a branch below that checkpoint.
+    With checkpoints enabled, it fails check 4 at position 271 with `bad-fork-prior-to-checkpoint`, DoS 100 and code `0x43`, and the 271 earlier entries stay.
+    With checkpoints disabled, the call accepts all 272 headers.
+  - An anchor without history gives `shortView` at position 0.
+    A raised anchor at 144720 gives `nextWork missingAncestor` at the retarget, position 229, and the earlier entries stay.
+  - The headers across 371337, `BIP66Height` and `BIP65Height` are accepted, and the checkpoint 371337 enters during its call.
+    A version change at each activation height gives `high-hash` at its position: step 2 runs before the contextual check.
+
+These checks do not run Core, and the Core comparison is stage 5 of the record.
+
+By `#print axioms` with Lean `v4.35.0`:
+
+| Axioms | Theorems in `Block.Proofs.HeaderSequence` |
+| --- | --- |
+| `propext` | `composeSequence_of_error` |
+| `propext`, `Quot.sound` | `lookup_addToBlockIndex_of_some`, `lookup_addHeaders_of_some`, `contextualViewDepth_antitone` |
+| `propext`, `Classical.choice`, `Quot.sound` | `processSteps_eq_compose`, `processSteps_append`, `wellFormed_processSteps`, `processNewBlockHeaders_of_wellFormed`, `processNewBlockHeaders_of_not_wellFormed`, `process_append`, `process_error_suffix`, `process_prefix_ok`, `accept_ok_index`, `processSteps_ok_index`, `linearView_cons`, `ancestorView_congr_walk`, `ancestorWalk_insert_fresh`, `ancestorHashAt_insert_fresh`, `isAncestorInIndex_linked`, the `LinearSetting` theorems `foundPrev`, `unknownHead`, `addToBlockIndex_eq`, `next`, `accept_ok_iff`, `ancestorWalk_linked`, `steps_ok_iff`, `walk` and `lookup_addHeaders`, `process_linear`, `process_height`, `lookup_addToBlockIndex`, `accept_no_failure`, `process_no_failure`, `accept_adjustedTime_mono`, `processSteps_adjustedTime_mono`, `process_adjustedTime_mono`, `ancestorWalk_last_zero`, `accept_complete`, `processSteps_complete`, `process_complete` |
+
 ### RIPEMD-160 and Hash160
 
 `Ripemd160.hash` adapts EthLib's executable definition at `6a93711`, as SOURCES.md records.

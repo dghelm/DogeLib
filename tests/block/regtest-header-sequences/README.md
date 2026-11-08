@@ -2,7 +2,8 @@
 
 `sequences.json` supplies exact requests and hand-derived expectations for design record 0008, section 9.4.
 `lake test` runs the first header of each case through `acceptBlockHeader` (`tests/KnownAnswers/HeaderSequence.lean`, `checkRegtestSteps`).
-The sequences after the first header, the oracle and the Core comparator do not consume it yet.
+It also runs every case in full through `processNewBlockHeaders` (`checkRegtestSequences`), and compares every expected field.
+The oracle and the Core comparator do not consume the fixture yet.
 Its record shape is local to the fixture and does not settle the stage 5 oracle interface.
 
 ## Reproduction (D83)
@@ -112,7 +113,7 @@ Other response fields remain comparable.
 
 The mainnet fixtures supply the production retarget, checkpoint and version-activation contexts.
 They include `tests/work/mainnet-headers` and the three full-header ranges beside this directory.
-Mainnet mutation verdicts and compiled consumption belong to the header-sequence implementation stages.
+`tests/KnownAnswers/HeaderSequence.lean` derives the mainnet mutation verdicts by hand, and runs them through the compiled code.
 Regtest needs no testnet-specific sequence rule.
 
 Licence: original fixture data and generator under the repository licence.

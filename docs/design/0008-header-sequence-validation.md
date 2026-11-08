@@ -1,6 +1,6 @@
 # Header-sequence validation
 
-**Status:** Adopted on 2026-11-07, with the decisions and the amendment that section 13 records.
+**Status:** Adopted on 2026-11-07, with the decisions and the amendments that section 13 records.
 This record is frozen.
 Implementation status belongs in ROADMAP.md and COVERAGE.md.
 
@@ -856,6 +856,23 @@ The model finds no entry, so `accept_genesis_insert` applies and the step insert
 A self-link would break `WellFormed`, because an entry's height cannot be its own height plus one, and so `wellFormed_preserved` would fail.
 `accept_genesis_parent` never covers this header, because its hypotheses need an entry under `hashPrevBlock` and none under the genesis hash.
 
+### 13.2 Amendment to `process_complete` and `process_linear`
+
+**Date:** 2026-11-07. **Decision maker:** Maintainer.
+The definitions do not change.
+Two statements of section 11 need a hypothesis, and one is read as follows:
+
+- `process_complete` also assumes `n ≤ 2147483647`.
+  For an empty index, "every height in the index is below `2147483647 − n`" holds for every `n`.
+  From genesis, the header at position `k` gets height `k`, and the header at position 2147483647 is the first whose predecessor is at 2147483646.
+  So a list of 2147483648 or more valid headers from genesis reaches `heightOutOfRange`, and the statement as written is false.
+  The added bound excludes exactly those lists.
+- In `process_linear`, "their hashes are unknown" means that no hash is in the index and that the hashes are pairwise distinct.
+  A repeated hash would make its second step a known duplicate that skips its checks.
+  Excluding that case needs a cycle of double SHA-256, which no target assumes impossible.
+- In `process_linear`, "the path has no failure state" means that `t` has no failure flag and that no member of the failed list is `t` or an ancestor of `t`.
+  The new entries have no flags by `accept_ok_insert`, so this reading is the record's condition.
+
 ## 14. Remaining risks
 
 | Risk | Mitigation |
@@ -872,5 +889,5 @@ A self-link would break `WellFormed`, because an entry's height cannot be its ow
 | A fixture with anchors gives a different result from a full chain. | `ancestorView_congr`, `process_complete`, and anchors deep enough for each candidate (section 9.1). |
 
 There is no pin change, trust-policy exception or change to an existing fixture format in this record.
-Section 13.1 records one amendment to an agreed theorem statement: three theorems replace the target `accept_genesis`.
+Sections 13.1 and 13.2 record amendments to agreed theorem statements: three theorems replace the target `accept_genesis`, and `process_complete` and `process_linear` gain the hypotheses of section 13.2.
 Adoption of the scope does not establish any target theorem, and it does not authorize the merge of a later implementation.

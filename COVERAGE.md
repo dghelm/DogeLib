@@ -159,10 +159,12 @@ At seed `20261108`, the default campaign compares 1,897 requests with Core at `e
 The optional signed-digest group compares 25 requests at the same seed, also with zero in all six classes.
 The campaign self-test also checks M1 to M6 with semantic triggers and fixed budgets, signer determinism, refusal replay and malformed-response replay.
 
-At seed `20261108`, the generated campaign completes 3,000 cases with 9,422 assessed Q6 requests and zero disagreements or process failures.
-It records 2,909 passes, 89 known behaviours and 2 unsupported cases.
-The known counts are 48 fixed-digest cases and 41 early recoveries with CLTV disabled.
+At seed `20261108`, the generated campaign completes 3,000 cases with 9,408 assessed Q6 requests and zero disagreements or process failures.
+It records 2,930 passes, 67 known behaviours and 3 unsupported cases. The unsupported cases are labelled Q6.
+The known counts are 38 fixed-digest cases and 29 early recoveries with CLTV disabled.
+
 The 2,043 generated plans cover both branches, all eleven selected hash-type bytes, input positions 0 to 3 and output counts 0 to 5.
 They reach Q1 to Q5 and Q7, both mutation modes and every operator in the field table.
+The field boundaries move the signed input in all six directions among positions 0 to 2. Under SINGLE, with and without ANYONECANPAY, they change an output before and an output after the signed input.
 
-The self-test passes 26 cases. Each mutant is detected within 2,000 cases and 120 seconds, with a three-second invocation timeout.
+The self-test passes 29 cases. Each mutant is detected within 3,000 cases and 120 seconds, with a three-second invocation timeout.

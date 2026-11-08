@@ -41,6 +41,10 @@ def wrap(mode, program, args):
             if mode == 'malformed':
                 print('{', flush=True)
                 continue
+            if mode in ('nonutf8-stdout', 'nonutf8-stderr'):
+                stream = sys.stdout if mode == 'nonutf8-stdout' else sys.stderr
+                stream.buffer.write(b'\xff\n')
+                stream.flush()
             if mode == 'id':
                 response['id'] = 'wrong'
             if mode == 'count':
@@ -84,7 +88,7 @@ def main():
         accepted = locktime_sets()[0][1][1]  # operand zero, lock time zero, nonfinal sequence
         for case in cases:
             case['request'] = dict(accepted, id=case['request']['id'])
-        for mode in (*campaign.CLASSES, 'malformed', 'id', 'count'):
+        for mode in (*campaign.CLASSES, 'malformed', 'id', 'count', 'nonutf8-stdout', 'nonutf8-stderr'):
             local = copy.deepcopy(options)
             local.output = str(tmp / mode)
             chosen = copy.deepcopy(cases)
@@ -99,7 +103,7 @@ def main():
             else:
                 local.harness = wrapper(tmp / f'{mode}-core', mode, args.harness)
             summary = campaign.run_campaign(local, chosen)
-            expected = 'crash' if mode in ('malformed', 'id', 'count') else mode
+            expected = 'crash' if mode in ('malformed', 'id', 'count', 'nonutf8-stdout', 'nonutf8-stderr') else mode
             assert summary['completed'] == 8, summary
             assert summary['counts'][expected] == 1, summary
             assert summary['counts']['pass_count'] == 7, summary
@@ -110,6 +114,10 @@ def main():
             assert record['requests'] == [chosen[3]['request']]
             assert record_path.stem == hashlib.sha256(campaign.canonical(record['requests'][0]).encode()).hexdigest()
             assert record['signer'] == []
+            if mode.startswith('nonutf8-'):
+                stream = mode.removeprefix('nonutf8-')
+                if b'\xff' not in record['responses']['core'][stream].encode('utf-8', errors='surrogateescape'):
+                    raise RuntimeError('invalid output bytes were lost')
             if mode in ('crash', 'timeout'):
                 assert record['batch_failures']
                 parent = record['batch_failures'][0]['responses']['core']

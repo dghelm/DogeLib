@@ -9,13 +9,14 @@ import pathlib
 import platform
 import random
 import shlex
+import signal
 import subprocess
 import sys
 import time
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / 'scripts'))
-from compare_core import RunError, compare, compare_refused, run_program, run_stream
+from compare_core import RunError, compare, compare_refused
 from oracle_pubkey import signature_spends
 from oracle_script import harness_refused, locktime_sets
 
@@ -44,11 +45,50 @@ def selected_cases(names, seed):
             for j, (name, i, request) in enumerate(cases)]
 
 
+def run_captured(program, args, data, timeout, capture):
+    """Capture bytes losslessly, including invalid UTF-8 and output before a timeout."""
+    proc = subprocess.Popen([program, *args], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, start_new_session=True)
+    timed_out = False
+    try:
+        out, err = proc.communicate(data.encode(), timeout=timeout)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        os.killpg(proc.pid, signal.SIGKILL)
+        out, err = proc.communicate()
+    capture.update(stdout=out.decode('utf-8', errors='surrogateescape'),
+                   stderr=err.decode('utf-8', errors='surrogateescape'), returncode=proc.returncode)
+    try:
+        out.decode('utf-8')
+        err.decode('utf-8')
+    except UnicodeDecodeError:
+        raise RunError('MALFORMED', f'{program}: non-UTF-8 process output', capture)
+    if timed_out:
+        raise RunError('TIMEOUT', f'{program} did not finish within {timeout} seconds', capture)
+    if proc.returncode:
+        raise RunError('EXIT', f'{program} exited with status {proc.returncode}', capture)
+    return capture['stdout']
+
+
 def execute(program, requests, timeout):
     """Retain raw output and status, including responses before a stream failure."""
     capture = {}
     try:
-        responses = run_stream(program, requests, timeout, capture=capture)
+        data = ''.join(canonical(request) + '\n' for request in requests)
+        lines = run_captured(program, [], data, timeout, capture).splitlines()
+        if len(lines) != len(requests):
+            raise RunError('COUNT', f'{program}: {len(lines)} responses to {len(requests)} requests', capture)
+        responses = []
+        for request, line in zip(requests, lines):
+            try:
+                response = json.loads(line)
+            except json.JSONDecodeError:
+                raise RunError('MALFORMED', f'{program}: response is not JSON', capture)
+            if not isinstance(response, dict):
+                raise RunError('MALFORMED', f'{program}: response is not an object', capture)
+            if response.get('id') != request['id']:
+                raise RunError('ID', f'{program}: response identifier differs', capture)
+            responses.append(response)
         return dict(responses=responses, timeout=timeout, **capture)
     except RunError as error:
         return dict(error=dict(code=error.code, message=str(error)), timeout=timeout, **error.capture)
@@ -95,7 +135,7 @@ def metadata(oracle, harness, timeout):
     for side, program in (('lean', oracle), ('core', harness)):
         capture = {}
         try:
-            run_program(program, ['--version'], '', timeout, capture)
+            run_captured(program, ['--version'], '', timeout, capture)
         except RunError as error:
             capture = dict(error=error.code, **error.capture)
         except OSError as error:

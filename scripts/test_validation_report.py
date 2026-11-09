@@ -202,6 +202,7 @@ class Reports(unittest.TestCase):
                               '(cd tests/block/mainnet-bip65-full-headers && sha256sum -c SHA256SUMS) && '
                               '(cd tests/block/mainnet-bip66-full-headers && sha256sum -c SHA256SUMS) && '
                               '(cd tests/block/regtest-header-sequences && sha256sum -c SHA256SUMS) && '
+                              '(cd tests/script/campaign && sha256sum -c SHA256SUMS) && '
                               '(cd tests/script/corpus && sha256sum -c SHA256SUMS) && '
                               '(cd tests/script/signed-spends && sha256sum -c SHA256SUMS)',
             'refinement': 'lake -d Refinement build --wfail',

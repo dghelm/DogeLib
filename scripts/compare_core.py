@@ -223,6 +223,11 @@ def load_fixtures() -> tuple[list[dict], list[str]]:
     return kept, excluded
 
 
+def campaign_fixtures() -> list[dict]:
+    """The regression fixtures of design record 0009, section 10. lake test checks their expected responses."""
+    return [json.loads(line) for line in (ROOT / "tests/script/campaign/requests.jsonl").read_text().splitlines()]
+
+
 def sighash_records() -> list[list]:
     records = json.loads((ROOT / "tests/transaction/sighash/sighash.json").read_text())
     return [r for r in records if len(r) == 5]
@@ -682,6 +687,7 @@ def request_sets() -> tuple[list[tuple[str, list[dict]]], list[str]]:
     sets.extend(sequence_sets())
     sets.extend(pubkey_sets())
     sets.append(("Script signature verdict", signature_spends()))
+    sets.append(("Script campaign fixtures", campaign_fixtures()))
     sets.extend(script_sets())
     sets.extend(legacy_sets())
     sets.extend(tx_spend_sets())

@@ -33,8 +33,12 @@ The two revised files have a line for each request, so the M3 fixture also check
 
 ## Revisions
 
-Both fixtures come from runs at DogeLib commit `43b9ed172f8ed8299645210a4b0674cb533fa9f2`, with a clean tree.
-That commit adds only the `--keep` option of `scripts/test_campaign_production.py` to `8f73e380f712b7240306a76c75af867dd897fe3b`.
+Each fixture comes from a run with a clean tree:
+
+- `proposal-faulty-locktime-5100b3`: the proposal search ran at DogeLib commit `8f73e380f712b7240306a76c75af867dd897fe3b`.
+- `harness-fault-m3-locktime-500000000`: the detection and reduction ran at DogeLib commit `43b9ed172f8ed8299645210a4b0674cb533fa9f2`.
+  That commit adds only the `--keep` option of `scripts/test_campaign_production.py` to `8f73e38`.
+
 The Core revision is the compatibility pin `e0a1c157791544e818c901bd9341896965afbf9d` ([SOURCES.md](../../../SOURCES.md)).
 The harness and the regtest node were built at the pin with `scripts/build_core_harness.sh` and `scripts/build_core_node.sh`.
 The `id` of each request is new. Every other field is the exact request of the saved failure.

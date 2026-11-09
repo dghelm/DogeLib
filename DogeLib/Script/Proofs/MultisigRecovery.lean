@@ -38,6 +38,7 @@ It also holds the P2SH commitment to the exact redeem bytes, a push-only `script
 - `multisigRecovery_accepted_iff`, `multisigRecovery_twoOfThree_accepted_iff`: the equivalence, for a verifier that decides every request.
 - `multisigRecovery_ordinary_unsupported`, `multisigRecovery_recovery_unsupported`: an undecided reached call gives `unsupported`.
 - `multisigRecovery_lockTime_lt`, `multisigRecovery_accepted_lockTime_lt`: under `CHECKLOCKTIMEVERIFY`, a lock time below 1,000,000 cannot pass the recovery branch.
+- `multisigRecovery_lockTime_ge_threshold`, `multisigRecovery_finalSequence`: under `CHECKLOCKTIMEVERIFY`, a false selector gives `UNSATISFIED_LOCKTIME` before any signature check in two more cases. They are a lock time of at least 500,000,000, and a sequence of `0xffffffff` at every lock time.
 - `verifyLegacySpend_scriptSig_rejected`, `verifyLegacySpend_scriptSig_unsupported`: a failed `scriptSig` evaluation passes through.
 
 ## The reference digest
@@ -1487,6 +1488,65 @@ theorem multisigRecovery_lockTime_lt (h : MultisigRecoverySpend ctx prevScriptPu
       h.recovery_length hsel hS1]
   have hl : ¬(recoveryLockTime ≤ ctx.tx.lockTime.toNat ∧ ctx.tx.lockTime.toNat < lockTimeThreshold ∧
       ctx.input.sequence ≠ sequenceFinal) := fun h' => by omega
+  simp only [hl, ↓reduceIte]
+
+/--
+**Corollary of section 7, time-based lock time.** Under `MultisigRecoverySpend`, which includes the `CHECKLOCKTIMEVERIFY` flag, assume `S.length + 2 ≤ 1000` and a false selector.
+Then a transaction with lock time at least 500,000,000 (`LOCKTIME_THRESHOLD`) gives `UNSATISFIED_LOCKTIME`, before any signature check.
+Such a lock time is a time, and the operand 1,000,000 is a height, so the two types differ.
+
+Without the `CHECKLOCKTIMEVERIFY` flag, this exclusion does not hold: `OP_CHECKLOCKTIMEVERIFY` is then `OP_NOP2`.
+
+The hypotheses are the fields of `MultisigRecoverySpend`:
+
+- supported flags, with `P2SH` and `CHECKLOCKTIMEVERIFY` set
+- `1 ≤ k ≤ n ≤ 16`, with `n` keys of 33 bytes and a 33-byte recovery key `R`
+- a previous output that is the P2SH commitment to the exact redeem bytes
+- a push-only `scriptSig` whose evaluation succeeds with the final stack `S ++ [redeem]`
+
+The input context gives an input index that selects an input, and fewer than 2^32 inputs and outputs.
+-/
+theorem multisigRecovery_lockTime_ge_threshold
+    (h : MultisigRecoverySpend ctx prevScriptPubKey flags verify k keys R S)
+    (hS : S.length + 2 ≤ maxStackItems) {S1 : List (List UInt8)} {sel : List UInt8} (hSe : S = S1 ++ [sel])
+    (hsel : castToBool sel = false) (hge : lockTimeThreshold ≤ ctx.tx.lockTime.toNat) :
+    verifyLegacySpend ctx prevScriptPubKey flags verify = .rejected .unsatisfiedLocktime := by
+  rw [h.eq]
+  simp only [hS, ↓reduceIte]
+  have hS1 : S1.length + 2 ≤ maxStackItems := by subst hSe; simp at hS; omega
+  rw [hSe, finishEval_redeem_recovery ctx verify h.supported h.cltv h.one_le_k h.k_le_n h.n_le h.keys_length
+      h.recovery_length hsel hS1]
+  have hl : ¬(recoveryLockTime ≤ ctx.tx.lockTime.toNat ∧ ctx.tx.lockTime.toNat < lockTimeThreshold ∧
+      ctx.input.sequence ≠ sequenceFinal) := fun h' => by omega
+  simp only [hl, ↓reduceIte]
+
+/--
+**Corollary of section 7, final sequence.** Under `MultisigRecoverySpend`, which includes the `CHECKLOCKTIMEVERIFY` flag, assume `S.length + 2 ≤ 1000` and a false selector.
+Then an input whose sequence is `0xffffffff` (`SEQUENCE_FINAL`) gives `UNSATISFIED_LOCKTIME`, before any signature check, at every lock time.
+
+Without the `CHECKLOCKTIMEVERIFY` flag, this exclusion does not hold: `OP_CHECKLOCKTIMEVERIFY` is then `OP_NOP2`.
+
+The hypotheses are the fields of `MultisigRecoverySpend`:
+
+- supported flags, with `P2SH` and `CHECKLOCKTIMEVERIFY` set
+- `1 ≤ k ≤ n ≤ 16`, with `n` keys of 33 bytes and a 33-byte recovery key `R`
+- a previous output that is the P2SH commitment to the exact redeem bytes
+- a push-only `scriptSig` whose evaluation succeeds with the final stack `S ++ [redeem]`
+
+The input context gives an input index that selects an input, and fewer than 2^32 inputs and outputs.
+-/
+theorem multisigRecovery_finalSequence
+    (h : MultisigRecoverySpend ctx prevScriptPubKey flags verify k keys R S)
+    (hS : S.length + 2 ≤ maxStackItems) {S1 : List (List UInt8)} {sel : List UInt8} (hSe : S = S1 ++ [sel])
+    (hsel : castToBool sel = false) (hseq : ctx.input.sequence = sequenceFinal) :
+    verifyLegacySpend ctx prevScriptPubKey flags verify = .rejected .unsatisfiedLocktime := by
+  rw [h.eq]
+  simp only [hS, ↓reduceIte]
+  have hS1 : S1.length + 2 ≤ maxStackItems := by subst hSe; simp at hS; omega
+  rw [hSe, finishEval_redeem_recovery ctx verify h.supported h.cltv h.one_le_k h.k_le_n h.n_le h.keys_length
+      h.recovery_length hsel hS1]
+  have hl : ¬(recoveryLockTime ≤ ctx.tx.lockTime.toNat ∧ ctx.tx.lockTime.toNat < lockTimeThreshold ∧
+      ctx.input.sequence ≠ sequenceFinal) := fun h' => h'.2.2 hseq
   simp only [hl, ↓reduceIte]
 
 /--

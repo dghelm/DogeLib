@@ -1656,9 +1656,13 @@ The weaker modes leave fields open. Each of these theorems gives equal productio
 - `legacySignatureHashPlan_eq_of_anyoneCanPay`, for ALL with ANYONECANPAY: the version, the lock time, the outputs, and the outpoint and sequence of input `n`. The other inputs and the input count are open.
 - `legacySignatureHashPlan_eq_of_none`, for NONE without ANYONECANPAY: the version, the lock time, every outpoint and the sequence of input `n`. The outputs and the other sequences are open.
 - `legacySignatureHashPlan_eq_of_single`, for SINGLE without ANYONECANPAY: the same inputs fields as NONE, and output `n`. The other outputs and the other sequences are open.
+- `legacySignatureHashPlan_eq_of_none_anyoneCanPay`, for NONE with ANYONECANPAY: the version, the lock time, and the outpoint and sequence of input `n`. The outputs, the other inputs and the input count are open.
+- `legacySignatureHashPlan_eq_of_single_anyoneCanPay`, for SINGLE with ANYONECANPAY: the same fields as NONE with ANYONECANPAY, and output `n`. The other outputs, the other inputs and the input count are open.
+
+In the theorems with ANYONECANPAY, input `n` may be missing from both transactions. The SINGLE theorems also let output `n` be missing from both. In each such case both plans are the fixed digest `one`.
+So they cover the case of design record 0009, section 11. There `n` is an input index of both transactions, and for SINGLE both have more than `n` outputs.
 
 `legacySignatureHashPlan_anyoneCanPay_set_other`, `legacySignatureHashPlan_none_outputs` and `legacySignatureHashPlan_single_set_other_output` name one open field of each mode.
-ANYONECANPAY combined with NONE or SINGLE has no theorem here.
 
 `lake test` mutates the transactions of Core's 500 `sighash.json` records and recomputes the production digest.
 For each mode it changes one committed and one open field, and expects a different or the same digest.
@@ -1669,8 +1673,8 @@ By `#print axioms` with Lean `v4.35.0`:
 
 | Theorem | Axioms |
 | --- | --- |
-| `legacyAllFields_eq_iff`, `legacyInputBytes_congr`, `legacyInputsBytes_anyoneCanPay_congr`, `legacyOutputsBytes_all_congr`, `referenceTransaction_inputs_allOnly`, `referenceTransaction_outputs_allOnly`, `legacyReferencePlan_eq_hashBytes_of_allOnly`, `lt_of_legacyReferencePlan_eq`, `referenceTransaction_eq_of_legacyReferencePlan_eq`, `HashType.isSingle_eq_false_of_isNone`, `HashType.isNone_eq_false_of_isSingle`, `legacySignatureHashPlan_eq_of_anyoneCanPay`, `legacySignatureHashPlan_anyoneCanPay_set_other` | `propext`, `Quot.sound` |
-| `mapIdx_eq_of_getElem`, `legacyInputsBytes_congr`, `legacyOutputsBytes_single_congr`, `legacySignatureHashPlan_eq_of_allFields`, `referenceSequencedInputs_false_eq`, `referenceSequencedInputs_signedFields`, `referenceTransaction_eq_of_allFields`, `legacyReferencePlan_eq_of_allFields`, `legacyAllFields_eq_of_referenceTransaction_eq`, `legacyReferencePlan_allOnly_commits`, `legacySignatureHashPlan_allOnly_commits`, `legacyReferencePlan_eq_iff_allFields`, `legacySignatureHashPlan_eq_iff_allFields`, `legacySignatureHash_eq_of_allFields`, `legacyReferencePlan_allOnly_index_eq`, `legacySignatureHashPlan_eq_of_none`, `legacySignatureHashPlan_eq_of_single`, `legacySignatureHashPlan_none_outputs`, `legacySignatureHashPlan_single_set_other_output` | `propext`, `Classical.choice`, `Quot.sound` |
+| `legacyAllFields_eq_iff`, `legacyInputBytes_congr`, `legacyInputsBytes_anyoneCanPay_congr`, `legacyOutputsBytes_all_congr`, `referenceTransaction_inputs_allOnly`, `referenceTransaction_outputs_allOnly`, `legacyReferencePlan_eq_hashBytes_of_allOnly`, `lt_of_legacyReferencePlan_eq`, `referenceTransaction_eq_of_legacyReferencePlan_eq`, `HashType.isSingle_eq_false_of_isNone`, `HashType.isNone_eq_false_of_isSingle`, `legacySignatureHashPlan_eq_of_anyoneCanPay`, `legacySignatureHashPlan_anyoneCanPay_set_other`, `legacySignatureHashPlan_eq_of_none_anyoneCanPay` | `propext`, `Quot.sound` |
+| `mapIdx_eq_of_getElem`, `legacyInputsBytes_congr`, `legacyOutputsBytes_single_congr`, `legacySignatureHashPlan_eq_of_allFields`, `referenceSequencedInputs_false_eq`, `referenceSequencedInputs_signedFields`, `referenceTransaction_eq_of_allFields`, `legacyReferencePlan_eq_of_allFields`, `legacyAllFields_eq_of_referenceTransaction_eq`, `legacyReferencePlan_allOnly_commits`, `legacySignatureHashPlan_allOnly_commits`, `legacyReferencePlan_eq_iff_allFields`, `legacySignatureHashPlan_eq_iff_allFields`, `legacySignatureHash_eq_of_allFields`, `legacyReferencePlan_allOnly_index_eq`, `legacySignatureHashPlan_eq_of_none`, `legacySignatureHashPlan_eq_of_single`, `legacySignatureHashPlan_none_outputs`, `legacySignatureHashPlan_single_set_other_output`, `legacySignatureHashPlan_eq_of_single_anyoneCanPay` | `propext`, `Classical.choice`, `Quot.sound` |
 
 ### Script instruction reader and execution state
 
@@ -2148,6 +2152,9 @@ The theorems:
 - `multisigRecovery_lockTime_lt`: with `CHECKLOCKTIMEVERIFY`, a false selector and a lock time below 1,000,000 give `UNSATISFIED_LOCKTIME` before any signature check.
   `multisigRecovery_accepted_lockTime_lt`: such a spend is accepted only through the ordinary branch.
   Without the flag, `OP_CHECKLOCKTIMEVERIFY` is `OP_NOP2`, and a known answer accepts the recovery branch with lock time 0.
+- `multisigRecovery_lockTime_ge_threshold`: with `CHECKLOCKTIMEVERIFY`, the stack bound `S.length + 2 ≤ 1000`, a false selector and a lock time of at least 500,000,000 give `UNSATISFIED_LOCKTIME` before any signature check.
+  `multisigRecovery_finalSequence`: the same for a sequence of `0xffffffff` on the input, at every lock time.
+  With `multisigRecovery_lockTime_lt`, they cover each case in which the lock-time check of the recovery branch fails.
 - `verifyLegacySpend_scriptSig_rejected` and `verifyLegacySpend_scriptSig_unsupported`: a failed `scriptSig` evaluation passes through.
 
 Every checker call of both branches hashes the transformation-reference digest, Core's `SignatureHashOld`.
@@ -2200,7 +2207,7 @@ By `#print axioms` with Lean `v4.35.0`:
 | `multisigVisits_cons`, `greedyMatch_cons`, `smallIntOpcode_facts` | None |
 | `multisigLoop_cons`, `multisigLoop_visits_error`, `pushEncoding_small`, `countOp_small`, `multisigRecoveryScript_eq`, `trueTop_boolBytes` | `propext` |
 | `multisigLoop_visits_ok`, `multisigLoop_ok_visits`, `checkSignatureEncoding_ok_iff`, `checkPubKeyEncoding_ok_iff`, `multisigCheck_eq_ok_iff`, `sigAccepted_iff`, `sigAccepted_of_checkSig`, `multisigRecoveryScript_length`, `checkSigStep_recovery`, `effectiveScriptCode_length_le`, `transactionChecker_checkSig_ne_none`, `hash160_toList_length`, `verifyLegacySpend_scriptSig_rejected`, `verifyLegacySpend_scriptSig_unsupported` and the other layout lemmas | `propext`, `Quot.sound` |
-| `multisigRecovery_sound`, `multisigRecovery_ordinary_complete`, `multisigRecovery_recovery_complete`, `multisigRecovery_accepted_iff`, `multisigRecovery_twoOfThree_accepted_iff`, `multisigRecovery_ordinary_unsupported`, `multisigRecovery_recovery_unsupported`, `multisigRecovery_lockTime_lt`, `multisigRecovery_accepted_lockTime_lt`, `multisigRecoveryScript_twoOfThree` and the evaluation lemmas | `propext`, `Classical.choice`, `Quot.sound` |
+| `multisigRecovery_sound`, `multisigRecovery_ordinary_complete`, `multisigRecovery_recovery_complete`, `multisigRecovery_accepted_iff`, `multisigRecovery_twoOfThree_accepted_iff`, `multisigRecovery_ordinary_unsupported`, `multisigRecovery_recovery_unsupported`, `multisigRecovery_lockTime_lt`, `multisigRecovery_lockTime_ge_threshold`, `multisigRecovery_finalSequence`, `multisigRecovery_accepted_lockTime_lt`, `multisigRecoveryScript_twoOfThree` and the evaluation lemmas | `propext`, `Classical.choice`, `Quot.sound` |
 | `multisigRecoveryScript_length_le`, `ordinaryCode_length_lt`, `recoveryCode_length_lt` | `propext`, `Quot.sound` |
 | `scanOps_cons_opcode`, `keys_scanOps`, `redeemTail_scanOps`, `multisigRecoveryScript_scanOps`, `ordinaryCode_scanOps`, `recoveryCode_scanOps`, `transactionChecker_verify_reference`, `sigAccepted_iff_reference`, `MultisigRecoverySpend.sigAccepted_ordinary_iff_reference`, `MultisigRecoverySpend.sigAccepted_recovery_iff_reference`, `MultisigRecoverySpend.checkSig_ordinary_reference`, `MultisigRecoverySpend.checkSig_recovery_reference` | `propext`, `Classical.choice`, `Quot.sound` |
 | `MultisigRecoverySpend.sigAccepted_ordinary_allOnly_commits`, `MultisigRecoverySpend.sigAccepted_recovery_allOnly_commits` | `propext`, `Classical.choice`, `Quot.sound` |
@@ -2724,6 +2731,7 @@ What the proofs say. Every theorem is Script-local: it is about one call of `ver
 - `lockStep_false`, `revisedVerifyScript_inactive_eq`, `revisedSpend_inactive_eq`, `inactiveEq`: with `active` false, each variant equals the baseline result with the error map `id`. This holds for every other argument, and every result agrees.
 - `faultyStep_pops`, `faultyStep_not_restricts`: take the checker of lock time 2 and no flags. At `OP_NOP4`, the faulty step succeeds with the stack `[1]`, and the baseline step succeeds with `[1, 2]`. So the faulty step does not restrict the baseline step.
 - `faulty_counterexample`: one concrete spend, `OP_1 OP_2 OP_NOP4 OP_1 OP_EQUAL` with lock time 2 and sequence `0xfffffffe`. `verifyLegacySpend` rejects it with `EVAL_FALSE`, and the active faulty revision accepts it.
+- `faulty_counterexample_short`: the same results for `OP_1 OP_0 OP_NOP4` (`51 00 b3`) in the same context. The faulty rule reads the empty operand as 0 and pops it, so the final stack is `[1]`. The baseline leaves `[1, ""]`. The planted-fault search of design record 0009, section 8.1, finds this script among its shortest violations.
 - `faulty_not_restrictsAcceptance`, `faulty_not_softFork`: the faulty spend predicate does not restrict acceptance, so it is not a `SoftFork` for any use predicate.
 - `faulty_strict`, `faulty_incompatible`: the faulty spend predicate also rejects a spend that the baseline accepts, so it is `Incompatible`.
 - `correctedStep_restricts`: for every `active`, checker, flag set and baseline error map, the corrected step restricts the baseline step.
@@ -2740,7 +2748,7 @@ It has these boundaries:
 - **Evidence.** The known answers in `tests/KnownAnswers/Proposals/ExampleFaultyLocktime.lean` have results derived by hand. No implementation of the rule exists, so there is no comparison of the rule. The baseline verdicts of the counterexample and of the lock-time spend `01 02 b3 75 51` agree with the Core harness, by the commands in docs/in-practice.md.
 
 By `#print axioms` with Lean `v4.35.0`, every theorem of the example depends on `propext` and `Quot.sound` only.
-The theorems are `lockStep_false`, `lockCheck_corrected_next`, `correctedStep_restricts`, `revisedVerifyScript_inactive_eq`, `revisedSpend_inactive_eq`, `inactiveEq`, `corrected_verifyScript_soft_fork_local`, `corrected_soft_fork_local`, `corrected_restrictsAcceptance`, `faultyStep_pops`, `faultyStep_not_restricts`, `faulty_counterexample`, `faulty_not_restrictsAcceptance`, `faulty_not_softFork`, `faulty_strict`, `faulty_incompatible`, `corrected_counterexample`, `corrected_strict`, `corrected_use` and `corrected_softFork`.
+The theorems are `lockStep_false`, `lockCheck_corrected_next`, `correctedStep_restricts`, `revisedVerifyScript_inactive_eq`, `revisedSpend_inactive_eq`, `inactiveEq`, `corrected_verifyScript_soft_fork_local`, `corrected_soft_fork_local`, `corrected_restrictsAcceptance`, `faultyStep_pops`, `faultyStep_not_restricts`, `faulty_counterexample`, `faulty_counterexample_short`, `faulty_not_restrictsAcceptance`, `faulty_not_softFork`, `faulty_strict`, `faulty_incompatible`, `corrected_counterexample`, `corrected_strict`, `corrected_use` and `corrected_softFork`.
 
 ### What cannot be proved yet
 

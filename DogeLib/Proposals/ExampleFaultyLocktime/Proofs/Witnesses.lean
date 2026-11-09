@@ -16,6 +16,7 @@ The previous `scriptPubKey` is one of two scripts:
 | Script | Bytes | Instructions |
 | --- | --- | --- |
 | `counterexampleScript` | `51 52 b3 51 87` | `OP_1 OP_2 OP_NOP4 OP_1 OP_EQUAL` |
+| `shortCounterexampleScript` | `51 00 b3` | `OP_1 OP_0 OP_NOP4` |
 | `useScript` | `01 02 b3 75 51` | a push of 2, `OP_NOP4 OP_DROP OP_1` |
 
 The lock time 2 meets the operand 2: both lie below `LOCKTIME_THRESHOLD`, 2 ≤ 2, and the sequence is not `SEQUENCE_FINAL`.
@@ -25,6 +26,7 @@ The lock time 1 does not meet it.
 
 - `faultyStep_pops`, `faultyStep_not_restricts`: at `OP_NOP4` of the counterexample, the faulty step succeeds with a state that the baseline step does not give.
 - `faulty_counterexample`: with lock time 2, `verifyLegacySpend` rejects the counterexample with `EVAL_FALSE`, and the active faulty revision accepts it.
+- `faulty_counterexample_short`: the same for the three-instruction script `51 00 b3`, one of the shortest violations that the search of design record 0009, section 8.1, finds.
 - `faulty_not_restrictsAcceptance`, `faulty_not_softFork`: the faulty spend predicate does not restrict acceptance, so it is not a `SoftFork`.
 - `faulty_strict`, `faulty_incompatible`: the faulty spend predicate also rejects a spend that the baseline accepts, so it is `Incompatible`.
 
@@ -52,6 +54,12 @@ def counterexampleBytes : List UInt8 := [0x51, 0x52, nop4, 0x51, 0x87]
 
 /-- The counterexample script, `counterexampleBytes`. -/
 def counterexampleScript : Transaction.Script := ⟨⟨counterexampleBytes, by decide⟩⟩
+
+/-- `OP_1 OP_0 OP_NOP4`: `51 00 b3`. -/
+def shortCounterexampleBytes : List UInt8 := [0x51, 0x00, nop4]
+
+/-- The three-instruction counterexample script, `shortCounterexampleBytes`. -/
+def shortCounterexampleScript : Transaction.Script := ⟨⟨shortCounterexampleBytes, by decide⟩⟩
 
 /-- A push of the operand 2, then `OP_NOP4 OP_DROP OP_1`: `01 02 b3 75 51`. -/
 def useScript : Transaction.Script := ⟨⟨operandScript [2] [0x75, 0x51], by decide⟩⟩
@@ -114,6 +122,19 @@ Script-local.
 theorem faulty_counterexample :
     baselineSpend (spendArgs 2 counterexampleScript) = .rejected .evalFalse ∧
       revisedSpend .faulty true (spendArgs 2 counterexampleScript) = .accepted := by
+  decide +kernel
+
+/--
+With lock time 2, `verifyLegacySpend` rejects `51 00 b3` (`OP_1 OP_0 OP_NOP4`) with `EVAL_FALSE`, and the active faulty revision accepts it.
+The context is that of `spendTx 2`: version 1, one input with a null outpoint, an empty `scriptSig` and sequence `0xfffffffe`, no outputs, and no flags.
+It is the context of the planted-fault search of design record 0009, section 8.1.
+The baseline treats `OP_NOP4` as a NOP, so the final stack is `[1, ""]`, whose top is false.
+The faulty rule reads the empty operand as 0, which lock time 2 meets, and pops it, so the final stack is `[1]`.
+Script-local.
+-/
+theorem faulty_counterexample_short :
+    baselineSpend (spendArgs 2 shortCounterexampleScript) = .rejected .evalFalse ∧
+      revisedSpend .faulty true (spendArgs 2 shortCounterexampleScript) = .accepted := by
   decide +kernel
 
 /--

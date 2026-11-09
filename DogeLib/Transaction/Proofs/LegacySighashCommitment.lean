@@ -25,6 +25,7 @@ It leaves out every scriptSig: the serializer writes the empty script, or the sc
 - `legacySignatureHash_eq_of_allFields`: equal committed fields give equal digests.
 - `legacyReferencePlan_allOnly_index_eq`: when the script code of the copy is not empty, equal plans also have the same input index.
 - `legacySignatureHashPlan_eq_of_anyoneCanPay`, `legacySignatureHashPlan_eq_of_none`, `legacySignatureHashPlan_eq_of_single`: the weaker modes. Agreement on fewer fields already gives equal plans, and three corollaries name a field that each mode leaves out.
+- `legacySignatureHashPlan_eq_of_none_anyoneCanPay`, `legacySignatureHashPlan_eq_of_single_anyoneCanPay`: NONE and SINGLE with ANYONECANPAY. The version, the lock time and input `n` suffice, and for SINGLE also output `n`.
 
 ## What the theorems do not say
 
@@ -543,6 +544,71 @@ theorem legacySignatureHashPlan_eq_of_single (sc : Script) (tx tx' : Transaction
       simp only [Bool.or_false, Bool.true_eq_false, or_false] at hi
       subst hi
       simpa [List.getElem?_eq_getElem hi1, List.getElem?_eq_getElem hi2] using hs
+
+/--
+**NONE with ANYONECANPAY.** Take a script code, an input index `n`, and a hash type that is NONE with the ANYONECANPAY bit.
+Two transactions have equal production plans when they agree on three things.
+They are the version, the lock time, and the outpoint and sequence of input `n`.
+
+Input `n` may be missing from both. Then both plans are the fixed digest `one`.
+The outputs, the other inputs and the number of inputs are not committed.
+-/
+theorem legacySignatureHashPlan_eq_of_none_anyoneCanPay (sc : Script) (tx tx' : Transaction) (n h : UInt32)
+    (hacp : HashType.anyoneCanPay h = true) (hnone : HashType.isNone h = true)
+    (hv : tx.version = tx'.version) (hl : tx.lockTime = tx'.lockTime)
+    (hi : (tx.inputs.val[n.toNat]?).map TxIn.signedFields = (tx'.inputs.val[n.toNat]?).map TxIn.signedFields) :
+    legacySignatureHashPlan sc tx n h = legacySignatureHashPlan sc tx' n h := by
+  have hsingle := HashType.isSingle_eq_false_of_isNone hnone
+  have hle : tx.inputs.val.length ≤ n.toNat ↔ tx'.inputs.val.length ≤ n.toNat := by
+    rw [← List.getElem?_eq_none_iff, ← List.getElem?_eq_none_iff, ← Option.map_eq_none_iff (f := TxIn.signedFields),
+      hi, Option.map_eq_none_iff]
+  unfold legacySignatureHashPlan
+  simp only [hle, hsingle, Bool.false_eq_true, false_and, ↓reduceIte]
+  split
+  · rfl
+  · congr 1
+    unfold legacyPreimage legacyBody
+    rw [hacp, hnone, hsingle, hv, hl]
+    have hout : legacyOutputsBytes tx n true false = legacyOutputsBytes tx' n true false := rfl
+    rw [hout, legacyInputsBytes_anyoneCanPay_congr sc tx tx' n _ hi]
+
+/--
+**SINGLE with ANYONECANPAY.** Take a script code, an input index `n`, and a hash type that is SINGLE with the ANYONECANPAY bit.
+Two transactions have equal production plans when they agree on four things.
+They are the version, the lock time, the outpoint and sequence of input `n`, and output `n`.
+
+Input `n` or output `n` may be missing from both. Then both plans are the fixed digest `one`.
+
+So the case of design record 0009, section 11, with `n` an input index and an output index of both transactions, is an instance.
+The other inputs, the number of inputs, and the other outputs, beyond their number being more than `n`, are not committed.
+-/
+theorem legacySignatureHashPlan_eq_of_single_anyoneCanPay (sc : Script) (tx tx' : Transaction) (n h : UInt32)
+    (hacp : HashType.anyoneCanPay h = true) (hsingle : HashType.isSingle h = true)
+    (hv : tx.version = tx'.version) (hl : tx.lockTime = tx'.lockTime)
+    (hi : (tx.inputs.val[n.toNat]?).map TxIn.signedFields = (tx'.inputs.val[n.toNat]?).map TxIn.signedFields)
+    (ho : tx.outputs.val[n.toNat]? = tx'.outputs.val[n.toNat]?) :
+    legacySignatureHashPlan sc tx n h = legacySignatureHashPlan sc tx' n h := by
+  have hnone := HashType.isNone_eq_false_of_isSingle hsingle
+  have hle : tx.inputs.val.length ≤ n.toNat ↔ tx'.inputs.val.length ≤ n.toNat := by
+    rw [← List.getElem?_eq_none_iff, ← List.getElem?_eq_none_iff, ← Option.map_eq_none_iff (f := TxIn.signedFields),
+      hi, Option.map_eq_none_iff]
+  have hleo : tx.outputs.val.length ≤ n.toNat ↔ tx'.outputs.val.length ≤ n.toNat := by
+    rw [← List.getElem?_eq_none_iff, ← List.getElem?_eq_none_iff, ho]
+  unfold legacySignatureHashPlan
+  simp only [hle, hsingle, hleo, true_and]
+  split
+  · rfl
+  · split
+    · rfl
+    · rename_i h2
+      have h1 : n.toNat < tx.outputs.val.length := Nat.lt_of_not_le fun hc => h2 (hleo.mp hc)
+      have h1' : n.toNat < tx'.outputs.val.length := by omega
+      congr 1
+      unfold legacyPreimage legacyBody
+      rw [hacp, hnone, hsingle, hv, hl,
+        legacyOutputsBytes_single_congr tx tx' n h1 h1' (by
+          simpa [List.getElem?_eq_getElem h1, List.getElem?_eq_getElem h1'] using ho),
+        legacyInputsBytes_anyoneCanPay_congr sc tx tx' n _ hi]
 
 /-- With ALL and ANYONECANPAY, replacing an input other than input `n` leaves the production plan unchanged. -/
 theorem legacySignatureHashPlan_anyoneCanPay_set_other (sc : Script) (tx : Transaction) (n h : UInt32)

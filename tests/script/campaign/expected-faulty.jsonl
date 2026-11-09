@@ -1,0 +1,2 @@
+{"id":"proposal-faulty-locktime-5100b3","ok":{"result":"accepted","script_error":"OK"}}
+{"id":"harness-fault-m3-locktime-500000000","ok":{"result":"rejected","script_error":"UNSATISFIED_LOCKTIME"}}

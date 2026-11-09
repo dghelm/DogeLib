@@ -1,7 +1,7 @@
 """Stage 4 of design record 0009: production replay of a planted harness fault.
 
 Usage: python3 -I scripts/test_campaign_production.py <dogelib-oracle> <core-oracle>
-           [--signer PATH] [--node DIR] [--upstream-harness PATH]
+           [--signer PATH] [--node DIR] [--upstream-harness PATH] [--keep DIR]
 
 The campaign searches with the planted harness fault M3 of section 8.2, reduces
 the first detection, and replays it at L1 with the unchanged harness at the pin.
@@ -9,6 +9,8 @@ the first detection, and replays it at L1 with the unchanged harness at the pin.
 harness fault, and five L3 spends with known node verdicts.
 --upstream-harness adds the L1 replay against a harness build of another
 commit, and compares its responses with the pin harness on generated cases.
+--keep copies the first detection and its reduced output to DIR under
+build/campaign/, which the self-test otherwise deletes.
 """
 
 import argparse
@@ -170,7 +172,7 @@ def check_labels(check):
           'and L1 alone blames only a different harness')
 
 
-def stage4(args, check, wrapper, node=None, upstream=None):
+def stage4(args, check, wrapper, node=None, upstream=None, keep=None):
     """Find, reduce and replay the planted harness fault M3 of section 8.2."""
     signer = str(pathlib.Path(args.signer or pathlib.Path(args.harness).with_name('core-signer')).resolve())
     base = campaign.ROOT / 'build/campaign'
@@ -303,6 +305,12 @@ def stage4(args, check, wrapper, node=None, upstream=None):
             print('ok L3 lost trigger: a rebuilt case that no longer fails is not comparable, exit status 3')
             checks += 1
             checks += l3_positives(args, check, signer, node)
+        if keep:
+            # The first detection and its reduced output, with the replay evidence that this run appended.
+            keep.mkdir(parents=True, exist_ok=True)
+            shutil.copy(path, keep / 'detected.json')
+            shutil.copy(target, keep / 'reduced.json')
+            print(f'kept the detection and its reduction in {keep}')
     return checks
 
 
@@ -313,13 +321,17 @@ def main():
     parser.add_argument('--signer', help='defaults to core-signer beside the harness')
     parser.add_argument('--node', help='a scripts/build_core_node.sh build directory at the pin')
     parser.add_argument('--upstream-harness', help='a scripts/build_core_harness.sh --revision build')
+    parser.add_argument('--keep', help='a directory under build/campaign/ for the detection and its reduction')
     args = parser.parse_args()
     args.oracle = str(pathlib.Path(args.oracle).resolve())
     args.harness = str(pathlib.Path(args.harness).resolve())
     upstream = str(pathlib.Path(args.upstream_harness).resolve()) if args.upstream_harness else None
+    keep = pathlib.Path(args.keep).resolve() if args.keep else None
+    if keep and not keep.is_relative_to(campaign.ROOT / 'build/campaign'):
+        parser.error('--keep must name a directory under build/campaign/, which is not committed')
     from test_campaign import check, wrapper
     started = time.monotonic()
-    checks = stage4(args, check, wrapper, args.node and str(pathlib.Path(args.node).resolve()), upstream)
+    checks = stage4(args, check, wrapper, args.node and str(pathlib.Path(args.node).resolve()), upstream, keep)
     print(f'{checks} cases, 0 failures ({time.monotonic() - started:.1f} s)')
     return 0
 

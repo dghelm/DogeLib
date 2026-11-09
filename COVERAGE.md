@@ -227,3 +227,23 @@ The generator's acceptance cases use lock time 1,000,000 with a nonfinal sequenc
 For these spends the node reports `non-final`, and the replay labels the case `not-comparable`.
 With the L1 part of stage 4, `scripts/test_campaign.py` passes 47 cases.
 These results test the replay procedure, and they add no theorem.
+
+### Campaign regression fixtures
+
+[`tests/script/campaign/`](tests/script/campaign/README.md) keeps the two understood counterexamples of the campaign, as design record 0009, section 10, requires.
+Both come from planted faults. The campaign found no fault in Core or in DogeLib.
+
+- `proposal-faulty-locktime-5100b3`: the stage 3 search finds `51 00 b3` at lock time 2 and sequence `0xfffffffe`. The faulty rule of `ExampleFaultyLocktime` accepts it, and the baseline rejects it with `EVAL_FALSE`.
+- `harness-fault-m3-locktime-500000000`: the reduced M3 candidate of stage 4, labelled `harness-fault`. The baseline rejects it with `UNSATISFIED_LOCKTIME`.
+
+Each expected value comes from its property and a hand check against pinned `interpreter.cpp`, which the fixture README cites by line.
+`lake test` checks `verifyLegacySpend` and both revised variants against these values.
+`scripts/compare_core.py` compares the oracle with the Core harness on the same requests, as the set `Script campaign fixtures`.
+The two checks together require the Core harness to give the baseline values.
+The known behaviours of design record 0009, section 7.5, get no fixture, because no property of section 11 has them as a counterexample.
+
+The `core` workflow runs the generated campaign at the reviewed seed `20261108` with 3,000 cases.
+On the development machine, that run took 8.7 seconds, with the counts above.
+The regtest replay of stage 4 stays a local gate.
+Its node build took 3 minutes and 51 seconds with 8 jobs, and it downloads Boost 1.70.0.
+These checks are finite regression evidence, and they add no theorem.

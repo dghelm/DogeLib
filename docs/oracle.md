@@ -1163,7 +1163,11 @@ It also requires semantic mutants M1 to M6 to be detected and replayed within fi
 It writes their seed, first detected case, class and timing to `build/campaign/mutant-detection.json`.
 Signer checks cover repeated-request determinism, refusal replay and malformed-response replay.
 [Production replay](#production-replay) replays a saved candidate through Core's production path.
-The campaign commands do not run in CI at this stage.
+
+The `core` workflow runs the generated campaign at seed `20261108` with 3,000 cases, the command above.
+A person reviewed the results of that seed, so a CI log shows no new candidate ([design record 0009, section 9.4](design/0009-bug-finding-campaign.md#94-a-real-finding)).
+A run with a fresh seed stays on a contributor's machine.
+The other campaign commands do not run in CI.
 
 ### The planted proposal search
 
@@ -1456,5 +1460,17 @@ It sends the requests of 500 generated cases to both harness builds and reports 
 When the node build names the same commit, it also runs L3 with `--target upstream`.
 
 `scripts/test_campaign.py` runs the L1 part, without `--node`.
+`--keep DIR` copies the first detection and its reduced output to a directory under `build/campaign/`, which the self-test otherwise deletes.
 With `--node` and `--upstream-harness`, the self-test passed 17 cases in 32 seconds on the development machine.
 Each L3 replay took about 1.5 seconds, and the search and reduction took about 18 seconds.
+
+### Regression fixtures
+
+[`tests/script/campaign/`](../tests/script/campaign/README.md) keeps each understood counterexample of the campaign as a fixture ([design record 0009, section 10](design/0009-bug-finding-campaign.md#10-regression-and-proof-follow-up)).
+The fixtures reuse the format of `tests/oracle`: `script.verify_legacy` requests, and the expected response on the same line of another file.
+`expected.jsonl` gives the baseline response. `expected-faulty.jsonl` and `expected-corrected.jsonl` give the responses of `proposal-replay` for each variant, with `--active`.
+
+The README of the directory records the property, the plan, the run, both revisions, the reduction and the source of each expected value.
+`lake test` checks the expected values, and `scripts/compare_core.py` sends the requests to both programs as the set `Script campaign fixtures`.
+A person reviews a candidate before it becomes a fixture.
+A candidate that can be a vulnerability becomes a fixture only after its report is resolved ([section 9.4](design/0009-bug-finding-campaign.md#94-a-real-finding)).

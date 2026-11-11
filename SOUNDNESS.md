@@ -2771,7 +2771,9 @@ Core comparisons run the compiled oracle against the pinned Core revision.
 
 The source registry exists. The fixtures are listed per operation in the *Comparison* column of [COVERAGE.md](COVERAGE.md), and each records its provenance.
 The Core comparison runs the compiled oracle and Core's own code at the pin on the same requests, for the operations of the oracle ([docs/oracle.md](docs/oracle.md#the-core-harness)).
-For `block.check_version`, `block.contextual_check` and `block.header_sequence`, the harness runs a hand transcription that calls Core's helpers, not Core's function ([B4](#b4-the-oracle-and-foreign-boundaries)).
+For `block.check_version`, the harness runs a hand transcription that calls Core's helpers, not Core's function ([B4](#b4-the-oracle-and-foreign-boundaries)).
+For `block.contextual_check` and `block.header_sequence`, it runs Core's functions on a block index that it builds in memory.
+
 The comparison shows agreement on the requests it sends, and nothing about other inputs.
 No person has recorded a line-by-line comparison of a definition with its source.
 

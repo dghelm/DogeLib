@@ -68,9 +68,9 @@ The four transaction-reader operations receive 263,929 of the requests, Script e
 The total includes requests with an unsupported Lean result and 12 checked harness refusals.
 The comparison counts these requests separately, as neither agreement nor disagreement.
 
-For three operations, the harness does not run Core's function.
-The version gates, contextual header validation and header sequences compare with transcriptions of code in `src/validation.cpp`, written by hand in the harness.
-The transcriptions call Core's helpers ([contextual evidence](docs/oracle.md#contextual-header-comparison-evidence), [sequence evidence](docs/oracle.md#header-sequence-comparison-evidence)).
+For one operation, the harness does not run Core's function.
+The version gates compare with a transcription of two branches of `src/validation.cpp`, written by hand in the harness.
+Contextual header validation and header sequences run Core's own functions on a block index that the harness builds in memory ([contextual evidence](docs/oracle.md#contextual-header-comparison-evidence), [sequence evidence](docs/oracle.md#header-sequence-comparison-evidence)).
 
 For example, Core's `script_tests.json` has 925 records with no witness and only the seven supported flags ([corpus](tests/script/corpus/README.md)).
 Through `script.verify_legacy`, these records give 925 agreements with the base checker and 925 with the transaction checker.

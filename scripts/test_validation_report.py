@@ -33,7 +33,7 @@ class WorkflowDependencies(unittest.TestCase):
                         if line.strip().startswith('sudo apt-get install ')]
             self.assertEqual(len(installs), 1, workflow)
             packages[workflow] = {word for word in installs[0][3:] if not word.startswith('-')}
-            self.assertIn('libboost-dev', packages[workflow], workflow)
+            self.assertIn('libevent-dev', packages[workflow], workflow)
         self.assertEqual(packages['core'], packages['validation'])
 
 
@@ -220,6 +220,7 @@ class Reports(unittest.TestCase):
             'campaign-generated-requests': 'python3 -I scripts/campaign.py run --campaign generated --signer build/core-harness/core-signer --seed 20261108 --cases 3000 --seconds 600 --batch-size 64 --output build/campaign/generated .lake/build/bin/dogelib-oracle build/core-harness/core-oracle',
             'campaign-proposal-search': 'python3 -I scripts/campaign.py run --campaign proposal --variant corrected --seed 0 --cases 374480 --output build/campaign/proposal .lake/build/bin/dogelib-oracle .lake/build/bin/proposal-replay',
             'campaign-regtest-replay': 'python3 -I scripts/test_campaign_production.py .lake/build/bin/dogelib-oracle build/core-harness/core-oracle --node build/core-node',
+            'core-harness-state': 'python3 -I scripts/test_core_harness.py .lake/build/bin/dogelib-oracle build/core-harness/core-oracle',
             'comparator-self-test': 'python3 -I scripts/test_compare_core.py .lake/build/bin/dogelib-oracle',
             'writing-checker-tests': 'uv run --no-project --python 3.12 python -m unittest scripts/test_check_writing.py',
             'script-corpus-freshness': 'python3 -I scripts/convert_script_tests.py --check',

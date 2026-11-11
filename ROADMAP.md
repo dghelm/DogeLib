@@ -75,7 +75,7 @@ Section 10 of the record gives four stages, and section 11 gives their theorem t
 | 1 | Median time past on a checked view, with its depth requirement | Specified in `Work.MedianTimePast`, with theorems and known answers |
 | 2 | Parameters by height: `fAllowLegacyBlocks`, `BIP65Height`, `BIP66Height` and the checkpoint tables | Specified in `Block.ContextualParams`, with theorems and known answers |
 | 3 | The composition `contextualCheckBlockHeader`, with its characterization theorems and known answers | Specified in `Block.ContextualCheck`, with the theorems of section 11 and known answers from five mainnet ranges and synthetic views |
-| 4 | The oracle operation `block.contextual_check`, the Core harness and the comparison | Implemented with the H2 transcription, independent fixture expectations, boundary cases, seed `20261109` mutations and comparator self-tests. [Evidence boundary](SOUNDNESS.md#contextual-header-validation) and [streams](docs/oracle.md#contextual-header-comparison-evidence) |
+| 4 | The oracle operation `block.contextual_check`, the Core harness and the comparison | Implemented. The harness first used the H2 transcription and now calls Core's `ContextualCheckBlockHeader`. Independent fixture expectations, boundary cases, seed `20261109` mutations and comparator self-tests. [Evidence boundary](SOUNDNESS.md#contextual-header-validation) and [streams](docs/oracle.md#contextual-header-comparison-evidence) |
 
 The adoption of the scope establishes no target theorem.
 Each stage reports its evidence in COVERAGE.md and SOUNDNESS.md when it merges.
@@ -102,7 +102,7 @@ Section 10 of the record gives five stages, and section 11 gives their theorem t
 | 2 | One step, `acceptBlockHeader`, with its characterization theorems | Specified in `Block.HeaderSequence`, with every step target of section 11. Section 13.1 of the record replaces `accept_genesis` with `accept_genesis_known`, `accept_genesis_insert` and `accept_genesis_parent`. Known answers from the regtest fixture and from mainnet full headers |
 | 3 | The sequence, `processNewBlockHeaders`, with the linear theorem `process_linear` | Specified in `Block.HeaderSequence`, with every sequence target of section 11. `process_complete` also takes `n ≤ 2147483647` for an index without entries (section 13.2 of the record). Known answers from all 34 regtest cases in full and from 14 mainnet sequences |
 | 4 | `GetBlockProof` and the chain work of each entry | Specified as `Work.blockProof` in `Work.ChainWork` and `IndexEntry.chainWork` in `Block.HeaderSequence`, with the targets `blockProof_eq` and `chainWork_add` and the chain work of `accept_genesis_insert` (section 13.1). Known answers of `GetBlockProof` for 11 compact values, the chain work of every added regtest entry, and two mainnet sequences |
-| 5 | The oracle operation `block.header_sequence`, the Core harness and the comparison | Implemented with H2, anchor guards, fixture expectations, seeded mutations and comparator self-tests. [Comparison boundary and streams](docs/oracle.md#header-sequence-comparison-evidence) |
+| 5 | The oracle operation `block.header_sequence`, the Core harness and the comparison | Implemented. The harness first used the H2 transcription and now calls Core's `AcceptBlockHeader` on an in-memory index. Fixture expectations, seeded mutations and comparator self-tests. [Comparison boundary and streams](docs/oracle.md#header-sequence-comparison-evidence) |
 
 The property-driven bug-finding campaign is implemented through stage 5, under [design record 0009](docs/design/0009-bug-finding-campaign.md).
 The maintainer adopted the record on 2026-11-08, with every decision of its section 14.
@@ -129,8 +129,8 @@ The next milestone is block validity.
 DogeLib has no definition of `CheckTransaction`, `CheckBlock`, `ContextualCheckBlock` or `ConnectBlock`, so the oracle cannot judge a block.
 Design record 0010 will define the milestone and its stages. The record does not exist, and the maintainer has not adopted a scope.
 
-Its first stage links Core's `src/validation.cpp` into the harness.
-`block.contextual_check` and `block.header_sequence` then compare with Core's own functions, and the stage removes their hand transcriptions from the harness.
+Its first stage is implemented: the harness links Core's server library and compiles Core's `src/validation.cpp`.
+`block.contextual_check` and `block.header_sequence` compare with Core's own functions, and their hand transcriptions are no longer in the harness.
 The stages after it specify the block checks and compare them with Core on real blocks.
 
 One other candidate is unscheduled, and it needs an approved scope before work starts:

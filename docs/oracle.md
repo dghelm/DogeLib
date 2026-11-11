@@ -613,14 +613,31 @@ It runs outside the oracle comparison loop.
 
 The build script exports the pinned commit from the clone with `git archive`.
 The clone must contain that commit, but its working tree may be at any other.
-It builds Core's consensus, cryptography and secp256k1 libraries, and compiles Core's bundled UniValue to read the requests.
-It needs autoconf, automake, libtool, pkg-config, OpenSSL's development files and Boost headers (`libboost-dev` on Ubuntu).
-It links no Boost library.
+It configures Core as `scripts/build_core_node.sh` does, with the daemon enabled and no wallet, GUI, tests or ZMQ.
+It builds Core's server, common, utility, consensus, cryptography, UniValue, LevelDB and secp256k1 libraries, and never links `dogecoind`.
+It needs autoconf, automake, libtool, pkg-config and the development files of OpenSSL and libevent (`libssl-dev` and `libevent-dev` on Ubuntu).
 
-The work functions and parameter constructors use these Core objects: `pow.cpp`, `chain.cpp`, `dogecoin.cpp`, `chainparams.cpp` and `chainparamsbase.cpp`, plus `auxpow.cpp` and `checkpoints.cpp` for the header checks.
-Function and data sections, with linker garbage collection, discard unrelated server functions and their dependencies.
-The build assumes GNU ld for `--gc-sections`, as Linux CI does.
-These pinned sources supply the additional objects:
+`scripts/core_boost.sh` supplies Boost 1.70.0 for both build scripts: it downloads the archive, checks its SHA-256 and builds five libraries into `<build-dir>/boost`.
+`BOOST_ROOT` selects an installed Boost, and `BOOST_ARCHIVE` names a local copy of the archive.
+
+The harness links the libraries of `dogecoind` in the order of `dogecoind_LDADD` (`src/Makefile.am`, lines 395 to 408), with Boost, OpenSSL and libevent.
+`harness/core/core_validation.cpp` includes Core's `src/validation.cpp` and `src/timedata.cpp` as text.
+The compiler sees both files unchanged, and the unit can name what they keep internal:
+
+- The static function `AcceptBlockHeader`.
+- The sets `gFailedBlocks` and `setDirtyBlockIndex` of the anonymous namespace.
+- The static variable `nTimeOffset`.
+
+The unit defines every symbol of both files, so the link takes neither `validation.o` nor `timedata.o` from the server library.
+Its four functions contain no validation logic.
+The server library brings in Core's network, RPC, database and memory-pool objects.
+The harness runs none of that code: it opens no database, starts no thread and creates no data directory.
+
+`core-signer` keeps its earlier link.
+It uses the objects of `pow.cpp`, `chain.cpp`, `dogecoin.cpp`, `chainparams.cpp`, `chainparamsbase.cpp`, `auxpow.cpp` and `checkpoints.cpp`, compiled apart from the server library.
+Function and data sections, with linker garbage collection, discard unrelated functions and their dependencies.
+That link assumes GNU ld for `--gc-sections`, as Linux CI does.
+These pinned sources supply the work functions and parameter constructors:
 
 | Source | Role |
 | --- | --- |
@@ -635,8 +652,8 @@ These pinned sources supply the additional objects:
 
 | `op` | Core's code |
 | --- | --- |
-| `block.header_sequence` | H2 transcription of `AcceptBlockHeader`, the index part of `AddToBlockIndex` and the sequence loop, with Core helpers |
-| `block.contextual_check` | H2 transcription of `ContextualCheckBlockHeader`, with Core helpers for every compared value |
+| `block.header_sequence` | `AcceptBlockHeader` once for each header, which calls `CheckBlockHeader`, `ContextualCheckBlockHeader` and `AddToBlockIndex`, on an index that the harness builds from the request |
+| `block.contextual_check` | `ContextualCheckBlockHeader` on index entries that the harness builds from the request |
 | `compactsize.encode` | `WriteCompactSize` into a `CDataStream` |
 | `compactsize.read` | `ReadCompactSize` from a `CDataStream` |
 | `tx.read_base` | `CMutableTransaction` read from a `CDataStream` whose version has `SERIALIZE_TRANSACTION_NO_WITNESS`, so `UnserializeTransaction` reads base mode |
@@ -1023,14 +1040,16 @@ An extra diagnostic field on a full-header reader response must fail with `FULL_
 
 ### Contextual header comparison evidence
 
-The harness uses H2 of [design record 0006](design/0006-contextual-header-validation.md#82-the-core-side).
-`contextualReject` transcribes D33, lines 3066 to 3119, replacing validation-state returns with reject-reason strings.
-Core computes each compared value through `GetConsensus`, `IsLegacy`, `IsAuxpow`, `GetNextWorkRequired`, `GetMedianTimePast`, `GetBaseVersion` and `Checkpoints::GetLastCheckpoint`.
+The harness calls Core's `ContextualCheckBlockHeader` (D33, lines 3066 to 3119).
+The verdict is its return value, and the reject reason is `GetRejectReason` of its `CValidationState`.
+Earlier revisions used a transcription of that function, H2 of [design record 0006](design/0006-contextual-header-validation.md#82-the-core-side).
+The harness no longer contains it.
 
-The harness owns `mapBlockIndex` and `fCheckpointsEnabled` and links `checkpoints.cpp`.
+The harness sets Core's `fCheckpointsEnabled` and fills Core's `mapBlockIndex`.
 Each known height adds the corresponding table hash with that height to the block index.
-The comparison uses a transcription, rather than the function in `validation.cpp`.
-A source review must compare the transcription line by line with D33.
+The remaining harness trust is the in-memory index.
+The harness builds the `CBlockIndex` entries and their links from the request, and it refuses a view that is too short.
+Core's function does not reach `VersionBitsState`, so the request needs no version-bits history.
 
 The contextual stream contains these requests:
 
@@ -1059,20 +1078,58 @@ These runs give finite evidence, not an all-input equivalence theorem with compi
 
 ### Header-sequence comparison evidence
 
-The harness follows H2 of [design record 0008](design/0008-header-sequence-validation.md#82-the-core-side).
-It transcribes D33, lines 3205 to 3286 and 2755 to 2788, with citations beside the ordered branches.
-The index transcription omits `nTimeMax` (2779), the best-header pointer (2782 to 2783) and the dirty set (2785).
+The harness calls Core's static `AcceptBlockHeader` (D33, lines 3205 to 3267) once for each header of the request, in order.
+That function calls Core's `CheckBlockHeader`, `ContextualCheckBlockHeader` and `AddToBlockIndex` (lines 2755 to 2788).
+Earlier revisions used a transcription of these passages, H2 of [design record 0008](design/0008-header-sequence-validation.md#82-the-core-side).
+The harness no longer contains it.
+The harness does not call `ProcessNewBlockHeaders`, so `NotifyHeaderTip` does not run.
 
-It calls Core's `CheckAuxPowProofOfWork`, `GetAncestor`, `BuildSkip`, `GetBlockProof` and `Checkpoints::GetLastCheckpoint`.
-The contextual step reuses `contextualReject`, with the Core helpers listed above.
-The harness owns the index and visits the failed list in request order, rather than pointer-address order.
-Source review must check these transcriptions against the pinned passages.
+Each response field comes from Core's state:
 
-Two guards keep anchor walks inside their represented chains.
-`sequenceSkip` calls `BuildSkip` only when the skip destination is at or above the branch anchor.
-`sequenceAncestor` returns null for a height below that anchor and otherwise calls Core's `GetAncestor`.
-Before contextual validation, the harness refuses short median, recovery and retarget histories.
-So `GetNextWorkRequired` cannot call `GetAncestor` below an anchor at `pow.cpp:84`.
+- `valid`, `reject_reason`, `dos` and `reject_code` come from the return value and the `CValidationState` of the first rejected call.
+- `added` lists each header whose hash `mapBlockIndex` lacked before its call, with the height and chain work of Core's new entry.
+- `marked_failed_child` lists the members of Core's `setDirtyBlockIndex` after the rejected call. A rejected call adds no entry, so the set holds exactly the entries that the marking loop visited (lines 3246 to 3250).
+
+The remaining harness trust is the in-memory index.
+The harness creates one `CBlockIndex` for each index entry of the request, in Core's `mapBlockIndex`.
+It sets the height, status flags, chain work and predecessor of each entry, and calls Core's `BuildSkip` with predecessors first.
+It inserts the failed list into Core's `gFailedBlocks`.
+That set orders its members by address, so Core visits the failed list in address order, not in request order.
+The comparator already excludes `marked_failed_child` where the order can change it.
+
+The harness sets the adjusted time through Core's mock time and time offset, and calls `UnloadBlockIndex` before and after each request.
+It restores mock time 0 and offset 0 on every exit from the request, so no later request sees the adjusted time.
+Mock time 0 selects the system clock, so the harness gets adjusted time 0 from mock time 1 and offset -1.
+
+The harness accepts every adjusted time from -2^63 to 2^63 - 7201, as the oracle does.
+On this path Core reads the time only through `GetAdjustedTime` and adds 7200 to it, which cannot overflow in that range.
+Core also formats a log timestamp from the mock time, and that conversion fails outside the years 1400 to 9999.
+The harness turns off Core's log timestamps and its debug log, so Core never makes the conversion.
+`scripts/test_core_harness.py` sends sequence requests at -2^63, 0, 10^12 and 2^63 - 7201, alone and in one stream with contextual checks between them.
+Each harness response must be the same alone and in the stream, and must agree with the oracle.
+
+The harness has one internal operation, `harness.time_state`, which is not part of `dogelib-oracle/1`.
+It returns Core's mock time and time offset.
+The oracle has no such operation, and the comparator never sends it.
+The same test sends it after a success, a consensus rejection, a request error and a decoding error, at adjusted time 0 and at 10^12.
+Both values must be 0 each time.
+The test fails when either reset is removed.
+
+A request names no ancestor below an anchor.
+Core's `GetAncestor` asserts a predecessor at every step, and `AddToBlockIndex` reaches it through `BuildSkip`.
+So each anchor above height 0 gets one placeholder entry as its predecessor.
+The placeholder is its own predecessor and its own skip entry, and it is outside `mapBlockIndex`.
+
+`GetAncestor` returns it for every height below the anchor, and it is equal to no entry of the request.
+Core follows a skip pointer only when its skip height is at least the target.
+So a walk to a height at or above the anchor never passes through the placeholder.
+
+Before each call, a preflight refuses a request with a short median, recovery or retarget history.
+It applies only where `AcceptBlockHeader` reads that history.
+There the header is not the genesis block, is unknown, has valid work, and has a known predecessor without a failure flag.
+So Core never reads the placeholder as history, and `GetNextWorkRequired` cannot call `GetAncestor` below an anchor at `pow.cpp:84`.
+The preflight returns no verdict.
+`AcceptBlockHeader` does not reach `VersionBitsState`, so the request needs no version-bits history.
 
 For the three fixture adapter errors, the comparator requires the exact Lean `work_view` error and the corresponding Core request-refusal message.
 Neither response is a consensus rejection.

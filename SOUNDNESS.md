@@ -590,18 +590,17 @@ The theorems in `Block.Proofs.ContextualCheck` hold for every network, header, a
   Check 7 rejects exactly when `b` is below 3 from `BIP66Height`, or below 4 from `BIP65Height`, with each network's heights.
 
 These theorems establish the behaviour of DogeLib's definitions.
-`block.contextual_check` compares the compiled specification with H2 of design record 0006.
-The harness transcribes D33, lines 3066 to 3119, and calls Core's helpers for each compared value.
+`block.contextual_check` compares the compiled specification with Core's `ContextualCheckBlockHeader` (D33, lines 3066 to 3119).
+The harness calls that function on index entries that it builds from the request.
 It compares `valid` and the first `reject_reason`, excluding Lean diagnostics.
 The [comparison stream](docs/oracle.md#contextual-header-comparison-evidence) includes 2231 real mainnet candidates, hand-derived boundaries and 500 mutations with seed `20261109`.
 The comparison gives finite evidence, not an equivalence theorem with compiled Core.
 
-The H2 transcription is an evidence boundary (A1).
-A mistake in its branch order or reject strings could make a wrong specification agree with the harness.
-Independent source review compares it line by line with D33.
+The in-memory index is an evidence boundary (A1).
+The harness sets the height, time, bits and predecessor of each entry, and a mistake there gives Core a context other than the request's.
 Hand-derived expected verdicts and reasons provide a separate check.
 
-The harness links `checkpoints.cpp`, owns its block-index map, and inserts each known table hash with its table height.
+The harness fills Core's block-index map with each known table hash at its table height.
 It refuses short views before calling Core, where a short median walk would otherwise give a different value.
 Neither the harness nor the oracle establishes the caller-supplied context.
 
@@ -705,7 +704,7 @@ The expected verdict of the contextual check comes from chain acceptance and D33
 A candidate with fewer than 11 entries above an anchor gives `shortView`, and a candidate below the last checkpoint gives `bad-fork-prior-to-checkpoint`.
 An anchor at 144720 gives `nextWork missingAncestor` at the retarget 144960.
 These known-answer checks do not run Core.
-The [header-sequence comparison](docs/oracle.md#header-sequence-comparison-evidence) supplies separate finite evidence through H2.
+The [header-sequence comparison](docs/oracle.md#header-sequence-comparison-evidence) supplies separate finite evidence from Core's `AcceptBlockHeader`.
 
 By `#print axioms` with Lean `v4.35.0`:
 
@@ -819,7 +818,7 @@ No theorem says that they are the state and the context that a node holds.
   Five cases of `checkWellFormed` accept and reject small indexes.
 
 These known-answer checks do not run Core.
-The [header-sequence comparison](docs/oracle.md#header-sequence-comparison-evidence) supplies separate finite evidence through H2.
+The [header-sequence comparison](docs/oracle.md#header-sequence-comparison-evidence) supplies separate finite evidence from Core's `AcceptBlockHeader`.
 
 By `#print axioms` with Lean `v4.35.0`:
 
@@ -926,7 +925,7 @@ The specification does not use them.
     A version change at each activation height gives `high-hash` at its position: step 2 runs before the contextual check.
 
 These known-answer checks do not run Core.
-The [header-sequence comparison](docs/oracle.md#header-sequence-comparison-evidence) supplies separate finite evidence through H2.
+The [header-sequence comparison](docs/oracle.md#header-sequence-comparison-evidence) supplies separate finite evidence from Core's `AcceptBlockHeader`.
 
 By `#print axioms` with Lean `v4.35.0`:
 
@@ -944,11 +943,17 @@ The adapter has no refinement theorem.
 It reports final prefix insertions with chain work and the marking loop's visited hashes, including flags already set and entries added in the call.
 It supplies no node-state authentication.
 
-The H2 harness transcribes D33's header-acceptance loop and index insertion.
-Core helpers compute proof of work, contextual values, ancestors, skip pointers and block proofs.
-The harness owns the map, checkpoint option and failed-list visit order.
-Users trust the transcription, JSON conversion, anchor guards and preflight refusal of short histories (A1, B4).
-Neither a build nor agreement on the tested inputs proves the transcription equivalent to `validation.cpp` on all inputs.
+The harness calls Core's `AcceptBlockHeader` (D33, lines 3205 to 3267) once for each header.
+That function runs Core's own proof-of-work check, contextual check and index insertion.
+`harness/core/core_validation.cpp` includes `validation.cpp` as text, so the compiled function is Core's.
+
+The harness builds the initial index in Core's `mapBlockIndex`, fills `gFailedBlocks`, and sets the checkpoint option and the adjusted time.
+It restores Core's mock time and time offset after each request.
+
+Core's set visits the failed list in address order.
+Each anchor above height 0 gets a placeholder predecessor, which stands for the ancestors that the request does not name.
+Users trust the index construction, JSON conversion, the placeholder and the preflight refusal of short histories (A1, B4).
+Agreement on the tested inputs does not prove agreement on all inputs.
 The [comparison streams](docs/oracle.md#header-sequence-comparison-evidence) record the finite evidence and seeds.
 
 The comparison excludes Lean diagnostics.
@@ -958,7 +963,7 @@ At least two distinct failed members must be ancestors of that header's predeces
 
 Other rejection steps and accepted calls retain the mark comparison.
 The verdict, failure position, reason, score, code, last hash and every added entry remain compared.
-`failedAncestor_verdict_perm` proves verdict independence from failed-list order for the Lean definition, rather than for the C++ transcription.
+`failedAncestor_verdict_perm` proves verdict independence from failed-list order for the Lean definition, rather than for Core's loop.
 Initial state, adjusted time and the checkpoint option remain execution boundaries.
 The adapter adds no axiom or compiler substitution.
 
@@ -1009,7 +1014,7 @@ No theorem says that a supplied chain work is the value that a node holds.
 - 300 mainnet headers from 144730: five sums of block proofs, computed with Python integers from the fixture's `nBits` fields.
 
 These known-answer checks do not run Core.
-The [header-sequence comparison](docs/oracle.md#header-sequence-comparison-evidence) supplies separate finite evidence through H2.
+The [header-sequence comparison](docs/oracle.md#header-sequence-comparison-evidence) supplies separate finite evidence from Core's `AcceptBlockHeader`.
 
 By `#print axioms` with Lean `v4.35.0`:
 
@@ -2807,7 +2812,9 @@ Core comparisons run the compiled oracle against the pinned Core revision.
 
 The source registry exists. The fixtures are listed per operation in the *Comparison* column of [COVERAGE.md](COVERAGE.md), and each records its provenance.
 The Core comparison runs the compiled oracle and Core's own code at the pin on the same requests, for the operations of the oracle ([docs/oracle.md](docs/oracle.md#the-core-harness)).
-For `block.check_version`, `block.contextual_check` and `block.header_sequence`, the harness runs a hand transcription that calls Core's helpers, not Core's function ([B4](#b4-the-oracle-and-foreign-boundaries)).
+For `block.check_version`, the harness runs a hand transcription that calls Core's helpers, not Core's function ([B4](#b4-the-oracle-and-foreign-boundaries)).
+For `block.contextual_check` and `block.header_sequence`, it runs Core's functions on a block index that it builds in memory.
+
 The comparison shows agreement on the requests it sends, and nothing about other inputs.
 No person has recorded a line-by-line comparison of a definition with its source.
 
@@ -3102,17 +3109,17 @@ Both programs could be wrong in the same way on an input that the comparison doe
 
 The five header PoW operations are IO-adapter entry points into the existing specification definitions.
 Their JSON conversion and Lean diagnostic strings have no refinement theorem.
-The Core harness transcribes the two version branches for `block.check_version` and all seven checks for `block.contextual_check`.
-The latter transcription follows D33, lines 3066 to 3119, and calls Core helpers for each compared value.
-Users trust that transcription and the harness's construction of `mapBlockIndex` and `fCheckpointsEnabled` (D67, D69).
-Its `LogPrintStr` replacement writes errors to standard error and does not replace any consensus predicate.
+The Core harness transcribes the two version branches for `block.check_version`.
+For `block.contextual_check` it calls Core's `ContextualCheckBlockHeader` (D33, lines 3066 to 3119).
+Users trust the transcription of the two version branches, and the entries that the harness puts into `mapBlockIndex` with its setting of `fCheckpointsEnabled` (D67, D69).
+The harness turns off Core's debug log and log timestamps, which changes no consensus predicate.
 
 The build disables SSE2, and its stamp records the generic scrypt variant and configure options.
 The comparison still assumes Core's little-endian header memory layout and arithmetic shift of signed versions.
 The contextual operation checks `ContextualCheckBlockHeader` on the stated input domain.
 The caller supplies the predecessor view, adjusted time and known checkpoint state.
 The contextual operation checks no node-state condition in `AcceptBlockHeader` or full-block validity.
-The sequence operation adds the header-acceptance state transitions, with the H2 transcription and anchor guards described [above](#header-sequence-oracle-and-comparison).
+The sequence operation adds the header-acceptance state transitions, with Core's `AcceptBlockHeader` and the placeholder predecessor described [above](#header-sequence-oracle-and-comparison).
 
 Any later foreign boundary, such as a C or Rust binding, is listed here with its size and its error handling.
 

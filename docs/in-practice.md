@@ -274,7 +274,7 @@ Investigate each of these causes:
 
 - The Lean model is wrong, for example because it makes a consensus quirk of Core regular. Compare the definition with the source that SOURCES.md records for it.
 - Core's C++ code does something that the source review of the definition missed, for example undefined behaviour or an integer wrap.
-- The harness is wrong. It converts JSON to Core's types, and it can transcribe Core's code (see below).
+- The harness is wrong. It converts JSON to Core's types, it builds Core's block index in memory, and for one operation it transcribes Core's code (see below).
 - The request violates a precondition that Core's callers maintain. Core can assert, or behave differently, on such an input.
 - The operation is unsupported in Lean. The oracle reports `unsupported`, and the comparator counts that request separately, as neither agreement nor disagreement.
 - The disagreement comes from undefined behaviour or an unrelated detail of the C++ code. CONTRIBUTING.md says that such a case "is not a protocol requirement", and that you document it and "decide the intended contract explicitly" ([sources of truth](../CONTRIBUTING.md#sources-of-truth)). A correction of the model there is not automatically a proposed revision.
@@ -282,18 +282,18 @@ Investigate each of these causes:
 ### Transcriptions in the harness
 
 For most operations, the harness calls Core's own function.
-`block.check_version`, `block.contextual_check` and `block.header_sequence` are different.
-For these operations the harness runs transcriptions that call Core's helpers.
-The last two follow option H2 of design records 0006 and 0008:
+That includes the two header operations, which earlier revisions answered from transcriptions (option H2 of design records 0006 and 0008):
 
-- `block.check_version` transcribes the two version branches of `ContextualCheckBlockHeader`.
-- `block.contextual_check` transcribes `ContextualCheckBlockHeader` ([evidence](oracle.md#contextual-header-comparison-evidence)).
-- `block.header_sequence` transcribes `AcceptBlockHeader`, the index part of `AddToBlockIndex` and the loop of `ProcessNewBlockHeaders` ([evidence](oracle.md#header-sequence-comparison-evidence)).
+- `block.contextual_check` calls `ContextualCheckBlockHeader` ([evidence](oracle.md#contextual-header-comparison-evidence)).
+- `block.header_sequence` calls `AcceptBlockHeader`, which calls `AddToBlockIndex` ([evidence](oracle.md#header-sequence-comparison-evidence)).
 
-A transcription can have a mistake that the specification shares.
-It can also have a mistake that Core does not have.
-So a disagreement on these operations is not evidence of a Core bug.
-Before you report a suspected Core bug there, replay the input against the production function in `src/validation.cpp`, or against a node.
+For both, the harness builds the block index in memory from the request.
+A mistake in that construction gives Core a context other than the one that the request describes.
+So read the index construction before you report a suspected Core bug on these operations, or replay the input against a node.
+
+`block.check_version` is still a transcription: the harness copies the two version branches of `ContextualCheckBlockHeader`.
+A transcription can have a mistake that the specification shares, or a mistake that Core does not have.
+So a disagreement on that operation is not evidence of a Core bug.
 Also check whether a later Core release changes the behaviour, because the pin is Core v1.14.9.
 
 ## What a theorem does and does not establish

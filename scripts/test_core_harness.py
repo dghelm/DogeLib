@@ -2,11 +2,18 @@
 
 Usage: python3 -I scripts/test_core_harness.py <dogelib-oracle> <core-oracle>
 
-block.header_sequence sets Core's mock time, because AcceptBlockHeader reads
-GetAdjustedTime. The test sends header-sequence requests at the limits of the
-adjusted-time domain, each alone and all in one stream, with contextual checks
-between them. Each response of the harness must be the same alone and in the
-stream, must have the stated verdict, and must agree with the oracle.
+block.header_sequence sets Core's mock time and time offset, because
+AcceptBlockHeader reads GetAdjustedTime. The test has two parts.
+
+Verdicts: header-sequence requests at the limits of the adjusted-time domain,
+each alone and all in one stream, with contextual checks between them. Each
+response of the harness must be the same alone and in the stream, must have
+the stated verdict, and must agree with the oracle.
+
+State: after a success, a consensus rejection, a request error and a decoding
+error, the harness-internal operation harness.time_state must report mock time
+0 and time offset 0. Adjusted time 0 uses offset -1, so the test covers each
+kind of exit at adjusted time 0 and at another value.
 """
 
 import copy
@@ -91,7 +98,38 @@ def main():
         check(alone == stream[i], f'case {i}: the harness response changes in the stream: {alone} != {stream[i]}')
         check(verdict(alone) == (valid, reason), f'case {i}: harness verdict {verdict(alone)}, expected {(valid, reason)}')
         check(verdict(lean[i]) == (valid, reason), f'case {i}: oracle verdict {verdict(lean[i])}, expected {(valid, reason)}')
-    print(f'{len(cases)} cases, 0 failures')
+
+    # (request, the kind of exit that the response must show).
+    def kind(response):
+        if 'ok' in response:
+            return 'success' if response['ok']['valid'] else 'rejection'
+        return response['error']['kind']
+
+    exits = []
+    for adjusted in (10**12, 0):
+        exits += [
+            (dict(empty, adjusted_time=adjusted), 'success'),
+            (dict(unmined, adjusted_time=adjusted), 'rejection'),
+            # The harness refuses the index after it has set the adjusted time.
+            (dict(empty, adjusted_time=adjusted, index=[dict(unexpected=1)]), 'request'),
+            # A header of one byte: Core's stream reader fails.
+            (dict(empty, adjusted_time=adjusted, headers=['00']), 'read'),
+        ]
+    exits.append((at(INT64_MIN), 'rejection'))
+    exits.append((at(0), 'rejection'))
+    state = dict(op='harness.time_state')
+    interleaved = [state]
+    for req, _ in exits:
+        interleaved += [req, state]
+    responses = run(harness, interleaved)
+    clean = dict(ok=dict(mock_time=0, time_offset=0))
+    check({k: v for k, v in responses[0].items() if k != 'id'} == clean, f'initial state: {responses[0]}')
+    for i, (req, expected) in enumerate(exits):
+        answer, after = responses[1 + 2 * i], responses[2 + 2 * i]
+        check(kind(answer) == expected, f'exit {i}: {answer}, expected {expected}')
+        check({k: v for k, v in after.items() if k != 'id'} == clean,
+              f'exit {i} ({expected}, adjusted time {req["adjusted_time"]}) left {after}')
+    print(f'{len(cases)} verdict cases and {len(exits)} state checks, 0 failures')
 
 
 if __name__ == '__main__':

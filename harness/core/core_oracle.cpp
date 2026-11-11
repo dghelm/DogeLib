@@ -41,8 +41,10 @@
 #include "script/script.h"
 #include "serialize.h"
 #include "streams.h"
+#include "timedata.h"
 #include "uint256.h"
 #include "utilstrencodings.h"
+#include "utiltime.h"
 #include "version.h"
 
 #include "core_validation.h"
@@ -703,6 +705,14 @@ UniValue run(const UniValue& req)
     if (op == "oracle.version") {
         checkArgs(req, op, {});
         ok.pushKV("format", FORMAT);
+    } else if (op == "harness.time_state") {
+        // Internal to the harness, and not part of dogelib-oracle/1. It reports
+        // Core's mock time and time offset, so that scripts/test_core_harness.py
+        // can check that block.header_sequence restores both. The comparator
+        // never sends it, and the oracle has no such operation.
+        checkArgs(req, op, {});
+        ok.pushKV("mock_time", GetMockTime());
+        ok.pushKV("time_offset", GetTimeOffset());
     } else if (op == "pubkey.verify") {
         checkArgs(req, op, {"pubkey_hex", "sig_hex", "digest_hex"});
         const auto key = scriptBytes(req, "pubkey_hex");

@@ -1108,6 +1108,13 @@ The harness turns off Core's log timestamps and its debug log, so Core never mak
 `scripts/test_core_harness.py` sends sequence requests at -2^63, 0, 10^12 and 2^63 - 7201, alone and in one stream with contextual checks between them.
 Each harness response must be the same alone and in the stream, and must agree with the oracle.
 
+The harness has one internal operation, `harness.time_state`, which is not part of `dogelib-oracle/1`.
+It returns Core's mock time and time offset.
+The oracle has no such operation, and the comparator never sends it.
+The same test sends it after a success, a consensus rejection, a request error and a decoding error, at adjusted time 0 and at 10^12.
+Both values must be 0 each time.
+The test fails when either reset is removed.
+
 A request names no ancestor below an anchor.
 Core's `GetAncestor` asserts a predecessor at every step, and `AddToBlockIndex` reaches it through `BuildSkip`.
 So each anchor above height 0 gets one placeholder entry as its predecessor.

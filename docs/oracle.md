@@ -725,9 +725,53 @@ For `sighash.legacy` with plan `hash_bytes`, the double SHA-256 of the oracle's 
 This checks the preimage against Core's digest, not byte by byte against a preimage from Core.
 Outside the checked `harness-refused` category, a request error from either program fails the comparison.
 
-The comparison with Core `e0a1c157791544e818c901bd9341896965afbf9d` passes 382,680 stream requests.
+A full comparison with Core `e0a1c157791544e818c901bd9341896965afbf9d` sends 385,842 stream requests.
+The table `EXPECTED_OPERATION_COUNTS` of `scripts/compare_core.py` gives the number of requests for each operation.
+A full run fails with `REQUEST_COUNT` when the count of any operation differs from the table.
+So a change to a request set changes the table, and this section, in the same pull request:
+
+| `op` | Stream requests |
+| --- | ---: |
+| `auxpow.check` | 404 |
+| `block.check_pow` | 806 |
+| `block.check_version` | 207 |
+| `block.contextual_check` | 2,903 |
+| `block.header.read` | 7,878 |
+| `block.header_sequence` | 257 |
+| `compactsize.encode` | 26 |
+| `compactsize.read` | 404 |
+| `hash.hash160` | 292 |
+| `hash.ripemd160` | 299 |
+| `hash.sha1` | 519 |
+| `header.encode` | 349 |
+| `header.hash` | 347 |
+| `header.read` | 25,865 |
+| `merkle.compute` | 550 |
+| `pubkey.verify` | 602 |
+| `script.eval` | 8,882 |
+| `script.read_op` | 1,233 |
+| `script.verify_legacy` | 8,093 |
+| `scrypt.hash` | 272 |
+| `sighash.legacy` | 4,425 |
+| `tx.decode_base` | 37,694 |
+| `tx.decode_witness` | 45,958 |
+| `tx.read_base` | 137,991 |
+| `tx.read_witness` | 42,286 |
+| `work.calculate_next` | 49,255 |
+| `work.get_compact` | 1,552 |
+| `work.next` | 1,353 |
+| `work.set_compact` | 5,140 |
+| Total | 385,842 |
+
+The four transaction-reader operations receive 263,929 of the requests.
+Most of them are proper prefixes and field changes of corpus transactions.
+`script.eval` and `script.verify_legacy` receive 16,975, and `block.header_sequence` receives 257.
+So the total is mostly evidence about the transaction readers.
+
 The pull request records the tested DogeLib revision.
-It reported zero failures, including 12 checked harness refusals, plus 22 adapter-limit cases and the 1,193 two-call compositions.
+The comparison passes with zero failures, including 12 checked harness refusals, plus 22 adapter-limit cases and the 1,193 two-call compositions.
+The adapter-limit cases and the compositions run outside the stream, so the table does not count them.
+With `--quick` or `--rust-compactsize`, the comparator sends a subset and does not check the table.
 The transaction inputs and targeted timelocks have these counts:
 
 | Stream | Requests | Agreement | Unsupported | Harness-refused | Disagreements |
@@ -866,6 +910,8 @@ The Merkle caller bound is explicit, but the comparison uses only small lists.
 `scripts/test_compare_core.py` checks that the comparison can fail.
 A wrapper around the oracle stands in for the harness.
 Unchanged, it must pass on the full stream. Each response mutation must fail with the failure code that it targets.
+One case drops a `compactsize.encode` request from the full stream, and the run must fail with `REQUEST_COUNT` alone.
+
 The witness mutations change `wtxid_hex`, a stack and `has_witness`.
 The work mutations change the magnitude, both flags, the encoded compact and each work operation's result bits.
 

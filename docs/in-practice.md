@@ -282,9 +282,11 @@ Investigate each of these causes:
 ### Transcriptions in the harness
 
 For most operations, the harness calls Core's own function.
-`block.contextual_check` and `block.header_sequence` are different.
-For these operations the harness runs transcriptions that call Core's helpers, option H2 of design records 0006 and 0008:
+`block.check_version`, `block.contextual_check` and `block.header_sequence` are different.
+For these operations the harness runs transcriptions that call Core's helpers.
+The last two follow option H2 of design records 0006 and 0008:
 
+- `block.check_version` transcribes the two version branches of `ContextualCheckBlockHeader`.
 - `block.contextual_check` transcribes `ContextualCheckBlockHeader` ([evidence](oracle.md#contextual-header-comparison-evidence)).
 - `block.header_sequence` transcribes `AcceptBlockHeader`, the index part of `AddToBlockIndex` and the loop of `ProcessNewBlockHeaders` ([evidence](oracle.md#header-sequence-comparison-evidence)).
 
@@ -303,11 +305,23 @@ A theorem establishes a claim about the Lean definitions, under its hypotheses a
 - A statement about a signature preimage, such as "the preimage commits to the lock time", is not a cryptographic security claim. A security claim also needs an assumption about the hash and the signature scheme, and DogeLib has no such theorem ([SOUNDNESS.md](../SOUNDNESS.md#a4-idealisations)).
 - A Script-local theorem about a proposal is not a claim about the network (design record 0007, section 8.3).
 
+## Searching with the campaign
+
+`scripts/campaign.py` searches for counterexamples to stated properties, under [design record 0009](design/0009-bug-finding-campaign.md).
+[docs/oracle.md](oracle.md#campaign-runs-and-replay) gives its commands, budgets and limits:
+
+- **Signed-spend generation.** The generator mutates a spend of the multisig-with-recovery template in two modes. One mode mutates the transaction and then signs it with Core's signer, so the signatures stay valid. The other mode signs first and keeps the signatures, so it tests what a signature commits to.
+- **Saved failures and reduction.** The campaign saves each failure as a record that `campaign.py replay` can run again. `campaign.py reduce` reduces the plan of a saved generated failure to a smaller plan that still fails ([reduction](oracle.md#reduction)).
+- **Production replay.** `campaign.py replay --level` sends a saved signed-spend failure to a harness build again, or submits the spend to a regtest node ([production replay](oracle.md#production-replay)).
+
+The campaign found no fault in Core or in DogeLib.
+Its two regression fixtures come from planted faults ([fixtures](../COVERAGE.md#campaign-regression-fixtures)).
+The production replay covers signed spends only.
+It does not replay `block.contextual_check` or `block.header_sequence` requests.
+
 ## Further directions
 
-These directions are not implemented, and none of them has an approved scope:
+These directions are not implemented:
 
-- **Signed-spend campaigns.** A generator could mutate a signed spend in two modes. One mode signs the spend again, so execution should stay successful. The other mode keeps the signature, so it tests what the signature commits to.
-- **Replay and shrinking.** The comparator could save each failing request with both responses and both revisions. A command could then replay the request and reduce it to a small input that still fails.
 - **Resource bounds for proposals.** A proposal record could state a bound on the work of validation, such as the number of bytes hashed. The bound would be a claim beside compatibility, strictness and use.
-- **Transaction and UTXO validation.** A model of `CheckTransaction`, of the UTXO set and of value accounting could state properties such as "no block spends one outpoint twice". Properties of this kind, the class of CVE-2018-17144, need such a model, because per-input Script verification does not describe them. At the pin, `CheckBlock` calls `CheckTransaction` with its duplicate-input check enabled (D90, lines 551 to 559 and 2984).
+- **Transaction and UTXO validation.** [ROADMAP.md](../ROADMAP.md#next-work) names block validity as the next milestone. A model of `CheckTransaction`, of the UTXO set and of value accounting could state properties such as "no block spends one outpoint twice". Properties of this kind, the class of CVE-2018-17144, need such a model, because per-input Script verification does not describe them. At the pin, `CheckBlock` calls `CheckTransaction` with its duplicate-input check enabled (D90, lines 551 to 559 and 2984).

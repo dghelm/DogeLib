@@ -2,7 +2,20 @@
 
 DogeLib is an executable formal specification and proof library for Dogecoin, written in Lean 4.
 
-It makes existing Dogecoin consensus behavior precise, and states proposed protocol revisions as named changes against that baseline. It proves that implementations and optimizations preserve the specification.
+It specifies part of Dogecoin's consensus behavior: serialization, hashes, header proof of work, header acceptance, and legacy Script verification of one transaction input.
+It does not specify transaction, block or chain validity, so it cannot decide whether a block is valid.
+It states a proposed protocol revision as a named change against that baseline.
+One theorem relates an implementation in another language to the specification: `decode_refines`, for a Rust CompactSize reader.
+
+## Review status
+
+No person has compared the Lean definitions with the source code of Dogecoin Core.
+AI models wrote the definitions from the pinned source, and the recorded reviews of the pull requests are by AI models.
+Three kinds of evidence connect the definitions to Core:
+
+- The theorems, which the Lean kernel checks. A theorem about a definition that differs from Core still holds ([A1](SOUNDNESS.md#a1-a-wrong-definition)).
+- The comparison with Core's code on a finite set of requests, which CI runs on every pull request ([docs/oracle.md](docs/oracle.md#the-comparison)).
+- Those reviews of the pull requests.
 
 ## Status
 
@@ -25,7 +38,14 @@ Each item below links to its evidence.
   - `CheckAuxPowProofOfWork` and `CheckBlockHeader` with `fCheckPOW` true. `checkAuxPowProofOfWork_iff` characterizes acceptance for every parameter record and full header ([header proof of work](SOUNDNESS.md#header-proof-of-work)).
   - The two version gates of `ContextualCheckBlockHeader` ([version gating](SOUNDNESS.md#version-gating)).
 - **Contextual header validation.** `ContextualCheckBlockHeader` on a checked view of the predecessor's chain, with the adjusted time and the last known checkpoint as inputs ([design record 0006](docs/design/0006-contextual-header-validation.md)).
-  `contextualCheck_eq_ok_iff` and one theorem for each rejection give the exact result on the domain, with no Core comparison yet ([contextual header validation](SOUNDNESS.md#contextual-header-validation)).
+  `contextualCheck_eq_ok_iff` and one theorem for each rejection give the exact result on the domain ([contextual header validation](SOUNDNESS.md#contextual-header-validation)).
+- **Header sequences.** Core's `AcceptBlockHeader` and `ProcessNewBlockHeaders` over an explicit model of the block index, with the chain work of each entry ([design record 0008](docs/design/0008-header-sequence-validation.md)).
+  `process_linear` gives the result for headers that extend one entry in order, under its stated hypotheses ([the sequence](SOUNDNESS.md#the-sequence-processnewblockheaders)).
+- **Proposed revisions.** A framework that states a revision of the Script rules and classifies it against the baseline, for example as a `SoftFork` ([design record 0007](docs/design/0007-proposed-revisions.md)).
+  It has two invented examples and no proposal for Dogecoin.
+  Its compatibility theorems are Script-local: each is about one Script evaluation or one transaction input, not about the network ([the framework](SOUNDNESS.md#proposed-revisions-the-framework)).
+- **Campaign.** `scripts/campaign.py` generates spends that Core signs, checks stated properties of them, reduces a failure and replays it on a regtest node ([design record 0009](docs/design/0009-bug-finding-campaign.md)).
+  It found no fault in Core or in DogeLib, and its regression fixtures come from planted faults ([campaign](COVERAGE.md#campaign-infrastructure)).
 - **Signatures.** The secp256k1 curve and ECDSA verification, adapted from EthLib, and Core's public-key parser and `CPubKey::Verify` as `Script.coreVerifier` ([design record 0005](docs/design/0005-signature-verifier.md)).
   Its theorems give the result of each of Core's checks, and reduce the final test to the point computation `Point.mulAdd` ([Core's verifier](SOUNDNESS.md#secp256k1-public-key-parser-and-cores-verifier)).
   No theorem proves that DogeLib's point arithmetic computes Core's `secp256k1_ecmult` result. Finite comparisons with Core are the evidence for that step.
@@ -42,9 +62,15 @@ Their verdicts and errors agree with Core's recorded expectations, and the oracl
 The oracle uses `coreVerifier` for its transaction checker and exposes single-signature verification through `pubkey.verify`.
 
 The `dogelib-oracle` program runs the specification on JSON requests, and a harness runs the pinned Core code on the same requests ([docs/oracle.md](docs/oracle.md)).
-The recorded comparison processed 382,680 stream requests with zero failures ([counts](docs/oracle.md#the-comparison)).
-That count includes requests with an unsupported Lean result and 12 checked harness refusals.
+A full comparison sends 385,842 stream requests, and it passes only with zero failures.
+The comparator also fails if the number of requests for any operation differs from its table ([counts](docs/oracle.md#the-comparison)).
+The four transaction-reader operations receive 263,929 of the requests, Script evaluation and verification 16,975, and header sequences 257.
+The total includes requests with an unsupported Lean result and 12 checked harness refusals.
 The comparison counts these requests separately, as neither agreement nor disagreement.
+
+For three operations, the harness does not run Core's function.
+The version gates, contextual header validation and header sequences compare with transcriptions of code in `src/validation.cpp`, written by hand in the harness.
+The transcriptions call Core's helpers ([contextual evidence](docs/oracle.md#contextual-header-comparison-evidence), [sequence evidence](docs/oracle.md#header-sequence-comparison-evidence)).
 
 For example, Core's `script_tests.json` has 925 records with no witness and only the seven supported flags ([corpus](tests/script/corpus/README.md)).
 Through `script.verify_legacy`, these records give 925 agreements with the base checker and 925 with the transaction checker.
@@ -52,12 +78,14 @@ All 159 eligible transaction inputs and 598 public-key inputs agree with Core.
 For header proof of work, Core and the oracle agree on all 321 recorded mainnet headers, 207 version-gate boundaries and 1,075 seeded mutations ([header evidence](docs/oracle.md#header-proof-of-work-evidence)).
 A comparison covers its requests and no other inputs.
 
-DogeLib does not specify these parts of Dogecoin:
+DogeLib has no definition of transaction validity, block validity or chain validity.
+It does not specify these parts of Dogecoin:
 
+- `CheckTransaction`, `CheckBlock`, `ContextualCheckBlock` and `ConnectBlock`
+- The UTXO set, value accounting and fees, the block subsidy, and the Script flags of each height
 - The sources of the inputs of the contextual header check: the node's clock and peer offsets, its block index and its choice of chain
-- Block validity, `CheckBlock`, and transaction validity outside one input's Script verification
 - The witness v0 signature hash, and witness script verification
-- Full-node validation: the UTXO set, chain selection and the mempool
+- Chain selection, reorganization and the mempool
 
 [ROADMAP.md](ROADMAP.md) records completed milestones and next work.
 

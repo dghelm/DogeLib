@@ -9,7 +9,7 @@ One theorem relates an implementation in another language to the specification: 
 
 ## Review status
 
-No person has compared the Lean definitions with the source code of Dogecoin Core.
+The repository records no line-by-line comparison by a person of a Lean definition with the source code of Dogecoin Core.
 AI models wrote the definitions from the pinned source, and the recorded reviews of the pull requests are by AI models.
 Three kinds of evidence connect the definitions to Core:
 

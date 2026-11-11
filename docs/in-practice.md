@@ -310,7 +310,7 @@ A theorem establishes a claim about the Lean definitions, under its hypotheses a
 `scripts/campaign.py` searches for counterexamples to stated properties, under [design record 0009](design/0009-bug-finding-campaign.md).
 [docs/oracle.md](oracle.md#campaign-runs-and-replay) gives its commands, budgets and limits:
 
-- **Signed-spend generation.** The generator mutates a spend of the multisig-with-recovery template in two modes. One mode mutates the transaction and then signs it with Core's signer, so the signatures stay valid. The other mode signs first and keeps the signatures, so it tests what a signature commits to.
+- **Signed-spend generation.** The generator mutates a spend of the multisig-with-recovery template in two modes. One mode mutates the transaction and then signs it with Core's signer, so each signature is over the mutated transaction. The other mode signs first and keeps the signatures, so it tests what a signature commits to. Some cases also change a signature after the signer returns it. They change it to a high S value, or change its hash-type byte, the order of the signatures or the DER padding. Those cases do not keep the signer's signatures.
 - **Saved failures and reduction.** The campaign saves each failure as a record that `campaign.py replay` can run again. `campaign.py reduce` reduces the plan of a saved generated failure to a smaller plan that still fails ([reduction](oracle.md#reduction)).
 - **Production replay.** `campaign.py replay --level` sends a saved signed-spend failure to a harness build again, or submits the spend to a regtest node ([production replay](oracle.md#production-replay)).
 

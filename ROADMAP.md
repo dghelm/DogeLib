@@ -90,7 +90,7 @@ Section 12 of the record gives two stages:
 | 1 | The `Proposals` and `ProposalProofs` libraries, the import check, the activation model and the Script loop with a step parameter | Specified in `DogeLib.Proposals.Framework`, with the framework targets of section 11 except `checkBlockHeader_not_versionBitsCondition` (decision 11), and the import-check self-test |
 | 2 | The worked example `ExampleVersionVerify`, with its theorem targets and known answers | Specified in `DogeLib.Proposals.ExampleVersionVerify`, with every target of section 10.3 and known answers through the compiled code |
 
-Header-sequence validation, the milestone before the current one, is implemented through stage 5, under [design record 0008](docs/design/0008-header-sequence-validation.md).
+Header-sequence validation is implemented through stage 5, under [design record 0008](docs/design/0008-header-sequence-validation.md).
 The maintainer adopted the record on 2026-11-07, with every decision of its section 13.
 It specifies Core's `AcceptBlockHeader` and `ProcessNewBlockHeaders` over an explicit model of the block index.
 The model includes the duplicate test, the predecessor lookup, the failed-ancestor walk and the chain work of each entry.
@@ -104,7 +104,7 @@ Section 10 of the record gives five stages, and section 11 gives their theorem t
 | 4 | `GetBlockProof` and the chain work of each entry | Specified as `Work.blockProof` in `Work.ChainWork` and `IndexEntry.chainWork` in `Block.HeaderSequence`, with the targets `blockProof_eq` and `chainWork_add` and the chain work of `accept_genesis_insert` (section 13.1). Known answers of `GetBlockProof` for 11 compact values, the chain work of every added regtest entry, and two mainnet sequences |
 | 5 | The oracle operation `block.header_sequence`, the Core harness and the comparison | Implemented with H2, anchor guards, fixture expectations, seeded mutations and comparator self-tests. [Comparison boundary and streams](docs/oracle.md#header-sequence-comparison-evidence) |
 
-The current milestone is a property-driven bug-finding campaign, under [design record 0009](docs/design/0009-bug-finding-campaign.md).
+The property-driven bug-finding campaign is implemented through stage 5, under [design record 0009](docs/design/0009-bug-finding-campaign.md).
 The maintainer adopted the record on 2026-11-08, with every decision of its section 14.
 It searches for counterexamples to stated properties of the multisig-with-recovery template, in signed spends that Core signs.
 Each failure gets a saved record, a replay command, a reducer and a replay through Core's production path before it counts as a finding.
@@ -119,13 +119,24 @@ Section 13 of the record gives five stages, and section 11 gives the properties 
 | 4 | Replay through Core's production path, and the check against current upstream Core | Implemented: `campaign.py replay --level` at L1 and L3, `build_core_harness.sh --revision` and `build_core_node.sh`. The planted harness fault M3 is found, reduced, replayed at L1 and on a regtest node, and labelled `harness-fault`. Upstream `1.14-maint` was the pin on 2026-11-08. [Evidence](COVERAGE.md#production-replay-of-campaign-candidates) |
 | 5 | Regression fixtures and theorem targets for understood counterexamples | Implemented. Fixtures keep the planted proposal fault `51 00 b3` and the reduced M3 harness fault. They have a comparison set and `lake test` known answers. The `core` workflow runs the generated campaign at the reviewed seed. The five theorem targets of section 11 are proved: `multisigRecovery_lockTime_ge_threshold`, `multisigRecovery_finalSequence`, `legacySignatureHashPlan_eq_of_none_anyoneCanPay`, `legacySignatureHashPlan_eq_of_single_anyoneCanPay` and `faulty_counterexample_short`. Evidence: [the fixtures](COVERAGE.md#campaign-regression-fixtures), [the template](SOUNDNESS.md#script-worked-property-multisig-with-recovery), [the digest](SOUNDNESS.md#legacy-signature-hash-what-all-commits-to) and [the faulty example](SOUNDNESS.md#proposed-revisions-the-deliberately-faulty-example) |
 
+The campaign found no fault in Core or in DogeLib.
+DogeLib specifies Dogecoin Core.
+A property of an application template belongs in a downstream project.
+
+### Block validity
+
+The next milestone is block validity.
+DogeLib has no definition of `CheckTransaction`, `CheckBlock`, `ContextualCheckBlock` or `ConnectBlock`, so the oracle cannot judge a block.
+Design record 0010 will define the milestone and its stages. The record does not exist, and the maintainer has not adopted a scope.
+
+Its first stage links Core's `src/validation.cpp` into the harness.
+`block.contextual_check` and `block.header_sequence` then compare with Core's own functions, and the stage removes their hand transcriptions from the harness.
+The stages after it specify the block checks and compare them with Core on real blocks.
+
 One other candidate is unscheduled, and it needs an approved scope before work starts:
 
 - **Arithmetic agreement with Core's verifier.** A Lean proof that `Point.mulAdd` computes Core's `secp256k1_ecmult` result ([design record 0005](docs/design/0005-signature-verifier.md), section 4.3).
   The proof needs Mathlib, so it requires a package proposal first.
-
-DogeLib specifies Dogecoin Core.
-A property of an application template belongs in a downstream project.
 
 ## Milestones
 

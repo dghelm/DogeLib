@@ -14,6 +14,11 @@ Script unsupported results have no compared verdict and are counted separately.
 Each failure line starts with `FAIL <CODE>`; scripts/test_compare_core.py
 relies on the codes. The exit status is 0 only when every response agrees.
 
+A full run also requires the stream to hold exactly the number of requests
+that EXPECTED_OPERATION_COUNTS gives for each operation. A difference fails
+with `FAIL REQUEST_COUNT`. Documents quote these counts, so a change to a
+request set changes the table and those documents in the same pull request.
+
 With `--rust-compactsize PATH`, only CompactSize reader requests from the
 fixtures and CompactSize boundary set run through all three programs.
 The Rust crate has no encoder.
@@ -49,6 +54,42 @@ ORACLE_FORMAT = "dogelib-oracle/1"
 MAX_SIZE = 0x02000000
 SEED = 20261104
 MAX_REPORTS = 10
+
+# The number of stream requests per operation in a full run, without --quick
+# or --rust-compactsize. The adapter-limit cases and the two-call compositions
+# run outside the stream and are not counted here.
+# docs/oracle.md, "The comparison", quotes this table and its sum.
+EXPECTED_OPERATION_COUNTS = {
+    "auxpow.check": 404,
+    "block.check_pow": 806,
+    "block.check_version": 207,
+    "block.contextual_check": 2903,
+    "block.header.read": 7878,
+    "block.header_sequence": 257,
+    "compactsize.encode": 26,
+    "compactsize.read": 404,
+    "hash.hash160": 292,
+    "hash.ripemd160": 299,
+    "hash.sha1": 519,
+    "header.encode": 349,
+    "header.hash": 347,
+    "header.read": 25865,
+    "merkle.compute": 550,
+    "pubkey.verify": 602,
+    "script.eval": 8882,
+    "script.read_op": 1233,
+    "script.verify_legacy": 8093,
+    "scrypt.hash": 272,
+    "sighash.legacy": 4425,
+    "tx.decode_base": 37694,
+    "tx.decode_witness": 45958,
+    "tx.read_base": 137991,
+    "tx.read_witness": 42286,
+    "work.calculate_next": 49255,
+    "work.get_compact": 1552,
+    "work.next": 1353,
+    "work.set_compact": 5140,
+}
 
 
 def sha256d(data: bytes) -> bytes:
@@ -958,6 +999,28 @@ def compare_compositions(oracle, harness, timeout):
     return failures
 
 
+def check_operation_counts(requests: list[dict], expected: dict[str, int] | None = None) -> list[str]:
+    """Require the stream to hold the expected number of requests for each operation.
+
+    Prints one `FAIL REQUEST_COUNT` line for each operation whose count differs,
+    including an operation that only one side names, and returns one failure code per line."""
+    if expected is None:
+        expected = EXPECTED_OPERATION_COUNTS
+    actual = {}
+    for request in requests:
+        actual[request["op"]] = actual.get(request["op"], 0) + 1
+    failures = []
+    for op in sorted(set(actual) | set(expected)):
+        if actual.get(op, 0) != expected.get(op, 0):
+            failures.append("REQUEST_COUNT")
+            print(f"FAIL REQUEST_COUNT {op}: {actual.get(op, 0)} requests, expected {expected.get(op, 0)}. "
+                  "If the change is intended, update EXPECTED_OPERATION_COUNTS in scripts/compare_core.py "
+                  "and the counts that docs/oracle.md quotes.")
+    if not failures:
+        print(f"operation counts: {len(expected)} operations and {sum(expected.values())} stream requests match EXPECTED_OPERATION_COUNTS")
+    return failures
+
+
 def check_auxpow_reconstruction(harness, timeout):
     """Core's independently constructed check_auxpow bytes and verdicts match the pinned records."""
     from oracle_header_pow import payload_cases
@@ -1137,6 +1200,7 @@ def main() -> int:
     if not args.quick and not args.rust_compactsize:
         failures.extend(compare_adapter_limits(args.oracle, args.harness, args.timeout))
         failures.extend(compare_compositions(args.oracle, args.harness, args.timeout))
+        failures.extend(check_operation_counts(requests))
     print(f"total: {len(requests)} stream requests, {len(failures)} failures")
     return 1 if failures else 0
 

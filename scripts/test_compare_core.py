@@ -541,6 +541,22 @@ def main() -> int:
         compare_core.request_sets = fewer_checks
         del sys.argv[1]
         return compare_core.main()
+    if len(sys.argv) > 1 and sys.argv[1] == "--compare-count-gap":
+        # Drop one request, so that one operation has fewer requests than the expected table gives.
+        import compare_core
+        original_sets = compare_core.request_sets
+
+        def one_fewer():
+            sets, excluded = original_sets()
+            for name, requests in sets:
+                if name == "compactsize":
+                    dropped = next(i for i, r in enumerate(requests) if r["op"] == "compactsize.encode")
+                    del requests[dropped]
+            return sets, excluded
+
+        compare_core.request_sets = one_fewer
+        del sys.argv[1]
+        return compare_core.main()
     if len(sys.argv) >= 5 and sys.argv[1] == "--wrap":
         return wrap(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5:])
     if len(sys.argv) != 2:
@@ -616,6 +632,16 @@ def main() -> int:
         else:
             print("ok   acceptance check count: FAIL TX_VALID_CORE_COUNT")
 
+        # The full stream with one request dropped. --quick does not check the counts.
+        result = compare(oracle, wrapper(tmp, "none", "core", oracle), ["--compare-count-gap"], driver=__file__)
+        codes = {line.split()[1] for line in result.stdout.splitlines() if line.startswith("FAIL ")}
+        if (result.returncode != 1 or codes != {"REQUEST_COUNT"} or
+                "FAIL REQUEST_COUNT compactsize.encode: 25 requests, expected 26" not in result.stdout):
+            failures += 1
+            print(f"FAIL operation request count: exit {result.returncode}\n{result.stdout[-2000:]}{result.stderr[-2000:]}")
+        else:
+            print("ok   operation request count: FAIL REQUEST_COUNT")
+
         rust_modes = {"none": None, "version": "VERSION", "consumed": "MISMATCH", "reason": "MISMATCH",
                       "rest_hex": "MISMATCH", "request_error": "REQUEST_ERROR", "drop": "COUNT",
                       "id": "ID", "malformed": "MALFORMED"}
@@ -673,7 +699,7 @@ def main() -> int:
                 except ProcessLookupError:
                     pass
             print(f"ok   {mode}: FAIL {code}")
-    print(f"{len(MUTATIONS) + len(rust_modes) + 2} cases, {failures} failures")
+    print(f"{len(MUTATIONS) + len(rust_modes) + 3} cases, {failures} failures")
     return 1 if failures else 0
 
 

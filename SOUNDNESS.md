@@ -2768,7 +2768,9 @@ Core comparisons run the compiled oracle against the pinned Core revision.
 
 The source registry exists. The fixtures are listed per operation in the *Comparison* column of [COVERAGE.md](COVERAGE.md), and each records its provenance.
 The Core comparison runs the compiled oracle and Core's own code at the pin on the same requests, for the operations of the oracle ([docs/oracle.md](docs/oracle.md#the-core-harness)).
-It shows agreement on the requests it sends, and nothing about other inputs.
+For `block.check_version`, `block.contextual_check` and `block.header_sequence`, the harness runs a hand transcription that calls Core's helpers, not Core's function ([B4](#b4-the-oracle-and-foreign-boundaries)).
+The comparison shows agreement on the requests it sends, and nothing about other inputs.
+No person has recorded a line-by-line comparison of a definition with its source.
 
 The real mainnet headers test next-work selection across DigiShield activation against historical `nBits` values.
 The next-work subsection states the exact branch counts.
@@ -3034,8 +3036,8 @@ A user of the comparison trusts these parts of it:
   Any other exception from Core stops the harness, so it cannot pass as a result.
 - The `plan` label of `sighash.legacy`. The harness computes it from Core's conditions instead of observing it. It stops if the label is `fixed_digest` and Core's digest is not the value one.
 - The comparator, `scripts/compare_core.py`.
-  Its self-test, `scripts/test_compare_core.py`, counts 113 cases: two passing controls and 111 negative checks that each fail with the code they target.
-  The negative checks are 102 stream mutations, eight Rust-side mutations and one acceptance-count gap.
+  Its self-test, `scripts/test_compare_core.py`, counts 115 cases: two passing controls and 113 negative checks that each fail with the code they target.
+  The negative checks are 103 stream mutations, eight Rust-side mutations, one acceptance-count gap and one request-count gap.
   Assertions about its refusal and timelock constructions run outside that count.
 - For `sighash.legacy`, the oracle's preimage is checked by hashing it, not byte by byte: Core does not expose its preimage.
 

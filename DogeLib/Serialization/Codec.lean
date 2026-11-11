@@ -126,7 +126,10 @@ def encodeBitVecLE : (n : Nat) → BitVec (8 * n) → List UInt8
   | 0, _ => []
   | n + 1, v => UInt8.ofBitVec (v.setWidth 8) :: encodeBitVecLE n ((v >>> 8).setWidth (8 * n))
 
-/-- A `BitVec (8 * n)` read from the first `n` bytes, low byte first, with the remainder, or `none` when there are fewer than `n` bytes. -/
+/--
+A `BitVec (8 * n)` read from the first `n` bytes, low byte first, with the remainder, or `none` when there are fewer than `n` bytes.
+The remainder agrees with Core's `CDataStream` while the read position plus `n` is below 2^32, the bound that `readFixed` states.
+-/
 def decodeBitVecLE : (n : Nat) → List UInt8 → Option (BitVec (8 * n) × List UInt8)
   | 0, bs => some (0#0, bs)
   | n + 1, bs => do

@@ -102,6 +102,7 @@ The definition reads `script.drop pc` with `Transaction.readOp`, which the legac
 The pushed bytes are the bytes of the instruction after its opcode and its length field.
 On a failure, `readOp` passes the opcode, and also the whole length field when the data is short.
 The cursor moves past those bytes.
+The correspondence with `GetOp2` covers a script of fewer than 2^31 bytes, for the reason that `Transaction.readOp` gives.
 -/
 def readInstruction (script : List UInt8) (pc : Nat) : ReadResult :=
   match readOp (script.drop pc) with

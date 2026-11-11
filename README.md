@@ -17,6 +17,9 @@ Three kinds of evidence connect the definitions to Core:
 - The comparison with Core's code on a finite set of requests, which CI runs on every pull request ([docs/oracle.md](docs/oracle.md#the-comparison)).
 - Those reviews of the pull requests.
 
+[docs/reviews/](docs/reviews/README.md) also records seven reads of the definitions against Core's source by an AI model.
+A read executes nothing, and it is not a review by a person.
+
 ## Status
 
 DogeLib follows Dogecoin Core `v1.14.9`, commit `e0a1c15` ([SOURCES.md](SOURCES.md)).

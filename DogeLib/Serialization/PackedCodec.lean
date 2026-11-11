@@ -103,7 +103,10 @@ The packed codec of `α`, made from a packed codec of `β` and two conversion fu
 
 /-! ## Little-endian fixed-width values -/
 
-/-- A `BitVec (8 * n)` read from the first `n` bytes of the slice, low byte first, with the rest of the slice: the packed form of `decodeBitVecLE`. -/
+/--
+A `BitVec (8 * n)` read from the first `n` bytes of the slice, low byte first, with the rest of the slice: the packed form of `decodeBitVecLE`.
+The slice offset is a natural number, so agreement with Core's `CDataStream` has the bound of `decodeBitVecLE`.
+-/
 def readBitVecLE : (n : Nat) → ByteSlice → Option (BitVec (8 * n) × ByteSlice)
   | 0, s => some (0#0, s)
   | n + 1, s => do

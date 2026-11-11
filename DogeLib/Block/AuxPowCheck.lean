@@ -173,6 +173,11 @@ The tests run in Core's order:
 
 Core computes the chain root before test 4, but that computation cannot fail.
 The transaction ID excludes witness data, as `CTransaction::GetHash` does.
+
+Test 4 of Core reads the cached `GetHash` of the coinbase transaction (D55, line 100).
+A default-constructed `CAuxPow` holds `CTransaction()`, whose cache is zero, and `Transaction.txid` gives the computed digest instead.
+So `check` and Core can report different errors for that object, which is outside the domain of `check`.
+Core computes the cache when it decodes a payload, so only an object that a caller builds in memory has the zero cache.
 -/
 def AuxPow.check (a : AuxPow) (hashAuxBlock : Hash256) (chainId : Int32) (strictChainId : Bool) :
     Except AuxPowCheckError Unit :=

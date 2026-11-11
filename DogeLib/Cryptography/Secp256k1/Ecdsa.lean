@@ -59,7 +59,12 @@ def hashToInt (hash : Hash256) : Nat := ofBytesBE hash.val
 
 The 32 digest bytes are read big-endian in storage order, then reduced mod `n`.
 
-The key `O` would accept any `r` that some `u1 G` hits, so it is rejected here too. -/
+The key `O` would accept any `r` that some `u1 G` hits, so it is rejected here too.
+
+`verify` accepts a high S when the equation holds.
+Core's `secp256k1_ecdsa_verify` rejects a high S before the equation (D52, `src/secp256k1/src/secp256k1.c` line 411).
+So `verify` corresponds to the inner test `secp256k1_ecdsa_sig_verify` (D60), not to that function.
+`Script.coreVerifier` normalizes S first, as `CPubKey::Verify` does. -/
 def verify (q : Point) (hash : Hash256) (r s : Nat) : Bool :=
   -- Step 1: `r` and `s` lie in `[1, n - 1]`, and the key is valid.
   if hr : 0 < r ∧ r < Fn.modulus then

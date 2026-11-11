@@ -56,6 +56,11 @@ def blocks (password salt : ByteArray) (c n : Nat) : ByteArray :=
 Derive `dkLen` bytes with PBKDF2-HMAC-SHA-256, or return `none` above `(2^32 - 1) * 32` bytes.
 Zero iterations uses `U₁`, and zero output bytes returns `some` of an empty array.
 RFC 8018 §5.2 requires `c ≥ 1` and `dkLen ≥ 1`.
+
+Core's `PBKDF2_SHA256` holds `c` and its loop counter `j` in `uint64_t`, with the loop test `j <= c` (D61, lines 71, 80 and 100).
+At `c = 2^64 - 1` the counter wraps and that loop does not end, and a larger `c` has no Core counterpart.
+This definition returns a result for every `c`, so a correspondence with Core can cover only `c < 2^64 - 1`.
+Core's scrypt digest calls it with `c = 1`.
 -/
 def pbkdf2 (password salt : ByteArray) (c dkLen : Nat) : Option ByteArray :=
   if (2 ^ 32 - 1) * 32 < dkLen then none

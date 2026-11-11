@@ -77,6 +77,11 @@ jobs:
         if: ${{ !cancelled() }}
         run: time python3 -I scripts/campaign.py run --campaign generated --signer build/core-harness/core-signer --seed 20261108 --cases 3000 --seconds 600 --batch-size 64 --output build/campaign/generated .lake/build/bin/dogelib-oracle build/core-harness/core-oracle
 
+      # The harness keeps no adjusted time between requests.
+      - name: harness state between requests
+        if: ${{ !cancelled() }}
+        run: python3 -I scripts/test_core_harness.py .lake/build/bin/dogelib-oracle build/core-harness/core-oracle
+
       # The comparison must be able to fail: a passing control, then one
       # mutation for each failure code.
       - name: comparator self-test

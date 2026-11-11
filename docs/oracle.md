@@ -1098,6 +1098,15 @@ That set orders its members by address, so Core visits the failed list in addres
 The comparator already excludes `marked_failed_child` where the order can change it.
 
 The harness sets the adjusted time through Core's mock time and time offset, and calls `UnloadBlockIndex` before and after each request.
+It restores mock time 0 and offset 0 on every exit from the request, so no later request sees the adjusted time.
+Mock time 0 selects the system clock, so the harness gets adjusted time 0 from mock time 1 and offset -1.
+
+The harness accepts every adjusted time from -2^63 to 2^63 - 7201, as the oracle does.
+On this path Core reads the time only through `GetAdjustedTime` and adds 7200 to it, which cannot overflow in that range.
+Core also formats a log timestamp from the mock time, and that conversion fails outside the years 1400 to 9999.
+The harness turns off Core's log timestamps and its debug log, so Core never makes the conversion.
+`scripts/test_core_harness.py` sends sequence requests at -2^63, 0, 10^12 and 2^63 - 7201, alone and in one stream with contextual checks between them.
+Each harness response must be the same alone and in the stream, and must agree with the oracle.
 
 A request names no ancestor below an anchor.
 Core's `GetAncestor` asserts a predecessor at every step, and `AddToBlockIndex` reaches it through `BuildSkip`.

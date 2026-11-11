@@ -45,3 +45,10 @@ void harnessSetAdjustedTime(int64_t adjusted)
         nTimeOffset = 0;
     }
 }
+
+void harnessResetAdjustedTime()
+{
+    LOCK(cs_nTimeOffset);
+    SetMockTime(0);
+    nTimeOffset = 0;
+}

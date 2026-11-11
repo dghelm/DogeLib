@@ -505,7 +505,10 @@ UniValue headerSequence(const UniValue& req)
     checkArgs(req, "block.header_sequence", {"network", "mode", "adjusted_time", "checkpoints_enabled", "index", "failed_blocks", "headers"});
     selectWorkNetwork(req);
     const int version = headerStreamVersion(req);
-    harnessSetAdjustedTime(argInt(req, "adjusted_time", INT64_MIN, INT64_MAX - 7200));
+    const int64_t adjusted = argInt(req, "adjusted_time", INT64_MIN, INT64_MAX - 7200);
+    // No later request sees this mock time, on any exit from this function.
+    struct ResetTime { ~ResetTime() { harnessResetAdjustedTime(); } } resetTime;
+    harnessSetAdjustedTime(adjusted);
     fCheckpointsEnabled = argBool(req, "checkpoints_enabled");
     const auto& entries = arg(req, "index");
     const auto& failed = arg(req, "failed_blocks");
@@ -1175,6 +1178,10 @@ int main(int argc, char** argv)
     ECCVerifyHandle ecc;
     // Core's log has no file here. Without this, util.cpp keeps every message in memory.
     fPrintToDebugLog = false;
+    // Core formats a timestamp for each message before it discards the message
+    // (util.cpp:272-284). The mock time of a request can be outside the years
+    // that the formatter accepts, and its conversion to microseconds can overflow.
+    fLogTimestamps = false;
     std::string line;
     while (std::getline(std::cin, line)) {
         std::string trimmed = trimAscii(line);

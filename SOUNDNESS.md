@@ -934,6 +934,8 @@ That function runs Core's own proof-of-work check, contextual check and index in
 `harness/core/core_validation.cpp` includes `validation.cpp` as text, so the compiled function is Core's.
 
 The harness builds the initial index in Core's `mapBlockIndex`, fills `gFailedBlocks`, and sets the checkpoint option and the adjusted time.
+It restores Core's mock time and time offset after each request.
+
 Core's set visits the failed list in address order.
 Each anchor above height 0 gets a placeholder predecessor, which stands for the ancestors that the request does not name.
 Users trust the index construction, JSON conversion, the placeholder and the preflight refusal of short histories (A1, B4).
@@ -3071,7 +3073,7 @@ Their JSON conversion and Lean diagnostic strings have no refinement theorem.
 The Core harness transcribes the two version branches for `block.check_version`.
 For `block.contextual_check` it calls Core's `ContextualCheckBlockHeader` (D33, lines 3066 to 3119).
 Users trust the transcription of the two version branches, and the entries that the harness puts into `mapBlockIndex` with its setting of `fCheckpointsEnabled` (D67, D69).
-The harness turns off Core's debug log, which changes no consensus predicate.
+The harness turns off Core's debug log and log timestamps, which changes no consensus predicate.
 
 The build disables SSE2, and its stamp records the generic scrypt variant and configure options.
 The comparison still assumes Core's little-endian header memory layout and arithmetic shift of signed versions.

@@ -23,4 +23,7 @@ std::vector<CBlockIndex*> harnessTakeDirtyBlockIndex();
 // Make Core's GetAdjustedTime (timedata.cpp) return `adjusted`.
 void harnessSetAdjustedTime(int64_t adjusted);
 
+// Restore Core's initial mock time and time offset, which are both 0.
+void harnessResetAdjustedTime();
+
 #endif

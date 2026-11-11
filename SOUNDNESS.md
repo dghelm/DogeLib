@@ -158,8 +158,10 @@ No runtime substitution or trust-policy exception is added.
 It also checks prefixes of the first vector and the zero-count, empty-output and oversized-output branches.
 The RFC errata search, read on 2026-11-06, has no correction to those vectors.
 No theorem or test here establishes agreement with compiled Core.
-Core's `PBKDF2_SHA256` counts iterations in `uint64_t` with the loop test `j <= c` (D61, line 100), so its loop does not end at `c = 2^64 - 1`.
-A correspondence with Core can therefore cover only `c < 2^64 - 1`, and Core's scrypt digest uses `c = 1`.
+
+Core's `PBKDF2_SHA256` counts iterations in `uint64_t` with the loop test `j <= c` (D61, line 100), so its loop does not end at `c = 2^64 - 1` with a positive output length.
+With a zero output length, Core's outer loop at line 88 runs no iteration.
+A correspondence with Core can therefore cover only `c < 2^64 - 1` or a zero output length, and Core's scrypt digest uses `c = 1`.
 
 ### Scrypt RFC 7914 model
 
@@ -291,7 +293,7 @@ C++ leaves that shift undefined.
 The Lean definitions remain total on every finite list and add no rejection rule.
 
 `blockMerkleRoot` takes its leaves from `Transaction.txid`, and Core takes them from the cached `GetHash` (D42, line 163).
-The two differ only for a default-constructed `CTransaction()`, as [Transactions](#transactions) states.
+The two differ only for a default-constructed `CTransaction()` or a copy of it, as [Transactions](#transactions) states.
 
 `tests/block/README.md` records the independent fixtures and the limits of their provenance (A1, B1, D3).
 The later header expectations rely on successor commitments or an independent hashlib computation, not Core output.
@@ -354,8 +356,10 @@ Which record a caller selects, and so which value it passes, is outside this ope
 The block hash and the chain ID are arguments: `CheckAuxPowProofOfWork` passes the merge-mined header's own hash and its own chain ID (C7 of design record 0004).
 
 The Merkle test of `check` uses `Transaction.txid`, and Core uses the cached `GetHash` (D55, line 100).
-A default-constructed `CAuxPow` holds `CTransaction()`, whose cached hash is zero ([Transactions](#transactions)), so it is outside the domain of `check`.
-For example, with a zero parent Merkle root Core reports that the coinbase has no inputs, and `check` reports `merkleRootIncorrect`.
+A default-constructed `CAuxPow` holds `CTransaction()`, whose cached hash is zero ([Transactions](#transactions)).
+A payload with that transaction or a copy of it is outside the domain of `check`.
+For example, take a default `CAuxPow` and set both indices to zero, with both branches empty, a zero parent Merkle root and `fStrictChainId` false.
+Core reports that the coinbase has no inputs, and `check` reports `merkleRootIncorrect`.
 Both reject, and Core computes the cache for every payload that it decodes.
 
 `AuxPow.check_eq_ok_iff` characterizes acceptance for every payload and every argument.
@@ -1191,7 +1195,7 @@ Their bytes are hexadecimal literals whose double SHA-256 is the digest that Cor
 These known answers cover `UInt8` to `UInt64`, pairs, truncated input, and slices that start at a nonzero offset.
 They are not a comparison with Core on other inputs.
 
-Core's `CDataStream` holds its read position in an `unsigned int`, and computes the next position in that type (D21, lines 151 and 346).
+Core's `CDataStream` holds its read position in an `unsigned int`, and computes the next position in that type (D21, lines 151 and 347).
 The list decoders return the exact remainder, and the packed decoders hold a natural-number offset.
 With a 32-bit `unsigned int`, they agree with the stream while the read position plus the size of the read is below 2^32.
 Above that bound Core's position wraps, and the codecs and readers make no claim about the stream.
@@ -1432,8 +1436,9 @@ So `txid` never takes the fallback branch of `digestToHash256`.
 This says nothing about which values a digest can take.
 
 `txid` is `CTransaction::ComputeHash`, and Core's `GetHash` returns a cached value.
-Each constructor stores `ComputeHash()` there, except the default constructor `CTransaction()`, which stores zero (D23, lines 78 to 81).
-So `txid` is `GetHash`, and `WitnessTransaction.wtxid` is `GetWitnessHash`, for every `CTransaction` except a default-constructed one.
+The default constructor `CTransaction()` stores zero there (D23, lines 78 to 81), and a copy of an object copies its cache.
+The constructors from `CMutableTransaction` and from a stream store `ComputeHash()`.
+So `txid` is `GetHash`, and `WitnessTransaction.wtxid` is `GetWitnessHash`, for every `CTransaction` except a default-constructed one and its copies.
 Core's deserialization and its conversion from `CMutableTransaction` compute the cache, so no decoded transaction has the zero cache.
 
 These theorems relate the reader to the codec, and the codec to a reading of D4 (A1).

@@ -28,8 +28,8 @@ All seven reads are by GPT-6 through Codex, on 2026-11-11, at DogeLib `865754b` 
 No read found a consensus-divergent discrepancy.
 Each finding is a *domain boundary*: an input outside the domain on which a definition corresponds to Core.
 The AuxPoW and transaction records report the same boundary, Core's default-constructed transaction.
-The section *After the read* of a record says where the repository states each boundary.
-That section is not part of the read.
+The section *After the read* of a record says where the repository states each boundary, and how that statement was checked.
+That section is an addendum, not part of the read.
 
 ## Run a read again
 
@@ -47,4 +47,9 @@ A record describes the Lean files of its scope at its DogeLib revision.
 Any later change to a definition in that scope invalidates the record for that definition.
 A pull request that changes a covered definition must say so in its description.
 The pull request must then include a new read, or mark the record as stale at its top.
-A change to doc comments only does not make a record stale.
+
+An editorial change to a comment does not make a record stale.
+A comment change that alters a stated domain, a failure behaviour or a claim of correspondence with Core is not editorial.
+Each brief tells the reader that a documented restriction is not a finding, so such a change can alter the conclusion of a read.
+It needs a new read, or an addendum under *After the read* in the record.
+The addendum names the change and the check behind it.

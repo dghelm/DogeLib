@@ -105,6 +105,10 @@ The reader did not execute the three large-input examples.
 It ran no differential comparison and no other repository gate.
 The oracle binary was absent at `.lake/build/bin/dogelib-oracle`, and the workspace was read-only.
 
+Writing check at DogeLib `865754b`: `python3 -I scripts/check_writing.py --stdin review` exited `0`.
+The reader reviewed its four advisories on paragraph length and split the affected paragraphs.
+The reader changed no file.
+
 ## After the read
 
 A check of F3 against Core at the pin, by the model that prepared this record, found that F3 names the wrong mechanism.

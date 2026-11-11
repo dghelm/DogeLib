@@ -38,7 +38,7 @@ The reader of a value of fixed length, from its codec: the value and the remaind
 Use it only for a codec that rejects exactly the inputs that are too short, such as the integer codecs and the codec of `Bytes n`.
 Core reads these values with `CDataStream::read`, which fails only at the end of the data (SOURCES.md, D21).
 
-`CDataStream` holds its read position in an `unsigned int`, and computes the next position in that type (D21, lines 151 and 346).
+`CDataStream` holds its read position in an `unsigned int`, and computes the next position in that type (D21, lines 151 and 347).
 This reader keeps the exact remainder.
 With a 32-bit `unsigned int`, the two agree while the read position plus the size of the read is below 2^32.
 Above that bound Core's position wraps, and this reader makes no claim about the stream.

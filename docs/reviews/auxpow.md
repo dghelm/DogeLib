@@ -74,5 +74,7 @@ Lean paths are relative to `DogeLib/`.
 ## After the read
 
 A check against Core at the pin, by the model that prepared this record, confirmed the finding from the source.
+Core's implicit copy constructor copies the cache, so the boundary is the default transaction and every copy of it.
+The example needs both indices set to zero, as the record says, because a default `CAuxPow` has `nIndex = -1` and Core rejects that first.
 The doc comments of `Transaction.txid`, `WitnessTransaction.wtxid`, `blockMerkleRoot` and `AuxPow.check` state the boundary.
 So do [SOUNDNESS.md](../../SOUNDNESS.md#the-auxpow-check) and the *AuxPoW check* and *Merkle root and mutation* rows of [COVERAGE.md](../../COVERAGE.md).

@@ -75,6 +75,7 @@ Lean paths are relative to `DogeLib/Transaction/`.
 ## After the read
 
 A check against Core at the pin, by the model that prepared this record, confirmed the finding from the source.
+Core's implicit copy constructor copies the cache, so the boundary is the default transaction and every copy of it.
 The doc comments of `Transaction.txid` and `WitnessTransaction.wtxid` state the boundary.
 So do [SOUNDNESS.md](../../SOUNDNESS.md#transactions) and the *Transaction ID* and *Witness hash* rows of [COVERAGE.md](../../COVERAGE.md).
 

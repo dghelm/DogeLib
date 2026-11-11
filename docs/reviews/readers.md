@@ -57,6 +57,14 @@ Core paths are relative to `src/`, and Lean paths are relative to `DogeLib/`.
 ## After the read
 
 A check against Core at the pin, by the model that prepared this record, confirmed the finding from the source.
-The position also wraps on a stream below 4 GiB, when the read position plus the size of the read reaches 2^32.
-The doc comments of `readFixed`, `decodeBitVecLE` and `readBitVecLE` state that bound.
+In the record's example the stream holds the bytes of the read, so Core's read is defined and only its remainder is wrong.
+
+A second case exists on a stream below 4 GiB.
+There the position plus the size of the read can reach 2^32 only when the read asks for more bytes than remain.
+Core narrows the next position to `unsigned int` before it tests for the end of the data (`src/streams.h`, lines 347 to 350).
+So the wrapped position can pass that test, and the `memcpy` at line 359 then reads outside the buffer.
+That read is unsafe in Core, and Lean returns `truncated`.
+
+The doc comments of `readFixed`, `decodeBitVecLE` and `readBitVecLE` state one bound that excludes both cases.
+The bound is that the read position plus the size of the read is below 2^32.
 So do [SOUNDNESS.md](../../SOUNDNESS.md#codecs) and the *Reader combinators* row of [COVERAGE.md](../../COVERAGE.md).

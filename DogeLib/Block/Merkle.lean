@@ -110,7 +110,7 @@ def computeMerkleRoot (leaves : List Hash256) : MerkleResult :=
 /--
 Core's `BlockMerkleRoot`: use base transaction IDs, without witness commitments or block validation.
 Core takes each leaf from the cached `GetHash` (D42, line 163).
-That leaf differs from `Transaction.txid` only for a default-constructed `CTransaction()`, whose cache is zero.
+That leaf differs from `Transaction.txid` only for a default-constructed `CTransaction()` or a copy of it, whose cache is zero.
 -/
 def blockMerkleRoot (transactions : List Transaction.Transaction) : MerkleResult :=
   computeMerkleRoot (transactions.map Transaction.Transaction.txid)

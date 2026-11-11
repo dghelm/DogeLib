@@ -1,7 +1,8 @@
 # Compare dogelib-oracle with Dogecoin Core on the same requests.
 #
 # The harness, harness/core/core_oracle.cpp, is built against Core's own
-# libraries at the commit that SOURCES.md pins. scripts/compare_core.py runs
+# libraries at the commit that SOURCES.md pins. It links Core's server library
+# and compiles Core's validation.cpp. scripts/compare_core.py runs
 # both programs and requires their responses to agree (docs/oracle.md, "The
 # Core harness").
 
@@ -21,6 +22,10 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  # Dogecoin Core v1.14.9, the commit that SOURCES.md pins.
+  CORE_PIN: e0a1c157791544e818c901bd9341896965afbf9d
+
 jobs:
   compare:
     runs-on: ubuntu-24.04
@@ -29,11 +34,10 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      # Dogecoin Core v1.14.9, the commit that SOURCES.md pins.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: dogecoin/dogecoin
-          ref: e0a1c157791544e818c901bd9341896965afbf9d
+          ref: ${{ env.CORE_PIN }}
           path: core-src
           fetch-depth: 1
           persist-credentials: false
@@ -41,14 +45,15 @@ jobs:
       - name: build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends autoconf automake libtool pkg-config libssl-dev libboost-dev
+          sudo apt-get install -y --no-install-recommends autoconf automake libtool pkg-config curl bzip2 libssl-dev libevent-dev
 
-      # The build script checks its stamp (pin, script, compilers, flags) and
-      # rebuilds the Core libraries when a restored cache does not match.
+      # The cache holds Boost 1.70.0 and Core's libraries. The build script
+      # checks its stamp (pin, scripts, compilers, flags) and rebuilds them
+      # when a restored cache does not match.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/core-harness
-          key: core-harness-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build_core_harness.sh') }}
+          key: core-harness-${{ runner.os }}-${{ runner.arch }}-${{ env.CORE_PIN }}-${{ hashFiles('scripts/build_core_harness.sh', 'scripts/core_boost.sh') }}
 
       - uses: leanprover/lean-action@50fcf42d2e460296f1a34b402e990d1b24f8b596 # v1.6.0
         with:
@@ -60,7 +65,7 @@ jobs:
         run: lake build dogelib-oracle
 
       - name: harness
-        run: bash scripts/build_core_harness.sh core-src build/core-harness
+        run: time JOBS=4 bash scripts/build_core_harness.sh core-src build/core-harness
 
       - name: signed-spend regeneration
         run: python3 -I scripts/check_signed_spends.py build/core-harness/core-signer

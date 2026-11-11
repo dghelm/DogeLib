@@ -33,7 +33,7 @@ class WorkflowDependencies(unittest.TestCase):
                         if line.strip().startswith('sudo apt-get install ')]
             self.assertEqual(len(installs), 1, workflow)
             packages[workflow] = {word for word in installs[0][3:] if not word.startswith('-')}
-            self.assertIn('libboost-dev', packages[workflow], workflow)
+            self.assertIn('libevent-dev', packages[workflow], workflow)
         self.assertEqual(packages['core'], packages['validation'])
 
 

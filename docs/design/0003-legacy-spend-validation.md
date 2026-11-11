@@ -104,7 +104,7 @@ The table omits the common `SCRIPT_VERIFY_` prefix from flag names:
 | `LOW_S` | 3 | Require DER and low S for nonempty signatures that undergo an encoding check. | Policy only [C2, C6, C7]. |
 | `NULLDUMMY` | 4 | Require the extra multisig dummy item to have zero bytes. | Policy only at this pin [C6, C7]. |
 | `CHECKLOCKTIMEVERIFY` | 9 | Enforce the CLTV operand against transaction locktime and the selected input's sequence. | Consensus from `BIP65Height`, 3,464,751 on mainnet [C6, C17]. Also standard policy [C7]. |
-| `CHECKSEQUENCEVERIFY` | 10 | Enforce the CSV operand against transaction version and the selected input's sequence. | Conditional consensus if `DEPLOYMENT_CSV` is active [C6]. Mainnet activation is unverified here. Also standard policy [C7]. |
+| `CHECKSEQUENCEVERIFY` | 10 | Enforce the CSV operand against transaction version and the selected input's sequence. | Conditional consensus if `DEPLOYMENT_CSV` is active [C6]. Mainnet activation is unverified here. Later note: [SOURCES.md](../../SOURCES.md) D102 shows that it never activates on mainnet. Also standard policy [C7]. |
 
 Core adds `NULLDUMMY` to block flags only inside the `IsWitnessEnabled` branch, which this pin never enters [C6].
 The `MANDATORY_SCRIPT_VERIFY_FLAGS` policy constant contains only P2SH [C7].

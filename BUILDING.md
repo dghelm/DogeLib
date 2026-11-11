@@ -84,7 +84,11 @@ Dogecoin Core's own test cases test the compact target encoding and the difficul
 ## Comparison with Dogecoin Core
 
 The comparison runs Dogecoin Core's own code on the oracle's requests ([docs/oracle.md](docs/oracle.md#the-core-harness)).
-It needs a git clone of Dogecoin Core that contains the pinned commit, and autoconf, automake, libtool, pkg-config and OpenSSL's development files.
+It needs a git clone of Dogecoin Core that contains the pinned commit.
+It also needs autoconf, automake, libtool, pkg-config, curl, and the development files of OpenSSL and libevent.
+On Ubuntu the last two are `libssl-dev` and `libevent-dev`.
+The build script downloads Boost 1.70.0 (about 97 MB), checks its SHA-256 and builds it into the build directory.
+Set `BOOST_ARCHIVE` to a local copy of the archive to avoid the download, or `BOOST_ROOT` to an installed Boost that has the `boost_system` library.
 
 ```bash
 lake build dogelib-oracle
@@ -94,8 +98,8 @@ python3 -I scripts/compare_core.py .lake/build/bin/dogelib-oracle build/core-har
 ```
 
 The build script uses `JOBS` parallel jobs, 8 by default.
-It reuses the Core libraries when the build directory's stamp matches the pin, the script, the compilers and the flags.
-A first build takes under a minute on 8 cores, and the comparison takes about 20 seconds.
+It reuses Boost and the Core libraries when the build directory's stamp matches the pin, the scripts, the compilers and the flags.
+A first build takes about 2 minutes on 8 cores and uses about 360 MB, and the comparison takes about 1 minute.
 
 ### Compiled Rust CompactSize comparison
 

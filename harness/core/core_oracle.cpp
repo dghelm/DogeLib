@@ -452,15 +452,18 @@ void checkWorkHistory(const std::vector<CBlockIndex>& chain, const CBlockHeader&
 // Core's GetAncestor (D35, chain.cpp:113-137) asserts a predecessor at every
 // step, and AddToBlockIndex reaches it through BuildSkip (D33, line 2777). So
 // each anchor above height 0 gets this entry as its predecessor. The entry is
-// its own predecessor, has no skip pointer and is outside mapBlockIndex.
+// its own predecessor and its own skip entry, and it is outside mapBlockIndex.
 // GetAncestor then returns it for every height below the anchor, and it is
-// equal to no entry of the request. A skip pointer to it is never followed to
-// a height at or above the anchor, because Core follows `pskip` only when the
-// skip height is at least the target.
+// equal to no entry of the request. With the skip link, a walk below the
+// anchor takes the steps of Core's skip list, not one step for each height.
+// A skip pointer to the entry is never followed to a height at or above the
+// anchor, because Core follows `pskip` only when the skip height is at least
+// the target.
 CBlockIndex* unknownAncestor()
 {
     static CBlockIndex entry;
     entry.pprev = &entry;
+    entry.pskip = &entry;
     return &entry;
 }
 

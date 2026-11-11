@@ -189,6 +189,7 @@ done
 # The fixture signer uses Core's key and randomness code, plus its secure pool.
 "$cxx" -std=c++11 $core_cxxflags -Wl,--gc-sections -DHAVE_CONFIG_H \
   -I"$src" -I"$src/config" -I"$src/univalue/include" -I"$src/secp256k1/include" \
+  -isystem "$boost/include" \
   "-DCORE_SIGNER_BLOB=\"$(git hash-object "$here/harness/core/core_signer.cpp")\"" \
   "-DCORE_SIGNER_REQUEST_BLOB=\"$(git hash-object "$here/harness/core/core_signer_main.cpp")\"" \
   -o "$build/core-signer" \

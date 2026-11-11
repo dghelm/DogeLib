@@ -1102,7 +1102,7 @@ The harness sets the adjusted time through Core's mock time and time offset, and
 A request names no ancestor below an anchor.
 Core's `GetAncestor` asserts a predecessor at every step, and `AddToBlockIndex` reaches it through `BuildSkip`.
 So each anchor above height 0 gets one placeholder entry as its predecessor.
-The placeholder is its own predecessor, has no skip pointer and is outside `mapBlockIndex`.
+The placeholder is its own predecessor and its own skip entry, and it is outside `mapBlockIndex`.
 
 `GetAncestor` returns it for every height below the anchor, and it is equal to no entry of the request.
 Core follows a skip pointer only when its skip height is at least the target.

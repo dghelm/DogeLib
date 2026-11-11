@@ -202,6 +202,7 @@ def WitnessTransaction.encode (w : WitnessTransaction) : List UInt8 :=
 /--
 The witness hash: Core's `CTransaction::GetWitnessHash` (D23, `src/primitives/transaction.cpp` lines 70 to 76).
 Without witness data it is the transaction ID. Otherwise it is the double SHA-256 of `encode`, the witness-allowed serialization.
+For a default-constructed `CTransaction()` or a copy of it, Core returns the cached zero hash, and this definition returns the computed digest (see `Transaction.txid`).
 -/
 def WitnessTransaction.wtxid (w : WitnessTransaction) : Hash256 :=
   if w.hasWitness then digestToHash256 (Cryptography.Hash.Sha256d.hash (w.encode).toByteArray)

@@ -46,7 +46,9 @@ namespace Point
 
 /-- Whether a point satisfies the defining equation `y^2 = x^3 + 7`.
 
-The point at infinity always does. -/
+The point at infinity always does.
+Core's `secp256k1_ge_is_valid_var` returns 0 for infinity instead (D58, `src/secp256k1/src/group_impl.h` lines 260 to 270).
+The two agree on every affine point, and `Ecdsa.verify` rejects the key at infinity with a separate test. -/
 def isOnCurve : Point → Bool
   | infinity => true
   | affine x y => y * y == x * x * x + b

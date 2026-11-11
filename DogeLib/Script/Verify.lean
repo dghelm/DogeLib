@@ -81,7 +81,11 @@ def isPushOnlyFrom (script : List UInt8) (pc : Nat) : Bool :=
 termination_by script.length - pc
 decreasing_by omega
 
-/-- `CScript::IsPushOnly` (D48, lines 256 to 259): every instruction reads, and no opcode is above `OP_16`. -/
+/--
+`CScript::IsPushOnly` (D48, lines 256 to 259): every instruction reads, and no opcode is above `OP_16`.
+It has the domain of `readInstruction`, a script of fewer than 2^31 bytes.
+`verifyScript` calls it only on a `scriptSig` that `evalScript` accepted, which has at most 10,000 bytes.
+-/
 def isPushOnly (script : List UInt8) : Bool := isPushOnlyFrom script 0
 
 /--

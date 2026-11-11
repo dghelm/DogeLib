@@ -159,6 +159,10 @@ It also checks prefixes of the first vector and the zero-count, empty-output and
 The RFC errata search, read on 2026-11-06, has no correction to those vectors.
 No theorem or test here establishes agreement with compiled Core.
 
+Core's `PBKDF2_SHA256` counts iterations in `uint64_t` with the loop test `j <= c` (D61, line 100), so its loop does not end at `c = 2^64 - 1` with a positive output length.
+With a zero output length, Core's outer loop at line 88 runs no iteration.
+A correspondence with Core can therefore cover only `c < 2^64 - 1` or a zero output length, and Core's scrypt digest uses `c = 1`.
+
 ### Scrypt RFC 7914 model
 
 `Cryptography.Hash.Scrypt.Spec` adapts verified-garbage's `Spec/Scrypt.lean` at the pin, under BSD-3-Clause.
@@ -288,6 +292,9 @@ The propagation loop increments `level` to 32 at line 125, then evaluates `(uint
 C++ leaves that shift undefined.
 The Lean definitions remain total on every finite list and add no rejection rule.
 
+`blockMerkleRoot` takes its leaves from `Transaction.txid`, and Core takes them from the cached `GetHash` (D42, line 163).
+The two differ only for a default-constructed `CTransaction()` or a copy of it, as [Transactions](#transactions) states.
+
 `tests/block/README.md` records the independent fixtures and the limits of their provenance (A1, B1, D3).
 The later header expectations rely on successor commitments or an independent hashlib computation, not Core output.
 The isolated fetched blocks have no authenticated chain connection.
@@ -347,6 +354,13 @@ The source review, not a theorem, connects these definitions to Core.
 `check` takes `fStrictChainId` as a Boolean, because it reads no other field of the parameter record.
 Which record a caller selects, and so which value it passes, is outside this operation.
 The block hash and the chain ID are arguments: `CheckAuxPowProofOfWork` passes the merge-mined header's own hash and its own chain ID (C7 of design record 0004).
+
+The Merkle test of `check` uses `Transaction.txid`, and Core uses the cached `GetHash` (D55, line 100).
+A default-constructed `CAuxPow` holds `CTransaction()`, whose cached hash is zero ([Transactions](#transactions)).
+A payload with that transaction or a copy of it is outside the domain of `check`.
+For example, take a default `CAuxPow` and set both indices to zero, with both branches empty, a zero parent Merkle root and `fStrictChainId` false.
+Core reports that the coinbase has no inputs, and `check` reports `merkleRootIncorrect`.
+Both reject, and Core computes the cache for every payload that it decodes.
 
 `AuxPow.check_eq_ok_iff` characterizes acceptance for every payload and every argument.
 `AuxPow.check_ok_binding` restates it as equalities of hashes and script bytes.
@@ -1046,6 +1060,11 @@ It computes `u1 G + u2 Q` in Jacobian coordinates, converts to affine coordinate
 It rejects a result at infinity.
 The scalar predicate `isLowS` is separate and does not restrict `verify`.
 
+So `verify` accepts a high S, which Core's `secp256k1_ecdsa_verify` rejects before the equation (D52, line 411).
+`verify` corresponds to the inner test `secp256k1_ecdsa_sig_verify`, and `Script.coreVerifier` normalizes S before it calls `verify`.
+`Point.isOnCurve` is true for infinity, where Core's `secp256k1_ge_is_valid_var` returns 0 (D58, lines 260 to 270).
+The two agree on every affine point, and `verify` rejects the key at infinity with its own test.
+
 The arithmetic adapts EthLib at `bb6dfe55198243682bc2eaf94611af2dbce1be6f` without changes to its formulas (SOURCES.md E7 to E11).
 The source argument for Core's verification equation is design record 0005, section 4.3.
 That argument requires parsed points and scalars, and is not an equivalence theorem about the arithmetic implementation or Core's compiled code.
@@ -1080,6 +1099,9 @@ It omits the subgroup test, which returns true outside libsecp256k1's exhaustive
 `Script.coreVerifier` is `CPubKey::Verify` (D50, lines 168 to 186) on a 64-bit build.
 It runs Core's steps in order: `isValidPubKey`, `parsePubKey`, the empty-signature test, `parseDerLax`, S normalization and `Ecdsa.verify`.
 The theorems are in `DogeLib.Cryptography.Proofs.Secp256k1.PubKey` and `DogeLib.Script.Proofs.CoreVerifier`.
+
+`readCoordinate` reads its whole list as one big-endian integer, and `secp256k1_fe_set_b32` reads exactly 32 bytes (D59).
+The two correspond on a list of exactly 32 bytes, and `parsePubKey` passes no other list.
 
 For every input:
 
@@ -1172,6 +1194,11 @@ The byte order of the integer codecs follows Core's `ser_writedata16` to `ser_wr
 Their bytes are hexadecimal literals whose double SHA-256 is the digest that Core asserts, and their values are the arguments of `CreateGenesisBlock` (SOURCES.md, D9).
 These known answers cover `UInt8` to `UInt64`, pairs, truncated input, and slices that start at a nonzero offset.
 They are not a comparison with Core on other inputs.
+
+Core's `CDataStream` holds its read position in an `unsigned int`, and computes the next position in that type (D21, lines 151 and 347).
+The list decoders return the exact remainder, and the packed decoders hold a natural-number offset.
+With a 32-bit `unsigned int`, they agree with the stream while the read position plus the size of the read is below 2^32.
+Above that bound Core's position wraps, and the codecs and readers make no claim about the stream.
 
 ### Packed codecs
 
@@ -1407,6 +1434,12 @@ For all bytes, transactions and remainders:
 `Transaction.txid_val` says that the bytes of the transaction ID are the double SHA-256 digest of the base serialization.
 So `txid` never takes the fallback branch of `digestToHash256`.
 This says nothing about which values a digest can take.
+
+`txid` is `CTransaction::ComputeHash`, and Core's `GetHash` returns a cached value.
+The default constructor `CTransaction()` stores zero there (D23, lines 78 to 81), and a copy of an object copies its cache.
+The constructors from `CMutableTransaction` and from a stream store `ComputeHash()`.
+So `txid` is `GetHash`, and `WitnessTransaction.wtxid` is `GetWitnessHash`, for every `CTransaction` except a default-constructed one and its copies.
+Core's deserialization and its conversion from `CMutableTransaction` compute the cache, so no decoded transaction has the zero cache.
 
 These theorems relate the reader to the codec, and the codec to a reading of D4 (A1).
 No theorem classifies every error against an independent Core error relation, or proves that the order of reads is Core's.
@@ -1698,6 +1731,12 @@ For the state:
 
 `truncated` reports the opcode byte and the short part, where Core returns `OP_INVALIDOPCODE` and an empty vector.
 Both `atEnd` and `truncated` correspond to Core's `false`.
+
+The correspondence with `GetOp2` covers a script of fewer than 2^31 bytes.
+Core's `CScript` is a `prevector` with a `uint32_t` size and an `int32_t` iterator difference (`src/prevector.h`, line 34).
+`GetOp2` tests `end() - pc` in that type, and converts it to `unsigned int` before the test of the push size (D24, line 543).
+`readOp` and `readInstruction` compare natural-number lengths, and `isPushOnly` and `scriptCodeBytes` inherit the bound.
+`EvalScript` rejects a script above 10,000 bytes before it reads an instruction, so the bound concerns only direct calls of those four definitions.
 
 `evalInstruction_wellFormed` in [Script evaluation](#script-evaluation-one-evalscript-call) shows that each successful step of the evaluator keeps these invariants and the combined stack limit.
 The hand-off theorems cover the two `EvalScript` calls of `VerifyScript`, not the P2SH copy and restore of the stack.

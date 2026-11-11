@@ -52,9 +52,13 @@ For example, the script `4c 05 aa` is written as `03 4c 05`.
 Core holds `nIn`, the input count `nInputs`, the output count `nOutputs` and `nIn + 1` in `unsigned int` variables.
 Here those values are reduced modulo 2^32 where Core reduces them.
 That happens only for a transaction with at least 2^32 inputs or outputs, or for SINGLE with `nIn = 0xffffffff`, where `nIn + 1` is 0.
+
 Core computes the script-code count as `scriptCode.size() - nCodeSeparators` in `unsigned int`.
 Here it is computed in `Nat`.
-A `CScript` stores its size in an `unsigned int`, so a script of 2^32 bytes or more has no Core counterpart, and the two computations differ only there.
+A `CScript` stores its size in an `unsigned int`, so a script of 2^32 bytes or more has no Core counterpart.
+The two computations differ only there.
+
+The instruction reader has a smaller domain, a script of fewer than 2^31 bytes, which `readOp` states.
 
 ## Not specified here
 
@@ -115,6 +119,13 @@ One instruction from the start of a script, as `CScript::GetOp2` reads it (D24, 
 An opcode below `0x4c` pushes that many bytes. `OP_PUSHDATA1`, `OP_PUSHDATA2` and `OP_PUSHDATA4` (`0x4c`, `0x4d`, `0x4e`) push the number of bytes in their next 1, 2 or 4 bytes, in little-endian order.
 Every other opcode is one byte.
 When the length bytes are short, the cursor stops after the opcode. When the data is short, it stops after the length bytes.
+
+The correspondence with `GetOp2` covers a script of fewer than 2^31 bytes.
+Core's `CScript` is a `prevector` with a `uint32_t` size and an `int32_t` iterator difference (`src/prevector.h`, line 34).
+`GetOp2` tests `end() - pc` in that type, and converts it to `unsigned int` before the test of the push size (D24, line 543).
+Here every length is a natural number.
+A longer script gives a pointer difference that does not fit `int32_t`, and this definition makes no claim about Core there.
+`EvalScript` rejects a script above 10,000 bytes before it reads an instruction (D3, line 266).
 -/
 def readOp : List UInt8 → OpRead
   | [] => .stop []

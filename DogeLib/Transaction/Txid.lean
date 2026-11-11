@@ -32,7 +32,16 @@ def digestToHash256 (d : ByteArray) : Hash256 :=
   | some h => h
   | none => Hash256.zero
 
-/-- The transaction ID: the double SHA-256 of the base serialization, `CTransaction::ComputeHash` (D23). -/
+/--
+The transaction ID: the double SHA-256 of the base serialization, `CTransaction::ComputeHash` (D23).
+
+Core's `CTransaction::GetHash` returns a cached value.
+The default constructor `CTransaction()` stores zero in the cache (D23, lines 78 to 81), and a copy of an object copies its cache.
+The constructors from `CMutableTransaction` and from a stream store `ComputeHash()`.
+So `txid` is `GetHash` for every `CTransaction` except a default-constructed one and its copies.
+That object has version 1, no inputs, no outputs and lock time 0, and `txid` gives the digest of those fields.
+Core's deserialization and its conversion from `CMutableTransaction` both compute the cache.
+-/
 def Transaction.txid (tx : Transaction) : Hash256 :=
   digestToHash256 (Cryptography.Hash.Sha256d.hash (Codec.encode tx).toByteArray)
 

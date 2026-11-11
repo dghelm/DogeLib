@@ -39,7 +39,12 @@ The parser is written from these sources. It is not adapted from EthLib, whose d
 
 namespace DogeLib.Cryptography.Secp256k1
 
-/-- A coordinate from 32 big-endian bytes: `secp256k1_fe_set_b32`, which fails when the value is at least `p`. -/
+/--
+A coordinate from 32 big-endian bytes: `secp256k1_fe_set_b32`, which fails when the value is at least `p`.
+
+The correspondence covers a list of exactly 32 bytes, which is what `parsePubKey` passes.
+`secp256k1_fe_set_b32` reads exactly 32 bytes, and this definition reads the whole list as one big-endian integer.
+-/
 def readCoordinate (bytes : List UInt8) : Option Fp :=
   let v := ofBytesBE bytes
   if h : v < Fp.modulus then some ⟨v, h⟩ else none

@@ -15,8 +15,11 @@ characters 7 to 13 of its display form, and zero digits elsewhere.
 The run is exit condition 5 of design record 0010, section 4. It is not part
 of CI. A full run sends 2^29 cases in 8,192 requests of 65,536 cases.
 
-The script fails if the programs disagree on any case, or if either gives an
-error. An oracle error includes `fuel_exhausted`, so a pass shows that the
+The script fails if the programs disagree on any case, if either gives an
+error, or if either ends with a nonzero status. It first requires the format
+name of the oracle from the first program and the name of the Core projection
+from the second, and each response must have the fields of its program. So
+the oracle cannot stand in for the harness. An oracle error includes `fuel_exhausted`, so a pass shows that the
 fuel of the oracle suffices on every seed. The summary, also written to
 DIR/summary.json, records the largest number of redraws that the oracle
 reports, and the Boost release of the harness.
@@ -30,6 +33,7 @@ import subprocess
 import sys
 import time
 
+ORACLE_FORMAT = "dogelib-oracle/1"
 SEEDS = 1 << 28
 BATCH = 65536
 # One height in each random range (D104, line 138).
@@ -66,16 +70,20 @@ def run_range(job: tuple[str, str, int, int]) -> dict:
                            "cases": [{"height": height, "prev_hash_hex": prev_hash_hex(seed)} for seed in seeds]}
                 ours, core = (ask(program, request) for program in programs)
                 result["cases"] += len(seeds)
-                a, b = ours.get("ok", {}), core.get("ok", {})
+                a, b = ours.get("ok"), core.get("ok")
+                a, b = (a if isinstance(a, dict) else {}), (b if isinstance(b, dict) else {})
+                # Each program has its own projection: the oracle counts redraws, the harness names Boost.
                 if (ours.get("id") != request["id"] or core.get("id") != request["id"] or
+                        set(a) != {"subsidies", "redraws"} or set(b) != {"subsidies", "boost_version"} or
+                        not isinstance(b["boost_version"], str) or
                         not isinstance(a.get("subsidies"), list) or not isinstance(b.get("subsidies"), list) or
                         not isinstance(a.get("redraws"), list) or
                         not len(a["subsidies"]) == len(b["subsidies"]) == len(a["redraws"]) == len(seeds)):
                     result["failures"].append({"height": height, "first_seed": start,
                                                "oracle": json.dumps(ours)[:300], "core": json.dumps(core)[:300]})
                     continue
-                if b.get("boost_version") not in result["boost"]:
-                    result["boost"].append(b.get("boost_version"))
+                if b["boost_version"] not in result["boost"]:
+                    result["boost"].append(b["boost_version"])
                 histogram = result["redraws"][str(height)]
                 for seed, x, y, redraws in zip(seeds, a["subsidies"], b["subsidies"], a["redraws"]):
                     if x != y or type(redraws) is not int:
@@ -86,7 +94,10 @@ def run_range(job: tuple[str, str, int, int]) -> dict:
     finally:
         for program in programs:
             program.stdin.close()
-            program.wait()
+            status = program.wait()
+            if status != 0:
+                result["failures"].append({"error": f"{program.args[0]} ended with status {status}",
+                                           "first_seed": first})
     return result
 
 
@@ -101,6 +112,16 @@ def main() -> int:
     args = parser.parse_args()
     if not (0 <= args.first and 0 < args.count and args.first + args.count <= SEEDS and args.jobs > 0):
         parser.error("the seeds must lie in 0 to 2^28 - 1, and --jobs must be positive")
+
+    for program, expected in ((args.oracle, ORACLE_FORMAT), (args.harness, ORACLE_FORMAT + "-core-projection")):
+        version = subprocess.run([program, "--version"], capture_output=True, text=True)
+        try:
+            found = json.loads(version.stdout).get("format") if version.returncode == 0 else None
+        except (ValueError, AttributeError):
+            found = None
+        if found != expected:
+            print(f"FAIL VERSION {program} --version must give the format {expected}, got {found!r}")
+            return 1
 
     started = time.time()
     # Each job is a whole number of requests, so a worker returns to the pool often.

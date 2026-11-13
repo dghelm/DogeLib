@@ -8,7 +8,8 @@ public import Lean.OriginalConstKind
 
 The attribute `theorem_tag` labels a theorem that a document cites as evidence, such as COVERAGE.md or SOUNDNESS.md.
 A tag says what kind of evidence the theorem is.
-A theorem with no tag is internal: a step of another proof.
+A theorem with no tag is unclassified.
+It can be a step of another proof, or a cited theorem without a tag.
 
 ```text
 @[theorem_tag property]

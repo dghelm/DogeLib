@@ -82,7 +82,7 @@ A new layer adds its proof root to the `Proofs` library and, if it has an adapte
 It defines the attribute `theorem_tag`, which labels a theorem that a document cites as evidence.
 The five tags are `property`, `model_agreement`, `refinement`, `characterization` and `witness`.
 A proof module imports it with `import` and `meta import`, because Lean runs the attribute when it elaborates the theorem.
-A theorem with no tag is internal.
+A theorem with no tag is unclassified. The theorems of earlier modules have no tags yet.
 
 ## Layers
 

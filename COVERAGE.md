@@ -14,7 +14,7 @@ What DogeLib implements, per operation and per kind of evidence ([CONTRIBUTING.m
 
 Use *conditional* in the Theorems column when a theorem depends on a hypothesis that no caller yet discharges.
 A word in italics after a theorem name, such as *property* or *witness*, is the tag that the theorem has in the Lean source ([`theorem_tag`](ARCHITECTURE.md#layout)).
-A theorem name with no such word has no tag.
+A theorem name with no such word has no tag, which says nothing about its kind.
 
 ## Operations
 

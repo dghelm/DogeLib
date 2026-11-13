@@ -222,6 +222,7 @@ class Reports(unittest.TestCase):
             'campaign-proposal-search': 'python3 -I scripts/campaign.py run --campaign proposal --variant corrected --seed 0 --cases 374480 --output build/campaign/proposal .lake/build/bin/dogelib-oracle .lake/build/bin/proposal-replay',
             'campaign-regtest-replay': 'python3 -I scripts/test_campaign_production.py .lake/build/bin/dogelib-oracle build/core-harness/core-oracle --node build/core-node',
             'subsidy-seeds': 'python3 -I scripts/compare_subsidy_seeds.py --jobs 8 --output build/subsidy-seeds .lake/build/bin/dogelib-oracle build/core-harness/core-oracle',
+            'subsidy-seeds-self-test': 'python3 -I scripts/test_compare_subsidy_seeds.py .lake/build/bin/dogelib-oracle',
             'core-harness-state': 'python3 -I scripts/test_core_harness.py .lake/build/bin/dogelib-oracle build/core-harness/core-oracle',
             'comparator-self-test': 'python3 -I scripts/test_compare_core.py .lake/build/bin/dogelib-oracle',
             'writing-checker-tests': 'uv run --no-project --python 3.12 python -m unittest scripts/test_check_writing.py',

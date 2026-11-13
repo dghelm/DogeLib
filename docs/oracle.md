@@ -1134,7 +1134,7 @@ With Boost 1.70.0 every case agrees.
 The oracle reports one redraw for 30 of the 145,000 mainnet heights, and no case has more than one.
 `scripts/test_oracle.py` checks the fixed schedule, the recorded Core values and the request errors without Core.
 
-Agreement on the mainnet heights covers 145,000 of the `2^28` seeds, at the height of each.
+The 144,999 mainnet heights with a random subsidy hold 144,965 distinct seeds of the `2^28`, each at the height of its block.
 `scripts/compare_subsidy_seeds.py` covers every seed outside CI.
 It sends all `2^28` seeds at height 1, where `maxReward` is 999,999, and at height 100,000, where it is 499,999.
 It fails on any disagreement and on any error, so a pass shows that 624 words of fuel suffice for every seed.

@@ -29,7 +29,9 @@ The size test uses the base serialization, and the Merkle root uses transaction 
 
 Core returns `true` at once when `block.fChecked` is set (line 2943).
 It sets that member after a call that passes with both flags true (lines 2996 and 2997).
-A block that Core reads from a stream has `fChecked` false.
+A new `CBlock` has `fChecked` false, and the reader does not change that member (D108).
+So a block that Core reads into a new object has `fChecked` false.
+A read into an object that already has the member set keeps it set, and `checkBlock` does not describe a call on that object.
 `checkBlock` is the function for a block with `fChecked` false, and it has no state.
 
 ## Integer semantics

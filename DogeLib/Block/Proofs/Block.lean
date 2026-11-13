@@ -52,7 +52,8 @@ def Block.RoundTripsBase (b : Block) : Prop :=
     b.vtx.val.length ≤ 0x02000000 ∧
     ∀ w ∈ b.vtx.val, w.tx.WithinMaxSize
 
-/-- The block with every witness stack replaced by an empty one, in the header's payload and in each transaction: what a base-mode read of its base-mode encoding returns. -/
+/-- The block with every witness stack replaced by an empty one, in the header's payload and in each transaction.
+A base-mode read of its base-mode encoding returns this block. -/
 def Block.baseProjection (b : Block) : Block :=
   ⟨b.header.baseProjection,
     ⟨b.vtx.val.map fun w => WitnessTransaction.ofBase w.tx, by

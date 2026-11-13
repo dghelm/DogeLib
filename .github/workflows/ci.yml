@@ -131,6 +131,11 @@ jobs:
         if: ${{ !cancelled() }}
         run: python3 -I scripts/test_validation_report.py
 
+      # The real-block fetch needs the maintainer's node. Its checks run here on synthetic blocks.
+      - name: block fetch tool tests
+        if: ${{ !cancelled() }}
+        run: python3 -I scripts/test_fetch_blocks.py
+
       # Every vendored vector file must match its pinned digest.
       - name: pinned vectors
         if: ${{ !cancelled() }}

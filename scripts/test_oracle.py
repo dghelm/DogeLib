@@ -457,13 +457,74 @@ def check_subsidy(oracle):
     return failures
 
 
+def check_block_check(oracle):
+    """The known answers and the argument rules of tx.check and block.check.
+
+    Every expected verdict is in scripts/oracle_block_check.py, beside the lines of Core's
+    text that fix it. It is a reject reason of CheckTransaction or CheckBlock
+    (src/validation.cpp, lines 527 to 574 and 2927 to 3000), or none.
+    The expected signature operation counts follow GetSigOpCount (src/script/script.cpp, lines 156 to 177).
+    The expected sizes are lengths of the request bytes, and the expected hashes come from hashlib.
+    The score, the code and the corruption flag of each reason are in TX_REASONS and BLOCK_REASONS.
+    `diagnostic` is a Lean value with no independent expectation. Only its form is checked."""
+    from oracle_block_check import block_check_sets, tx_request, block_request, genesis_block, EXPECTATIONS, key, malformed, unexpected
+    requests = [req for _, reqs in block_check_sets() for req in reqs if key(req) in EXPECTATIONS]
+    known = len(requests)
+    genesis = genesis_block()
+    tx, block = tx_request(genesis[81:]), block_request(genesis)
+    # Each operation takes exactly its own arguments: two modes, Boolean flags and whole bytes in hexadecimal.
+    for bad in [
+        {"op": "tx.check"},
+        {k: v for k, v in tx.items() if k != "mode"},
+        {k: v for k, v in tx.items() if k != "check_duplicate_inputs"},
+        {k: v for k, v in tx.items() if k != "tx_hex"},
+        {**tx, "check_pow": False},
+        {**tx, "mode": "witness"},
+        {**tx, "mode": 0},
+        {**tx, "check_duplicate_inputs": 1},
+        {**tx, "check_duplicate_inputs": "true"},
+        {**tx, "check_duplicate_inputs": None},
+        {**tx, "tx_hex": tx["tx_hex"][:-1]},
+        {**tx, "tx_hex": "zz"},
+        {**tx, "tx_hex": 1},
+        {"op": "block.check"},
+        {k: v for k, v in block.items() if k != "mode"},
+        {k: v for k, v in block.items() if k != "check_pow"},
+        {k: v for k, v in block.items() if k != "check_merkle_root"},
+        {k: v for k, v in block.items() if k != "block_hex"},
+        {**block, "network": "mainnet"},
+        {**block, "mode": "allow-witness"},
+        {**block, "check_pow": 0},
+        {**block, "check_merkle_root": "false"},
+        {**block, "block_hex": block["block_hex"][:-1]},
+        {**block, "block_hex": "0g"},
+        {**block, "block_hex": []},
+    ]:
+        requests.append(bad)
+    got = run_requests(oracle, "block check", [{**req, "id": i} for i, req in enumerate(requests)])
+    if got is None:
+        return 1
+    failures = 0
+    for i, (req, response) in enumerate(zip(requests, got)):
+        if i >= known:
+            fault = None if matches({k: v for k, v in response.items() if k != "id"}, {"error": {"kind": "request"}}) else "expected a request error"
+        else:
+            fault = malformed(req, response["ok"], True) if "ok" in response else None
+            fault = fault or unexpected(response, EXPECTATIONS[key(req)])
+        if fault:
+            failures += 1
+            print(f"FAIL block check {i}: {fault}: {json.dumps(req)[:200]} -> {json.dumps(response)[:300]}")
+    print(f"block check oracle: {known} known answers and {len(requests) - known} argument cases, {failures} failures")
+    return failures
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print(__doc__)
         return 2
     oracle = sys.argv[1]
     failures = (check_fixtures(oracle) + check_sighash_corpus(oracle) + check_tx_corpus(oracle)
-                + check_header_sequences(oracle) + check_contextual(oracle) + check_header_pow(oracle) + check_witness_corpus(oracle) + check_hash_block_fixtures(oracle) + check_process(oracle) + check_script_adapter_limits(oracle) + check_subsidy(oracle))
+                + check_header_sequences(oracle) + check_contextual(oracle) + check_header_pow(oracle) + check_witness_corpus(oracle) + check_hash_block_fixtures(oracle) + check_process(oracle) + check_script_adapter_limits(oracle) + check_subsidy(oracle) + check_block_check(oracle))
     print("PASS" if failures == 0 else f"FAIL: {failures} failures")
     return 0 if failures == 0 else 1
 

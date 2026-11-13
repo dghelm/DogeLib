@@ -126,13 +126,13 @@ A property of an application template belongs in a downstream project.
 ### Block validity
 
 The next milestone is block validity.
-DogeLib has no definition of `CheckTransaction`, `CheckBlock`, `ContextualCheckBlock` or `ConnectBlock`, so the oracle cannot judge a block.
+DogeLib has no definition of `ContextualCheckBlock` or `ConnectBlock`, so the oracle cannot judge a block in its context.
 [Design record 0010](docs/design/0010-block-validity.md) defines the milestone. The maintainer adopted it on 2026-11-13.
 
 | Stage | Deliverable | Status |
 | --- | --- | --- |
 | 0 | The harness compiles Core's `src/validation.cpp`. `block.contextual_check` and `block.header_sequence` call Core's own functions. | Implemented |
-| 0010a | Block checks without coins: `CheckTransaction`, `CheckBlock`, `ContextualCheckBlock`, the subsidy and the version-bits state, compared with Core on two mainnet ranges and on mutations | Started. The mainnet subsidy and `block.subsidy` are implemented ([COVERAGE.md](COVERAGE.md#operations), *Block subsidy*). The other parts are not started. |
+| 0010a | Block checks without coins: `CheckTransaction`, `CheckBlock`, `ContextualCheckBlock`, the subsidy and the version-bits state, compared with Core on two mainnet ranges and on mutations | Started. The mainnet subsidy with `block.subsidy`, the block codec, `CheckTransaction` and `CheckBlock` with `tx.check` and `block.check` are implemented and compared on mutations ([COVERAGE.md](COVERAGE.md#operations)). The comparison on real mainnet blocks waits for the fetch of the fixtures (`scripts/fetch_blocks.py`). `ContextualCheckBlock` and the version-bits state are not started. |
 | 0010b | Block connection: the coin set, `ConnectBlock` and `block.validate`, replayed with Core | Not started |
 | 0010c | Properties of connection: available spends, the value bound and the issuance bound | Not started |
 

@@ -1078,6 +1078,66 @@ Its cases include every mainnet height from 1 to 145,000.
 By `#print axioms`, `Mt19937.output_seed_eq` and `Mt19937.output_seed_10000` depend on `propext` and `Quot.sound`.
 `uniformInt_preimages` depends on `propext`, `Classical.choice` and `Quot.sound`.
 
+### Block codec, `CheckTransaction` and `CheckBlock`
+
+`Block.read` and `Block.encode` in `DogeLib.Block.Block` follow `CBlock::SerializationOp` (D108): a full header, a CompactSize count and the transactions.
+`checkTransaction` in `DogeLib.Transaction.Check` follows Core's `CheckTransaction`, and `checkBlock` in `DogeLib.Block.Check` follows `CheckBlock` (D106).
+`Transaction.getLegacySigOpCount` in `DogeLib.Transaction.SigOps` follows `GetLegacySigOpCount` with `CScript::GetSigOpCount(false)` (D106, D107).
+They are the second part of design record 0010, stage 0010a.
+The source review, not a theorem, connects these definitions to Core.
+
+Each check returns Core's first failure in source order.
+An error has the reject reason, the denial-of-service score and the reject code that Core's `CValidationState` holds, and `checkBlock` also gives `CorruptionPossible`.
+`checkBlock` reports each failure of the header check as `high-hash`, as `CheckBlockHeader` does.
+
+The definitions differ from the C++ in these places:
+
+- `CheckBlock` returns true at once when the memory-only member `fChecked` is set. `checkBlock` has no such state. It is the check of a block with `fChecked` false. A block that Core reads into a new `CBlock` has that state. The reader does not clear the member, so a read into an object with `fChecked` set is outside the definition.
+- `checkOutputs` adds the output amounts in the integers. Core adds in `int64_t`, and the sum there is at most `2 * MAX_MONEY`, below `2^63`. That bound is an argument in the module documentation, not a theorem.
+- The counts of signature operations are natural numbers. Core counts in `unsigned int`. `checkBlock` reduces the product with `WITNESS_SCALE_FACTOR` modulo `2^32` before the comparison, so the two agree for every count.
+- `hasDuplicate` compares outpoints pair by pair, where Core inserts them into a `std::set`.
+- The instruction reader of the sigop count covers a script of fewer than `2^31` bytes, the domain of `readOp`.
+- `checkBlock` takes the network of its header check as a parameter. The oracle and the comparison use mainnet, and testnet and regtest have no comparison evidence here.
+
+No statement of `CheckTransaction` or `CheckBlock` reads a witness stack, so the definitions take the base fields of each transaction.
+A block with witness data can pass `checkBlock`. `ContextualCheckBlock` rejects such a block on main and test, and DogeLib does not define that function yet.
+
+`Block.read_encode_allowWitness` and `Block.read_encode_base` are round trips over encoder output, under the conditions `Block.RoundTripsAllowWitness` and `Block.RoundTripsBase`.
+Those conditions bound every count by `MAX_SIZE` and require a payload exactly when the AuxPoW flag is set.
+In the witness-allowed mode each transaction must also have witness data, or an input, or no output.
+The base-mode reader returns the base projection of the block, without witness stacks.
+Neither theorem says that an accepted byte string is the encoding of its result, and neither says which error the reader reports.
+
+`MerkleDuplication.root_eq_and_mutated` is about `merkleRoot` and `merkleMutated`.
+`MerkleDuplication xs ys` holds when `ys` comes from `xs` by one or more duplications of a trailing subtree.
+One step appends a copy of the last `2^k` hashes of a list of `2^k * c` hashes, for an odd `c` of at least 3.
+The theorem shows that `ys` has the root of `xs` and sets the mutation flag.
+It assumes nothing about SHA-256.
+
+`checkBlock_rejects_merkleDuplication` carries that result to blocks.
+Let `checkBlock` accept a block with the Merkle check, and let a second block have the same header and a `MerkleDuplication` of its transaction IDs.
+Then `checkBlock` rejects the second block with `duplicateTransactions`, the reject reason `bad-txns-duplicate`.
+A definition that compared only the root would accept both blocks, which is the fault of CVE-2012-2459.
+The theorem does not cover two lists with one root for another cause, such as a hash collision.
+It is a statement about `checkBlock`, and it does not show that Core's `CheckBlock` has the property.
+
+`Script.getSigOpCount_le` bounds the count of a script by 20 times the number of its bytes.
+It does not bound the count of a block, and no theorem shows that Core's `unsigned int` count never wraps.
+`checkBlock` needs no such theorem, because it takes the product modulo `2^32`.
+
+No theorem relates `checkTransaction` to a property of the outputs, and none states which failure comes first.
+The comparison with Core tests the order of the failures ([COVERAGE.md](COVERAGE.md#operations)).
+
+The comparison evidence is in [COVERAGE.md](COVERAGE.md#operations).
+`lake test` runs Core's corpus, Core's sigop test and the genesis block through the compiled code.
+Two records of `tx_invalid.json` have comments that name `MAX_MONEY`, with amounts near the bound of Bitcoin, 2,100,000,000,000,000.
+Dogecoin's bound is `10^18`, so `CheckTransaction` accepts both records, and they fail Core's test for another reason.
+The oracle operations `tx.check` and `block.check` compare the definitions with Core's own functions ([B4](#b4-the-oracle-and-foreign-boundaries)).
+[docs/reviews/blockcheck.md](docs/reviews/blockcheck.md) records a model read of the definitions against Core.
+
+By `#print axioms`, `MerkleDuplication.root_eq_and_mutated` and `Script.getSigOpCount_le` depend on `propext` and `Quot.sound`.
+`checkBlock_rejects_merkleDuplication`, `Block.read_encode_allowWitness` and `Block.read_encode_base` depend on `propext`, `Classical.choice` and `Quot.sound`.
+
 ### RIPEMD-160 and Hash160
 
 `Ripemd160.hash` adapts EthLib's executable definition at `6a93711`, as SOURCES.md records.
@@ -3182,6 +3242,16 @@ It adds `boost_version`, the release of the Boost headers that Core's function w
 The oracle adds `redraws`, the number of words that the draw rejected.
 Core does not report that number, so the comparison checks only its form.
 The adapter refuses more than 65,536 cases in one request, a limit that Core does not have.
+
+For `tx.check` the harness calls Core's `CheckTransaction` on a `CTransaction` that Core's stream code reads from the request.
+For `block.check` it selects mainnet and calls Core's `CheckBlock` on a `CBlock` that Core's stream code reads.
+The block is a new object in each request, so its member `fChecked` is false at the call.
+The harness stops if that member is set.
+
+The harness also calls `GetLegacySigOpCount` and `GetSerializeSize`, and reports their values for every verdict.
+The oracle adds `diagnostic`, the Lean error with the position of a rejected transaction.
+Core does not report it, so the comparison checks only its form.
+The oracle reads blocks and transactions as byte lists, and `block.check` has no size limit of its own.
 
 Any later foreign boundary, such as a C or Rust binding, is listed here with its size and its error handling.
 

@@ -120,7 +120,7 @@ def checkOutputs (nValueOut : Int) : List TxOut → Except CheckTransactionError
 Whether two entries of the list are equal.
 Core inserts each outpoint of `vin` into a `std::set<COutPoint>`, and fails at the first insertion that finds an equal member (D106, lines 553 to 558).
 An insertion fails exactly when some earlier outpoint has the same hash and the same index (`operator<`, D4, lines 43 to 47).
-The test needs a number of comparisons that is quadratic in the length of the list.
+The number of comparisons is quadratic in the length of the list.
 -/
 def hasDuplicate : List OutPoint → Bool
   | [] => false

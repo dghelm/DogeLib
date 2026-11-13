@@ -50,6 +50,7 @@ from oracle_header_sequence import sequence_sets, EXPECTATIONS as SEQUENCE_EXPEC
 from oracle_contextual import contextual_sets, EXPECTATIONS as CONTEXT_EXPECTATIONS, key as context_key
 from oracle_header_pow import header_pow_sets, CODES as HEADER_CODES, EXPECTATIONS as HEADER_EXPECTATIONS, key as header_key
 from oracle_subsidy import subsidy_sets, compare as compare_subsidy
+from oracle_block_check import block_check_sets, corpus_requests as check_corpus_requests, compare as compare_block_check, reasons_reached, reasons_missing, LABELS as CHECK_LABELS, QUICK_SET as CHECK_QUICK_SET
 
 ORACLE_FORMAT = "dogelib-oracle/1"
 MAX_SIZE = 0x02000000
@@ -62,6 +63,7 @@ MAX_REPORTS = 10
 # docs/oracle.md, "The comparison", quotes this table and its sum.
 EXPECTED_OPERATION_COUNTS = {
     "auxpow.check": 404,
+    "block.check": 2064,
     "block.check_pow": 806,
     "block.check_version": 207,
     "block.contextual_check": 2903,
@@ -83,6 +85,7 @@ EXPECTED_OPERATION_COUNTS = {
     "script.verify_legacy": 8093,
     "scrypt.hash": 272,
     "sighash.legacy": 4425,
+    "tx.check": 1384,
     "tx.decode_base": 37694,
     "tx.decode_witness": 45958,
     "tx.read_base": 137991,
@@ -665,7 +668,7 @@ def set_hash_boundaries(algorithm: str) -> list[dict]:
 
 
 QUICK_SEQUENCE_MUTATIONS = 8
-QUICK_SETS = ("subsidy boundaries and fixed schedule", "header sequence regtest 34", "header sequence state boundaries", "contextual boundaries", "header PoW fixtures", "full header readers", "header version boundaries", "pubkey Core signatures", "Script signature verdict", "fixtures", "compactsize", "sighash endpoints", "witness flags and stacks",
+QUICK_SETS = (CHECK_QUICK_SET, "subsidy boundaries and fixed schedule", "header sequence regtest 34", "header sequence state boundaries", "contextual boundaries", "header PoW fixtures", "full header readers", "header version boundaries", "pubkey Core signatures", "Script signature verdict", "fixtures", "compactsize", "sighash endpoints", "witness flags and stacks",
               "work compact boundaries", "regtest legacy wrap case", "work missing skip traversal", "header field boundaries", "Merkle generated",
               "RIPEMD-160 padding boundaries", "Hash160 padding boundaries", "SHA-1 padding boundaries", "Script reader truncations", "Script resource boundaries", "Script resource boundaries base",
               "Script legacy corpus base", "Script legacy corpus transaction", "Script harness refusal domain", "Script refusal precedence",
@@ -729,6 +732,8 @@ def request_sets() -> tuple[list[tuple[str, list[dict]]], list[str]]:
     sets.extend(contextual_sets())
     sets.extend(sequence_sets())
     sets.extend(subsidy_sets())
+    sets.extend(block_check_sets())
+    sets.append(("tx.check corpus", check_corpus_requests(corpus, witness_corpus)))
     sets.extend(pubkey_sets())
     sets.append(("Script signature verdict", signature_spends()))
     sets.append(("Script campaign fixtures", campaign_fixtures()))
@@ -846,6 +851,8 @@ def compare(req: dict, ours: dict, core: dict, peer: str = "core") -> tuple[str,
             return "REQUEST_ERROR", f"{side} rejected the request: {resp['error'].get('message')}"
     if req["op"] == "block.subsidy":
         return compare_subsidy(req, ours, core, peer)
+    if req["op"] in CHECK_LABELS:
+        return compare_block_check(req, ours, core, peer)
     if req["op"] == "block.contextual_check":
         for side, response in (("oracle", ours), (peer, core)):
             if "ok" not in response:
@@ -1210,6 +1217,17 @@ def main() -> int:
         print(f"block.subsidy: {sum(len(a.get('ok', {}).get('subsidies', [])) for a, _ in subsidy)} cases, "
               f"harness Boost {', '.join(versions)}, {sum(1 for r in redraws if r)} cases with a redraw, "
               f"largest number of redraws {max(redraws, default=0)}")
+    if not args.rust_compactsize:
+        # Design record 0010, section 4, lists the reject reasons that a request can reach.
+        # A full run fails when Core returned one of them for no request.
+        reached = reasons_reached(requests, core)
+        for op in sorted(reached):
+            print(f"{op}: {sum(reached[op].values())} requests, Core's results: " +
+                  ", ".join(f"{name} {count}" for name, count in sorted(reached[op].items())))
+        if not args.quick:
+            for missing in reasons_missing(reached):
+                failures.append("REASON_NOT_REACHED")
+                print(f"FAIL REASON_NOT_REACHED Core returned {missing} for no request")
     if not args.quick and not args.rust_compactsize:
         failures.extend(compare_adapter_limits(args.oracle, args.harness, args.timeout))
         failures.extend(compare_compositions(args.oracle, args.harness, args.timeout))

@@ -231,6 +231,7 @@ class Reports(unittest.TestCase):
             'full-header-fixture-check': 'python3 -I scripts/check_full_headers.py',
             'header-sequence-regeneration': 'python3 -I scripts/generate_header_sequences.py --check',
             'validation-report-tests': 'python3 -I scripts/test_validation_report.py',
+            'block-fetch-tool-tests': 'python3 -I scripts/test_fetch_blocks.py',
             'lane-tool': 'bash scripts/test_lane.sh',
         }
         self.assertEqual({g['slug']: g['command'] for g in gates}, expected)

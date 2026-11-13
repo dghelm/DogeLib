@@ -15,7 +15,8 @@ Each record gives the reader, the date, the DogeLib and Core revisions, the scop
 Line numbers in a record refer to those revisions.
 All reads are by GPT-6 through Codex, at Core `e0a1c157791544e818c901bd9341896965afbf9d`.
 The first seven are of 2026-11-11, at DogeLib `865754b`.
-The block subsidy read is of 2026-11-13, at DogeLib `4cd73bc`, and it also reads Boost 1.70.0:
+The block subsidy read is of 2026-11-13, at DogeLib `4cd73bc`, and it also reads Boost 1.70.0.
+The block check read is of 2026-11-13, at DogeLib `6ca6373`:
 
 | Area | Record | Brief | Findings |
 | --- | --- | --- | --- |
@@ -27,9 +28,11 @@ The block subsidy read is of 2026-11-13, at DogeLib `4cd73bc`, and it also reads
 | Contextual header validation and header sequences | [headerseq.md](headerseq.md) | [briefs/headerseq.md](briefs/headerseq.md) | None |
 | Cryptography: secp256k1 verification and hashes | [crypto.md](crypto.md) | [briefs/crypto.md](briefs/crypto.md) | 4 domain boundaries |
 | Block subsidy, with Boost's `mt19937` and `uniform_int` | [subsidy.md](subsidy.md) | [briefs/subsidy.md](briefs/subsidy.md) | None |
+| Block codec, `CheckTransaction`, legacy sigop count and `CheckBlock` | [blockcheck.md](blockcheck.md) | [briefs/blockcheck.md](briefs/blockcheck.md) | 1 documentation-only |
 
 No read found a consensus-divergent discrepancy.
-Each finding is a *domain boundary*: an input outside the domain on which a definition corresponds to Core.
+Each finding but one is a *domain boundary*: an input outside the domain on which a definition corresponds to Core.
+The block check read has one finding about documentation alone: a sentence on Core's `fChecked` member that claimed too much.
 The AuxPoW and transaction records report the same boundary, Core's default-constructed transaction.
 The section *After the read* of a record says where the repository states each boundary, and how that statement was checked.
 That section is an addendum, not part of the read.
@@ -38,7 +41,7 @@ That section is an addendum, not part of the read.
 
 Each file in [briefs/](briefs/) is the prompt that produced one record.
 The only change is that placeholders, such as `<DogeLib clone>` and `<Dogecoin Core clone>`, replace the local paths.
-The subsidy brief also has a placeholder for its DogeLib revision.
+The subsidy brief and the block check brief also have a placeholder for their DogeLib revision.
 
 1. Check out DogeLib and Dogecoin Core at the revisions to compare.
 2. Put the two paths and the DogeLib revision in the brief.

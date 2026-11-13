@@ -2,6 +2,8 @@ module
 
 public import DogeLib.Block.AuxPow
 public import DogeLib.Block.AuxPowCheck
+public import DogeLib.Block.Block
+public import DogeLib.Block.Check
 public import DogeLib.Block.ContextualCheck
 public import DogeLib.Block.ContextualParams
 public import DogeLib.Block.Header
@@ -11,4 +13,4 @@ public import DogeLib.Block.ProofOfWork
 public import DogeLib.Block.Subsidy
 public import DogeLib.Block.VersionGate
 
-/-! # Block headers, AuxPoW payloads, transaction Merkle roots, header proof of work, version gating, contextual parameters and checkpoints, contextual header validation, the block-index model, and the block subsidy -/
+/-! # Block headers, AuxPoW payloads, transaction Merkle roots, header proof of work, version gating, contextual parameters and checkpoints, contextual header validation, the block-index model, the block subsidy, the block codec, and `CheckBlock` -/

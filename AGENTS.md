@@ -108,6 +108,7 @@ Report only the checks you ran, with the exact command, revision, and result ([C
 | Full-header fixture check | `python3 -I scripts/check_full_headers.py` | Yes | `ci` / `tools` |
 | Header-sequence regeneration | `python3 -I scripts/generate_header_sequences.py --check` | Yes | `ci` / `tools` |
 | Validation report tests | `python3 -I scripts/test_validation_report.py` | Yes | `ci` / `tools` |
+| Block fetch tool tests | `python3 -I scripts/test_fetch_blocks.py`: the checks of `scripts/fetch_blocks.py` accept synthetic blocks and the genesis block, and fail on each planted fault | Yes | `ci` / `tools` |
 | Lane tool | `bash scripts/test_lane.sh` | Yes | `ci` / `tools` |
 
 The root DogeLib package has no Lake dependencies.

@@ -6,6 +6,7 @@ public import DogeLib.Transaction.Proofs.LegacySighashReader
 public import DogeLib.Transaction.Proofs.LegacySighashReference
 public import DogeLib.Transaction.Proofs.ScanOps
 public import DogeLib.Transaction.Proofs.Serialization
+public import DogeLib.Transaction.Proofs.SigOps
 public import DogeLib.Transaction.Proofs.Txid
 public import DogeLib.Transaction.Proofs.Witness
 

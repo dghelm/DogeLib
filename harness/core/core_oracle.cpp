@@ -17,6 +17,9 @@
 // core_validation.cpp includes Core's validation.cpp for that purpose. The
 // harness builds the block index of each request in memory.
 // block.subsidy calls Core's GetDogecoinBlockSubsidy (SOURCES.md D104).
+// tx.check and block.check call Core's CheckTransaction, CheckBlock and
+// GetLegacySigOpCount (SOURCES.md D106) on objects that Core's own stream
+// code reads from the request.
 //
 // An exception from Core that is not one of the four mapped read errors ends
 // the program with status 3, so it shows as a failed comparison.
@@ -383,6 +386,19 @@ void requireEmpty(const CDataStream& ds)
         error.pushKV("count", static_cast<uint64_t>(ds.size()));
         throw SpecError{error};
     }
+}
+
+// The verdict of CheckTransaction or CheckBlock: Core's return value, and the
+// reject reason, score and code of its CValidationState. A false return
+// without an invalid state is outside the contract of both functions.
+void pushVerdict(UniValue& ok, bool valid, const CValidationState& state, const std::string& function)
+{
+    int score = 0;
+    if (valid == state.IsInvalid(score)) throw UnmappedCoreError{function + " returned a verdict that disagrees with its state"};
+    ok.pushKV("valid", valid);
+    ok.pushKV("reject_reason", valid ? UniValue() : UniValue(state.GetRejectReason()));
+    ok.pushKV("dos", valid ? UniValue() : UniValue(score));
+    ok.pushKV("reject_code", valid ? UniValue() : UniValue(static_cast<int>(state.GetRejectCode())));
 }
 
 UniValue payloadJson(const CAuxPow& a)
@@ -981,6 +997,48 @@ UniValue run(const UniValue& req)
         // The Boost release whose mt19937 and uniform_int Core was compiled with.
         ok.pushKV("boost_version", std::to_string(BOOST_VERSION / 100000) + "." +
                   std::to_string(BOOST_VERSION / 100 % 1000) + "." + std::to_string(BOOST_VERSION % 100));
+    } else if (op == "tx.check") {
+        // Core's CheckTransaction (D106) on a transaction that Core's reader
+        // builds from the whole of tx_hex.
+        checkArgs(req, op, {"tx_hex", "mode", "check_duplicate_inputs"});
+        const auto version = headerStreamVersion(req);
+        const auto bytes = argHex(req, "tx_hex");
+        const bool duplicates = argBool(req, "check_duplicate_inputs");
+        CDataStream ds(bytes, SER_NETWORK, version);
+        const CMutableTransaction mtx = readTransaction(ds);
+        requireEmpty(ds);
+        const CTransaction tx(mtx);
+        CValidationState state;
+        const bool valid = CheckTransaction(tx, state, duplicates);
+        pushVerdict(ok, valid, state, "CheckTransaction");
+        ok.pushKV("legacy_sigops", static_cast<uint64_t>(GetLegacySigOpCount(tx)));
+        ok.pushKV("base_size", static_cast<uint64_t>(::GetSerializeSize(tx, SER_NETWORK, BASE_VERSION)));
+    } else if (op == "block.check") {
+        // Core's CheckBlock (D106) on mainnet. The block is a new object that
+        // Core's reader fills, so its member fChecked is false at the call, and
+        // CheckBlock cannot return early at line 2943. The object ends with the
+        // request, so a call that sets fChecked affects no later request.
+        checkArgs(req, op, {"block_hex", "mode", "check_pow", "check_merkle_root"});
+        const auto version = headerStreamVersion(req);
+        const auto bytes = argHex(req, "block_hex");
+        const bool checkPow = argBool(req, "check_pow");
+        const bool checkMerkle = argBool(req, "check_merkle_root");
+        SelectParams(CBaseChainParams::MAIN);
+        CDataStream ds(bytes, SER_NETWORK, version);
+        CBlock block;
+        try { ds >> block; } catch (const std::ios_base::failure& e) { throw SpecError{mapCoreFailure(e)}; }
+        requireEmpty(ds);
+        if (block.fChecked) throw UnmappedCoreError{"a block from Core's reader has fChecked set"};
+        CValidationState state;
+        const bool valid = CheckBlock(block, state, checkPow, checkMerkle);
+        pushVerdict(ok, valid, state, "CheckBlock");
+        ok.pushKV("corruption_possible", valid ? UniValue() : UniValue(state.CorruptionPossible()));
+        unsigned int sigops = 0;
+        for (const auto& tx : block.vtx) sigops += GetLegacySigOpCount(*tx);
+        ok.pushKV("legacy_sigops", static_cast<uint64_t>(sigops));
+        ok.pushKV("base_size", static_cast<uint64_t>(::GetSerializeSize(block, SER_NETWORK, BASE_VERSION)));
+        ok.pushKV("transactions", static_cast<uint64_t>(block.vtx.size()));
+        pushHash(ok, "hash", block.GetHash());
     } else if (op == "work.next" || op == "block.contextual_check") {
         const bool contextual = op == "block.contextual_check";
         if (contextual) checkArgs(req, op, {"bytes_hex", "network", "chain", "adjusted_time", "checkpoints_enabled", "known_checkpoints"});

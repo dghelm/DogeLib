@@ -46,6 +46,11 @@ MUTATIONS = {
     "subsidy_value": ("core", "SUBSIDY"),
     "subsidy_boost": ("core", "SUBSIDY"),
     "subsidy_redraws": ("oracle", "SUBSIDY"),
+    **{f"check_tx_{field}": ("core", "TX_CHECK") for field in ("reason", "dos", "sigops", "size", "error")},
+    "check_tx_diagnostic": ("oracle", "TX_CHECK"),
+    **{f"check_block_{field}": ("core", "BLOCK_CHECK") for field in
+       ("reason", "dos", "sigops", "transactions", "corruption", "hash", "error", "core_diagnostic")},
+    "check_block_diagnostic": ("oracle", "BLOCK_CHECK"),
     "signature_verdict": ("core", "SIGNATURE_VERDICT"),
     "targeted_early_error": ("both", "TARGETED_OPCODE"),
     "tx_valid_core_rejection": ("core", "TX_VALID_CORE"),
@@ -164,7 +169,9 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
             ok["format"] = projected_format
         if role == "core" and mode != "core_preimage":
             ok.pop("preimage_hex", None)
-            ok.pop("diagnostic", None)
+            # The harness has no Lean diagnostic. One mutation keeps it in block.check.
+            if not (mode == "check_block_core_diagnostic" and request["op"] == "block.check"):
+                ok.pop("diagnostic", None)
         if role == "core" and request["op"] == "block.subsidy" and "redraws" in ok:
             # The harness names its Boost release and reports no rejected words.
             del ok["redraws"]
@@ -213,6 +220,42 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
     elif mode == "subsidy_redraws":
         mutate_first(responses, lambda r: "redraws" in r.get("ok", {}),
                      lambda r: r["ok"].pop("redraws"))
+    elif mode.startswith("check_") and mode != "check_block_core_diagnostic":
+        op, field = ("tx.check", mode[9:]) if mode.startswith("check_tx_") else ("block.check", mode[12:])
+        ids = {r["id"] for r in requests if r["op"] == op}
+
+        def verdict(r):
+            return r["id"] in ids and "ok" in r
+
+        def rejected(r):
+            return verdict(r) and r["ok"]["valid"] is False
+
+        def plain(r):
+            # A rejection with score 100 and no corruption flag, so another such reason keeps the form valid.
+            return rejected(r) and r["ok"]["dos"] == 100 and r["ok"].get("corruption_possible") is not True
+
+        def other_reason(r):
+            negative = "bad-txns-vout-negative"
+            r["ok"]["reject_reason"] = "bad-txns-vout-toolarge" if r["ok"]["reject_reason"] == negative else negative
+
+        def add(name, amount):
+            return lambda r: r["ok"].__setitem__(name, r["ok"][name] + amount)
+
+        test, change = {
+            "reason": (plain, other_reason),
+            "dos": (rejected, add("dos", 1)),
+            "sigops": (verdict, add("legacy_sigops", 1)),
+            "size": (verdict, add("base_size", -1)),
+            "transactions": (verdict, add("transactions", 1)),
+            "corruption": (rejected, lambda r: r["ok"].__setitem__("corruption_possible", not r["ok"]["corruption_possible"])),
+            "hash": (verdict, lambda r: r["ok"].update(hash_hex=r["ok"]["hash_display"], hash_display=r["ok"]["hash_hex"])),
+            "diagnostic": (rejected, lambda r: r["ok"].pop("diagnostic")),
+            "error": (lambda r: r["id"] in ids and r.get("error", {}).get("reason") == "truncated",
+                      lambda r: r["error"].__setitem__("reason", "non_canonical")),
+        }[field]
+        # The version handshake and the auxiliary calls hold no request of the operation.
+        if ids:
+            mutate_first(responses, test, change)
     elif mode == "signature_verdict":
         from oracle_pubkey import signature_spends
         ids = {r["id"] for r in requests if {k: v for k, v in r.items() if k != "id"} in signature_spends()}

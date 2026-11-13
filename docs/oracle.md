@@ -109,7 +109,7 @@ Results use these types:
 | `request` | The oracle could not interpret the request. Examples: invalid JSON, an unknown `op`, a missing or unknown argument, or a value out of range. | `message`, free text for a person. It is not part of the format. |
 | `read` | The reader of the specification rejects the bytes, as Core's stream would. | `reason`: `truncated` (the input ends early), `non_canonical` (a CompactSize value in a longer form than needed), `too_large` (a CompactSize value above `MAX_SIZE`, `0x02000000`), or `unknown_optional_data` (a transaction flag bit other than bit 0 remains after the input and output lists and any stacks). For `sighash.legacy`, `argument` names the argument that failed. |
 | `work_view` | The finite work view cannot supply a result. The view errors describe the adapter, not consensus rejection codes. | `reason`: `height_out_of_range`, `inconsistent_heights`, `missing_ancestor`, `first_height_underflow`, `zero_interval`, `empty_view` or `short_view`. `first_height_underflow` and `zero_interval` are unreachable with these network parameters and checked views. |
-| `trailing_bytes` | A transaction was read and bytes remain. | `count`: the number of bytes after the transaction. For `sighash.legacy`, `argument`. |
+| `trailing_bytes` | A transaction or a block was read and bytes remain. | `count`: the number of bytes after the transaction or the block. For `sighash.legacy`, `argument`. |
 | `subsidy` | The draw of `block.subsidy` rejected every word that its fuel allows. Core has no such result. | `reason`: `fuel_exhausted`. `index`: the position of the case in `cases`. |
 
 `work_view` errors describe the finite-view adapter in the specification.
@@ -144,6 +144,8 @@ The `read` and `trailing_bytes` kinds report serialization errors of the specifi
 | `work.calculate_next` | `network`, `selection_height`, `last_height`, `last_time`, `last_bits`, `first_time` | `bits` (`u32`) | `Work.calculateDogecoinNextWorkRequired` with `Work.getConsensus` |
 | `work.next` | `network`, `chain`, `candidate_time` (`u32`) | `bits` (`u32`) | `Work.nextWorkRequired` |
 | `block.subsidy` | `cases`: an array of `height` and `prev_hash_hex` pairs | `subsidies`, and Lean-only `redraws`, [as below](#block-subsidy) | `Block.getDogecoinBlockSubsidy`, Core's `GetDogecoinBlockSubsidy` on mainnet |
+| `tx.check` | `tx_hex`, `mode`, `check_duplicate_inputs` (boolean) | Verdict, `legacy_sigops`, `base_size`, and Lean-only `diagnostic`, [as below](#transaction-and-block-checks) | `Transaction.checkTransaction` and `Transaction.getLegacySigOpCount`, Core's `CheckTransaction` and `GetLegacySigOpCount` |
+| `block.check` | `block_hex`, `mode`, `check_pow`, `check_merkle_root` (booleans) | Verdict, `corruption_possible`, `legacy_sigops`, `base_size`, `transactions`, `hash_hex`, `hash_display`, and Lean-only `diagnostic`, [as below](#transaction-and-block-checks) | `Block.decodeComplete`, then `Block.checkBlock` on mainnet, Core's `CheckBlock` |
 
 ### Public-key verification
 
@@ -594,6 +596,69 @@ Duplicate members of the failed list do not satisfy that condition alone.
 A failed member below an anchor is no ancestor under the finite-index convention.
 All other fields remain comparable in the excluded-mark cases.
 
+### Transaction and block checks
+
+`tx.check` runs `Transaction.checkTransaction`, Core's `CheckTransaction`, and `block.check` runs `Block.checkBlock`, Core's `CheckBlock` (SOURCES.md D106, design record 0010, stage 0010a).
+Neither operation needs a coin, a height or another block.
+
+`tx.check` has three required fields:
+
+- `tx_hex`: a transaction that is all of the bytes.
+- `mode`: `"base"` or `"allow_witness"`, the format of `tx_hex`, as for [`block.header.read`](#header-proof-of-work).
+  `CheckTransaction` reads no witness stack, so the mode changes only how the bytes are read.
+  Base mode reads the ordinary encoding of a transaction with no inputs and some outputs.
+  The witness-allowed reader takes the empty input count of that encoding as the marker of the extended format.
+- `check_duplicate_inputs`: Core's `fCheckDuplicateInputs`. Core's block and mempool paths pass true.
+
+`block.check` has four required fields:
+
+- `block_hex`: a block that is all of the bytes: a full header, a CompactSize count and the transactions.
+- `mode`: the read mode of every transaction, the one in an AuxPoW payload included.
+  `"allow_witness"` is the mode of Core's network and disk paths.
+- `check_pow`: Core's `fCheckPOW`. With true, `CheckBlockHeader` runs `CheckAuxPowProofOfWork` on the mainnet record of height zero.
+- `check_merkle_root`: Core's `fCheckMerkleRoot`.
+
+`block.check` has no network argument, and it covers mainnet only.
+With `check_pow` false, no step depends on the network.
+
+```json
+{"id":"c1","op":"tx.check","tx_hex":"01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff0151ffffffff010000000000000000015100000000","mode":"base","check_duplicate_inputs":true}
+{"id":"c1","ok":{"base_size":62,"diagnostic":"DogeLib.Transaction.CheckTransactionError.coinbaseLength","dos":100,"legacy_sigops":0,"reject_code":16,"reject_reason":"bad-cb-length","valid":false}}
+```
+
+The transaction is the record "Coinbase of size 1" of Core's `tx_invalid.json` (D29).
+
+Both results have these fields in `ok`:
+
+| Field | Meaning |
+| --- | --- |
+| `valid` | Core's return value |
+| `reject_reason` | The reject reason of Core's `CValidationState`, or null when `valid` is true |
+| `dos` | The denial-of-service score of the state, or null when `valid` is true |
+| `reject_code` | The reject code of the state, 16 for `REJECT_INVALID`, or null when `valid` is true |
+| `legacy_sigops` | `GetLegacySigOpCount` of the transaction, or the sum over the transactions of the block, modulo `2^32` as Core's `unsigned int` |
+| `base_size` | The number of bytes of the base serialization, Core's `GetSerializeSize` with `SERIALIZE_TRANSACTION_NO_WITNESS` |
+| `diagnostic` | A Lean diagnostic: the name of the error, with the position of a rejected transaction of a block, or null when `valid` is true. Core does not report it. |
+
+`block.check` adds these fields:
+
+| Field | Meaning |
+| --- | --- |
+| `corruption_possible` | `CorruptionPossible` of the state: true for `bad-txnmrklroot` and `bad-txns-duplicate`, false for another failure, and null when `valid` is true |
+| `transactions` | The number of transactions |
+| `hash_hex`, `hash_display` | The block hash, the double SHA-256 of the 80-byte pure header |
+
+`legacy_sigops`, `base_size`, `transactions` and the hash are functions of the decoded bytes.
+The result has them for every verdict.
+
+A reader failure is an `error` of kind `read`, and bytes after the transaction or the block give `trailing_bytes`.
+In that case no check runs.
+A count of transactions above `MAX_SIZE` is `too_large` before any transaction is read.
+
+`CheckBlock` returns true at once for a block whose member `fChecked` is set.
+`block.check` is the check of a block with `fChecked` false, which is the state of every block that Core reads into a new object.
+The operations do not run `ContextualCheckBlock`, so a block with witness data can be valid here.
+
 ### Block subsidy
 
 `block.subsidy` runs `Block.getDogecoinBlockSubsidy`, Core's `GetDogecoinBlockSubsidy` with the mainnet parameter records (SOURCES.md D104, design record 0010).
@@ -688,9 +753,11 @@ These pinned sources supply the work functions and parameter constructors:
 | --- | --- |
 | `block.header_sequence` | `AcceptBlockHeader` once for each header, which calls `CheckBlockHeader`, `ContextualCheckBlockHeader` and `AddToBlockIndex`, on an index that the harness builds from the request |
 | `block.contextual_check` | `ContextualCheckBlockHeader` on index entries that the harness builds from the request |
+| `block.check` | `SelectParams` for mainnet, then `CheckBlock` on a `CBlock` that Core's stream code reads from the request, with the two flags of the request. Then `GetLegacySigOpCount` for each transaction, `GetSerializeSize` in base mode and `GetHash` |
 | `block.subsidy` | `SelectParams` for mainnet, then `GetDogecoinBlockSubsidy` with `Params().GetConsensus(height)` for each case, as `ConnectBlock` calls it (D101, line 1996) |
 | `compactsize.encode` | `WriteCompactSize` into a `CDataStream` |
 | `compactsize.read` | `ReadCompactSize` from a `CDataStream` |
+| `tx.check` | `CheckTransaction` on a `CTransaction` that Core's stream code reads from the request in the mode of the request. Then `GetLegacySigOpCount` and `GetSerializeSize` in base mode |
 | `tx.read_base` | `CMutableTransaction` read from a `CDataStream` whose version has `SERIALIZE_TRANSACTION_NO_WITNESS`, so `UnserializeTransaction` reads base mode |
 | `tx.decode_base` | The same read, then a check that the stream is empty. The transaction written back to a stream of the same version, and `CTransaction::GetHash` |
 | `tx.read_witness`, `tx.decode_witness` | `CMutableTransaction` read from a `CDataStream` without `SERIALIZE_TRANSACTION_NO_WITNESS`. The complete operation requires an empty stream. Both write with witness data allowed and call `CTransaction::HasWitness`, `GetHash` and `GetWitnessHash`. |
@@ -749,6 +816,9 @@ The harness answers a projection of `dogelib-oracle/1`, not the format itself:
   An unmapped `ScriptError` stops the harness with an unmapped-Core error.
 - For a truncated `script.read_op`, the harness derives `opcode` and `part` from the input and cursor.
   Core does not return these diagnostics.
+- `tx.check` and `block.check` have no `diagnostic`. Core reports the reject reason, and not the Lean error or the position of a rejected transaction.
+  The harness builds a new `CBlock` for each request, so `fChecked` is false at the call.
+  It stops with an unmapped-Core error if that member is set.
 - `block.subsidy` has no `redraws`, because Core does not report the rejected words.
   It has `boost_version` instead: the release of the Boost headers that Core's function was compiled with, such as `1.70.0`.
 - `sighash.legacy` has no `preimage_hex`.
@@ -779,7 +849,7 @@ For `sighash.legacy` with plan `hash_bytes`, the double SHA-256 of the oracle's 
 This checks the preimage against Core's digest, not byte by byte against a preimage from Core.
 Outside the checked `harness-refused` category, a request error from either program fails the comparison.
 
-A full comparison with Core `e0a1c157791544e818c901bd9341896965afbf9d` sends 385,990 stream requests.
+A full comparison with Core `e0a1c157791544e818c901bd9341896965afbf9d` sends 389,438 stream requests.
 The table `EXPECTED_OPERATION_COUNTS` of `scripts/compare_core.py` gives the number of requests for each operation.
 A full run fails with `REQUEST_COUNT` when the count of any operation differs from the table.
 So a change to a request set changes the table, and this section, in the same pull request:
@@ -787,6 +857,7 @@ So a change to a request set changes the table, and this section, in the same pu
 | `op` | Stream requests |
 | --- | ---: |
 | `auxpow.check` | 404 |
+| `block.check` | 2,064 |
 | `block.check_pow` | 806 |
 | `block.check_version` | 207 |
 | `block.contextual_check` | 2,903 |
@@ -808,6 +879,7 @@ So a change to a request set changes the table, and this section, in the same pu
 | `script.verify_legacy` | 8,093 |
 | `scrypt.hash` | 272 |
 | `sighash.legacy` | 4,425 |
+| `tx.check` | 1,384 |
 | `tx.decode_base` | 37,694 |
 | `tx.decode_witness` | 45,958 |
 | `tx.read_base` | 137,991 |
@@ -816,7 +888,7 @@ So a change to a request set changes the table, and this section, in the same pu
 | `work.get_compact` | 1,552 |
 | `work.next` | 1,353 |
 | `work.set_compact` | 5,140 |
-| Total | 385,990 |
+| Total | 389,438 |
 
 The four transaction-reader operations receive 263,929 of the requests.
 Most of them are proper prefixes and field changes of corpus transactions.
@@ -1113,6 +1185,49 @@ A third mutation swaps one rejection string for another on a request without an 
 That mutation preserves the response shape and must fail the stream comparison of result values.
 It also checks Boolean types, result fields, acceptance reasons, rejection reasons and the exclusion of Lean diagnostics.
 These runs give finite evidence, not an all-input equivalence theorem with compiled Core.
+
+### Transaction and block check comparison evidence
+
+The harness calls Core's own `CheckTransaction`, `CheckBlock` and `GetLegacySigOpCount` (D106), on objects that Core's stream code reads.
+The comparator requires equal `ok` fields, except the oracle's `diagnostic`, and equal `error` objects.
+It also checks both sides against Core's text: the score and the corruption flag of each reason, and the reject code 16.
+It checks the block hash against `hashlib`, and `base_size` against the byte count in base mode.
+A full run fails with `REASON_NOT_REACHED` if Core never returns one of the reachable reasons of design record 0010, section 4.
+`bad-txns-oversize` is exempt for `block.check`: the size test of `CheckBlock` (line 2972) comes first, and both programs return `bad-blk-length`.
+
+The 3,448 requests are in nine sets, defined in `scripts/oracle_block_check.py`:
+
+| Set | Requests | Contents |
+| --- | ---: | --- |
+| Known answers | 61 | One case or more for each reason, with the expected result read from Core's text |
+| `tx.check` reasons | 242 | Each reason of `CheckTransaction` with its boundary values, both values of `check_duplicate_inputs`, and pairs of faults in each order |
+| `block.check` transaction reasons | 222 | The same faults in a transaction of a block |
+| `block.check` reasons | 448 | Each reason of `CheckBlock`, with the four combinations of the two flags. Mutations of the mainnet genesis block and of synthetic blocks, and Merkle duplications at the leaf level and one level above |
+| Signature operations | 724 | Exactly 20,000 and 20,001 operations, both multisig opcodes after each of `OP_1` to `OP_16`, short pushes that hide later opcodes, opcode bytes in push data, and a coinbase `scriptSig` |
+| Readers and witness data | 976 | Every proper prefix of a small block, bytes after a block, counts above `MAX_SIZE`, counts that are not canonical, the extended format in both modes, and unknown optional data |
+| Real full headers | 402 | The mainnet full headers of [the AuxPoW activation fixture](../tests/block/mainnet-auxpow-activation-full-headers/README.md) before a synthetic transaction list, with `check_pow` true and `check_merkle_root` false |
+| Size limits | 16 | Transactions and blocks of exactly 1,000,000 and 1,000,001 base bytes |
+| `tx.check` corpus | 357 | The records of `tx_valid.json` and `tx_invalid.json` (D28, D29), with no expected value: agreement of the two programs |
+
+Every request agrees.
+In the full run Core returns each of the seven reasons of `CheckBlock` 14 times or more.
+It returns each of the nine reasons of `CheckTransaction` 3 times or more.
+`scripts/test_oracle.py` checks 3,065 requests that have an expected value, and 25 argument errors, without Core.
+
+No block of the chain other than the genesis block is in these sets.
+`scripts/fetch_blocks.py` reads the two ranges and the rule-change blocks of design record 0010 from a mainnet node, and checks each block before it writes a fixture.
+That fetch has not run, so no fixture of real blocks exists, and exit condition 1 of stage 0010a is open.
+`python3 -I scripts/test_fetch_blocks.py` tests the checks of the fetch on synthetic blocks.
+
+Three cases have no request.
+A block with more than 1,000,000 transactions has at least 10 MB, and the size clause rejects it too.
+A sigop product that wraps modulo `2^32` needs `2^30` operations.
+The strict chain ID rule through `block.check` needs a mined mainnet header, and `block.check_pow` covers that rule.
+
+The oracle's sigop count reads a script as a byte list, and its time grows with the square of the number of instructions.
+A script of 80,000 one-byte opcodes takes about 3 seconds, and Core takes less than 0.1 seconds.
+So the requests of a megabyte hold one large push, and no request has more than about 30,000 separate opcodes in one script.
+[Issue 149](https://github.com/dghelm/DogeLib/issues/149) tracks a faster reader.
 
 ### Block subsidy comparison evidence
 

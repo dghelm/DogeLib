@@ -19,13 +19,28 @@ hashlib, and scrypt digests with hashlib.scrypt.
 The blocks are the mainnet genesis block, synthetic blocks, and synthetic
 transaction lists after the real full headers of
 tests/block/mainnet-auxpow-activation-full-headers.
+
+The module also reads real mainnet blocks from fixtures of
+scripts/fetch_blocks.py: the committed blocks at the rule changes, in
+tests/block/mainnet-blocks/rule-changes, and the two ranges that
+scripts/fetch_release_blocks.py restores from a GitHub release. The main
+chain holds each of these blocks, so each one must pass CheckBlock with both
+flags. That expectation comes from the chain, and the hash, the size and the
+number of transactions of each block come from the fixture's manifest.
 """
 import hashlib
 import json
 import pathlib
+import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "scripts"))
+import fetch_blocks  # noqa: E402
+import fetch_release_blocks  # noqa: E402
+
 FULL_HEADERS = ROOT / "tests/block/mainnet-auxpow-activation-full-headers/headers.txt"
+MAINNET_BLOCKS = ROOT / "tests/block/mainnet-blocks"
+RULE_CHANGES = MAINNET_BLOCKS / "rule-changes"
 
 COIN = 100000000
 # src/amount.h, lines 18 and 32: MAX_MONEY is 10,000,000,000 coins.
@@ -993,6 +1008,199 @@ def size_requests() -> list[dict]:
     return requests
 
 
+# ---------------------------------------------------------------------------
+# Real mainnet blocks
+
+
+class BlockAssets(Exception):
+    """A fixture of real blocks is absent, or differs from its committed hashes or from its manifest."""
+
+
+def fixture_blocks(directory, sums: str | None = None) -> list[tuple[dict, bytes]]:
+    """The manifest record and the bytes of each block of a `dogelib-blocks/1` fixture.
+
+    The two files must have the hashes of the fixture's SHA256SUMS file. With `sums`, that file
+    must have exactly this text, which the caller takes from a committed file.
+    Each block must have the height, the size and the header hash of its manifest record.
+    scripts/fetch_blocks.py --check makes the other checks of a fixture."""
+    directory = pathlib.Path(directory)
+    names = (fetch_blocks.BLOCKS_FILE, fetch_blocks.MANIFEST_FILE)
+    try:
+        if sums is not None and (directory / fetch_blocks.SUMS_FILE).read_text() != sums:
+            raise BlockAssets(f"{directory}: SHA256SUMS does not have the committed hashes")
+        fetch_blocks.check_sums(directory, names)
+        manifest = json.loads((directory / fetch_blocks.MANIFEST_FILE).read_text())
+        blocks = list(fetch_blocks.read_blocks(directory / fetch_blocks.BLOCKS_FILE))
+    except (OSError, ValueError, fetch_blocks.FetchError) as error:
+        detail = str(error) if isinstance(error, fetch_blocks.FetchError) else type(error).__name__
+        raise BlockAssets(f"{directory}: cannot read the fixture: {detail}") from None
+    records = manifest.get("blocks") if isinstance(manifest, dict) else None
+    if manifest.get("format") != fetch_blocks.FORMAT or not isinstance(records, list) or len(records) != len(blocks):
+        raise BlockAssets(f"{directory}: the manifest does not match the blocks")
+    for record, (height, raw) in zip(records, blocks):
+        if (record.get("height") != height or record.get("size") != len(raw)
+                or record.get("hash") != sha256d(raw[:80])[::-1].hex()
+                or record.get("auth") not in ("pinned", "linked") or not is_count(record.get("transactions"))):
+            raise BlockAssets(f"{directory}: the manifest record of height {height} does not match its block")
+    return [(record, raw) for record, (_, raw) in zip(records, blocks)]
+
+
+def witness_size(tx: bytes) -> int:
+    """The bytes of a parsed transaction that its base serialization leaves out.
+
+    They are the marker, the flags and the witness stacks of the extended format
+    (src/primitives/transaction.h, lines 211 to 243)."""
+    if tx[4:6] != b"\x00\x01":
+        return 0
+    reader = fetch_blocks.Reader(tx)
+    reader.take(6)
+    inputs = reader.compact_size()
+    for _ in range(inputs):
+        reader.take(36)
+        reader.take(reader.compact_size())
+        reader.take(4)
+    for _ in range(reader.compact_size()):
+        reader.take(8)
+        reader.take(reader.compact_size())
+    start = reader.pos
+    for _ in range(inputs):
+        for _ in range(reader.compact_size()):
+            reader.take(reader.compact_size())
+    assert reader.pos + 4 == len(tx)
+    return 2 + reader.pos - start
+
+
+def parent_coinbase(raw: bytes) -> bytes:
+    """The coinbase transaction of the parent block in the AuxPoW payload, or no bytes without a payload."""
+    if not int.from_bytes(raw[:4], "little") & 0x100:
+        return b""
+    reader = fetch_blocks.Reader(raw)
+    reader.take(80)
+    fetch_blocks.read_transaction(reader)
+    return raw[80:reader.pos]
+
+
+def real_request(record: dict, raw: bytes, mode: str) -> dict:
+    """block.check with both flags on a block of the main chain.
+
+    The parent coinbase of an AuxPoW payload can be in the extended format, because the parent
+    chain allows witness data. The base size of the block leaves those bytes out. The expected
+    size assumes that no transaction of the block itself has witness data. A block with such a
+    transaction fails the comparison."""
+    return expect(block_request(raw, mode, True, True), None,
+                  base_size=record["size"] - witness_size(parent_coinbase(raw)),
+                  transactions=record["transactions"], hash_display=record["hash"])
+
+
+def split_block(raw: bytes) -> tuple[bytes, list[bytes]]:
+    """The full header of a block, with its AuxPoW payload if it has one, and its transactions."""
+    reader = fetch_blocks.Reader(raw)
+    version = int.from_bytes(reader.take(80)[:4], "little")
+    if version & 0x100:
+        # CAuxPow (src/auxpow.h): the coinbase transaction, the block hash, two branches with
+        # their indexes, and the parent header.
+        fetch_blocks.read_transaction(reader)
+        reader.take(32)
+        reader.hashes()
+        reader.take(4)
+        reader.hashes()
+        reader.take(4)
+        reader.take(80)
+    header = raw[:reader.pos]
+    txs = []
+    for _ in range(reader.compact_size()):
+        start = reader.pos
+        fetch_blocks.read_transaction(reader)
+        txs.append(raw[start:reader.pos])
+    assert reader.pos == len(raw) and block(txs, header=header) == raw
+    return header, txs
+
+
+def merkle_duplication(txs: list[bytes]) -> list[bytes] | None:
+    """A longer list with the root of `txs`, in which Core joins two equal hashes, or None.
+
+    The list repeats the last 2^k transactions, for the least k that keeps the root (CVE-2012-2459)."""
+    count = 1
+    while count <= len(txs):
+        longer = txs + txs[-count:]
+        if root_of(longer) == root_of(txs) and is_mutated(longer):
+            return longer
+        count *= 2
+    return None
+
+
+def rule_change_requests() -> list[dict]:
+    """The real blocks at and next to the rule changes of design record 0010, and mutations of them.
+
+    Each block has real work and its own Merkle root. So a mutation reaches `bad-txns-duplicate`
+    with both flags, which a synthetic block reaches only without the header test."""
+    requests = []
+    duplications = 0
+    blocks = fixture_blocks(RULE_CHANGES)
+    assert [record["height"] for record, _ in blocks] == [
+        144998, 144999, 145000, 145001, 371336, 371337, 371338, 599998, 599999, 600000, 600001,
+        1034382, 1034383, 1034384, 3464750, 3464751, 3464752]
+    for record, raw in blocks:
+        for mode in BOTH_MODES:
+            requests.append(real_request(record, raw, mode))
+        header, txs = split_block(raw)
+        assert not is_mutated(txs) and root_of(txs) == raw[36:68]
+        # Lines 2952 to 2956: another lock time in the last transaction changes its ID, and the
+        # header has work. CheckTransaction does not read the lock time.
+        changed = raw[:-1] + bytes([raw[-1] ^ 1])
+        requests += by_flags(changed, {(True, True): "bad-txnmrklroot", (True, False): None},
+                             transactions=len(txs), base_size=len(raw), hash_display=record["hash"])
+        # Lines 2958 to 2962: a longer list with the same root, under real work.
+        longer = merkle_duplication(txs)
+        if longer is not None:
+            duplications += 1
+            data = block(longer, header=header)
+            assert len(data) <= MAX_BLOCK_BASE_SIZE
+            requests += by_flags(data, {(True, True): "bad-txns-duplicate", (True, False): None},
+                                 transactions=len(longer), hash_display=record["hash"])
+        # Lines 2933 and 2934: another nonce in the header that carries the work. With a payload
+        # that is the parent header, which ends the payload.
+        bits = int.from_bytes(raw[72:76], "little")
+        assert scrypt_of(header[-80:]) <= target_of(bits)
+        spoiled = header[:-4] + le((int.from_bytes(header[-4:], "little") + 1) % 2**32, 4)
+        assert scrypt_of(spoiled[-80:]) > target_of(bits)
+        requests += by_flags(spoiled + raw[len(header):], {(True, True): "high-hash", (False, True): None},
+                             transactions=len(txs), base_size=len(raw))
+        # The reader takes the whole block and nothing more.
+        requests.append(expect(block_request(raw[:-1], "base", True, True), TRUNCATED))
+        requests.append(expect(block_request(raw + b"\x00", "base", True, True),
+                               {"kind": "trailing_bytes", "count": 1}))
+    # Blocks with one transaction have no such list.
+    assert 0 < duplications < len(blocks)
+    return requests
+
+
+def mainnet_range_sets(directory) -> list[tuple[str, list[dict]]]:
+    """One set for each range of tests/block/mainnet-blocks/release.json: every block, with both flags.
+
+    `directory` holds the fixtures that scripts/fetch_release_blocks.py writes. Each file must have
+    its committed hash. The mode is `allow_witness`, in which Core reads a block from the network."""
+    try:
+        release = fetch_release_blocks.load_release()
+    except fetch_release_blocks.AssetError as error:
+        raise BlockAssets(str(error)) from None
+    sets = []
+    for entry in release["ranges"]:
+        blocks = fixture_blocks(pathlib.Path(directory) / entry["name"], fetch_release_blocks.sums_text(entry))
+        heights = [record["height"] for record, _ in blocks]
+        if heights != list(range(entry["first"], entry["last"] + 1)) or len(heights) != entry["blocks"]:
+            raise BlockAssets(f"{directory}: the range {entry['name']} does not have the heights of release.json")
+        sets.append((f"block.check mainnet {entry['name']}",
+                     [real_request(record, raw, "allow_witness") for record, raw in blocks]))
+    return sets
+
+
+def mainnet_range_counts() -> dict[str, int]:
+    """Operation -> the number of requests of `mainnet_range_sets`, from release.json."""
+    release = fetch_release_blocks.load_release()
+    return {"block.check": sum(entry["blocks"] for entry in release["ranges"])}
+
+
 def corpus_requests(base: list[bytes], witness: list[bytes]) -> list[dict]:
     """Core's transaction corpus through tx.check, with the duplicate test. Core supplies the results.
 
@@ -1018,6 +1226,7 @@ def block_check_sets() -> list[tuple[str, list[dict]]]:
             ("check readers and witness data", reader_requests()),
             ("block.check real full headers", auxpow_requests()),
             ("check size limits", size_requests()),
+            ("block.check mainnet rule changes", rule_change_requests()),
         ]
     return _sets
 

@@ -1,0 +1,51 @@
+{
+  "format": "dogelib-block-assets/1",
+  "repository": "dghelm/DogeLib",
+  "tag": "fixtures-mainnet-blocks-2026-11-13",
+  "ranges": [
+    {
+      "name": "genesis-10000",
+      "first": 0,
+      "last": 10000,
+      "blocks": 10001,
+      "files": {
+        "blocks.bin": {
+          "asset": "mainnet-blocks-genesis-10000.blocks.bin.xz",
+          "asset_bytes": 31077776,
+          "asset_sha256": "f1d7dcc7534c142ecf03a284cdba7810e40ac57f6cffe78789390e245542dbb6",
+          "bytes": 44017373,
+          "sha256": "e56e6a39270afb8b35c0007cdfc7e6893dcf1810a56fb2da3fc411a51a063703"
+        },
+        "manifest.json": {
+          "asset": "mainnet-blocks-genesis-10000.manifest.json.xz",
+          "asset_bytes": 389756,
+          "asset_sha256": "2b56d55e29cf058c075f26ce14dec6e73e82a9451c33dea08400023d4d771c7f",
+          "bytes": 1490331,
+          "sha256": "e79c28682f8b0032c5f518edeedc9712e4dd0aa98318d5223de3466ff80d9a42"
+        }
+      }
+    },
+    {
+      "name": "recent-6455302-6456301",
+      "first": 6455302,
+      "last": 6456301,
+      "blocks": 1000,
+      "files": {
+        "blocks.bin": {
+          "asset": "mainnet-blocks-recent-6455302-6456301.blocks.bin.xz",
+          "asset_bytes": 14701988,
+          "asset_sha256": "2b08e17970e7ec23059e362517ba7faa7adfd3295410230972dbfac027b79048",
+          "bytes": 19947510,
+          "sha256": "2641cd80237529825a881fb772cc097bf08336910ceaa0f56b0ced208b629fd8"
+        },
+        "manifest.json": {
+          "asset": "mainnet-blocks-recent-6455302-6456301.manifest.json.xz",
+          "asset_bytes": 41956,
+          "asset_sha256": "a862d00e29338bf95049b5e6fd6a64b4c607936d676f3d300d2d8d9386449266",
+          "bytes": 153517,
+          "sha256": "68d621fb3d6f21589edac02c74f74c6738a72a30dc7e4e9b58a80e494d761e54"
+        }
+      }
+    }
+  ]
+}

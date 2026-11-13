@@ -101,6 +101,19 @@ The build script uses `JOBS` parallel jobs, 8 by default.
 It reuses Boost and the Core libraries when the build directory's stamp matches the pin, the scripts, the compilers and the flags.
 A first build takes about 2 minutes on 8 cores and uses about 360 MB, and the comparison takes about 1 minute.
 
+### Real mainnet blocks
+
+Two ranges of real mainnet blocks are assets of a GitHub release ([fixtures](tests/block/mainnet-blocks/README.md)).
+Download them, about 46 MB, and compare `block.check` with Core on every block:
+
+```bash
+python3 -I scripts/fetch_release_blocks.py
+python3 -I scripts/compare_core.py --mainnet-blocks build/mainnet-blocks .lake/build/bin/dogelib-oracle build/core-harness/core-oracle
+```
+
+The first command writes the fixtures to `build/mainnet-blocks` and checks them against the committed SHA-256 values.
+The second takes about 1 minute.
+
 ### Compiled Rust CompactSize comparison
 
 Build the Rust adapter, then compare only CompactSize reader requests through the oracle, Core and compiled Rust:

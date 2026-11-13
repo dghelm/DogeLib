@@ -244,6 +244,19 @@ They are the previous block hashes of heights 1 to 145000, the inputs of the ran
 The fixture holds the hashes alone, so no test can repeat those checks from it.
 The fixture does not change any reference pin.
 
+## Mainnet block fixtures
+
+[`tests/block/mainnet-blocks/README.md`](tests/block/mainnet-blocks/README.md) records the source of the real mainnet blocks and the fetch date.
+The source is the maintainer's mainnet node, under decision 1 of design record 0010.
+The 17 blocks at and next to the rule changes are committed.
+Two ranges are not: heights 0 to 10,000, and 6,455,302 to 6,456,301.
+The ranges are assets of the GitHub release `fixtures-mainnet-blocks-2026-11-13` of this repository, and `tests/block/mainnet-blocks/release.json` commits to their SHA-256 values.
+
+`scripts/fetch_blocks.py` checked each block against its header hash, its Merkle root, its neighbours, and the pinned hashes of the repository.
+Those hashes come from the subsidy fixture, the header fixtures and Core's checkpoints (D9, `src/chainparams.cpp`, lines 180 to 205).
+1,004 blocks have no pinned hash, and the README names them.
+The fixtures change no reference pin.
+
 ## Header-sequence fixture evidence
 
 D80–D82 retain the full serialization of the existing pure ranges, including AuxPoW payloads.

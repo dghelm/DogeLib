@@ -37,6 +37,8 @@ Thus the expected Merkle roots come from serialized headers, not explorer JSON f
 The source is untrusted, and these isolated blocks have no authenticated chain connection or proof-of-work check.
 The checks establish consistency with the recorded commitments, subject to the hash commitment assumption.
 
+[`mainnet-blocks/README.md`](mainnet-blocks/README.md) describes the complete mainnet blocks of the `block.check` comparison: 17 committed blocks at the rule changes, and two ranges that a GitHub release stores.
+
 `tests/KnownAnswers/Serialization.lean` records the genesis transaction and header literals in `KnownAnswers.Codec`.
 Their expected commitments come from Core's `src/chainparams.cpp` at the SOURCES.md pin (D9).
 

@@ -25,7 +25,7 @@ Core is Dogecoin Core at the pin `e0a1c157`. Line numbers refer to `src/validati
 | Rule | Mainnet behaviour | Source |
 | --- | --- | --- |
 | BIP34 | From height 1,034,383, the coinbase script starts with the height. The block version is not read. | `chainparams.cpp:84`, 3146–3152 |
-| BIP30 | Checked for every transaction ID that the block creates, unless the ancestor at 1,034,383 has `BIP34Hash`. | 1869–1887 |
+| BIP30 | Checked for every transaction ID that the block creates, at every height. Core skips the check when the ancestor at `BIP34Height` (1,034,383) has the hash `BIP34Hash`. But `BIP34Hash` is the hash of block 1,032,483, so the skip never applies on mainnet. | 1869–1887, `chainparams.cpp:84–85`, `tests/block/mainnet-bip66-headers` |
 | Script flags | P2SH at every height, DERSIG from 1,034,383, CLTV from 3,464,751. The logic is inline. | 1890–1917 |
 | CSV | Never active. Version bits need the top bits `001`. A header that passes the mainnet chain-ID check is legacy or has chain ID `0x62`, so its top bits are `000`. The lock-time cutoff is therefore the block's own time. | `versionbits.cpp:155`, `pureheader.h:110–155`, `dogecoin.cpp:89–122`, `chainparams.cpp:120–136`, 3128–3136 |
 | SegWit | `IsWitnessEnabled` returns false directly. `ContextualCheckBlock` reads the deployment, whose timeout is 0. If the earlier checks pass, witness data gives `unexpected-witness`. | 3002–3008, 3138–3188 |
@@ -156,12 +156,14 @@ A range that does not start at genesis takes a partial coin set that answers eve
 That is every coin the range spends.
 For each transaction ID that the range creates, it also holds the existing coins or a statement that there are none.
 The request also supplies the ancestor hash at 1,034,383.
-On the real chain that ancestor is `BIP34Hash`, so BIP30 is skipped after 1,034,383 and no absence statement is needed.
+On mainnet BIP30 is never skipped (section 2), so the recent range states that every transaction ID it creates is absent.
+Nothing authenticates that statement.
+BIP34 supports it for the real chain: each coinbase from 1,034,383 contains its height, so a repeated ID needs a SHA-256d collision.
 
 The fetch tool takes each spent coin from its funding transaction and checks the transaction against its ID.
 It checks the coin's height with a Merkle branch to the pinned header chain.
 That authenticates each coin as a real output.
-It does not show that the coin was unspent at the start of the range.
+It does not show that the coin was unspent at the start of the range, or that the absence statements are true.
 So agreement on a recent range shows agreement on the supplied state, not on the historical coin set.
 
 **Exit conditions.**

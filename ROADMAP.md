@@ -132,7 +132,7 @@ DogeLib has no definition of `CheckTransaction`, `CheckBlock`, `ContextualCheckB
 | Stage | Deliverable | Status |
 | --- | --- | --- |
 | 0 | The harness compiles Core's `src/validation.cpp`. `block.contextual_check` and `block.header_sequence` call Core's own functions. | Implemented |
-| 0010a | Block checks without coins: `CheckTransaction`, `CheckBlock`, `ContextualCheckBlock`, the subsidy and the version-bits state, compared with Core on two mainnet ranges and on mutations | Not started |
+| 0010a | Block checks without coins: `CheckTransaction`, `CheckBlock`, `ContextualCheckBlock`, the subsidy and the version-bits state, compared with Core on two mainnet ranges and on mutations | Started. The mainnet subsidy and `block.subsidy` are implemented ([COVERAGE.md](COVERAGE.md#operations), *Block subsidy*). The other parts are not started. |
 | 0010b | Block connection: the coin set, `ConnectBlock` and `block.validate`, replayed with Core | Not started |
 | 0010c | Properties of connection: available spends, the value bound and the issuance bound | Not started |
 

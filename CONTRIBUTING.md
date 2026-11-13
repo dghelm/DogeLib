@@ -419,6 +419,7 @@ Material under one of these licences can ship without a further check:
 | MIT | Values from Dogecoin Core's tests and chain parameters |
 | BSD 2-clause or 3-clause | verified-garbage HMAC model |
 | Apache 2.0 | btc-verified |
+| Boost Software License 1.0 | Boost's `mt19937` and `uniform_int`, which the block subsidy adapts |
 
 Each can accompany MIT-licensed material, provided DogeLib meets every condition of its licence.
 For Apache 2.0, they include a copy of the licence, a change statement in each modified file, and any upstream `NOTICE` attributions.

@@ -65,7 +65,7 @@ Their verdicts and errors agree with Core's recorded expectations, and the oracl
 The oracle uses `coreVerifier` for its transaction checker and exposes single-signature verification through `pubkey.verify`.
 
 The `dogelib-oracle` program runs the specification on JSON requests, and a harness runs the pinned Core code on the same requests ([docs/oracle.md](docs/oracle.md)).
-A full comparison sends 385,842 stream requests, and it passes only with zero failures.
+A full comparison sends 385,990 stream requests, and it passes only with zero failures.
 The comparator also fails if the number of requests for any operation differs from its table ([counts](docs/oracle.md#the-comparison)).
 The four transaction-reader operations receive 263,929 of the requests, Script evaluation and verification 16,975, and header sequences 257.
 The total includes requests with an unsupported Lean result and 12 checked harness refusals.
@@ -85,7 +85,7 @@ DogeLib has no definition of transaction validity, block validity or chain valid
 It does not specify these parts of Dogecoin:
 
 - `CheckTransaction`, `CheckBlock`, `ContextualCheckBlock` and `ConnectBlock`
-- The UTXO set, value accounting and fees, the block subsidy, and the Script flags of each height
+- The UTXO set, value accounting and fees, and the Script flags of each height. The block subsidy is specified for mainnet alone
 - The sources of the inputs of the contextual header check: the node's clock and peer offsets, its block index and its choice of chain
 - The witness v0 signature hash, and witness script verification
 - Chain selection, reorganization and the mempool

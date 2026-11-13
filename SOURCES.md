@@ -13,9 +13,16 @@ This file is the single source registry ([CONTRIBUTING.md](CONTRIBUTING.md#sourc
 | [Charon](https://github.com/AeneasVerif/charon) | `a58d159210b3a36fedeaba4437bda896a8b12f0d` | — | Rust extraction, the commit in Aeneas's `charon-pin` at the Aeneas pin. It builds with Rust `nightly-2026-09-17`. Apache 2.0. | Adopted |
 | [pyca/verified-garbage](https://github.com/pyca/verified-garbage) | `28428ba6b81bfd8c438b7cdbcab1f8537f6bc13e` | — | HMAC, PBKDF2 and scrypt list models under BSD-3-Clause. The licence is in `LICENSES/verified-garbage-BSD-3-Clause.txt`. | Adopted |
 | [Lean 4](https://github.com/leanprover/lean4) | `eb6cafb7290e8bd5f2937522d8d804f58f02bafc` | `v4.35.0` | Toolchain, pinned in `lean-toolchain` | Adopted |
+| [Boost](https://github.com/boostorg/boost) | `8f9a1cf1d15d262e09c16a305034d8bc1e39aca2` | `boost-1.70.0` | The algorithm of the random block subsidy: `boost::mt19937` and `boost::uniform_int<>`, which Core calls and does not contain. The Core harness builds this release from the archive with SHA-256 `430ae8354789de4fd19ee52f3b1f739e1fba576f0aded0897c3c2bc00fb38778` (`scripts/core_boost.sh`). Its Boost Software License 1.0 is in `LICENSES/boost-BSL-1.0.txt`. | Adopted |
 
 The maintainer authorized the verified-garbage source pin and BSD-3-Clause election on 2026-11-06.
 Binary distributions containing this material must include its licence and notice.
+
+The maintainer authorized the Boost pin and its licence on 2026-11-13, with design record 0010.
+Core requires Boost 1.60 or later (`configure.ac`, line 693), and it has no pin of its own.
+The Lean definitions follow release 1.70.0.
+The claims about the random subsidy hold for a Core built with a Boost release that has the same algorithm.
+The three Boost headers of BO1 to BO3 in the harness's archive are byte-identical to the files at the tag `boost-1.70.0` of `boostorg/random`.
 
 The EthLib pin advances from `6a93711` to `bb6dfe5` with Lean `v4.35.0` unchanged.
 The maintainer authorized this single pin change on 2026-11-06.
@@ -151,6 +158,8 @@ Design records and module documentation cite these identifiers.
 | D101 | [Dogecoin block rules by height: `ConnectBlock`, `ContextualCheckBlockHeader`, `ContextualCheckBlock` and `IsWitnessEnabled`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.cpp). BIP30: lines 1861 to 1888, enforced for every block, and skipped only when the ancestor at `BIP34Height` has `BIP34Hash` (1877 to 1879). Script flags: lines 1890 to 1917. P2SH applies at every height, DERSIG from `BIP66Height` and CHECKLOCKTIMEVERIFY from `BIP65Height`. CHECKSEQUENCEVERIFY applies only if `DEPLOYMENT_CSV` is active, and WITNESS and NULLDUMMY never apply. Header versions: lines 3113 to 3116, base version below 3 rejected from `BIP66Height` and below 4 from `BIP65Height`. BIP34: lines 3146 to 3153, the coinbase script starts with the height from `BIP34Height`, by height alone. Lock-time cutoff: lines 3129 to 3136. `IsWitnessEnabled` returns false (3002 to 3008), and witness data gives `unexpected-witness` (3184 to 3188). `IsSuperMajority` (3368 to 3378) has no caller, so the BIP34, BIP65 and BIP66 checks use fixed heights alone. `DEPLOYMENT_CSV` uses version bits (D102). |
 | D102 | [Dogecoin version-bits state: `GetStateFor` and `VersionBitsConditionChecker::Condition`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/versionbits.cpp), lines 24 to 106 and 153 to 156, with `VERSIONBITS_TOP_BITS` and `VERSIONBITS_TOP_MASK` (`src/versionbits.h`, lines 14 to 16). A block signals only if the top three bits of `nVersion` are `001`. On mainnet, `CheckAuxPowProofOfWork` (D6, lines 89 to 97) accepts a header only if it is legacy or has chain ID `0x62`. A legacy header has version 1 or 2 (D10, lines 110 to 113 and 150 to 155). Both leave the top three bits `000`. So no header that passes `CheckBlockHeader` with `fCheckPOW` true signals, no period reaches the threshold, and `DEPLOYMENT_CSV` is never active on mainnet. The argument does not cover testnet, where `fStrictChainId` is false, or regtest. |
 | D103 | Core state that the harness reaches through the textual include of [`src/validation.cpp`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.cpp) and [`src/timedata.cpp`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/timedata.cpp). `gFailedBlocks` (line 180), `setDirtyBlockIndex` (line 183), the marking loop of `AcceptBlockHeader` (3241 to 3256) and `UnloadBlockIndex` (3945 to 3970). `nTimeOffset` and `GetAdjustedTime` (`timedata.cpp`, lines 18 to 37), with `GetTime` and `SetMockTime` ([`src/utiltime.cpp`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/utiltime.cpp), lines 21 to 41). The link line follows `dogecoind_LDADD` ([`src/Makefile.am`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/Makefile.am), lines 395 to 408). |
+| D104 | [Dogecoin block subsidy: `generateMTRandom` and `GetDogecoinBlockSubsidy`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/dogecoin.cpp), lines 16 to 21 and 127 to 149, with `COIN` ([`src/amount.h`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/amount.h), line 18). On mainnet, `nSubsidyHalvingInterval` is 100000 (D14, line 79), and `fSimplifiedRewards` is true from the record at height 145000 (D14, lines 126 to 128 and 134). The record below 145000 never assigns it, so the zero initialization of the static `mainParams` (D14, line 218) gives false. `ConnectBlock` calls the function with `GetConsensus(pindex->nHeight)` and the hash of the previous block (D101, line 1996). The random value follows Boost (BO1 to BO3). |
+| D105 | [Dogecoin subsidy tests: `subsidy_first_100k_test`, `subsidy_100k_145k_test` and `subsidy_post_145k_test`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/test/dogecoin_tests.cpp), lines 14 to 121. The first two add each subsidy to a 256-bit number that is the next previous hash, and fix the sums 54894174438 and 12349960000 coins. |
 | E1 | [EthLib build definition](https://github.com/ethereum/EthLib/blob/bb6dfe55198243682bc2eaf94611af2dbce1be6f/lakefile.lean) |
 | E2 | [EthLib architecture](https://github.com/ethereum/EthLib/blob/bb6dfe55198243682bc2eaf94611af2dbce1be6f/ARCHITECTURE.md) |
 | E3 | [EthLib contribution policy](https://github.com/ethereum/EthLib/blob/bb6dfe55198243682bc2eaf94611af2dbce1be6f/CONTRIBUTING.md) |
@@ -178,9 +187,13 @@ Design records and module documentation cite these identifiers.
 | B14 | [btc-verified transaction outputs](https://github.com/ProofOfKeags/btc-verified/blob/ecf4f0d2c5ab4df84f2595ca60ba2e1fd62d1bce/BtcVerified/Transaction/TxOut.lean) |
 | B15 | [btc-verified transaction body without witness](https://github.com/ProofOfKeags/btc-verified/blob/ecf4f0d2c5ab4df84f2595ca60ba2e1fd62d1bce/BtcVerified/Transaction/TxBody.lean) |
 | B16 | [btc-verified raw scripts](https://github.com/ProofOfKeags/btc-verified/blob/ecf4f0d2c5ab4df84f2595ca60ba2e1fd62d1bce/BtcVerified/Script/Script.lean) |
+| BO1 | [Boost 1.70.0 Mersenne Twister: `mersenne_twister_engine` and `mt19937`](https://github.com/boostorg/random/blob/boost-1.70.0/include/boost/random/mersenne_twister.hpp): `default_seed` (line 89), `seed(value)` (lines 141 to 154), `normalize_state` (346 to 363), `twist` (536 to 574), `operator()` (584 to 596) and the parameters of `mt19937` (623 and 624) |
+| BO2 | [Boost 1.70.0 uniform integers: `generate_uniform_int`](https://github.com/boostorg/random/blob/boost-1.70.0/include/boost/random/uniform_int_distribution.hpp), lines 49 to 249. The branch `brange > range` is lines 188 to 226. `uniform_int_distribution::operator()` is lines 369 to 371. With `int` bounds and a 32-bit engine, `range_type`, `base_unsigned` and `mixed_range_type` are 32-bit unsigned types. |
+| BO3 | [Boost 1.70.0 `uniform_int`](https://github.com/boostorg/random/blob/boost-1.70.0/include/boost/random/uniform_int.hpp), lines 36 to 95: a class derived from `uniform_int_distribution`, whose `operator()` (lines 77 to 81) calls the base class |
 | R1 | [Aeneas documentation](https://github.com/AeneasVerif/aeneas) (for discovery only: pin a revision before use) |
 | S1 | [C++11 working draft N3337](https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2012/n3337.pdf): [expr.mul] 5.6 paragraph 4, [conv.integral] 4.7 paragraph 2, [over.ics.rank] 13.3.3.2 paragraph 2, [expr.shift] 5.8 paragraphs 2 and 3 |
 | S2 | [SEC 2: Recommended Elliptic Curve Domain Parameters, version 2.0](https://www.secg.org/sec2-v2.pdf), §2.4.1: the order `n` of secp256k1 |
+| S3 | [C++11 working draft N3337](https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2012/n3337.pdf), [rand.predef] 26.5.5 paragraph 3: the 10000th consecutive invocation of a default-constructed `mt19937` produces 4123659995 |
 | W1 | [Wycheproof secp256k1 P1363 vectors](https://github.com/C2SP/wycheproof/tree/d17cc89fa5c8f4f4d378b5385ebf75da5d0926c9), `ecdsa_secp256k1_sha256_p1363_test.json` and `ecdsa_secp256k1_sha256_bitcoin_test.json`. P1363 cases 1 to 252 and all 464 bitcoin cases via EthLib at its pin. [Apache 2.0 licence](LICENSES/wycheproof-Apache-2.0.txt). [Fixture provenance](tests/cryptography/secp256k1/README.md). |
 
 ## Proposal documents
@@ -218,6 +231,14 @@ No definition reads the hash, so the difference changes no behaviour.
 [`mainnet-bip65-headers`](tests/block/mainnet-bip65-headers/README.md) holds heights 3464739–3464760, anchored by the hash in the comment on `BIP65Height` (D14, line 86), the block at 3464751.
 The tests check every predecessor link and each anchor after double SHA-256 and display-order reversal.
 The fixtures do not change any reference pin.
+
+## Subsidy fixture
+
+[`tests/block/mainnet-subsidy-prev-hashes/README.md`](tests/block/mainnet-subsidy-prev-hashes/README.md) records the public source of the hashes of mainnet blocks 0 to 144999 and the fetch date.
+They are the previous block hashes of heights 1 to 145000, the inputs of the random subsidy (D104).
+`scripts/fetch_subsidy_prev_hashes.py` checked every predecessor link of the 145,001 headers, and the checkpoints at heights 0, 104679 and 145000 (D9, `src/chainparams.cpp`, lines 182 to 184).
+The fixture holds the hashes alone, so no test can repeat those checks from it.
+The fixture does not change any reference pin.
 
 ## Header-sequence fixture evidence
 

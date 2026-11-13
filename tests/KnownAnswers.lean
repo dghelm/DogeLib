@@ -15,6 +15,7 @@ import KnownAnswers.ScryptPow
 import KnownAnswers.Secp256k1
 import KnownAnswers.Serialization
 import KnownAnswers.SignedSpends
+import KnownAnswers.Subsidy
 import KnownAnswers.Transaction
 import KnownAnswers.Work
 
@@ -40,6 +41,7 @@ def KnownAnswers.checks : List (String × IO Nat) :=
     KnownAnswers.Secp256k1.checks,
     KnownAnswers.Serialization.checks,
     KnownAnswers.SignedSpends.checks,
+    KnownAnswers.Subsidy.checks,
     KnownAnswers.Transaction.checks,
     KnownAnswers.Work.checks
   ]

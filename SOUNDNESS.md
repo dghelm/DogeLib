@@ -1022,6 +1022,62 @@ By `#print axioms` with Lean `v4.35.0`:
 | --- | --- |
 | `propext`, `Classical.choice`, `Quot.sound` | `setCompact_value_ne_max` and `blockProof_eq` in `Work.Proofs.ChainWork`. `chainWork_add` and `accept_ok_addToBlockIndex` in `Block.Proofs.HeaderSequence` |
 
+### Block subsidy
+
+`getDogecoinBlockSubsidy` in `DogeLib.Block.Subsidy` follows Core's `GetDogecoinBlockSubsidy` (D104, lines 127 to 149) with the mainnet records, design record 0010, stage 0010a.
+Below height 145,000 the subsidy is `(1 + rand) * COIN`, and `rand` is one value of `boost::uniform_int<>(1, maxReward)` from a `boost::mt19937`.
+`subsidySeed` reads the seed from characters 7 to 13 of the display form of the previous block hash.
+From 145,000 the subsidy is `(500000 * COIN) >> (nHeight / 100000)`, and from 600,000 it is `10000 * COIN`.
+The source review, not a theorem, connects these definitions to Core and to Boost.
+
+Core's text does not contain the random value.
+It comes from Boost, which is no part of the Core pin: Core accepts Boost 1.60 or later.
+`Mt19937` and `uniformInt` follow Boost 1.70.0 (BO1 to BO3), the release that the Core harness builds.
+A Core built with a Boost release that draws in another way can pay other subsidies, and no claim here covers it.
+[SOURCES.md](SOURCES.md#reference-pins) records the Boost pin.
+
+`uniformInt` covers one branch of Boost's `generate_uniform_int`: `int` bounds, a 32-bit engine and `2 ≤ maxValue ≤ 2^31 - 1`.
+On mainnet `maxReward` is 999,999 or 499,999, so `getDogecoinBlockSubsidy` stays in that branch.
+The definitions use natural numbers where Boost uses 32-bit unsigned values.
+On the stated domain no step of Boost's arithmetic wraps. That statement is a comment in the source, not a theorem.
+
+The domain of `getDogecoinBlockSubsidy` is a height from 0 to `2^31 - 1`.
+It has the mainnet records only.
+
+Boost's rejection loop has no bound, and the library has no proof that it ends.
+So `uniformInt` takes fuel, and `getDogecoinBlockSubsidy` returns `fuelExhausted` when the draw rejects that many words.
+`fuelExhausted` is no result of Core.
+The oracle uses `subsidyFuel`, 624 words.
+A run outside CI compares all `2^28` seeds for both ranges, and the oracle returns a value for each ([COVERAGE.md](COVERAGE.md#operations), *Block subsidy*).
+That run is test evidence for the compiled code, not a theorem about `uniformInt`.
+
+`uniformInt_preimages` is about one word of the draw, `uniformIntAccept`, on the two mainnet ranges.
+The bucket sizes are 4,294 and 8,589, and `maxReward * bucket ≤ 2^32`.
+A word gives `value` exactly when `1 ≤ value ≤ maxReward` and the word lies in `[(value - 1) * bucket, value * bucket)`.
+A word is rejected exactly when it is at least `maxReward * bucket`.
+So each value has exactly `bucket` words, and a draw by remainder or with another bucket size fails the statement.
+
+The theorem does not relate `uniformIntAccept` to Boost's code.
+It says nothing about the generator or about the number of words that a draw reads.
+
+`Mt19937.output_seed_10000` shows that output 10,000 of the default seed 5489 is 4123659995, the value that the C++11 draft requires of `mt19937` (S3).
+It is one output of one seed.
+The kernel evaluates the array updates of `seed` and `twist` slowly, so the proof evaluates a list evaluator in their place.
+`Mt19937.output_seed_eq` proves that the evaluator gives the outputs of `seed`, `twist` and `next` for every seed and every output number.
+The evaluator is in the proof library, and no compiled code runs it.
+
+No theorem states a distribution of the subsidy, and none bounds its value.
+The definition does not model `ConnectBlock`, which adds the fees and compares the sum with the coinbase value (D101, line 1996).
+
+The comparison evidence is in [COVERAGE.md](COVERAGE.md#operations).
+`lake test` runs Core's three subsidy tests (D105) through the compiled code.
+The oracle operation `block.subsidy` compares the definition with Core's own function ([B4](#b4-the-oracle-and-foreign-boundaries)).
+Its cases include every mainnet height from 1 to 145,000.
+[docs/reviews/subsidy.md](docs/reviews/subsidy.md) records a model read of the definitions against Core and Boost.
+
+By `#print axioms`, `Mt19937.output_seed_eq` and `Mt19937.output_seed_10000` depend on `propext` and `Quot.sound`.
+`uniformInt_preimages` depends on `propext`, `Classical.choice` and `Quot.sound`.
+
 ### RIPEMD-160 and Hash160
 
 `Ripemd160.hash` adapts EthLib's executable definition at `6a93711`, as SOURCES.md records.
@@ -3121,6 +3177,12 @@ The caller supplies the predecessor view, adjusted time and known checkpoint sta
 The contextual operation checks no node-state condition in `AcceptBlockHeader` or full-block validity.
 The sequence operation adds the header-acceptance state transitions, with Core's `AcceptBlockHeader` and the placeholder predecessor described [above](#header-sequence-oracle-and-comparison).
 
+For `block.subsidy` the harness calls Core's `GetDogecoinBlockSubsidy` with `Params().GetConsensus(height)` on mainnet, as `ConnectBlock` does (D101, line 1996).
+It adds `boost_version`, the release of the Boost headers that Core's function was compiled with.
+The oracle adds `redraws`, the number of words that the draw rejected.
+Core does not report that number, so the comparison checks only its form.
+The adapter refuses more than 65,536 cases in one request, a limit that Core does not have.
+
 Any later foreign boundary, such as a C or Rust binding, is listed here with its size and its error handling.
 
 ### B5. Compiler substitutions in this repository
@@ -3207,6 +3269,12 @@ The fixtures in `scripts/CheckDeclsTest` use them on purpose.
 A metaprogram can add a declaration to the environment without the kernel checking it.
 An independent checker that replays the environment, such as `lean4checker`, would catch it, but none runs yet.
 
+`DogeLib.Proofs.TheoremTag` defines the attribute `theorem_tag`, which labels a cited theorem as a property, a model agreement, a refinement, a characterization or a witness.
+A proof module that uses the attribute imports that module with `meta import`, and Lean runs the handler of the attribute when it elaborates the module.
+The handler rejects an unknown tag and a declaration that is not a theorem, and records the tag in an environment extension.
+It adds no declaration, and it does not change a statement or a proof.
+A tag is a label that an author chose. No check shows that it describes its theorem.
+
 The default declaration check loads `DogeLib`, `DogeLib.Proofs`, `DogeLib.Exports` and `Refinement` with their private proof bodies.
 It requires every `.lean` source under `DogeLib/` and `Refinement/Refinement/`, plus their library roots, to appear in that imported environment.
 An unreachable module fails the check, including a leaf omitted from its layer root.
@@ -3238,9 +3306,13 @@ The root DogeLib package has no Lake dependencies.
 The separate package under `Refinement/` requires DogeLib and the pinned Aeneas backend, which brings Mathlib.
 [ARCHITECTURE.md](ARCHITECTURE.md#lake-libraries) explains the import boundaries, and [BUILDING.md](BUILDING.md#build-and-check) gives the build sequence.
 
+The random block subsidy follows Boost 1.70.0, which the Core pin does not fix ([block subsidy](#block-subsidy)).
+The Core comparison prints the Boost release of the harness, so a comparison with another release is visible in its output.
+
 ### D3. Wrong fixtures
 
 A fixture with a wrong expected value makes a wrong implementation pass.
 Each fixture records its provenance, and a test runner compares results with the committed expectations rather than overwriting them.
 A fixture can also carry generated inputs.
 The Script corpus's transaction bytes come from a transcription of Core's test builders, which [B4](#b4-the-oracle-and-foreign-boundaries) states.
+The subsidy fixture holds block hashes without their headers, so no test repeats the link checks of its fetch ([README](tests/block/mainnet-subsidy-prev-hashes/README.md)).

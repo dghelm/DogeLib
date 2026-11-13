@@ -150,6 +150,7 @@ jobs:
           (cd tests/block/mainnet-auxpow-activation-full-headers && sha256sum -c SHA256SUMS)
           (cd tests/block/mainnet-bip65-full-headers && sha256sum -c SHA256SUMS)
           (cd tests/block/mainnet-bip66-full-headers && sha256sum -c SHA256SUMS)
+          (cd tests/block/mainnet-subsidy-prev-hashes && sha256sum -c SHA256SUMS)
           (cd tests/block/regtest-header-sequences && sha256sum -c SHA256SUMS)
           (cd tests/script/campaign && sha256sum -c SHA256SUMS)
           (cd tests/script/corpus && sha256sum -c SHA256SUMS)

@@ -16,6 +16,7 @@
 // block.header_sequence calls Core's AcceptBlockHeader (SOURCES.md D33).
 // core_validation.cpp includes Core's validation.cpp for that purpose. The
 // harness builds the block index of each request in memory.
+// block.subsidy calls Core's GetDogecoinBlockSubsidy (SOURCES.md D104).
 //
 // An exception from Core that is not one of the four mapped read errors ends
 // the program with status 3, so it shows as a failed comparison.
@@ -50,6 +51,8 @@
 #include "core_validation.h"
 
 #include <univalue.h>
+
+#include <boost/version.hpp>
 
 #include <algorithm>
 #include <cstdint>
@@ -953,6 +956,31 @@ UniValue run(const UniValue& req)
         ok.pushKV("bits", static_cast<uint64_t>(bits));
     } else if (op == "block.header_sequence") {
         ok = headerSequence(req);
+    } else if (op == "block.subsidy") {
+        // Core's GetDogecoinBlockSubsidy (D104) with the mainnet record that
+        // GetConsensus selects for the height, as ConnectBlock calls it
+        // (D101, line 1996).
+        checkArgs(req, op, {"cases"});
+        const auto& cases = arg(req, "cases");
+        if (!cases.isArray()) throw RequestError{"cases must be an array"};
+        if (cases.size() > 65536) throw RequestError{"cases must have at most 65536 entries"};
+        SelectParams(CBaseChainParams::MAIN);
+        UniValue subsidies(UniValue::VARR);
+        for (size_t i = 0; i < cases.size(); ++i) {
+            const auto& entry = cases[i];
+            if (!entry.isObject()) throw RequestError{"cases must contain objects"};
+            for (const auto& key : entry.getKeys()) {
+                if (key != "height" && key != "prev_hash_hex") throw RequestError{"unknown case field " + key};
+            }
+            const int height = static_cast<int>(argInt(entry, "height", 0, INT32_MAX));
+            const uint256 prevHash = argHash(entry, "prev_hash_hex");
+            const CAmount subsidy = GetDogecoinBlockSubsidy(height, Params().GetConsensus(height), prevHash);
+            subsidies.push_back(std::to_string(subsidy));
+        }
+        ok.pushKV("subsidies", subsidies);
+        // The Boost release whose mt19937 and uniform_int Core was compiled with.
+        ok.pushKV("boost_version", std::to_string(BOOST_VERSION / 100000) + "." +
+                  std::to_string(BOOST_VERSION / 100 % 1000) + "." + std::to_string(BOOST_VERSION % 100));
     } else if (op == "work.next" || op == "block.contextual_check") {
         const bool contextual = op == "block.contextual_check";
         if (contextual) checkArgs(req, op, {"bytes_hex", "network", "chain", "adjusted_time", "checkpoints_enabled", "known_checkpoints"});

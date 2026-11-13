@@ -5,6 +5,7 @@ public import DogeLib.Block.Header
 public import DogeLib.Block.Merkle
 public import DogeLib.Block.ContextualCheck
 public import DogeLib.Block.HeaderSequence
+public import DogeLib.Block.Subsidy
 public import DogeLib.Transaction.Exports.Oracle
 public import DogeLib.Work.Exports.Oracle
 
@@ -315,8 +316,44 @@ def headerSequence : Operation where
         ("height", natJson entry.height), ("chain_work", .str (Work.Exports.targetHex entry.chainWork))]).toArray),
       ("marked_failed_child", .arr ((marked.map (fun hash => hexOf hash.displayBytes)).eraseDups.mergeSort (· ≤ ·) |>.map Json.str).toArray)]
 
-/-- The block, Merkle and header proof-of-work operations of the oracle. -/
+/-- One case of `block.subsidy`: a height and a previous block hash in internal order. -/
+def subsidyCase (json : Json) : Except Failure (Nat × Hash256) := do
+  let .obj fields := json | throw (.request "cases must contain objects")
+  for (key, _) in fields do
+    unless ["height", "prev_hash_hex"].contains key do
+      throw (.request s!"unknown case field {key}")
+  return ((← argInt fields "height" 0 2147483647).toNat, ← argHash fields "prev_hash_hex")
+
+/--
+The mainnet block subsidy of each case, with `subsidyFuel` words of fuel.
+`redraws` is a Lean diagnostic, which Core does not report: the number of rejected words, or null from height 145,000, where Core draws no word.
+-/
+def blockSubsidy : Operation where
+  name := "block.subsidy"
+  args := ["cases"]
+  run fields := do
+    let .arr entries ← arg fields "cases" | throw (.request "cases must be an array")
+    unless entries.size ≤ 65536 do throw (.request "cases must have at most 65536 entries")
+    let mut subsidies := #[]
+    let mut redraws := #[]
+    for entry in entries do
+      let (height, prevHash) ← subsidyCase entry
+      match getDogecoinBlockSubsidy subsidyFuel height prevHash with
+      | .error .fuelExhausted =>
+        throw (.spec (Json.mkObj [("kind", "subsidy"), ("reason", "fuel_exhausted"),
+          ("index", natJson subsidies.size)]))
+      | .ok subsidy =>
+        subsidies := subsidies.push (Json.str (toString subsidy))
+        redraws := redraws.push <|
+          if mainnetSimplifiedRewards height then Json.null
+          else match generateMTRandom (subsidySeed prevHash) (subsidyMaxReward height) subsidyFuel with
+            | some draw => natJson draw.redraws
+            | none => Json.null
+    return Json.mkObj [("subsidies", .arr subsidies), ("redraws", .arr redraws)]
+
+/-- The block, Merkle, header proof-of-work and subsidy operations of the oracle. -/
 def operations : List Operation := [readHeader, encodeHeader, hashHeader, computeMerkle,
-  scryptHash, readBlockHeader, checkAuxPow, checkPow, checkHeaderVersion, contextualCheck, headerSequence]
+  scryptHash, readBlockHeader, checkAuxPow, checkPow, checkHeaderVersion, contextualCheck, headerSequence,
+  blockSubsidy]
 
 end DogeLib.Block.Exports

@@ -43,6 +43,9 @@ MUTATIONS = {
     "pow_split": ("core", "HEADER_POW"),
     "pow_version": ("core", "HEADER_VERSION"),
     "pubkey_valid": ("core", "PUBKEY_VALID"),
+    "subsidy_value": ("core", "SUBSIDY"),
+    "subsidy_boost": ("core", "SUBSIDY"),
+    "subsidy_redraws": ("oracle", "SUBSIDY"),
     "signature_verdict": ("core", "SIGNATURE_VERDICT"),
     "targeted_early_error": ("both", "TARGETED_OPCODE"),
     "tx_valid_core_rejection": ("core", "TX_VALID_CORE"),
@@ -162,6 +165,10 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
         if role == "core" and mode != "core_preimage":
             ok.pop("preimage_hex", None)
             ok.pop("diagnostic", None)
+        if role == "core" and request["op"] == "block.subsidy" and "redraws" in ok:
+            # The harness names its Boost release and reports no rejected words.
+            del ok["redraws"]
+            ok["boost_version"] = "1.70.0"
         if role == "core" and request["op"] == "block.header_sequence" and resp.get("error", {}).get("kind") == "work_view":
             from oracle_header_sequence import core_refusal
             resp["error"] = core_refusal(resp["error"])
@@ -196,6 +203,16 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
     elif mode == "pubkey_valid":
         mutate_first(responses, lambda r: "valid" in r.get("ok", {}),
                      lambda r: r["ok"].__setitem__("valid", not r["ok"]["valid"]))
+    elif mode == "subsidy_value":
+        # One coin more at a random-subsidy height stays inside Core's range.
+        mutate_first(responses, lambda r: (r.get("ok", {}).get("subsidies") or [None])[0] == "6841600000000",
+                     lambda r: r["ok"]["subsidies"].__setitem__(0, "6841700000000"))
+    elif mode == "subsidy_boost":
+        mutate_first(responses, lambda r: "boost_version" in r.get("ok", {}),
+                     lambda r: r["ok"].pop("boost_version"))
+    elif mode == "subsidy_redraws":
+        mutate_first(responses, lambda r: "redraws" in r.get("ok", {}),
+                     lambda r: r["ok"].pop("redraws"))
     elif mode == "signature_verdict":
         from oracle_pubkey import signature_spends
         ids = {r["id"] for r in requests if {k: v for k, v in r.items() if k != "id"} in signature_spends()}

@@ -52,7 +52,8 @@ The two programs must return the same subsidy for every height ([the comparison]
 `scripts/oracle_subsidy.py` builds the requests.
 
 The fixture has no expected subsidy.
-The table `CORE_VALUES` of `scripts/oracle_subsidy.py` records 35 subsidies that Core's function returned for these hashes through the harness, at the pin with Boost 1.70.0, on 2026-11-13.
+The table `CORE_VALUES` of `scripts/oracle_subsidy.py` records 35 subsidies that Core's function returned for these hashes.
+The harness at the pin, with Boost 1.70.0, gave them on 2026-11-13.
 They are the heights 1, 2, 99999, 100000 and 144999, and the 30 heights below 145,000 for which the oracle reports a redraw.
 `scripts/test_oracle.py` checks the oracle against that table, and the Core comparison computes the values again.
 To capture them again, send the request of `core_values_request()` to `build/core-harness/core-oracle`.

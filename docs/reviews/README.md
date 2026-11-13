@@ -13,7 +13,9 @@ The [Script record](script.md#after-the-read) shows one finding whose stated mec
 
 Each record gives the reader, the date, the DogeLib and Core revisions, the scope, the findings, and what the read compared and did not compare.
 Line numbers in a record refer to those revisions.
-All seven reads are by GPT-6 through Codex, on 2026-11-11, at DogeLib `865754b` and Core `e0a1c157791544e818c901bd9341896965afbf9d`:
+All reads are by GPT-6 through Codex, at Core `e0a1c157791544e818c901bd9341896965afbf9d`.
+The first seven are of 2026-11-11, at DogeLib `865754b`.
+The block subsidy read is of 2026-11-13, at DogeLib `4cd73bc`, and it also reads Boost 1.70.0:
 
 | Area | Record | Brief | Findings |
 | --- | --- | --- | --- |
@@ -24,6 +26,7 @@ All seven reads are by GPT-6 through Codex, on 2026-11-11, at DogeLib `865754b` 
 | Bounded readers and base serialization | [readers.md](readers.md) | [briefs/readers.md](briefs/readers.md) | 1 domain boundary |
 | Contextual header validation and header sequences | [headerseq.md](headerseq.md) | [briefs/headerseq.md](briefs/headerseq.md) | None |
 | Cryptography: secp256k1 verification and hashes | [crypto.md](crypto.md) | [briefs/crypto.md](briefs/crypto.md) | 4 domain boundaries |
+| Block subsidy, with Boost's `mt19937` and `uniform_int` | [subsidy.md](subsidy.md) | [briefs/subsidy.md](briefs/subsidy.md) | None |
 
 No read found a consensus-divergent discrepancy.
 Each finding is a *domain boundary*: an input outside the domain on which a definition corresponds to Core.
@@ -34,7 +37,8 @@ That section is an addendum, not part of the read.
 ## Run a read again
 
 Each file in [briefs/](briefs/) is the prompt that produced one record.
-The only change is that `<DogeLib clone>` and `<Dogecoin Core clone>` replace the local paths.
+The only change is that placeholders, such as `<DogeLib clone>` and `<Dogecoin Core clone>`, replace the local paths.
+The subsidy brief also has a placeholder for its DogeLib revision.
 
 1. Check out DogeLib and Dogecoin Core at the revisions to compare.
 2. Put the two paths and the DogeLib revision in the brief.

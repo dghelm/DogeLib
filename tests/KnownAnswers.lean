@@ -1,5 +1,6 @@
 import KnownAnswers.AuxPow
 import KnownAnswers.Block
+import KnownAnswers.BlockCheck
 import KnownAnswers.Campaign
 import KnownAnswers.ContextualCheck
 import KnownAnswers.ContextualParams
@@ -26,6 +27,7 @@ def KnownAnswers.checks : List (String × IO Nat) :=
   List.flatten [
     KnownAnswers.AuxPow.checks,
     KnownAnswers.Block.checks,
+    KnownAnswers.BlockCheck.checks,
     KnownAnswers.Campaign.checks,
     KnownAnswers.ContextualCheck.checks,
     KnownAnswers.ContextualParams.checks,

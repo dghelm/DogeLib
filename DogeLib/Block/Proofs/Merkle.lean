@@ -2,12 +2,16 @@ module
 
 public import DogeLib.Block.Merkle
 public import DogeLib.Transaction.Proofs.Txid
+public import DogeLib.Proofs.TheoremTag
+meta import DogeLib.Proofs.TheoremTag
 
 /-!
 # Merkle structural properties
 
 These properties concern the Lean definitions on every finite leaf list.
 They do not establish collision resistance or an all-input equivalence to Core's C++ implementation.
+
+`MerkleDuplication.root_eq_and_mutated` covers the mutation of CVE-2012-2459 in every shape: one or more duplications of a trailing subtree keep the root and set the mutation flag.
 -/
 
 @[expose] public section
@@ -94,5 +98,144 @@ theorem computeMerkleRoot_duplicate_last (pre : List Hash256) (last : Hash256) (
 theorem merklePair_val (a b : Hash256) :
     (merklePair a b).val = (Cryptography.Hash.Sha256d.hash (a.val ++ b.val).toByteArray).toList :=
   Transaction.digestToHash256_val _ (Cryptography.Hash.Sha256d.size_hash _)
+
+/-! ## Duplication of a trailing subtree (CVE-2012-2459) -/
+
+/-- A list of at least two hashes has the root of its next level. -/
+theorem merkleRoot_eq_merkleLevel (xs : List Hash256) (h : 2 ≤ xs.length) :
+    merkleRoot xs = merkleRoot (merkleLevel xs) := by
+  match xs with
+  | [] => simp at h
+  | [a] => simp at h
+  | a :: b :: rest => rw [merkleRoot, merkleLevel]
+
+/-- The next level of `xs ++ ys` is the next level of each part, when `xs` has even length. -/
+theorem merkleLevel_append (xs ys : List Hash256) (even : xs.length % 2 = 0) :
+    merkleLevel (xs ++ ys) = merkleLevel xs ++ merkleLevel ys := by
+  match xs with
+  | [] => rfl
+  | [a] => simp at even
+  | a :: b :: rest =>
+    simp only [List.length_cons] at even
+    have hr : rest.length % 2 = 0 := by omega
+    simp only [List.cons_append, merkleLevel, merkleLevel_append rest ys hr]
+
+/-- The next level of a list of even length has half its entries. -/
+theorem merkleLevel_length (xs : List Hash256) (even : xs.length % 2 = 0) :
+    (merkleLevel xs).length = xs.length / 2 := by
+  match xs with
+  | [] => rfl
+  | [a] => simp at even
+  | a :: b :: rest =>
+    simp only [List.length_cons] at even
+    have hr : rest.length % 2 = 0 := by omega
+    simp only [merkleLevel, List.length_cons, merkleLevel_length rest hr]
+    omega
+
+/-- The next level of a list without its first `m` entries, for even `m`, is the next level without its first `m / 2` entries. -/
+theorem merkleLevel_drop (xs : List Hash256) (m : Nat) (even : m % 2 = 0) :
+    merkleLevel (xs.drop m) = (merkleLevel xs).drop (m / 2) := by
+  match m, xs with
+  | 0, xs => simp
+  | 1, _ => simp at even
+  | m + 2, [] => simp [merkleLevel]
+  | m + 2, [a] =>
+    have : (m + 2) / 2 = m / 2 + 1 := by omega
+    simp [merkleLevel, this]
+  | m + 2, a :: b :: rest =>
+    have hm : m % 2 = 0 := by omega
+    have : (m + 2) / 2 = m / 2 + 1 := by omega
+    simp only [List.drop_succ_cons, merkleLevel, this, merkleLevel_drop rest m hm]
+
+/-- On a list of even length, the level of complete pairs is the padded level: no entry needs padding. -/
+theorem merkleCompleteLevel_eq_merkleLevel (xs : List Hash256) (even : xs.length % 2 = 0) :
+    merkleCompleteLevel xs = merkleLevel xs := by
+  match xs with
+  | [] => rfl
+  | [a] => simp at even
+  | a :: b :: rest =>
+    simp only [List.length_cons] at even
+    have hr : rest.length % 2 = 0 := by omega
+    simp only [merkleCompleteLevel, merkleLevel, merkleCompleteLevel_eq_merkleLevel rest hr]
+
+/--
+One duplication of a trailing subtree.
+Let `xs` have `2^k * c` hashes, with `c` odd and at least 3, and let `ys` be `xs` followed by a copy of its last `2^k` hashes.
+Then `ys` has the Merkle root of `xs`, and `ys` sets the mutation flag.
+
+At level `k` the tree of `xs` has `c` nodes, an odd number, so the root computation pairs the last node with itself.
+The copy in `ys` makes that pair explicit.
+`c = 1` is excluded: the one node at level `k` is the root, and the computation does not pair it.
+-/
+theorem merkle_duplicate_subtree (k : Nat) : ∀ (c : Nat) (xs : List Hash256),
+    xs.length = 2 ^ k * c → c % 2 = 1 → 3 ≤ c →
+    merkleRoot (xs ++ xs.drop (xs.length - 2 ^ k)) = merkleRoot xs ∧
+      merkleMutated (xs ++ xs.drop (xs.length - 2 ^ k)) = true := by
+  induction k with
+  | zero =>
+    intro c xs hlen hodd hc
+    simp only [Nat.pow_zero, Nat.one_mul] at hlen
+    have hne : xs ≠ [] := by intro h; simp [h] at hlen; omega
+    obtain ⟨pre, last, rfl⟩ : ∃ pre last, xs = pre ++ [last] :=
+      ⟨xs.dropLast, xs.getLast hne, (List.dropLast_concat_getLast hne).symm⟩
+    simp only [List.length_append, List.length_cons, List.length_nil] at hlen
+    have hpre : pre ≠ [] := by intro h; simp [h] at hlen; omega
+    have heven : pre.length % 2 = 0 := by omega
+    have hdrop : (pre ++ [last]).drop ((pre ++ [last]).length - 2 ^ 0) = [last] := by simp
+    rw [hdrop, List.append_assoc]
+    have h := computeMerkleRoot_duplicate_last pre last hpre heven
+    simp only [computeMerkleRoot, MerkleResult.mk.injEq] at h
+    exact h
+  | succ k ih =>
+    intro c xs hlen hodd hc
+    have hp : 0 < 2 ^ k := Nat.two_pow_pos k
+    rw [Nat.pow_succ] at hlen ⊢
+    generalize 2 ^ k = p at hlen hp ih ⊢
+    have hlen' : xs.length = 2 * (p * c) := by rw [hlen]; ac_rfl
+    have hpc : 3 * p ≤ p * c := by rw [Nat.mul_comm 3 p]; exact Nat.mul_le_mul_left p hc
+    have hxs : xs.length % 2 = 0 := by omega
+    have htail : (xs.drop (xs.length - p * 2)).length % 2 = 0 := by simp only [List.length_drop]; omega
+    have hys : (xs ++ xs.drop (xs.length - p * 2)).length % 2 = 0 := by
+      simp only [List.length_append]; omega
+    have hzlen : (merkleLevel xs).length = p * c := by rw [merkleLevel_length xs hxs]; omega
+    have hlevel : merkleLevel (xs ++ xs.drop (xs.length - p * 2)) =
+        merkleLevel xs ++ (merkleLevel xs).drop ((merkleLevel xs).length - p) := by
+      rw [merkleLevel_append xs _ hxs, merkleLevel_drop xs _ (by omega), hzlen]
+      congr 2
+      omega
+    obtain ⟨hroot, hmut⟩ := ih c (merkleLevel xs) hzlen hodd hc
+    constructor
+    · rw [merkleRoot_eq_merkleLevel _ (by simp only [List.length_append]; omega), hlevel, hroot,
+        ← merkleRoot_eq_merkleLevel xs (by omega)]
+    · apply merkleMutated_of_completeLevel
+      rw [merkleCompleteLevel_eq_merkleLevel _ hys, hlevel]
+      exact hmut
+
+/--
+`MerkleDuplication xs ys`: `ys` comes from `xs` by one or more duplications of a trailing subtree, the mutation of CVE-2012-2459.
+One step appends a copy of the last `2^k` hashes of a list of `2^k * c` hashes, for an odd `c` of at least 3.
+For example, `[A, B, C]` gives `[A, B, C, C]`, and `[A, B, C, D, E, F]` gives `[A, B, C, D, E, F, E, F]`.
+A step from `[A, B, C, D, E]` to six hashes and a step from six to eight give `[A, B, C, D, E, E, E, E]`.
+-/
+inductive MerkleDuplication : List Hash256 → List Hash256 → Prop where
+  /-- One duplication of the last `2^k` hashes. -/
+  | step (k c : Nat) (xs : List Hash256) (hlen : xs.length = 2 ^ k * c) (hodd : c % 2 = 1)
+      (hc : 3 ≤ c) : MerkleDuplication xs (xs ++ xs.drop (xs.length - 2 ^ k))
+  /-- A duplication of a duplication. -/
+  | trans {xs ys zs : List Hash256} : MerkleDuplication xs ys → MerkleDuplication ys zs →
+      MerkleDuplication xs zs
+
+/--
+For all hash lists `xs` and `ys` with `MerkleDuplication xs ys`: `ys` has the Merkle root of `xs`, and `ys` sets the mutation flag.
+So the root alone does not tell the two lists apart, and the flag marks the longer one.
+The theorem is about `merkleRoot` and `merkleMutated`. It assumes nothing about the hash function.
+It does not say that every list with the root of `xs` is a duplication of `xs`.
+-/
+@[theorem_tag property]
+theorem MerkleDuplication.root_eq_and_mutated {xs ys : List Hash256} (h : MerkleDuplication xs ys) :
+    merkleRoot ys = merkleRoot xs ∧ merkleMutated ys = true := by
+  induction h with
+  | step k c xs hlen hodd hc => exact merkle_duplicate_subtree k c xs hlen hodd hc
+  | trans _ _ ih1 ih2 => exact ⟨ih2.1.trans ih1.1, ih2.2⟩
 
 end DogeLib.Block

@@ -1,6 +1,7 @@
 module
 
 public import DogeLib.Exports.Json
+public import DogeLib.Block.Check
 public import DogeLib.Block.Header
 public import DogeLib.Block.Merkle
 public import DogeLib.Block.ContextualCheck
@@ -16,6 +17,7 @@ The adapter exposes the pure header codec, block hash and transaction Merkle com
 SOURCES.md D10, D40 and D42 name the pinned Core functions.
 `docs/oracle.md` defines the JSON contract and the Merkle leaf bound.
 The full-header operations also expose the AuxPoW and header proof-of-work checks.
+`tx.check` and `block.check` expose `checkTransaction` and `checkBlock` (D106), with the legacy count of signature operations.
 -/
 
 @[expose] public section
@@ -351,9 +353,73 @@ def blockSubsidy : Operation where
             | none => Json.null
     return Json.mkObj [("subsidies", .arr subsidies), ("redraws", .arr redraws)]
 
-/-- The block, Merkle, header proof-of-work and subsidy operations of the oracle. -/
+/-- The fields of a verdict of `CheckTransaction` or `CheckBlock`: the reject reason, score and code of Core's `CValidationState`, or nulls. -/
+def rejectionFields (rejection : Option (String × Nat × Nat)) : List (String × Json) :=
+  [("valid", .bool rejection.isNone),
+    ("reject_reason", rejection.map (Json.str ·.1) |>.getD .null),
+    ("dos", rejection.map (natJson ·.2.1) |>.getD .null),
+    ("reject_code", rejection.map (natJson ·.2.2) |>.getD .null)]
+
+/--
+`tx.check`: `checkTransaction` on a transaction that is all of `tx_hex`, read in `mode`.
+`legacy_sigops` is `Transaction.getLegacySigOpCount` modulo `2^32`, and `base_size` is the length of the base serialization.
+`diagnostic` is the Lean error, which Core does not report.
+-/
+def txCheck : Operation where
+  name := "tx.check"
+  args := ["tx_hex", "mode", "check_duplicate_inputs"]
+  run fields := do
+    let mode ← argMode fields
+    let bs ← argHex fields "tx_hex"
+    let duplicates ← Work.Exports.argBool fields "check_duplicate_inputs"
+    match readTx mode bs with
+    | .error e => throw (.spec (Transaction.Exports.witnessReadErrorJson e))
+    | .ok (w, rest) =>
+      unless rest.isEmpty do
+        throw (.spec (Json.mkObj [("kind", "trailing_bytes"), ("count", natJson rest.length)]))
+      let result := Transaction.checkTransaction w.tx duplicates
+      let rejection := match result with
+        | .ok () => none
+        | .error e => some (e.rejectReason, e.dosScore, e.rejectCode)
+      return Json.mkObj (rejectionFields rejection ++
+        [("legacy_sigops", natJson (w.tx.getLegacySigOpCount % 2 ^ 32)),
+          ("base_size", natJson (Codec.encode w.tx).length),
+          ("diagnostic", match result with | .ok () => .null | .error e => .str (reprStr e))])
+
+/--
+`block.check`: `checkBlock` on mainnet for a block that is all of `block_hex`, read in `mode`.
+`legacy_sigops` is `legacySigOpCount` modulo `2^32`, and `base_size` is `Block.baseSize`.
+`diagnostic` is the Lean error, which Core does not report. It names the position of a rejected transaction.
+-/
+def blockCheck : Operation where
+  name := "block.check"
+  args := ["block_hex", "mode", "check_pow", "check_merkle_root"]
+  run fields := do
+    let mode ← argMode fields
+    let bs ← argHex fields "block_hex"
+    let checkPow ← Work.Exports.argBool fields "check_pow"
+    let checkMerkle ← Work.Exports.argBool fields "check_merkle_root"
+    match Block.decodeComplete mode bs with
+    | .error (.read e) => throw (.spec (Transaction.Exports.witnessReadErrorJson e))
+    | .error (.trailingBytes n) =>
+      throw (.spec (Json.mkObj [("kind", "trailing_bytes"), ("count", natJson n)]))
+    | .ok b =>
+      let result := checkBlock .mainnet checkPow checkMerkle b
+      let rejection := match result with
+        | .ok () => none
+        | .error e => some (e.rejectReason, e.dosScore, e.rejectCode)
+      return Json.mkObj (rejectionFields rejection ++
+        [("corruption_possible", match result with
+            | .ok () => .null | .error e => .bool e.corruptionPossible),
+          ("legacy_sigops", natJson (legacySigOpCount b.transactions % 2 ^ 32)),
+          ("base_size", natJson b.baseSize),
+          ("transactions", natJson b.vtx.val.length),
+          ("diagnostic", match result with | .ok () => .null | .error e => .str (reprStr e))] ++
+        hashFields "hash" b.header.pure.getHash)
+
+/-- The block, Merkle, header proof-of-work, subsidy and check operations of the oracle. -/
 def operations : List Operation := [readHeader, encodeHeader, hashHeader, computeMerkle,
   scryptHash, readBlockHeader, checkAuxPow, checkPow, checkHeaderVersion, contextualCheck, headerSequence,
-  blockSubsidy]
+  blockSubsidy, txCheck, blockCheck]
 
 end DogeLib.Block.Exports

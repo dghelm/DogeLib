@@ -59,6 +59,7 @@ This section is an addendum, not part of the read.
 
 - The header names the reader as the model named itself. The Codex log of the run gives the model identifier `gpt-6.1-sol`.
 - The read did not establish that 624 words of fuel suffice.
-  The run of `scripts/compare_subsidy_seeds.py` on 2026-11-13 compared all 2^28 seeds at heights 1 and 100,000 with Core, with no error and at most 2 redraws ([COVERAGE.md](../../COVERAGE.md#operations), *Block subsidy*).
+  `scripts/compare_subsidy_seeds.py` compared all 2^28 seeds at heights 1 and 100,000 with Core on 2026-11-13.
+  It found no error and at most 2 redraws ([COVERAGE.md](../../COVERAGE.md#operations), *Block subsidy*).
 - The reader sent 2,117 cases to the oracle and the harness. A model read needs no execution, and the repository's own comparison covers those cases and more.
 - The [brief](briefs/subsidy.md) is the prompt of the read.

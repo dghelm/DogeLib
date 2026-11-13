@@ -205,7 +205,7 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
                      lambda r: r["ok"].__setitem__("valid", not r["ok"]["valid"]))
     elif mode == "subsidy_value":
         # One coin more at a random-subsidy height stays inside Core's range.
-        mutate_first(responses, lambda r: r.get("ok", {}).get("subsidies") == ["6841600000000"] + r["ok"]["subsidies"][1:],
+        mutate_first(responses, lambda r: (r.get("ok", {}).get("subsidies") or [None])[0] == "6841600000000",
                      lambda r: r["ok"]["subsidies"].__setitem__(0, "6841700000000"))
     elif mode == "subsidy_boost":
         mutate_first(responses, lambda r: "boost_version" in r.get("ok", {}),

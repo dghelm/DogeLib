@@ -157,8 +157,8 @@ That is every coin the range spends.
 For each transaction ID that the range creates, it also holds the existing coins or a statement that there are none.
 The request also supplies the ancestor hash at 1,034,383.
 On mainnet BIP30 is never skipped (section 2), so the recent range states that every transaction ID it creates is absent.
-Nothing authenticates that statement.
-BIP34 supports it for the real chain: each coinbase from 1,034,383 contains its height, so a repeated ID needs a SHA-256d collision.
+Nothing authenticates that statement, and the record makes no claim that it is true.
+Core's verdict on the real blocks with that supplied state is what the comparison checks.
 
 The fetch tool takes each spent coin from its funding transaction and checks the transaction against its ID.
 It checks the coin's height with a Merkle branch to the pinned header chain.

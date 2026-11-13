@@ -665,7 +665,7 @@ def set_hash_boundaries(algorithm: str) -> list[dict]:
 
 
 QUICK_SEQUENCE_MUTATIONS = 8
-QUICK_SETS = ("header sequence regtest 34", "header sequence state boundaries", "contextual boundaries", "header PoW fixtures", "full header readers", "header version boundaries", "pubkey Core signatures", "Script signature verdict", "fixtures", "compactsize", "sighash endpoints", "witness flags and stacks",
+QUICK_SETS = ("subsidy boundaries and fixed schedule", "header sequence regtest 34", "header sequence state boundaries", "contextual boundaries", "header PoW fixtures", "full header readers", "header version boundaries", "pubkey Core signatures", "Script signature verdict", "fixtures", "compactsize", "sighash endpoints", "witness flags and stacks",
               "work compact boundaries", "regtest legacy wrap case", "work missing skip traversal", "header field boundaries", "Merkle generated",
               "RIPEMD-160 padding boundaries", "Hash160 padding boundaries", "SHA-1 padding boundaries", "Script reader truncations", "Script resource boundaries", "Script resource boundaries base",
               "Script legacy corpus base", "Script legacy corpus transaction", "Script harness refusal domain", "Script refusal precedence",

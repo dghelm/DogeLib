@@ -17,6 +17,9 @@ The kernel evaluates the array updates of `Mt19937.seed` and `Mt19937.twist` slo
 So the module defines an evaluator on lists, proves that it agrees with the definitions for every seed (`Mt19937.output_seed_eq`), and evaluates that.
 
 No theorem here says that `uniformInt` returns a value with a given fuel, or that a subsidy has a given distribution.
+
+The list evaluator adapts the same Boost code as the definitions.
+`DogeLib.Block.Subsidy` gives its notices and its licence.
 -/
 
 @[expose] public section
@@ -25,8 +28,9 @@ namespace DogeLib.Block
 /-! ## The distribution -/
 
 /--
-For every range `maxValue ≥ 1` with a positive bucket size, every word and every `value`:
-`uniformIntAccept` returns `value` exactly when `1 ≤ value ≤ maxValue` and the word lies in the interval `[(value - 1) * bucket, value * bucket)`.
+Let the range `maxValue ≥ 1` have a positive bucket size.
+For every word and every `value`, `uniformIntAccept` returns `value` exactly when two conditions hold.
+`value` is from 1 to `maxValue`, and the word lies in the interval `[(value - 1) * bucket, value * bucket)`.
 -/
 theorem uniformIntAccept_eq_some_iff (maxValue : Nat) (word : UInt32) (value : Nat)
     (hmax : 1 ≤ maxValue) (hbucket : 0 < uniformIntBucket maxValue) :
@@ -53,8 +57,8 @@ theorem uniformIntAccept_eq_some_iff (maxValue : Nat) (word : UInt32) (value : N
     omega
 
 /--
-For every range `maxValue ≥ 1` with a positive bucket size and every word:
-`uniformIntAccept` rejects the word exactly when the word is at least `maxValue * bucket`.
+Let the range `maxValue ≥ 1` have a positive bucket size.
+For every word, `uniformIntAccept` rejects the word exactly when the word is at least `maxValue * bucket`.
 -/
 theorem uniformIntAccept_eq_none_iff (maxValue : Nat) (word : UInt32)
     (hmax : 1 ≤ maxValue) (hbucket : 0 < uniformIntBucket maxValue) :
@@ -129,7 +133,7 @@ def normalizeList (l : List UInt32) : List UInt32 :=
 
 /--
 `twist` on lists, without an array update.
-`rest` holds the words that the pass has not replaced, and `doneRev` holds the new words, newest first.
+`rest` holds the old words from the current index on, and `doneRev` holds the new words, newest first.
 One step replaces the head of `rest`.
 It reads the next word from `rest`, or the first new word at the last step.
 It reads the word 397 places on from `rest`, or the new word 227 places back.
@@ -336,7 +340,7 @@ theorem output_seed_eq (value : UInt32) (q r : Nat) (hr : r < 624) :
     seedLoop_toList]
 
 /--
-Output number 10,000 of `boost::mt19937` with the default seed 5489 (B1, line 89) is 4123659995.
+Output number 10,000 of `boost::mt19937` with the default seed 5489 (BO1, line 89) is 4123659995.
 The C++11 draft N3337, 26.5.5 [rand.predef], paragraph 3, requires this value of `std::mt19937`.
 The kernel computes it through the list evaluator of `output_seed_eq`, in about 45 seconds.
 -/

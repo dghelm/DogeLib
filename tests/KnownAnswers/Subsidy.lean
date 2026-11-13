@@ -7,7 +7,7 @@ import KnownAnswers.Common
 The expected values come from Dogecoin Core's unit tests at the pin and from the C++11 draft N3337.
 None of them comes from DogeLib.
 
-- `subsidy_first_100k_test`, `subsidy_100k_145k_test` and `subsidy_post_145k_test`: `src/test/dogecoin_tests.cpp`, lines 61 to 121 (SOURCES.md D7).
+- `subsidy_first_100k_test`, `subsidy_100k_145k_test` and `subsidy_post_145k_test`: `src/test/dogecoin_tests.cpp`, lines 61 to 121 (SOURCES.md D105).
   The first two tests add each subsidy to a 256-bit number, and use that number as the next previous hash.
   They fix only the sum of the subsidies, so a wrong value at one height changes every later seed.
 - Output number 10,000 of `mt19937` with the default seed: N3337, 26.5.5 [rand.predef], paragraph 3.

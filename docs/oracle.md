@@ -110,6 +110,7 @@ Results use these types:
 | `read` | The reader of the specification rejects the bytes, as Core's stream would. | `reason`: `truncated` (the input ends early), `non_canonical` (a CompactSize value in a longer form than needed), `too_large` (a CompactSize value above `MAX_SIZE`, `0x02000000`), or `unknown_optional_data` (a transaction flag bit other than bit 0 remains after the input and output lists and any stacks). For `sighash.legacy`, `argument` names the argument that failed. |
 | `work_view` | The finite work view cannot supply a result. The view errors describe the adapter, not consensus rejection codes. | `reason`: `height_out_of_range`, `inconsistent_heights`, `missing_ancestor`, `first_height_underflow`, `zero_interval`, `empty_view` or `short_view`. `first_height_underflow` and `zero_interval` are unreachable with these network parameters and checked views. |
 | `trailing_bytes` | A transaction was read and bytes remain. | `count`: the number of bytes after the transaction. For `sighash.legacy`, `argument`. |
+| `subsidy` | The draw of `block.subsidy` rejected every word that its fuel allows. Core has no such result. | `reason`: `fuel_exhausted`. `index`: the position of the case in `cases`. |
 
 `work_view` errors describe the finite-view adapter in the specification.
 They do not describe Core consensus rejection.
@@ -142,6 +143,7 @@ The `read` and `trailing_bytes` kinds report serialization errors of the specifi
 | `work.get_compact` | `value_hex` (target magnitude), `negative` (boolean) | `compact` (`u32`) | `Work.ArithUint256.getCompact` |
 | `work.calculate_next` | `network`, `selection_height`, `last_height`, `last_time`, `last_bits`, `first_time` | `bits` (`u32`) | `Work.calculateDogecoinNextWorkRequired` with `Work.getConsensus` |
 | `work.next` | `network`, `chain`, `candidate_time` (`u32`) | `bits` (`u32`) | `Work.nextWorkRequired` |
+| `block.subsidy` | `cases`: an array of `height` and `prev_hash_hex` pairs | `subsidies`, and Lean-only `redraws`, [as below](#block-subsidy) | `Block.getDogecoinBlockSubsidy`, Core's `GetDogecoinBlockSubsidy` on mainnet |
 
 ### Public-key verification
 
@@ -592,6 +594,38 @@ Duplicate members of the failed list do not satisfy that condition alone.
 A failed member below an anchor is no ancestor under the finite-index convention.
 All other fields remain comparable in the excluded-mark cases.
 
+### Block subsidy
+
+`block.subsidy` runs `Block.getDogecoinBlockSubsidy`, Core's `GetDogecoinBlockSubsidy` with the mainnet parameter records (SOURCES.md D104, design record 0010).
+It has no network argument, and it covers mainnet only.
+The request has one required field, `cases`: an array of at most 65,536 objects.
+Each object has exactly these fields:
+
+- `height`: an integer from 0 to 2147483647, Core's `nHeight`.
+- `prev_hash_hex`: exactly 32 bytes, the hash of the previous block in internal order.
+
+```json
+{"id":"s1","op":"block.subsidy","cases":[{"height":1,"prev_hash_hex":"9156352c1818b32e90c9e792efd6a11a82fe7956a630f03bbee236cedae3911a"},{"height":145000,"prev_hash_hex":"0000000000000000000000000000000000000000000000000000000000000000"}]}
+{"id":"s1","ok":{"redraws":[0,null],"subsidies":["6841600000000","25000000000000"]}}
+```
+
+The result in `ok` has two arrays, with one entry for each case, in the order of the request:
+
+| Field | Meaning |
+| --- | --- |
+| `subsidies` | The subsidy in koinu, as a string of decimal digits |
+| `redraws` | A Lean diagnostic: the number of words that Boost's draw rejected before it accepted one. It is null from height 145,000, where Core draws no word. Core does not report this number. |
+
+Below height 145,000 the subsidy depends on `prev_hash_hex`, through seven hexadecimal digits of its display form.
+From 145,000 it depends on the height alone.
+The operation does not check that a hash is the hash of a block, or that a block at the height exists.
+
+More than 65,536 cases, an unknown field, a height outside the range and a hash of another length are request errors.
+This adapter limit is not a limit of Core.
+The draw of the specification takes fuel, 624 words in the oracle.
+If a case rejects that many words, the whole request gets the error kind `subsidy`, with `reason` `fuel_exhausted` and the `index` of the case.
+No known request gives that error: a [run outside CI](#block-subsidy-comparison-evidence) covers every seed.
+
 ## The Core harness
 
 `harness/core/core_oracle.cpp` answers the same requests by running Dogecoin Core's own code.
@@ -654,6 +688,7 @@ These pinned sources supply the work functions and parameter constructors:
 | --- | --- |
 | `block.header_sequence` | `AcceptBlockHeader` once for each header, which calls `CheckBlockHeader`, `ContextualCheckBlockHeader` and `AddToBlockIndex`, on an index that the harness builds from the request |
 | `block.contextual_check` | `ContextualCheckBlockHeader` on index entries that the harness builds from the request |
+| `block.subsidy` | `SelectParams` for mainnet, then `GetDogecoinBlockSubsidy` with `Params().GetConsensus(height)` for each case, as `ConnectBlock` calls it (D101, line 1996) |
 | `compactsize.encode` | `WriteCompactSize` into a `CDataStream` |
 | `compactsize.read` | `ReadCompactSize` from a `CDataStream` |
 | `tx.read_base` | `CMutableTransaction` read from a `CDataStream` whose version has `SERIALIZE_TRANSACTION_NO_WITNESS`, so `UnserializeTransaction` reads base mode |
@@ -714,6 +749,8 @@ The harness answers a projection of `dogelib-oracle/1`, not the format itself:
   An unmapped `ScriptError` stops the harness with an unmapped-Core error.
 - For a truncated `script.read_op`, the harness derives `opcode` and `part` from the input and cursor.
   Core does not return these diagnostics.
+- `block.subsidy` has no `redraws`, because Core does not report the rejected words.
+  It has `boost_version` instead: the release of the Boost headers that Core's function was compiled with, such as `1.70.0`.
 - `sighash.legacy` has no `preimage_hex`.
   `SignatureHash` hashes its preimage as it writes it and does not return it.
 - `plan` is a label that the harness computes from the conditions of Core's two early returns, in `src/script/interpreter.cpp` lines 1225 to 1235.
@@ -742,7 +779,7 @@ For `sighash.legacy` with plan `hash_bytes`, the double SHA-256 of the oracle's 
 This checks the preimage against Core's digest, not byte by byte against a preimage from Core.
 Outside the checked `harness-refused` category, a request error from either program fails the comparison.
 
-A full comparison with Core `e0a1c157791544e818c901bd9341896965afbf9d` sends 385,842 stream requests.
+A full comparison with Core `e0a1c157791544e818c901bd9341896965afbf9d` sends 385,990 stream requests.
 The table `EXPECTED_OPERATION_COUNTS` of `scripts/compare_core.py` gives the number of requests for each operation.
 A full run fails with `REQUEST_COUNT` when the count of any operation differs from the table.
 So a change to a request set changes the table, and this section, in the same pull request:
@@ -755,6 +792,7 @@ So a change to a request set changes the table, and this section, in the same pu
 | `block.contextual_check` | 2,903 |
 | `block.header.read` | 7,878 |
 | `block.header_sequence` | 257 |
+| `block.subsidy` | 148 |
 | `compactsize.encode` | 26 |
 | `compactsize.read` | 404 |
 | `hash.hash160` | 292 |
@@ -778,7 +816,7 @@ So a change to a request set changes the table, and this section, in the same pu
 | `work.get_compact` | 1,552 |
 | `work.next` | 1,353 |
 | `work.set_compact` | 5,140 |
-| Total | 385,842 |
+| Total | 385,990 |
 
 The four transaction-reader operations receive 263,929 of the requests.
 Most of them are proper prefixes and field changes of corpus transactions.
@@ -1075,6 +1113,33 @@ A third mutation swaps one rejection string for another on a request without an 
 That mutation preserves the response shape and must fail the stream comparison of result values.
 It also checks Boolean types, result fields, acceptance reasons, rejection reasons and the exclusion of Lean diagnostics.
 These runs give finite evidence, not an all-input equivalence theorem with compiled Core.
+
+### Block subsidy comparison evidence
+
+The harness calls Core's own `GetDogecoinBlockSubsidy` (D104), so the comparison tests Core's code and the Boost release of the harness build.
+The comparator requires equal `subsidies`, and it checks the form of `redraws` and `boost_version` without a comparison.
+It also requires each subsidy to lie in the range that Core's text allows for the height (D104, lines 138 to 148).
+Its report names the Boost release, the number of cases with a redraw and the largest number of redraws.
+
+The 148 requests hold 145,166 cases:
+
+| Set | Requests | Cases | Expected values |
+| --- | ---: | ---: | --- |
+| Mainnet heights 1 to 145,000 on their real previous hashes ([fixture](../tests/block/mainnet-subsidy-prev-hashes/README.md)) | 145 | 145,000 | None: agreement of the two programs |
+| Fixed schedule: 18 heights from 145,000 to 2147483647, each on three hashes | 1 | 54 | Read by hand from D104, lines 142 to 148 |
+| Recorded Core values: 35 mainnet heights below 145,000 | 1 | 35 | Captured from Core's function through the harness, and computed again in each run |
+| Boundaries: 11 heights from 0 to 600,001, each on seven hashes | 1 | 77 | None: agreement of the two programs |
+
+With Boost 1.70.0 every case agrees.
+The oracle reports one redraw for 30 of the 145,000 mainnet heights, and no case has more than one.
+`scripts/test_oracle.py` checks the fixed schedule, the recorded Core values and the request errors without Core.
+
+Agreement on the mainnet heights covers 145,000 of the `2^28` seeds, at the height of each.
+`scripts/compare_subsidy_seeds.py` covers every seed outside CI.
+It sends all `2^28` seeds at height 1, where `maxReward` is 999,999, and at height 100,000, where it is 499,999.
+It fails on any disagreement and on any error, so a pass shows that 624 words of fuel suffice for every seed.
+The run of 2026-11-13 passed on all 536,870,912 cases, and no seed takes more than 2 redraws.
+[COVERAGE.md](../COVERAGE.md#operations) records the run.
 
 ### Header-sequence comparison evidence
 

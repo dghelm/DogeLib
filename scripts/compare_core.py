@@ -57,6 +57,10 @@ from oracle_script import script_sets, corpus_records, evaluation, validate_eval
 from oracle_pubkey import pubkey_sets, signature_spends
 from oracle_header_sequence import sequence_sets, EXPECTATIONS as SEQUENCE_EXPECTATIONS, key as sequence_key, exclude_marks, core_refusal, SEED as SEQUENCE_SEED
 from oracle_contextual import contextual_sets, EXPECTATIONS as CONTEXT_EXPECTATIONS, key as context_key
+from oracle_contextual_body import (contextual_body_sets, compare as compare_body,
+                                    reasons_reached as body_reasons_reached,
+                                    reasons_missing as body_reasons_missing,
+                                    mainnet_body_sets, mainnet_body_counts)
 from oracle_header_pow import header_pow_sets, CODES as HEADER_CODES, EXPECTATIONS as HEADER_EXPECTATIONS, key as header_key
 from oracle_subsidy import subsidy_sets, compare as compare_subsidy
 from oracle_block_check import block_check_sets, corpus_requests as check_corpus_requests, compare as compare_block_check, reasons_reached, reasons_missing, LABELS as CHECK_LABELS, QUICK_SET as CHECK_QUICK_SET, mainnet_range_sets, mainnet_range_counts, BlockAssets
@@ -76,6 +80,7 @@ EXPECTED_OPERATION_COUNTS = {
     "block.check_pow": 806,
     "block.check_version": 207,
     "block.contextual_check": 2903,
+    "block.contextual_check_body": 22,
     "block.header.read": 7878,
     "block.header_sequence": 257,
     "block.subsidy": 148,
@@ -739,6 +744,7 @@ def request_sets() -> tuple[list[tuple[str, list[dict]]], list[str]]:
     ])
     sets.extend(header_pow_sets())
     sets.extend(contextual_sets())
+    sets.extend(contextual_body_sets())
     sets.extend(sequence_sets())
     sets.extend(subsidy_sets())
     sets.extend(block_check_sets())
@@ -858,6 +864,8 @@ def compare(req: dict, ours: dict, core: dict, peer: str = "core") -> tuple[str,
     for side, resp in (("oracle", ours), (peer, core)):
         if resp.get("error", {}).get("kind") == "request":
             return "REQUEST_ERROR", f"{side} rejected the request: {resp['error'].get('message')}"
+    if req["op"] == "block.contextual_check_body":
+        return compare_body(req, ours, core, peer)
     if req["op"] == "block.subsidy":
         return compare_subsidy(req, ours, core, peer)
     if req["op"] in CHECK_LABELS:
@@ -1139,11 +1147,12 @@ def main() -> int:
         print("CompactSize-only: compiled Rust, oracle and Core (reader only, no Rust encoder)")
     elif args.mainnet_blocks:
         try:
-            sets, excluded = mainnet_range_sets(args.mainnet_blocks), []
+            sets = mainnet_range_sets(args.mainnet_blocks) + mainnet_body_sets(args.mainnet_blocks)
+            excluded = []
         except BlockAssets as e:
             print(f"FAIL BLOCK_ASSETS {e}. Run python3 -I scripts/fetch_release_blocks.py first.")
             return 1
-        print(f"Mainnet block ranges only: block.check with both flags on the fixtures under {args.mainnet_blocks}")
+        print(f"Mainnet block ranges only: block.check and block.contextual_check_body on the fixtures under {args.mainnet_blocks}")
     else:
         sets, excluded = request_sets()
     if args.quick:
@@ -1247,12 +1256,19 @@ def main() -> int:
         for op in sorted(op for op in reached if reached[op]):
             print(f"{op}: {sum(reached[op].values())} requests, Core's results: " +
                   ", ".join(f"{name} {count}" for name, count in sorted(reached[op].items())))
+        body_reached = body_reasons_reached(requests, core)
+        if body_reached:
+            print("block.contextual_check_body: " + ", ".join(f"{name} {count}"
+                  for name, count in sorted(body_reached.items())))
         if not args.quick and not args.mainnet_blocks:
             for missing in reasons_missing(reached):
                 failures.append("REASON_NOT_REACHED")
                 print(f"FAIL REASON_NOT_REACHED Core returned {missing} for no request")
+            for missing in body_reasons_missing(body_reached):
+                failures.append("REASON_NOT_REACHED")
+                print(f"FAIL REASON_NOT_REACHED Core returned {missing} for no request")
     if args.mainnet_blocks:
-        failures.extend(check_operation_counts(requests, mainnet_range_counts(),
+        failures.extend(check_operation_counts(requests, {**mainnet_range_counts(), **mainnet_body_counts()},
                                                "tests/block/mainnet-blocks/release.json"))
     elif not args.quick and not args.rust_compactsize:
         failures.extend(compare_adapter_limits(args.oracle, args.harness, args.timeout))

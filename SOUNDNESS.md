@@ -1142,6 +1142,63 @@ It also states what the comparison shows for a block with no pinned hash.
 By `#print axioms`, `MerkleDuplication.root_eq_and_mutated` and `Script.getSigOpCount_le` depend on `propext` and `Quot.sound`.
 `checkBlock_rejects_merkleDuplication`, `Block.read_encode_allowWitness` and `Block.read_encode_base` depend on `propext`, `Classical.choice` and `Quot.sound`.
 
+### Version bits
+
+`DogeLib.Block.VersionBits` models Core's `VersionBitsState`, as `AbstractThresholdConditionChecker::GetStateFor` computes it (D102).
+A deployment has a start time, a timeout, a signalling bit, a confirmation window and an activation threshold.
+`versionBitsCondition` is Core's `Condition`: a block signals a deployment when the top three version bits are `001` and the deployment's bit is set.
+`versionBitsWalk` folds `thresholdStep` over the period boundaries from the genesis period.
+`thresholdStep` folds the reset of Core's backward walk into one step: a boundary whose median time is below the start time gives `DEFINED` whatever the state before it.
+So the fold over every boundary equals `GetStateFor` at the last boundary.
+The source review, not a theorem, connects the fold to the imperative algorithm of Core, and the run outside continuous integration gives the empirical evidence.
+
+`csv_never_lockedIn` takes a chain of full headers from the mainnet genesis in which every header passed `checkBlockHeader`.
+On mainnet `checkBlockHeader` runs `CheckAuxPowProofOfWork` with a strict chain ID of `0x62`, which accepts a header only if it is legacy, with version 1 or 2, or has the chain ID `0x62`.
+Both leave the top three version bits `000`, so `versionBitsCondition_false_of_checkBlockHeader` shows that no such header signals.
+With no signals every period has a zero count, and a walk with no signals never leaves `DEFINED`, `STARTED` or `FAILED`.
+So the CSV and SegWit states are never `LOCKED_IN` or `ACTIVE`.
+The hypothesis is about a genesis-rooted chain whose headers pass the check, and an arbitrary supplied index does not meet it.
+The median time of each boundary comes from the chain, so the conclusion holds whatever the times are.
+The theorem does not cover testnet, where `fStrictChainId` is false, or regtest.
+
+`versionBits_shortcut` takes a boundary list with no signals and the shortcut's result at the last boundary.
+When the median is below the start time the state is `DEFINED`, and when it is at or after the timeout the state is `FAILED`.
+The `FAILED` case uses `csv_never_lockedIn`, through the no-signal hypothesis, to exclude a transition into `ACTIVE`.
+
+By `#print axioms`, `csv_never_lockedIn` and `versionBitsCondition_false_of_checkBlockHeader` depend on `propext`, `Classical.choice` and `Quot.sound`, and `versionBits_shortcut` depends on `propext` and `Quot.sound`.
+
+### The contextual block body
+
+`DogeLib.Block.ContextualBody` models Core's `ContextualCheckBlock` on mainnet (D110), the third part of design record 0010, stage 0010a.
+`contextualCheckBlockBody` checks the finality of every transaction, the BIP34 coinbase height from 1,034,383, the absence of witness data, and the block weight, in Core's order.
+The source review, not a theorem, connects the definition to Core.
+
+The body takes the CSV and SegWit states as inputs, where Core calls `VersionBitsState`, and reads only whether each state is `ACTIVE`.
+On mainnet neither is ever active, which `csv_never_lockedIn` and `segwit_never_active` establish.
+So the lock-time cutoff is always the block time, and the witness-commitment branch never runs.
+The two reasons behind that branch, `bad-witness-nonce-size` and `bad-witness-merkle-match`, are therefore unreachable on mainnet.
+This body returns the adapter error `segwitActive` on an active SegWit state, which the mainnet comparison never sends, and it never returns those two reasons.
+
+The harness builds the block's predecessor and the aligned version-bits boundary from the request's chain, and lets Core compute `VersionBitsState`.
+At a boundary whose median time is at or after the CSV timeout the harness installs `THRESHOLD_FAILED` in `versionbitscache` for CSV and SegWit, for that request only.
+This seed is a harness input, justified by `csv_never_lockedIn` and `versionBits_shortcut`: on the real chain the state is never `LOCKED_IN` or `ACTIVE`, and `DEFINED`, `STARTED` and `FAILED` all go to `FAILED` at or after the timeout, so `FAILED` is Core's own result.
+The seed lets the harness answer without the dense block history that Core's walk would otherwise read.
+A boundary in the gap between the CSV start and timeout is an adapter error, outside the comparison domain, so no continuous-integration request depends on the seed in that gap.
+
+`bad-blk-weight` is reachable when the body runs alone, because the body has no base-size check.
+`contextualBody_badBlkWeight_unreachable_after_checkBlock` shows that `block.validate` of stage 0010b, which runs `CheckBlock` first, cannot reach it.
+After `CheckBlock` accepts a block, the base size is at most `MAX_BLOCK_BASE_SIZE`.
+If any transaction has witness data, the witness check returns `unexpected-witness` before the weight check.
+Otherwise, under the hypothesis that the AuxPoW payload transaction has no witness data, the full size equals the base size, so the weight is four times the base size and at most `MAX_BLOCK_WEIGHT`.
+That hypothesis excludes some real mainnet blocks: pull request #152 found that the AuxPoW parent coinbase of blocks 6,455,642, 6,456,071 and 6,456,247 carries witness data that Core accepts.
+The theorem does not cover a block whose AuxPoW payload transaction has witness data.
+
+The comparison evidence is in [COVERAGE.md](COVERAGE.md#operations) and [docs/oracle.md](docs/oracle.md#contextual-block-body-comparison-evidence).
+`block.contextual_check_body` compares the verdict, the reject reason, the denial-of-service score and the reject code with Core's own `ContextualCheckBlock` ([B4](#b4-the-oracle-and-foreign-boundaries)).
+[docs/reviews/contextualbody.md](docs/reviews/contextualbody.md) records a model read of the definitions against Core.
+
+By `#print axioms`, `contextualBody_badBlkWeight_unreachable_after_checkBlock` and `segwit_never_active` depend on `propext`, `Classical.choice` and `Quot.sound`.
+
 ### RIPEMD-160 and Hash160
 
 `Ripemd160.hash` adapts EthLib's executable definition at `6a93711`, as SOURCES.md records.

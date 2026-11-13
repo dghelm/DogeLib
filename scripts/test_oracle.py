@@ -518,13 +518,58 @@ def check_block_check(oracle):
     return failures
 
 
+def check_contextual_body(oracle):
+    """The expected verdicts and argument rules of block.contextual_check_body.
+
+    Every expected verdict is in scripts/oracle_contextual_body.py, beside the lines of Core's
+    text that fix it (src/validation.cpp, lines 3121 to 3203). It is a reject reason of
+    ContextualCheckBlock, or none. The score and the code of each reason are in BODY_REASONS."""
+    from oracle_contextual_body import contextual_body_sets, body_request, EXPECTATIONS, key, malformed
+    from oracle_block_check import genesis_block
+    requests = [req for _, reqs in contextual_body_sets() for req in reqs if key(req) in EXPECTATIONS]
+    known = len(requests)
+    example = body_request(genesis_block(), [])
+    for bad in [
+        {"op": "block.contextual_check_body"},
+        {k: v for k, v in example.items() if k != "mode"},
+        {k: v for k, v in example.items() if k != "chain"},
+        {k: v for k, v in example.items() if k != "block_hex"},
+        {**example, "mode": "witness"},
+        {**example, "chain": "x"},
+        {**example, "block_hex": example["block_hex"][:-1]},
+        {**example, "block_hex": "zz"},
+    ]:
+        requests.append(bad)
+    got = run_requests(oracle, "contextual body", [{**req, "id": i} for i, req in enumerate(requests)])
+    if got is None:
+        return 1
+    failures = 0
+    for i, (req, response) in enumerate(zip(requests, got)):
+        if i >= known:
+            fault = None if matches({k: v for k, v in response.items() if k != "id"}, {"error": {"kind": "request"}}) else "expected a request error"
+        elif "ok" not in response:
+            fault = f"expected a verdict, got {json.dumps(response)[:200]}"
+        else:
+            ok = response["ok"]
+            fault = malformed(ok, True)
+            if not fault:
+                expected = EXPECTATIONS[key(req)]
+                got_verdict = None if ok["valid"] else ok["reject_reason"]
+                fault = None if got_verdict == expected else f"expected {expected!r}, got {got_verdict!r}"
+        if fault:
+            failures += 1
+            print(f"FAIL contextual body {i}: {fault}")
+    print(f"contextual body oracle: {known} known answers and {len(requests) - known} argument cases, {failures} failures")
+    return failures
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print(__doc__)
         return 2
     oracle = sys.argv[1]
     failures = (check_fixtures(oracle) + check_sighash_corpus(oracle) + check_tx_corpus(oracle)
-                + check_header_sequences(oracle) + check_contextual(oracle) + check_header_pow(oracle) + check_witness_corpus(oracle) + check_hash_block_fixtures(oracle) + check_process(oracle) + check_script_adapter_limits(oracle) + check_subsidy(oracle) + check_block_check(oracle))
+                + check_header_sequences(oracle) + check_contextual(oracle) + check_header_pow(oracle) + check_witness_corpus(oracle) + check_hash_block_fixtures(oracle) + check_process(oracle) + check_script_adapter_limits(oracle) + check_subsidy(oracle) + check_block_check(oracle) + check_contextual_body(oracle))
     print("PASS" if failures == 0 else f"FAIL: {failures} failures")
     return 0 if failures == 0 else 1
 

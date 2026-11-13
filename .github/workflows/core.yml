@@ -106,3 +106,14 @@ jobs:
       - name: compare
         if: ${{ !cancelled() }}
         run: python3 -I scripts/compare_core.py .lake/build/bin/dogelib-oracle build/core-harness/core-oracle
+
+      # Design record 0010, decision 2: mainnet blocks 0 to 10,000 and 1,000
+      # recent blocks are assets of a GitHub release. The first command
+      # downloads them and requires the SHA-256 values of
+      # tests/block/mainnet-blocks/release.json. The second runs block.check
+      # with both flags on every block.
+      - name: mainnet block ranges
+        if: ${{ !cancelled() }}
+        run: |
+          time python3 -I scripts/fetch_release_blocks.py
+          time python3 -I scripts/compare_core.py --mainnet-blocks build/mainnet-blocks .lake/build/bin/dogelib-oracle build/core-harness/core-oracle

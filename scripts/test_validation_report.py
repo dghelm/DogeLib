@@ -202,6 +202,7 @@ class Reports(unittest.TestCase):
                               '(cd tests/block/mainnet-bip65-full-headers && sha256sum -c SHA256SUMS) && '
                               '(cd tests/block/mainnet-bip66-full-headers && sha256sum -c SHA256SUMS) && '
                               '(cd tests/block/mainnet-subsidy-prev-hashes && sha256sum -c SHA256SUMS) && '
+                              '(cd tests/block/mainnet-blocks/rule-changes && sha256sum -c SHA256SUMS) && '
                               '(cd tests/block/regtest-header-sequences && sha256sum -c SHA256SUMS) && '
                               '(cd tests/script/campaign && sha256sum -c SHA256SUMS) && '
                               '(cd tests/script/corpus && sha256sum -c SHA256SUMS) && '
@@ -232,6 +233,10 @@ class Reports(unittest.TestCase):
             'header-sequence-regeneration': 'python3 -I scripts/generate_header_sequences.py --check',
             'validation-report-tests': 'python3 -I scripts/test_validation_report.py',
             'block-fetch-tool-tests': 'python3 -I scripts/test_fetch_blocks.py',
+            'rule-change-block-fixture': 'python3 -I scripts/fetch_blocks.py --check tests/block/mainnet-blocks/rule-changes',
+            'release-block-fetch-tests': 'python3 -I scripts/test_fetch_release_blocks.py',
+            'mainnet-block-ranges': 'python3 -I scripts/fetch_release_blocks.py && '
+                                    'python3 -I scripts/compare_core.py --mainnet-blocks build/mainnet-blocks .lake/build/bin/dogelib-oracle build/core-harness/core-oracle',
             'lane-tool': 'bash scripts/test_lane.sh',
         }
         self.assertEqual({g['slug']: g['command'] for g in gates}, expected)

@@ -24,6 +24,15 @@ fixtures and CompactSize boundary set run through all three programs.
 The Rust crate has no encoder.
 The comparator reads the oracle version at runtime and passes it to the adapter.
 
+With `--mainnet-blocks DIR`, only the two ranges of real mainnet blocks run:
+`block.check` with both flags on every block of each fixture under DIR.
+scripts/fetch_release_blocks.py writes the fixtures, `build/mainnet-blocks`
+by default. Each file must have the hash that
+tests/block/mainnet-blocks/release.json gives, or the run fails with
+`FAIL BLOCK_ASSETS`. The stream must hold one request for each block of
+release.json. The ranges are a separate run because the comparator's
+self-test repeats the full stream several times.
+
 The transaction field walker below only locates fields in transactions that
 are known to parse. No expected value comes from this script.
 """
@@ -50,20 +59,20 @@ from oracle_header_sequence import sequence_sets, EXPECTATIONS as SEQUENCE_EXPEC
 from oracle_contextual import contextual_sets, EXPECTATIONS as CONTEXT_EXPECTATIONS, key as context_key
 from oracle_header_pow import header_pow_sets, CODES as HEADER_CODES, EXPECTATIONS as HEADER_EXPECTATIONS, key as header_key
 from oracle_subsidy import subsidy_sets, compare as compare_subsidy
-from oracle_block_check import block_check_sets, corpus_requests as check_corpus_requests, compare as compare_block_check, reasons_reached, reasons_missing, LABELS as CHECK_LABELS, QUICK_SET as CHECK_QUICK_SET
+from oracle_block_check import block_check_sets, corpus_requests as check_corpus_requests, compare as compare_block_check, reasons_reached, reasons_missing, LABELS as CHECK_LABELS, QUICK_SET as CHECK_QUICK_SET, mainnet_range_sets, mainnet_range_counts, BlockAssets
 
 ORACLE_FORMAT = "dogelib-oracle/1"
 MAX_SIZE = 0x02000000
 SEED = 20261104
 MAX_REPORTS = 10
 
-# The number of stream requests per operation in a full run, without --quick
-# or --rust-compactsize. The adapter-limit cases and the two-call compositions
+# The number of stream requests per operation in a full run, without --quick,
+# --rust-compactsize or --mainnet-blocks. The adapter-limit cases and the two-call compositions
 # run outside the stream and are not counted here.
 # docs/oracle.md, "The comparison", quotes this table and its sum.
 EXPECTED_OPERATION_COUNTS = {
     "auxpow.check": 404,
-    "block.check": 2064,
+    "block.check": 2232,
     "block.check_pow": 806,
     "block.check_version": 207,
     "block.contextual_check": 2903,
@@ -1011,11 +1020,13 @@ def compare_compositions(oracle, harness, timeout):
     return failures
 
 
-def check_operation_counts(requests: list[dict], expected: dict[str, int] | None = None) -> list[str]:
+def check_operation_counts(requests: list[dict], expected: dict[str, int] | None = None,
+                           source: str = "EXPECTED_OPERATION_COUNTS in scripts/compare_core.py") -> list[str]:
     """Require the stream to hold the expected number of requests for each operation.
 
     Prints one `FAIL REQUEST_COUNT` line for each operation whose count differs,
-    including an operation that only one side names, and returns one failure code per line."""
+    including an operation that only one side names, and returns one failure code per line.
+    `source` names the place that holds the expected counts."""
     if expected is None:
         expected = EXPECTED_OPERATION_COUNTS
     actual = {}
@@ -1026,10 +1037,10 @@ def check_operation_counts(requests: list[dict], expected: dict[str, int] | None
         if actual.get(op, 0) != expected.get(op, 0):
             failures.append("REQUEST_COUNT")
             print(f"FAIL REQUEST_COUNT {op}: {actual.get(op, 0)} requests, expected {expected.get(op, 0)}. "
-                  "If the change is intended, update EXPECTED_OPERATION_COUNTS in scripts/compare_core.py "
+                  f"If the change is intended, update {source} "
                   "and the counts that docs/oracle.md quotes.")
     if not failures:
-        print(f"operation counts: {len(expected)} operations and {sum(expected.values())} stream requests match EXPECTED_OPERATION_COUNTS")
+        print(f"operation counts: {len(expected)} operations and {sum(expected.values())} stream requests match {source.split()[0]}")
     return failures
 
 
@@ -1076,9 +1087,14 @@ def main() -> int:
                         help=f"only the sets {', '.join(QUICK_SETS)} and a sample of the seeded sequence mutations, for the comparator's self-test")
     parser.add_argument("--rust-compactsize", metavar="PATH",
                         help="compare only CompactSize reader requests with this native Rust adapter as a third program")
+    parser.add_argument("--mainnet-blocks", metavar="DIR",
+                        help="compare only block.check on the real mainnet block ranges under DIR, "
+                             "which scripts/fetch_release_blocks.py writes")
     parser.add_argument("oracle")
     parser.add_argument("harness")
     args = parser.parse_args()
+    if args.mainnet_blocks and (args.quick or args.rust_compactsize):
+        parser.error("--mainnet-blocks runs alone, without --quick or --rust-compactsize")
 
     revision = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True)
     dirty = subprocess.run(["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True)
@@ -1112,7 +1128,7 @@ def main() -> int:
     for line in failures:
         print(line)
 
-    if not args.rust_compactsize:
+    if not args.rust_compactsize and not args.mainnet_blocks:
         failures.extend(check_auxpow_reconstruction(args.harness, args.timeout))
         failures.extend(check_auxpow_pow_reconstruction(args.harness, args.timeout))
 
@@ -1121,6 +1137,13 @@ def main() -> int:
         sets = [("fixtures", fixtures), ("compactsize", set_compactsize())]
         sets = [(name, [r for r in reqs if r["op"] == "compactsize.read"]) for name, reqs in sets]
         print("CompactSize-only: compiled Rust, oracle and Core (reader only, no Rust encoder)")
+    elif args.mainnet_blocks:
+        try:
+            sets, excluded = mainnet_range_sets(args.mainnet_blocks), []
+        except BlockAssets as e:
+            print(f"FAIL BLOCK_ASSETS {e}. Run python3 -I scripts/fetch_release_blocks.py first.")
+            return 1
+        print(f"Mainnet block ranges only: block.check with both flags on the fixtures under {args.mainnet_blocks}")
     else:
         sets, excluded = request_sets()
     if args.quick:
@@ -1207,7 +1230,7 @@ def main() -> int:
         for label, count in sorted(unsupported[name].items()):
             print(f"  unsupported {label}: {count}")
         print("  Core's outcomes: " + ", ".join(f"{k} {v}" for k, v in sorted(outcomes[name].items())))
-    if not args.rust_compactsize:
+    if not args.rust_compactsize and not args.mainnet_blocks:
         print(f"tx_valid Core acceptance requirements: {sanity_checks} checked, {sanity_failures} failed")
     subsidy = [(a, b) for req, a, b in zip(requests, ours, core) if req["op"] == "block.subsidy"]
     if subsidy:
@@ -1221,14 +1244,17 @@ def main() -> int:
         # Design record 0010, section 4, lists the reject reasons that a request can reach.
         # A full run fails when Core returned one of them for no request.
         reached = reasons_reached(requests, core)
-        for op in sorted(reached):
+        for op in sorted(op for op in reached if reached[op]):
             print(f"{op}: {sum(reached[op].values())} requests, Core's results: " +
                   ", ".join(f"{name} {count}" for name, count in sorted(reached[op].items())))
-        if not args.quick:
+        if not args.quick and not args.mainnet_blocks:
             for missing in reasons_missing(reached):
                 failures.append("REASON_NOT_REACHED")
                 print(f"FAIL REASON_NOT_REACHED Core returned {missing} for no request")
-    if not args.quick and not args.rust_compactsize:
+    if args.mainnet_blocks:
+        failures.extend(check_operation_counts(requests, mainnet_range_counts(),
+                                               "tests/block/mainnet-blocks/release.json"))
+    elif not args.quick and not args.rust_compactsize:
         failures.extend(compare_adapter_limits(args.oracle, args.harness, args.timeout))
         failures.extend(compare_compositions(args.oracle, args.harness, args.timeout))
         failures.extend(check_operation_counts(requests))

@@ -1,0 +1,118 @@
+{
+  "format": "dogelib-blocks/1",
+  "network": "mainnet",
+  "selection": "heights",
+  "heights": [
+    144998,
+    144999,
+    145000,
+    145001,
+    371336,
+    371337,
+    371338,
+    599998,
+    599999,
+    600000,
+    600001,
+    1034382,
+    1034383,
+    1034384,
+    3464750,
+    3464751,
+    3464752
+  ],
+  "node_version": "/Shibetoshi:1.14.9/ (1140900)",
+  "fetch_date": "2026-11-13T21:00:20Z",
+  "tip_height": 6456361,
+  "tip_hash": "3d1b3d6993e1ab2f2142edbd315932ff013022438c57954c0f38a6af96e6ebe0",
+  "count": 17,
+  "bytes": 344408,
+  "runs": [
+    {
+      "first": 144998,
+      "last": 145001,
+      "previous": "pinned"
+    },
+    {
+      "first": 371336,
+      "last": 371338,
+      "previous": "pinned"
+    },
+    {
+      "first": 599998,
+      "last": 600001,
+      "previous": "node"
+    },
+    {
+      "first": 1034382,
+      "last": 1034384,
+      "previous": "pinned"
+    },
+    {
+      "first": 3464750,
+      "last": 3464752,
+      "previous": "pinned"
+    }
+  ],
+  "pinned_by": {
+    "core-checkpoints": [
+      [
+        145000,
+        145000
+      ],
+      [
+        371337,
+        371337
+      ]
+    ],
+    "tests/block/mainnet-auxpow-activation-headers": [
+      [
+        371336,
+        371338
+      ]
+    ],
+    "tests/block/mainnet-bip65-headers": [
+      [
+        3464750,
+        3464752
+      ]
+    ],
+    "tests/block/mainnet-bip66-headers": [
+      [
+        1034382,
+        1034384
+      ]
+    ],
+    "tests/block/mainnet-subsidy-prev-hashes": [
+      [
+        144998,
+        144999
+      ]
+    ],
+    "tests/work/mainnet-headers": [
+      [
+        144998,
+        145001
+      ]
+    ]
+  },
+  "blocks": [
+    {"height": 144998, "hash": "2e910459e9ec3062e7b4e2cfb569c579b43254da53cdd98da671d4ecdeb6a018", "size": 9012, "transactions": 18, "auth": "pinned"},
+    {"height": 144999, "hash": "919a380db4b45eb97abb131633d87ff690387ebe03ac76690da3f4d681400558", "size": 7777, "transactions": 14, "auth": "pinned"},
+    {"height": 145000, "hash": "cc47cae70d7c5c92828d3214a266331dde59087d4a39071fa76ddfff9b7bde72", "size": 28876, "transactions": 85, "auth": "pinned"},
+    {"height": 145001, "hash": "3e0a64ab98d596929a43c9e17fc960135d52b0a85faa05f3af36a56bcf376c9d", "size": 18184, "transactions": 24, "auth": "pinned"},
+    {"height": 371336, "hash": "46a8b109fb016fa41abd17a19186ca78d39c60c020c71fcd2690320d47036f0d", "size": 33215, "transactions": 30, "auth": "pinned"},
+    {"height": 371337, "hash": "60323982f9c5ff1b5a954eac9dc1269352835f47c2c5222691d80f0d50dcf053", "size": 1704, "transactions": 6, "auth": "pinned"},
+    {"height": 371338, "hash": "6fb5ae70a65902381bcaa63a38cadf36e8c0a9b4cbffa85bc545c1be08cd0721", "size": 2920, "transactions": 6, "auth": "pinned"},
+    {"height": 599998, "hash": "6ff217f1e1204f2552aefdbdc3eb1cf8857a067b7206dd52d67cdcee1d37d981", "size": 44319, "transactions": 103, "auth": "linked"},
+    {"height": 599999, "hash": "9b72ab55c1dd7b9eb1a2f4dc89f6909fd7b2648581f2223fccf7057116fbe18d", "size": 41162, "transactions": 80, "auth": "linked"},
+    {"height": 600000, "hash": "caa5446c05c8e51cf7985a6cb4da4dc2b730e4ec399dc95b2a094df6bdd4f268", "size": 15739, "transactions": 43, "auth": "linked"},
+    {"height": 600001, "hash": "eb058cbb071b0e4b224f8dd9feb82d1955028acfb864a61588866c240235cb49", "size": 1219, "transactions": 5, "auth": "linked"},
+    {"height": 1034382, "hash": "2ef59bc8f22e098b21c2a5d3268d91619808a69900636167f8d059e3fe3e392d", "size": 657, "transactions": 1, "auth": "pinned"},
+    {"height": 1034383, "hash": "251f53c3e66f122347b7667c45aaadfffb52c2a05b8c80edcce68450b639f7f6", "size": 2113, "transactions": 5, "auth": "pinned"},
+    {"height": 1034384, "hash": "d2fa44d76f32f65a2f4813d41e54f9b9d84a1ff94c0cc575309969a7d16d89e6", "size": 4350, "transactions": 13, "auth": "pinned"},
+    {"height": 3464750, "hash": "4b517bd14906cb473ec19579a199a3fc8e8499ec2f033bba21a3836e59949663", "size": 69035, "transactions": 84, "auth": "pinned"},
+    {"height": 3464751, "hash": "34cd2cbba4ba366f47e5aa0db5f02c19eba2adf679ceb6653ac003bdc9a0ef1f", "size": 6990, "transactions": 15, "auth": "pinned"},
+    {"height": 3464752, "hash": "8b0f9eca5ef71c63918592bab83fe160278f62e070ee445f8534e0bedcddc754", "size": 57136, "transactions": 142, "auth": "pinned"}
+  ]
+}

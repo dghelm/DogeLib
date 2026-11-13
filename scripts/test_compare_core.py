@@ -15,6 +15,7 @@ The script also runs as that wrapper:
 import json
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -702,6 +703,23 @@ def main() -> int:
         else:
             print("ok   operation request count: FAIL REQUEST_COUNT")
 
+        # --mainnet-blocks: a directory without the fixtures, and a fixture that is
+        # consistent with its own SHA256SUMS but not with the committed hashes.
+        absent = tmp / "no-blocks"
+        absent.mkdir()
+        other = tmp / "other-blocks"
+        release = json.loads((ROOT / "tests/block/mainnet-blocks/release.json").read_text())
+        shutil.copytree(ROOT / "tests/block/mainnet-blocks/rule-changes", other / release["ranges"][0]["name"])
+        for label, directory, message in (("absent", absent, "cannot read the fixture"),
+                                          ("other", other, "SHA256SUMS does not have the committed hashes")):
+            result = compare(oracle, wrapper(tmp, "none", "core", oracle), ["--mainnet-blocks", str(directory)])
+            codes = {line.split()[1] for line in result.stdout.splitlines() if line.startswith("FAIL ")}
+            if result.returncode != 1 or codes != {"BLOCK_ASSETS"} or message not in result.stdout:
+                failures += 1
+                print(f"FAIL mainnet blocks {label}: exit {result.returncode}\n{result.stdout[-2000:]}{result.stderr[-2000:]}")
+            else:
+                print(f"ok   mainnet blocks {label}: FAIL BLOCK_ASSETS")
+
         rust_modes = {"none": None, "version": "VERSION", "consumed": "MISMATCH", "reason": "MISMATCH",
                       "rest_hex": "MISMATCH", "request_error": "REQUEST_ERROR", "drop": "COUNT",
                       "id": "ID", "malformed": "MALFORMED"}
@@ -759,7 +777,7 @@ def main() -> int:
                 except ProcessLookupError:
                     pass
             print(f"ok   {mode}: FAIL {code}")
-    print(f"{len(MUTATIONS) + len(rust_modes) + 3} cases, {failures} failures")
+    print(f"{len(MUTATIONS) + len(rust_modes) + 5} cases, {failures} failures")
     return 1 if failures else 0
 
 

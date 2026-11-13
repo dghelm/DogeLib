@@ -1133,6 +1133,10 @@ The comparison evidence is in [COVERAGE.md](COVERAGE.md#operations).
 Two records of `tx_invalid.json` have comments that name `MAX_MONEY`, with amounts near the bound of Bitcoin, 2,100,000,000,000,000.
 Dogecoin's bound is `10^18`, so `CheckTransaction` accepts both records, and they fail Core's test for another reason.
 The oracle operations `tx.check` and `block.check` compare the definitions with Core's own functions ([B4](#b4-the-oracle-and-foreign-boundaries)).
+
+`block.check` also runs on 11,018 real mainnet blocks, with both flags.
+[D3](#d3-wrong-fixtures) states how each block is authenticated.
+It also states what the comparison shows for a block with no pinned hash.
 [docs/reviews/blockcheck.md](docs/reviews/blockcheck.md) records a model read of the definitions against Core.
 
 By `#print axioms`, `MerkleDuplication.root_eq_and_mutated` and `Script.getSigOpCount_le` depend on `propext` and `Quot.sound`.
@@ -3386,3 +3390,28 @@ Each fixture records its provenance, and a test runner compares results with the
 A fixture can also carry generated inputs.
 The Script corpus's transaction bytes come from a transcription of Core's test builders, which [B4](#b4-the-oracle-and-foreign-boundaries) states.
 The subsidy fixture holds block hashes without their headers, so no test repeats the link checks of its fetch ([README](tests/block/mainnet-subsidy-prev-hashes/README.md)).
+
+The fixtures of real mainnet blocks come from the maintainer's node, which the checks treat as untrusted ([README](tests/block/mainnet-blocks/README.md)).
+Each block is consistent with its own header: the header has the recorded hash, and the transactions have the Merkle root of the header.
+The manifest gives each block the label `pinned` or `linked`.
+A `pinned` block has a hash that a committed fixture or a Core checkpoint gives.
+If SHA-256 is collision resistant, that hash fixes the 80-byte header and every transaction ID.
+It does not fix the bytes of an AuxPoW payload or of witness data.
+
+A `linked` block has no pinned hash: 1,004 of the 11,018 blocks, which are heights 599,998 to 600,001 and the 1,000 recent blocks.
+Its previous-hash field links it to the block below it in the fixture.
+The first block of a linked run was compared with the node's own hash for the height below.
+So the run connects to no pinned hash.
+The repository therefore does not show that a linked block is the mainnet block of its height. That statement rests on the node.
+
+The comparison result does not depend on that statement.
+For each block, pinned or linked, it shows that `checkBlock` and Core's `CheckBlock` give the same result on these bytes.
+That result is acceptance with both flags.
+
+Core's acceptance includes the proof-of-work check against the block's own `nBits`.
+No check compares that `nBits` with the difficulty that the chain requires, because `CheckBlock` does not read it and the fixtures hold no header context.
+So the evidence for a linked block is agreement on a block that passes Core's context-free checks.
+Whether the main chain holds the block is a claim that nothing here supports.
+
+The two ranges are release assets, not committed files.
+The committed `tests/block/mainnet-blocks/release.json` holds the SHA-256 of each file, and the comparison refuses a file with another hash.

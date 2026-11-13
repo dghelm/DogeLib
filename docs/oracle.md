@@ -849,7 +849,7 @@ For `sighash.legacy` with plan `hash_bytes`, the double SHA-256 of the oracle's 
 This checks the preimage against Core's digest, not byte by byte against a preimage from Core.
 Outside the checked `harness-refused` category, a request error from either program fails the comparison.
 
-A full comparison with Core `e0a1c157791544e818c901bd9341896965afbf9d` sends 389,438 stream requests.
+A full comparison with Core `e0a1c157791544e818c901bd9341896965afbf9d` sends 389,606 stream requests.
 The table `EXPECTED_OPERATION_COUNTS` of `scripts/compare_core.py` gives the number of requests for each operation.
 A full run fails with `REQUEST_COUNT` when the count of any operation differs from the table.
 So a change to a request set changes the table, and this section, in the same pull request:
@@ -857,7 +857,7 @@ So a change to a request set changes the table, and this section, in the same pu
 | `op` | Stream requests |
 | --- | ---: |
 | `auxpow.check` | 404 |
-| `block.check` | 2,064 |
+| `block.check` | 2,232 |
 | `block.check_pow` | 806 |
 | `block.check_version` | 207 |
 | `block.contextual_check` | 2,903 |
@@ -888,7 +888,7 @@ So a change to a request set changes the table, and this section, in the same pu
 | `work.get_compact` | 1,552 |
 | `work.next` | 1,353 |
 | `work.set_compact` | 5,140 |
-| Total | 389,438 |
+| Total | 389,606 |
 
 The four transaction-reader operations receive 263,929 of the requests.
 Most of them are proper prefixes and field changes of corpus transactions.
@@ -899,6 +899,7 @@ The pull request records the tested DogeLib revision.
 The comparison passes with zero failures, including 12 checked harness refusals, plus 22 adapter-limit cases and the 1,193 two-call compositions.
 The adapter-limit cases and the compositions run outside the stream, so the table does not count them.
 With `--quick` or `--rust-compactsize`, the comparator sends a subset and does not check the table.
+With `--mainnet-blocks DIR`, it sends only the 11,001 `block.check` requests of the [two ranges of real mainnet blocks](#transaction-and-block-check-comparison-evidence), and checks their number against `tests/block/mainnet-blocks/release.json`.
 The transaction inputs and targeted timelocks have these counts:
 
 | Stream | Requests | Agreement | Unsupported | Harness-refused | Disagreements |
@@ -1195,7 +1196,7 @@ It checks the block hash against `hashlib`, and `base_size` against the byte cou
 A full run fails with `REASON_NOT_REACHED` if Core never returns one of the reachable reasons of design record 0010, section 4.
 `bad-txns-oversize` is exempt for `block.check`: the size test of `CheckBlock` (line 2972) comes first, and both programs return `bad-blk-length`.
 
-The 3,448 requests are in nine sets, defined in `scripts/oracle_block_check.py`:
+The 3,616 requests of the full run are in ten sets, defined in `scripts/oracle_block_check.py`:
 
 | Set | Requests | Contents |
 | --- | ---: | --- |
@@ -1207,17 +1208,56 @@ The 3,448 requests are in nine sets, defined in `scripts/oracle_block_check.py`:
 | Readers and witness data | 976 | Every proper prefix of a small block, bytes after a block, counts above `MAX_SIZE`, counts that are not canonical, the extended format in both modes, and unknown optional data |
 | Real full headers | 402 | The mainnet full headers of [the AuxPoW activation fixture](../tests/block/mainnet-auxpow-activation-full-headers/README.md) before a synthetic transaction list, with `check_pow` true and `check_merkle_root` false |
 | Size limits | 16 | Transactions and blocks of exactly 1,000,000 and 1,000,001 base bytes |
+| Mainnet rule changes | 168 | The 17 real blocks at and next to the rule changes of design record 0010, with both flags in both modes, and four mutations of each block ([fixture](../tests/block/mainnet-blocks/README.md)) |
 | `tx.check` corpus | 357 | The records of `tx_valid.json` and `tx_invalid.json` (D28, D29), with no expected value: agreement of the two programs |
 
 Every request agrees.
-In the full run Core returns each of the seven reasons of `CheckBlock` 14 times or more.
+In the full run Core returns each of the seven reasons of `CheckBlock` 30 times or more.
 It returns each of the nine reasons of `CheckTransaction` 3 times or more.
-`scripts/test_oracle.py` checks 3,065 requests that have an expected value, and 25 argument errors, without Core.
+`scripts/test_oracle.py` checks 3,233 requests that have an expected value, and 25 argument errors, without Core.
 
-No block of the chain other than the genesis block is in these sets.
-`scripts/fetch_blocks.py` reads the two ranges and the rule-change blocks of design record 0010 from a mainnet node, and checks each block before it writes a fixture.
-That fetch has not run, so no fixture of real blocks exists, and exit condition 1 of stage 0010a is open.
-`python3 -I scripts/test_fetch_blocks.py` tests the checks of the fetch on synthetic blocks.
+#### Real mainnet blocks
+
+`scripts/fetch_blocks.py` read three sets of blocks from the maintainer's mainnet node on 2026-11-13, and checked each block before it wrote a fixture.
+[The fixture README](../tests/block/mainnet-blocks/README.md) records the source, the checks, the sizes and the label of each block.
+
+| Set | Heights | Blocks | `pinned` | `linked` | Compared in |
+| --- | --- | ---: | ---: | ---: | --- |
+| Rule changes | 144,998 to 145,001, 371,336 to 371,338, 599,998 to 600,001, 1,034,382 to 1,034,384, 3,464,750 to 3,464,752 | 17 | 13 | 4 | The full run, set *Mainnet rule changes* |
+| Genesis to 10,000 | 0 to 10,000 | 10,001 | 10,001 | 0 | `--mainnet-blocks` |
+| Recent | 6,455,302 to 6,456,301 | 1,000 | 0 | 1,000 | `--mainnet-blocks` |
+
+A `pinned` block has a hash that a committed fixture or a Core checkpoint gives.
+A `linked` block has no pinned hash.
+It is consistent with its header and with its neighbours, and its place in the chain rests on the node.
+The linked blocks are 599,998 to 600,001 and the whole recent range.
+
+The rule-change blocks are committed.
+The two ranges have 44.0 MB and 19.9 MB, so they are assets of a GitHub release (design record 0010, decision 2).
+`python3 -I scripts/fetch_release_blocks.py` downloads them, requires the SHA-256 values of the committed `tests/block/mainnet-blocks/release.json`, and repeats the checks of the fetch.
+Then this command compares every block of both ranges:
+
+```bash
+python3 -I scripts/compare_core.py --mainnet-blocks build/mainnet-blocks .lake/build/bin/dogelib-oracle build/core-harness/core-oracle
+```
+
+Each request has `check_pow` and `check_merkle_root` true, in the mode `allow_witness`.
+Both programs must return a valid verdict, with the hash and the number of transactions of the manifest.
+The expected base size is the size of the block without the witness data of the parent coinbase in its AuxPoW payload.
+Three blocks of the recent range have such data, 36 bytes each.
+
+All 11,001 requests agree.
+The run fails with `BLOCK_ASSETS` when a file is absent or does not have its committed hash.
+It fails with `REQUEST_COUNT` when the stream does not hold one request for each block of `release.json`.
+
+The ranges are a separate run, not sets of the full run.
+The comparator's self-test repeats the full run five times, with the oracle in both places.
+On a development machine the oracle takes about 70 seconds for the 11,001 blocks, and Core takes about 3 seconds.
+The largest sigop count of a block is 3,367, so the cost of [issue 149](https://github.com/dghelm/DogeLib/issues/149) does not show on these blocks.
+
+This closes exit condition 1 of stage 0010a for `block.check`.
+`block.contextual_check_body` is not implemented, so that part of the condition is open.
+`python3 -I scripts/test_fetch_blocks.py` and `python3 -I scripts/test_fetch_release_blocks.py` test the checks of the two fetch scripts on synthetic blocks.
 
 Three cases have no request.
 A block with more than 1,000,000 transactions has at least 10 MB, and the size clause rejects it too.

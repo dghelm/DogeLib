@@ -65,7 +65,7 @@ Their verdicts and errors agree with Core's recorded expectations, and the oracl
 The oracle uses `coreVerifier` for its transaction checker and exposes single-signature verification through `pubkey.verify`.
 
 The `dogelib-oracle` program runs the specification on JSON requests, and a harness runs the pinned Core code on the same requests ([docs/oracle.md](docs/oracle.md)).
-A full comparison sends 389,438 stream requests, and it passes only with zero failures.
+A full comparison sends 389,606 stream requests, and it passes only with zero failures.
 The comparator also fails if the number of requests for any operation differs from its table ([counts](docs/oracle.md#the-comparison)).
 The four transaction-reader operations receive 263,929 of the requests, Script evaluation and verification 16,975, and header sequences 257.
 The total includes requests with an unsupported Lean result and 12 checked harness refusals.

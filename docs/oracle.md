@@ -606,7 +606,8 @@ Neither operation needs a coin, a height or another block.
 - `tx_hex`: a transaction that is all of the bytes.
 - `mode`: `"base"` or `"allow_witness"`, the format of `tx_hex`, as for [`block.header.read`](#header-proof-of-work).
   `CheckTransaction` reads no witness stack, so the mode changes only how the bytes are read.
-  Base mode can carry a transaction with no inputs and some outputs, which the witness-allowed format cannot.
+  Base mode reads the ordinary encoding of a transaction with no inputs and some outputs.
+  The witness-allowed reader takes the empty input count of that encoding as the marker of the extended format.
 - `check_duplicate_inputs`: Core's `fCheckDuplicateInputs`. Core's block and mempool paths pass true.
 
 `block.check` has four required fields:

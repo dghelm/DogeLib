@@ -49,6 +49,7 @@ from oracle_pubkey import pubkey_sets, signature_spends
 from oracle_header_sequence import sequence_sets, EXPECTATIONS as SEQUENCE_EXPECTATIONS, key as sequence_key, exclude_marks, core_refusal, SEED as SEQUENCE_SEED
 from oracle_contextual import contextual_sets, EXPECTATIONS as CONTEXT_EXPECTATIONS, key as context_key
 from oracle_header_pow import header_pow_sets, CODES as HEADER_CODES, EXPECTATIONS as HEADER_EXPECTATIONS, key as header_key
+from oracle_subsidy import subsidy_sets, compare as compare_subsidy
 
 ORACLE_FORMAT = "dogelib-oracle/1"
 MAX_SIZE = 0x02000000
@@ -66,6 +67,7 @@ EXPECTED_OPERATION_COUNTS = {
     "block.contextual_check": 2903,
     "block.header.read": 7878,
     "block.header_sequence": 257,
+    "block.subsidy": 148,
     "compactsize.encode": 26,
     "compactsize.read": 404,
     "hash.hash160": 292,
@@ -726,6 +728,7 @@ def request_sets() -> tuple[list[tuple[str, list[dict]]], list[str]]:
     sets.extend(header_pow_sets())
     sets.extend(contextual_sets())
     sets.extend(sequence_sets())
+    sets.extend(subsidy_sets())
     sets.extend(pubkey_sets())
     sets.append(("Script signature verdict", signature_spends()))
     sets.append(("Script campaign fixtures", campaign_fixtures()))
@@ -841,6 +844,8 @@ def compare(req: dict, ours: dict, core: dict, peer: str = "core") -> tuple[str,
     for side, resp in (("oracle", ours), (peer, core)):
         if resp.get("error", {}).get("kind") == "request":
             return "REQUEST_ERROR", f"{side} rejected the request: {resp['error'].get('message')}"
+    if req["op"] == "block.subsidy":
+        return compare_subsidy(req, ours, core, peer)
     if req["op"] == "block.contextual_check":
         for side, response in (("oracle", ours), (peer, core)):
             if "ok" not in response:
@@ -1197,6 +1202,14 @@ def main() -> int:
         print("  Core's outcomes: " + ", ".join(f"{k} {v}" for k, v in sorted(outcomes[name].items())))
     if not args.rust_compactsize:
         print(f"tx_valid Core acceptance requirements: {sanity_checks} checked, {sanity_failures} failed")
+    subsidy = [(a, b) for req, a, b in zip(requests, ours, core) if req["op"] == "block.subsidy"]
+    if subsidy:
+        # The random subsidy follows Boost's algorithm, so the report names the harness's Boost release.
+        versions = sorted({str(b.get("ok", {}).get("boost_version")) for _, b in subsidy})
+        redraws = [r for a, _ in subsidy for r in a.get("ok", {}).get("redraws", []) if isinstance(r, int)]
+        print(f"block.subsidy: {sum(len(a.get('ok', {}).get('subsidies', [])) for a, _ in subsidy)} cases, "
+              f"harness Boost {', '.join(versions)}, {sum(1 for r in redraws if r)} cases with a redraw, "
+              f"largest number of redraws {max(redraws, default=0)}")
     if not args.quick and not args.rust_compactsize:
         failures.extend(compare_adapter_limits(args.oracle, args.harness, args.timeout))
         failures.extend(compare_compositions(args.oracle, args.harness, args.timeout))

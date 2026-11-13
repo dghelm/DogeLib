@@ -406,13 +406,64 @@ def check_header_sequences(oracle):
     return failures
 
 
+def check_subsidy(oracle):
+    """The fixed schedule, Core's recorded random subsidies, and the argument rules of block.subsidy."""
+    from oracle_subsidy import schedule_request, core_values_request, case, request, MAX_CASES
+    schedule, schedule_expected = schedule_request()
+    values, values_expected = core_values_request()
+    zero = bytes(32)
+    requests = [schedule, values, request([])]
+    expected = [{"ok": {"subsidies": schedule_expected}}, {"ok": {"subsidies": values_expected}},
+                {"ok": {"subsidies": []}}]
+    for bad in [
+        {"op": "block.subsidy"},
+        {"op": "block.subsidy", "cases": {}},
+        {"op": "block.subsidy", "cases": [1]},
+        {"op": "block.subsidy", "cases": [], "network": "mainnet"},
+        request([{"height": 1}]),
+        request([{"prev_hash_hex": zero.hex()}]),
+        request([{**case(1, zero), "fuel": 1}]),
+        request([case(-1, zero)]),
+        request([case(2147483648, zero)]),
+        request([{"height": 1.5, "prev_hash_hex": zero.hex()}]),
+        request([case(1, bytes(31))]),
+        request([case(1, bytes(33))]),
+        request([case(600000, zero)] * (MAX_CASES + 1)),
+    ]:
+        requests.append(bad)
+        expected.append({"error": {"kind": "request"}})
+    # The largest batch, and the largest height.
+    requests.append(request([case(2147483647, zero)] * MAX_CASES))
+    expected.append({"ok": {"subsidies": ["1000000000000"] * MAX_CASES}})
+    got = run_requests(oracle, "subsidy", [{**req, "id": i} for i, req in enumerate(requests)])
+    if got is None:
+        return 1
+    failures = 0
+    for i, (response, want) in enumerate(zip(got, expected)):
+        response = {k: v for k, v in response.items() if k != "id"}
+        if "ok" in response:
+            # `redraws` is a Lean diagnostic with no independent expectation. Only its form is checked.
+            redraws = response["ok"].pop("redraws", None)
+            heights = [entry["height"] for entry in requests[i]["cases"]]
+            if (not isinstance(redraws, list) or len(redraws) != len(heights) or
+                    any((r is None) != (h >= 145000) or (r is not None and (type(r) is not int or r < 0))
+                        for r, h in zip(redraws, heights))):
+                failures += 1
+                print(f"FAIL subsidy {i}: malformed redraws")
+        if not matches(response, want):
+            failures += 1
+            print(f"FAIL subsidy {i}: {json.dumps(response)[:300]} != {json.dumps(want)[:300]}")
+    print(f"subsidy oracle: {len(requests)} requests, {failures} failures")
+    return failures
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print(__doc__)
         return 2
     oracle = sys.argv[1]
     failures = (check_fixtures(oracle) + check_sighash_corpus(oracle) + check_tx_corpus(oracle)
-                + check_header_sequences(oracle) + check_contextual(oracle) + check_header_pow(oracle) + check_witness_corpus(oracle) + check_hash_block_fixtures(oracle) + check_process(oracle) + check_script_adapter_limits(oracle))
+                + check_header_sequences(oracle) + check_contextual(oracle) + check_header_pow(oracle) + check_witness_corpus(oracle) + check_hash_block_fixtures(oracle) + check_process(oracle) + check_script_adapter_limits(oracle) + check_subsidy(oracle))
     print("PASS" if failures == 0 else f"FAIL: {failures} failures")
     return 0 if failures == 0 else 1
 

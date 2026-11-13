@@ -8,6 +8,7 @@ public import DogeLib.Block.Header
 public import DogeLib.Block.HeaderSequence
 public import DogeLib.Block.Merkle
 public import DogeLib.Block.ProofOfWork
+public import DogeLib.Block.Subsidy
 public import DogeLib.Block.VersionGate
 
-/-! # Block headers, AuxPoW payloads, transaction Merkle roots, header proof of work, version gating, contextual parameters and checkpoints, contextual header validation, and the block-index model -/
+/-! # Block headers, AuxPoW payloads, transaction Merkle roots, header proof of work, version gating, contextual parameters and checkpoints, contextual header validation, the block-index model, and the block subsidy -/

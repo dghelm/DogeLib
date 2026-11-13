@@ -241,6 +241,8 @@ The fixtures do not change any reference pin.
 [`tests/block/mainnet-subsidy-prev-hashes/README.md`](tests/block/mainnet-subsidy-prev-hashes/README.md) records the public source of the hashes of mainnet blocks 0 to 144999 and the fetch date.
 They are the previous block hashes of heights 1 to 145000, the inputs of the random subsidy (D104).
 `scripts/fetch_subsidy_prev_hashes.py` checked every predecessor link of the 145,001 headers, and the checkpoints at heights 0, 104679 and 145000 (D9, `src/chainparams.cpp`, lines 182 to 184).
+The fixture holds the hashes alone, so no test can repeat those checks from it.
+The fixture does not change any reference pin.
 
 ## Mainnet block fixtures
 
@@ -254,8 +256,6 @@ The ranges are assets of the GitHub release `fixtures-mainnet-blocks-2026-11-13`
 Those hashes come from the subsidy fixture, the header fixtures and Core's checkpoints (D9, `src/chainparams.cpp`, lines 180 to 205).
 1,004 blocks have no pinned hash, and the README names them.
 The fixtures change no reference pin.
-The fixture holds the hashes alone, so no test can repeat those checks from it.
-The fixture does not change any reference pin.
 
 ## Header-sequence fixture evidence
 

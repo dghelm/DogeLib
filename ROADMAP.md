@@ -127,11 +127,14 @@ A property of an application template belongs in a downstream project.
 
 The next milestone is block validity.
 DogeLib has no definition of `CheckTransaction`, `CheckBlock`, `ContextualCheckBlock` or `ConnectBlock`, so the oracle cannot judge a block.
-Design record 0010 will define the milestone and its stages. The record does not exist, and the maintainer has not adopted a scope.
+[Design record 0010](docs/design/0010-block-validity.md) defines the milestone. The maintainer adopted it on 2026-11-13.
 
-Its first stage is implemented: the harness links Core's server library and compiles Core's `src/validation.cpp`.
-`block.contextual_check` and `block.header_sequence` compare with Core's own functions, and their hand transcriptions are no longer in the harness.
-The stages after it specify the block checks and compare them with Core on real blocks.
+| Stage | Deliverable | Status |
+| --- | --- | --- |
+| 0 | The harness compiles Core's `src/validation.cpp`. `block.contextual_check` and `block.header_sequence` call Core's own functions. | Implemented |
+| 0010a | Block checks without coins: `CheckTransaction`, `CheckBlock`, `ContextualCheckBlock`, the subsidy and the version-bits state, compared with Core on two mainnet ranges and on mutations | Not started |
+| 0010b | Block connection: the coin set, `ConnectBlock` and `block.validate`, replayed with Core | Not started |
+| 0010c | Properties of connection: available spends, the value bound and the issuance bound | Not started |
 
 One other candidate is unscheduled, and it needs an approved scope before work starts:
 

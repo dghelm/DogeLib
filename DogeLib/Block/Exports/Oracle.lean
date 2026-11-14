@@ -2,6 +2,7 @@ module
 
 public import DogeLib.Exports.Json
 public import DogeLib.Block.Check
+public import DogeLib.Block.ContextualBody
 public import DogeLib.Block.Header
 public import DogeLib.Block.Merkle
 public import DogeLib.Block.ContextualCheck
@@ -318,6 +319,95 @@ def headerSequence : Operation where
         ("height", natJson entry.height), ("chain_work", .str (Work.Exports.targetHex entry.chainWork))]).toArray),
       ("marked_failed_child", .arr ((marked.map (fun hash => hexOf hash.displayBytes)).eraseDups.mergeSort (· ≤ ·) |>.map Json.str).toArray)]
 
+/--
+The candidate height and the CSV and SegWit activeness of a `block.contextual_check_body` request.
+`chain` is a contiguous view from the predecessor, newest first, empty for a block at the genesis position where Core passes a null predecessor.
+The candidate height is the predecessor's height plus one.
+Below the first period the aligned boundary is null, and both states are `DEFINED`.
+Otherwise the chain reaches the aligned boundary, whose median time past gives the states through `versionBitsStateFromBoundary`, and the case-3 gap is an adapter error outside the comparison domain.
+A predecessor at height 2147483646 or above is outside Core's signed-`int` range for the candidate height, and gives an adapter error.
+The returned median time is the aligned boundary's, a stand-in for the predecessor's own: on mainnet both states are never `ACTIVE`, so the body never reads it.
+-/
+def bodyStates (chain : List Work.BlockIndex) : Except Failure (Nat × Bool × Bool × Int) := do
+  match Work.validateWorkView chain with
+  | .error e => throw (.spec (Work.Exports.viewErrorJson e))
+  | .ok () => pure ()
+  match chain with
+  | [] => return (0, false, false, 0)
+  | prev :: _ =>
+    if 2147483646 ≤ prev.nHeight then
+      throw (.request "predecessor height is outside the signed 32-bit range")
+    let height := prev.nHeight + 1
+    let aligned : Int := (prev.nHeight : Int) - ((prev.nHeight : Int) + 1) % (minerConfirmationWindow : Int)
+    if aligned < 0 then return (height, false, false, 0)
+    else
+      let boundary := chain.drop (prev.nHeight - aligned.toNat)
+      match boundary with
+      | [] => throw (.request "chain does not reach the aligned boundary")
+      | b :: _ =>
+        unless b.nHeight = aligned.toNat do
+          throw (.request "chain is not contiguous to the aligned boundary")
+        match Work.medianTimePast boundary with
+        | .error _ =>
+          throw (.spec (Json.mkObj [("kind", .str "work_view"), ("reason", .str "short_boundary_window")]))
+        | .ok mtp =>
+          match versionBitsStateFromBoundary csvDeployment (some mtp),
+              versionBitsStateFromBoundary segwitDeployment (some mtp) with
+          | some csv, some seg => return (height, csv == .active, seg == .active, mtp)
+          | _, _ => throw (.spec (Json.mkObj [("kind", .str "version_bits"), ("reason", .str "gap")]))
+
+/--
+`block.contextual_check_body`: Core's `ContextualCheckBlock` on mainnet for a block that is all of `block_hex`, read in `mode`.
+`chain` is a contiguous view from the predecessor, newest first, each entry `{height, time, bits}`.
+It is empty for a block at the genesis position, and otherwise reaches the aligned version-bits boundary and its predecessors for the boundary's median time.
+The response holds the verdict, the reject reason, the denial-of-service score and the reject code, and the Lean diagnostic.
+An input whose SegWit state is active, whose block has no coinbase input, or whose version bits fall in the case-3 gap is outside the comparison domain and gives an error.
+-/
+def contextualCheckBody : Operation where
+  name := "block.contextual_check_body"
+  args := ["block_hex", "mode", "chain"]
+  run fields := do
+    let mode ← argMode fields
+    let bs ← argHex fields "block_hex"
+    let chain ← Work.Exports.argView fields
+    match Block.decodeComplete mode bs with
+    | .error (.read e) => throw (.spec (Transaction.Exports.witnessReadErrorJson e))
+    | .error (.trailingBytes n) =>
+      throw (.spec (Json.mkObj [("kind", "trailing_bytes"), ("count", natJson n)]))
+    | .ok b =>
+      let (height, csvActive, segwitActive, prevMtp) ← bodyStates chain
+      match contextualCheckBlockBody height prevMtp csvActive segwitActive b with
+      | .ok () => return Json.mkObj [("valid", .bool true), ("reject_reason", .null),
+          ("dos", .null), ("reject_code", .null), ("diagnostic", .null)]
+      | .error e =>
+        if e.isRejection then
+          return Json.mkObj [("valid", .bool false),
+            ("reject_reason", e.rejectReason.map Json.str |>.getD .null),
+            ("dos", natJson e.dosScore), ("reject_code", natJson e.rejectCode),
+            ("diagnostic", .str (reprStr e))]
+        else
+          throw (.spec (Json.mkObj [("kind", .str "contextual_body"),
+            ("reason", .str (match e with | .noCoinbase => "no_coinbase" | _ => "segwit_active"))]))
+
+/--
+`block.version_bits_state`: Core's `VersionBitsState` for CSV and SegWit on mainnet, by the full walk.
+`chain` is the blocks from the genesis block to the predecessor, oldest first, each entry `{version, time}`.
+The response gives the two states, for the outside-CI comparison with Core.
+-/
+def versionBitsStateOp : Operation where
+  name := "block.version_bits_state"
+  args := ["chain"]
+  run fields := do
+    let .arr entries ← arg fields "chain" | throw (.request "chain must be an array")
+    let vb ← entries.toList.mapM fun e => do
+      let .obj f := e | throw (.request "chain entries must be objects")
+      for (key, _) in f do
+        unless ["version", "time"].contains key do throw (.request s!"unknown chain field {key}")
+      return (⟨← argU32 f "version", ← argU32 f "time"⟩ : VbEntry)
+    return Json.mkObj [
+      ("csv", .str (versionBitsStateFull csvDeployment ruleChangeActivationThreshold vb).name),
+      ("segwit", .str (versionBitsStateFull segwitDeployment ruleChangeActivationThreshold vb).name)]
+
 /-- One case of `block.subsidy`: a height and a previous block hash in internal order. -/
 def subsidyCase (json : Json) : Except Failure (Nat × Hash256) := do
   let .obj fields := json | throw (.request "cases must contain objects")
@@ -419,7 +509,7 @@ def blockCheck : Operation where
 
 /-- The block, Merkle, header proof-of-work, subsidy and check operations of the oracle. -/
 def operations : List Operation := [readHeader, encodeHeader, hashHeader, computeMerkle,
-  scryptHash, readBlockHeader, checkAuxPow, checkPow, checkHeaderVersion, contextualCheck, headerSequence,
-  blockSubsidy, txCheck, blockCheck]
+  scryptHash, readBlockHeader, checkAuxPow, checkPow, checkHeaderVersion, contextualCheck,
+  contextualCheckBody, versionBitsStateOp, headerSequence, blockSubsidy, txCheck, blockCheck]
 
 end DogeLib.Block.Exports

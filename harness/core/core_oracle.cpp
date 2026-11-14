@@ -1039,6 +1039,129 @@ UniValue run(const UniValue& req)
         ok.pushKV("base_size", static_cast<uint64_t>(::GetSerializeSize(block, SER_NETWORK, BASE_VERSION)));
         ok.pushKV("transactions", static_cast<uint64_t>(block.vtx.size()));
         pushHash(ok, "hash", block.GetHash());
+    } else if (op == "block.contextual_check_body") {
+        // Core's ContextualCheckBlock (D33, lines 3121 to 3203) on mainnet. The
+        // harness builds the block's predecessor and the aligned version-bits
+        // boundary. VersionBitsState reads the boundary's median time past, and
+        // on a boundary at or after the CSV timeout the harness seeds
+        // THRESHOLD_FAILED, as design record 0010, decision 3, justifies with
+        // csv_never_lockedIn and versionBits_shortcut. On mainnet neither state
+        // is ever ACTIVE, so the lock-time cutoff is always the block time.
+        checkArgs(req, op, {"block_hex", "mode", "chain"});
+        SelectParams(CBaseChainParams::MAIN);
+        const int version = headerStreamVersion(req);
+        const auto bytes = argHex(req, "block_hex");
+        CDataStream ds(bytes, SER_NETWORK, version);
+        CBlock block;
+        try { ds >> block; } catch (const std::ios_base::failure& e) { throw SpecError{mapCoreFailure(e)}; }
+        requireEmpty(ds);
+        if (block.fChecked) throw UnmappedCoreError{"a block from Core's reader has fChecked set"};
+        const auto& entries = arg(req, "chain");
+        if (!entries.isArray()) throw RequestError{"chain must be an array"};
+        std::vector<CBlockIndex> chain(entries.size());
+        for (size_t i = 0; i < chain.size(); ++i) {
+            const auto& e = entries[i];
+            if (!e.isObject()) throw RequestError{"chain entries must be objects"};
+            for (const auto& key : e.getKeys())
+                if (key != "height" && key != "time" && key != "bits") throw RequestError{"unknown chain entry field"};
+            chain[i].nHeight = argInt(e, "height", 0, 2147483646);
+            chain[i].nTime = argU32(e, "time");
+            chain[i].nBits = argU32(e, "bits");
+            if (i && chain[i-1].nHeight != chain[i].nHeight + 1) throw RequestError{"chain heights must be consecutive"};
+        }
+        // The version-bits cache holds pointers into this request only.
+        versionbitscache.Clear();
+        struct Clear { ~Clear() { versionbitscache.Clear(); } } clearState;
+        // Build oldest to newest, with real pprev links and Core's skip list.
+        // Build a skip pointer only when its target stays within the chain, as
+        // the work operations do, so GetAncestor never reads below the chain.
+        for (size_t i = chain.size(); i-- > 0;) {
+            if (i + 1 < chain.size()) {
+                chain[i].pprev = &chain[i+1];
+                if (availableSkipHeight(chain[i].nHeight) >= chain.back().nHeight) chain[i].BuildSkip();
+            }
+        }
+        CBlockIndex* pindexPrev = chain.empty() ? nullptr : &chain.front();
+        if (pindexPrev) {
+            const int64_t period = 10080;
+            const int64_t prevHeight = pindexPrev->nHeight;
+            const int64_t aligned = prevHeight - ((prevHeight + 1) % period);
+            if (aligned >= 0) {
+                const size_t drop = static_cast<size_t>(prevHeight - aligned);
+                if (drop >= chain.size() || chain[drop].nHeight != aligned)
+                    throw RequestError{"chain does not reach the aligned boundary"};
+                CBlockIndex* boundary = &chain[drop];
+                const int64_t boundaryMtp = boundary->GetMedianTimePast();
+                // Case 2: seed FAILED at the aligned boundary for both deployments,
+                // justified by csv_never_lockedIn and versionBits_shortcut.
+                if (boundaryMtp >= 1493596800) {
+                    versionbitscache.caches[Consensus::DEPLOYMENT_CSV][boundary] = THRESHOLD_FAILED;
+                    versionbitscache.caches[Consensus::DEPLOYMENT_SEGWIT][boundary] = THRESHOLD_FAILED;
+                } else if (boundaryMtp >= 1462060800) {
+                    // Case 3: between the CSV start and timeout. Without the dense history
+                    // Core's GetStateFor would walk below the supplied chain and assert, so
+                    // the harness refuses the request, as the Lean adapter rejects the gap.
+                    throw RequestError{"version-bits gap is outside the comparison domain"};
+                }
+            }
+        }
+        CValidationState state;
+        const bool valid = ContextualCheckBlock(block, state, pindexPrev);
+        ok.pushKV("valid", valid);
+        if (valid) {
+            ok.pushKV("reject_reason", UniValue());
+            ok.pushKV("dos", UniValue());
+            ok.pushKV("reject_code", UniValue());
+        } else {
+            int score = 0;
+            if (!state.IsInvalid(score)) throw UnmappedCoreError{"ContextualCheckBlock failed without an invalid state"};
+            ok.pushKV("reject_reason", state.GetRejectReason());
+            ok.pushKV("dos", score);
+            ok.pushKV("reject_code", static_cast<int>(state.GetRejectCode()));
+        }
+    } else if (op == "block.version_bits_state") {
+        // Core's VersionBitsState for CSV and SegWit on mainnet, by the full walk,
+        // for the outside-CI comparison. The chain is the blocks from the genesis
+        // block to the predecessor, oldest first. The harness builds the whole
+        // CBlockIndex chain so Core's GetStateFor can count each period.
+        checkArgs(req, op, {"chain"});
+        SelectParams(CBaseChainParams::MAIN);
+        const auto& entries = arg(req, "chain");
+        if (!entries.isArray()) throw RequestError{"chain must be an array"};
+        std::vector<CBlockIndex> chain(entries.size());
+        for (size_t i = 0; i < chain.size(); ++i) {
+            const auto& e = entries[i];
+            if (!e.isObject()) throw RequestError{"chain entries must be objects"};
+            for (const auto& key : e.getKeys())
+                if (key != "version" && key != "time") throw RequestError{"unknown chain field"};
+            chain[i].nHeight = static_cast<int>(i);
+            chain[i].nVersion = static_cast<int32_t>(argU32(e, "version"));
+            chain[i].nTime = argU32(e, "time");
+            if (i) chain[i].pprev = &chain[i-1];
+        }
+        for (size_t i = 0; i < chain.size(); ++i)
+            if (availableSkipHeight(chain[i].nHeight) >= 0) chain[i].BuildSkip();
+        versionbitscache.Clear();
+        struct ClearVB { ~ClearVB() { versionbitscache.Clear(); } } clearVB;
+        auto name = [](ThresholdState s) -> std::string {
+            switch (s) {
+                case THRESHOLD_DEFINED: return "defined";
+                case THRESHOLD_STARTED: return "started";
+                case THRESHOLD_LOCKED_IN: return "locked_in";
+                case THRESHOLD_ACTIVE: return "active";
+                case THRESHOLD_FAILED: return "failed";
+            }
+            throw UnmappedCoreError{"unknown threshold state"};
+        };
+        if (chain.empty()) {
+            ok.pushKV("csv", name(THRESHOLD_DEFINED));
+            ok.pushKV("segwit", name(THRESHOLD_DEFINED));
+        } else {
+            const CBlockIndex* prev = &chain.back();
+            const auto& params = Params().GetConsensus(prev->nHeight + 1);
+            ok.pushKV("csv", name(VersionBitsState(prev, params, Consensus::DEPLOYMENT_CSV, versionbitscache)));
+            ok.pushKV("segwit", name(VersionBitsState(prev, params, Consensus::DEPLOYMENT_SEGWIT, versionbitscache)));
+        }
     } else if (op == "work.next" || op == "block.contextual_check") {
         const bool contextual = op == "block.contextual_check";
         if (contextual) checkArgs(req, op, {"bytes_hex", "network", "chain", "adjusted_time", "checkpoints_enabled", "known_checkpoints"});

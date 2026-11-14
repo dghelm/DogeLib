@@ -16,7 +16,8 @@ Line numbers in a record refer to those revisions.
 All reads are by GPT-6 through Codex, at Core `e0a1c157791544e818c901bd9341896965afbf9d`.
 The first seven are of 2026-11-11, at DogeLib `865754b`.
 The block subsidy read is of 2026-11-13, at DogeLib `4cd73bc`, and it also reads Boost 1.70.0.
-The block check read is of 2026-11-13, at DogeLib `6ca6373`:
+The block check read is of 2026-11-13, at DogeLib `6ca6373`.
+The version-bits and `ContextualCheckBlock` read is of 2026-11-13, at DogeLib `cc15d98`:
 
 | Area | Record | Brief | Findings |
 | --- | --- | --- | --- |
@@ -29,6 +30,7 @@ The block check read is of 2026-11-13, at DogeLib `6ca6373`:
 | Cryptography: secp256k1 verification and hashes | [crypto.md](crypto.md) | [briefs/crypto.md](briefs/crypto.md) | 4 domain boundaries |
 | Block subsidy, with Boost's `mt19937` and `uniform_int` | [subsidy.md](subsidy.md) | [briefs/subsidy.md](briefs/subsidy.md) | None |
 | Block codec, `CheckTransaction`, legacy sigop count and `CheckBlock` | [blockcheck.md](blockcheck.md) | [briefs/blockcheck.md](briefs/blockcheck.md) | 1 documentation-only |
+| Version bits and `ContextualCheckBlock` | [contextualbody.md](contextualbody.md) | [briefs/contextualbody.md](briefs/contextualbody.md) | 3 domain boundaries, 1 documentation-only |
 
 No read found a consensus-divergent discrepancy.
 Each finding but one is a *domain boundary*: an input outside the domain on which a definition corresponds to Core.

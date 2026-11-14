@@ -449,6 +449,7 @@ The latter uses Core's network stream version without `SERIALIZE_TRANSACTION_NO_
 | `block.check_pow` | `bytes_hex`, `mode`, `network`, `selection_height` | Boolean `valid`, and Lean-only `diagnostic` |
 | `block.header_sequence` | `network`, `mode`, `adjusted_time`, `checkpoints_enabled`, `index`, `failed_blocks`, `headers` | Sequence verdict, added entries and child marks, as below |
 | `block.contextual_check` | `bytes_hex`, exactly 80 bytes, `network`, `chain`, `adjusted_time`, `checkpoints_enabled`, `known_checkpoints` | Boolean `valid`, `reject_reason` (null on acceptance), and Lean-only `diagnostic` |
+| `block.contextual_check_body` | `block_hex`, `mode`, `chain` | Boolean `valid`, `reject_reason`, `dos` and `reject_code` (null on acceptance), and Lean-only `diagnostic` |
 | `block.check_version` | `bytes_hex`, exactly 80 bytes, `network`, `selection_height` | Boolean `valid`, and Lean-only `diagnostic` |
 
 `scrypt.hash` fixes N = 1024, r = 1, p = 1 and a 32-byte output.
@@ -659,6 +660,32 @@ A count of transactions above `MAX_SIZE` is `too_large` before any transaction i
 `block.check` is the check of a block with `fChecked` false, which is the state of every block that Core reads into a new object.
 The operations do not run `ContextualCheckBlock`, so a block with witness data can be valid here.
 
+### Contextual block body
+
+`block.contextual_check_body` runs `Block.contextualCheckBlockBody`, Core's `ContextualCheckBlock` on mainnet (SOURCES.md D33, design record 0010, stage 0010a).
+It checks the finality of every transaction, the BIP34 coinbase height from 1,034,383, the absence of witness data, and the block weight.
+It has three required fields:
+
+- `block_hex`: a block that is all of the bytes, read as for `block.check`.
+- `mode`: the read mode of every transaction. The recent range reads only in `allow_witness` mode.
+- `chain`: a contiguous view from the predecessor, newest first, each entry `{height, time, bits}`.
+  It is empty for a block at the genesis position, where Core passes a null predecessor.
+  Otherwise it reaches the aligned version-bits boundary and its predecessors, for the boundary's median time.
+
+The candidate height is the predecessor's height plus one.
+The body reads the version-bits states of CSV and SegWit only to test whether either is active.
+On mainnet neither is ever active, which `csv_never_lockedIn` and `segwit_never_active` establish.
+Below the first period the aligned boundary is null and both states are `DEFINED`.
+Otherwise the boundary's median time selects the case of design record 0010, section 4.
+Below the CSV start the state is `DEFINED`, and at or after the CSV timeout the state is `FAILED`.
+A boundary in the gap between them, which the window from 2016 to 2017 would reach, is an adapter error outside the comparison domain.
+
+The result has `valid`, `reject_reason`, `dos`, `reject_code` and the Lean-only `diagnostic`, as `tx.check` does.
+The four reject reasons are `bad-txns-nonfinal` (score 10), `bad-cb-height`, `unexpected-witness` and `bad-blk-weight` (score 100 each), all with `reject_code` 16.
+`bad-blk-weight` is reachable because this body has no base-size check.
+In `block.validate` of stage 0010b, `CheckBlock` bounds the base size first.
+`contextualBody_badBlkWeight_unreachable_after_checkBlock` then shows that the weight check cannot fire, under the hypothesis that the AuxPoW payload transaction has no witness data.
+
 ### Block subsidy
 
 `block.subsidy` runs `Block.getDogecoinBlockSubsidy`, Core's `GetDogecoinBlockSubsidy` with the mainnet parameter records (SOURCES.md D104, design record 0010).
@@ -753,6 +780,7 @@ These pinned sources supply the work functions and parameter constructors:
 | --- | --- |
 | `block.header_sequence` | `AcceptBlockHeader` once for each header, which calls `CheckBlockHeader`, `ContextualCheckBlockHeader` and `AddToBlockIndex`, on an index that the harness builds from the request |
 | `block.contextual_check` | `ContextualCheckBlockHeader` on index entries that the harness builds from the request |
+| `block.contextual_check_body` | `SelectParams` for mainnet, then `ContextualCheckBlock` on a `CBlock` that Core's stream code reads, with a predecessor that the harness builds from the chain. `VersionBitsState` reads the aligned boundary's median time, and the harness seeds `THRESHOLD_FAILED` at a boundary at or after the CSV timeout |
 | `block.check` | `SelectParams` for mainnet, then `CheckBlock` on a `CBlock` that Core's stream code reads from the request, with the two flags of the request. Then `GetLegacySigOpCount` for each transaction, `GetSerializeSize` in base mode and `GetHash` |
 | `block.subsidy` | `SelectParams` for mainnet, then `GetDogecoinBlockSubsidy` with `Params().GetConsensus(height)` for each case, as `ConnectBlock` calls it (D101, line 1996) |
 | `compactsize.encode` | `WriteCompactSize` into a `CDataStream` |
@@ -849,7 +877,7 @@ For `sighash.legacy` with plan `hash_bytes`, the double SHA-256 of the oracle's 
 This checks the preimage against Core's digest, not byte by byte against a preimage from Core.
 Outside the checked `harness-refused` category, a request error from either program fails the comparison.
 
-A full comparison with Core `e0a1c157791544e818c901bd9341896965afbf9d` sends 389,606 stream requests.
+A full comparison with Core `e0a1c157791544e818c901bd9341896965afbf9d` sends 389,628 stream requests.
 The table `EXPECTED_OPERATION_COUNTS` of `scripts/compare_core.py` gives the number of requests for each operation.
 A full run fails with `REQUEST_COUNT` when the count of any operation differs from the table.
 So a change to a request set changes the table, and this section, in the same pull request:
@@ -861,6 +889,7 @@ So a change to a request set changes the table, and this section, in the same pu
 | `block.check_pow` | 806 |
 | `block.check_version` | 207 |
 | `block.contextual_check` | 2,903 |
+| `block.contextual_check_body` | 22 |
 | `block.header.read` | 7,878 |
 | `block.header_sequence` | 257 |
 | `block.subsidy` | 148 |
@@ -888,7 +917,7 @@ So a change to a request set changes the table, and this section, in the same pu
 | `work.get_compact` | 1,552 |
 | `work.next` | 1,353 |
 | `work.set_compact` | 5,140 |
-| Total | 389,606 |
+| Total | 389,628 |
 
 The four transaction-reader operations receive 263,929 of the requests.
 Most of them are proper prefixes and field changes of corpus transactions.
@@ -1268,6 +1297,32 @@ The oracle's sigop count reads a script as a byte list, and its time grows with 
 A script of 80,000 one-byte opcodes takes about 3 seconds, and Core takes less than 0.1 seconds.
 So the requests of a megabyte hold one large push, and no request has more than about 30,000 separate opcodes in one script.
 [Issue 149](https://github.com/dghelm/DogeLib/issues/149) tracks a faster reader.
+
+### Contextual block body comparison evidence
+
+The harness calls Core's own `ContextualCheckBlock` (D33) on a `CBlock` that Core's stream code reads.
+The harness builds the predecessor and the version-bits boundary from the chain.
+The comparator requires equal `ok` fields, except the oracle's `diagnostic`.
+It also checks both sides against Core's text: the score of each reason and the reject code 16.
+A full run fails with `REASON_NOT_REACHED` if Core never returns one of the four reachable reasons of design record 0010, section 4.
+
+The 22 requests are in six sets, defined in `scripts/oracle_contextual_body.py`:
+
+| Set | Requests | Contents |
+| --- | ---: | --- |
+| Valid | 3 | The genesis block, and final blocks below the first period |
+| Finality | 5 | A non-final lock time by time and by height, a final sequence, lock time 0, and a non-final coinbase |
+| Coinbase height | 8 | `bad-cb-height` at a period boundary, the exact boundary 1,034,382 and 1,034,383, a short height, and valid heights at the BIP65 boundary |
+| Witness | 2 | Witness data in a transaction and in the coinbase |
+| Weight | 2 | Blocks of exactly 1,000,000 and 1,000,001 base bytes |
+| Version bits | 2 | A boundary below the CSV start (case 1) and one at or after the CSV timeout (case 2, seeded `FAILED`) |
+
+The height boundaries use a contiguous chain back to the aligned version-bits boundary, about 6,200 entries for 1,034,383 and 7,300 for 3,464,751.
+The other requests use a short chain, so the six sets add about 39,600 chain entries in all.
+Every request agrees, and Core returns each of the four reasons.
+`scripts/compare_core.py --mainnet-blocks` also compares the body on 11,018 real blocks: the genesis-to-10000 range, the 1,000 most recent blocks and the 17 rule-change blocks.
+Below the first period the chain is the predecessor alone, and otherwise it reaches the aligned boundary from the committed blocks and the version-bits header runs of `tests/block/mainnet-blocks/version-bits-headers`.
+`scripts/test_oracle.py` checks the 22 requests against their expected verdicts without Core.
 
 ### Block subsidy comparison evidence
 

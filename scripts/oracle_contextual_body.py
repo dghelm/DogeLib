@@ -236,19 +236,64 @@ def version_bits_cases() -> list[dict]:
     return out
 
 
-def mainnet_body_sets(directory) -> list[tuple[str, list[dict]]]:
-    """`block.contextual_check_body` on the real mainnet blocks below the first period.
+RULE_RANGE = "rule-changes"
+RULE_DIR = ROOT / "tests/block/mainnet-blocks" / RULE_RANGE  # committed, not a download
+VERSION_BITS_HEADERS = ROOT / "tests/block/mainnet-blocks/version-bits-headers"
 
-    Only the genesis-to-10000 range is feasible from the committed fixtures: below height
-    10,080 the aligned version-bits boundary is null, so the chain is the predecessor alone.
-    The recent range and the rule-change blocks would need the predecessor headers back to each
-    block's version-bits boundary, which the fixtures do not hold, so this set omits them.
-    """
+
+def header_time_bits(raw: bytes) -> tuple[int, int]:
     import struct
+    return struct.unpack_from("<I", raw, 68)[0], struct.unpack_from("<I", raw, 72)[0]
+
+
+def aligned_boundary(height: int) -> int:
+    return (height - 1) - (height % PERIOD)
+
+
+def body_chain(height: int, headers: dict[int, bytes]) -> list[dict]:
+    """The contiguous chain from the predecessor down to the aligned boundary and its ten predecessors."""
+    aligned = aligned_boundary(height)
+    low = max(0, aligned - 10)
+    chain = []
+    for x in range(height - 1, low - 1, -1):
+        t, b = header_time_bits(headers[x])
+        chain.append(chain_entry(x, t, b))
+    return chain
+
+
+def combined_headers(directory, group_names: list[str]) -> tuple[dict[int, bytes], list[tuple[dict, bytes]]]:
+    """Height -> 80-byte header for the committed blocks of `group_names` and the version-bits run fixture."""
+    import fetch_release_blocks
+    import fetch_version_bits_headers
+    from oracle_block_check import fixture_blocks
+    headers: dict[int, bytes] = dict(fetch_version_bits_headers.load_fixture(VERSION_BITS_HEADERS))
+    committed = []
+    for name in group_names:
+        if name == RULE_RANGE:
+            path, sums = RULE_DIR, None
+        else:
+            release = fetch_release_blocks.load_release()
+            entry = next(e for e in release["ranges"] if e["name"] == name)
+            path, sums = pathlib.Path(directory) / name, fetch_release_blocks.sums_text(entry)
+        for record, raw in fixture_blocks(path, sums):
+            headers[record["height"]] = raw[:80]
+            committed.append((record, raw))
+    return headers, committed
+
+
+def mainnet_body_sets(directory) -> list[tuple[str, list[dict]]]:
+    """`block.contextual_check_body` on the real mainnet blocks of design record 0010, section 4.
+
+    Below the first period (the genesis-to-10000 range) the aligned version-bits boundary is null,
+    so the chain is the predecessor alone. For the recent range and the rule-change blocks, which
+    are higher, the chain reaches each block's aligned boundary, from the committed blocks and the
+    version-bits header runs that `scripts/fetch_version_bits_headers.py` fetches.
+    """
     import fetch_release_blocks
     from oracle_block_check import fixture_blocks
-    release = fetch_release_blocks.load_release()
     sets = []
+    release = fetch_release_blocks.load_release()
+    recent_name = next((e["name"] for e in release["ranges"] if e["last"] >= PERIOD), None)
     for entry in release["ranges"]:
         if entry["last"] >= PERIOD:
             continue
@@ -256,14 +301,17 @@ def mainnet_body_sets(directory) -> list[tuple[str, list[dict]]]:
         requests, prev = [], None
         for record, raw in blocks:
             h = record["height"]
-            if h == 0:
-                chain = []
-            else:
-                chain = [chain_entry(h - 1, struct.unpack_from("<I", prev, 68)[0],
-                                     struct.unpack_from("<I", prev, 72)[0])]
+            chain = [] if h == 0 else [chain_entry(h - 1, *header_time_bits(prev))]
             requests.append(expect(body_request(raw, chain), None))
             prev = raw
         sets.append((f"block.contextual_check_body mainnet {entry['name']}", requests))
+    # The recent range and the rule-change blocks reach their aligned boundary.
+    groups = ([recent_name] if recent_name else []) + ([RULE_RANGE] if RULE_DIR.exists() else [])
+    if groups and VERSION_BITS_HEADERS.exists():
+        headers, committed = combined_headers(directory, groups)
+        requests = [expect(body_request(raw, body_chain(record["height"], headers)), None)
+                    for record, raw in committed]
+        sets.append(("block.contextual_check_body mainnet boundary ranges", requests))
     return sets
 
 
@@ -272,6 +320,14 @@ def mainnet_body_counts() -> dict[str, int]:
     import fetch_release_blocks
     release = fetch_release_blocks.load_release()
     count = sum(entry["blocks"] for entry in release["ranges"] if entry["last"] < PERIOD)
+    recent = sum(entry["blocks"] for entry in release["ranges"] if entry["last"] >= PERIOD)
+    rule = 0
+    if VERSION_BITS_HEADERS.exists():
+        from oracle_block_check import fixture_blocks
+        rule_dir = ROOT / "tests/block/mainnet-blocks" / RULE_RANGE
+        if rule_dir.exists():
+            rule = len(fixture_blocks(rule_dir))
+        count += recent + rule
     return {"block.contextual_check_body": count} if count else {}
 
 

@@ -1320,9 +1320,8 @@ The 22 requests are in six sets, defined in `scripts/oracle_contextual_body.py`:
 The height boundaries use a contiguous chain back to the aligned version-bits boundary, about 6,200 entries for 1,034,383 and 7,300 for 3,464,751.
 The other requests use a short chain, so the six sets add about 39,600 chain entries in all.
 Every request agrees, and Core returns each of the four reasons.
-`scripts/compare_core.py --mainnet-blocks` also compares the body on the 10,001 real blocks of the genesis-to-10000 range.
-There the version-bits boundary is null, and the chain is the predecessor alone.
-The recent range and the rule-change blocks would need the predecessor headers back to each block's version-bits boundary, which the fixtures do not hold.
+`scripts/compare_core.py --mainnet-blocks` also compares the body on 11,018 real blocks: the genesis-to-10000 range, the 1,000 most recent blocks and the 17 rule-change blocks.
+Below the first period the chain is the predecessor alone, and otherwise it reaches the aligned boundary from the committed blocks and the version-bits header runs of `tests/block/mainnet-blocks/version-bits-headers`.
 `scripts/test_oracle.py` checks the 22 requests against their expected verdicts without Core.
 
 ### Block subsidy comparison evidence

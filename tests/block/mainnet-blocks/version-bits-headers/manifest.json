@@ -1,0 +1,38 @@
+{
+  "format": "dogelib-version-bits-headers/1",
+  "network": "mainnet",
+  "runs": [
+    {
+      "first": 141109,
+      "count": 3889,
+      "links_to": 144998
+    },
+    {
+      "first": 362869,
+      "count": 8467,
+      "links_to": 371336
+    },
+    {
+      "first": 594709,
+      "count": 5289,
+      "links_to": 599998
+    },
+    {
+      "first": 1028149,
+      "count": 6233,
+      "links_to": 1034382
+    },
+    {
+      "first": 3457429,
+      "count": 7321,
+      "links_to": 3464750
+    },
+    {
+      "first": 6451189,
+      "count": 4113,
+      "links_to": 6455302
+    }
+  ],
+  "bytes": 2824960,
+  "checkpoints": {}
+}

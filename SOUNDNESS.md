@@ -1151,6 +1151,7 @@ A deployment has a start time, a timeout, a signalling bit, a confirmation windo
 `thresholdStep` folds the reset of Core's backward walk into one step: a boundary whose median time is below the start time gives `DEFINED` whatever the state before it.
 So the fold over every boundary equals `GetStateFor` at the last boundary.
 The source review, not a theorem, connects the fold to the imperative algorithm of Core, and the run outside continuous integration gives the empirical evidence.
+That run of 2026-11-13 compared the full walk with Core at 11 period boundaries through the CSV window on the real mainnet header chain, and agreed at each for CSV and SegWit, across `DEFINED`, `STARTED` and `FAILED`.
 
 `csv_never_lockedIn` takes a chain of full headers from the mainnet genesis in which every header passed `checkBlockHeader`.
 On mainnet `checkBlockHeader` runs `CheckAuxPowProofOfWork` with a strict chain ID of `0x62`, which accepts a header only if it is legacy, with version 1 or 2, or has the chain ID `0x62`.

@@ -30,7 +30,7 @@ import urllib.request
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
-from fetch_blocks import read_password, PASSWORD_FILE  # noqa: E402
+from fetch_blocks import read_password, PASSWORD_FILE, DEFAULT_URL, DEFAULT_USER  # noqa: E402
 
 PERIOD = 10080
 CSV_START = 1462060800
@@ -161,8 +161,8 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("oracle")
     parser.add_argument("harness")
-    parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=22555)
+    parser.add_argument("--url", default=DEFAULT_URL)
+    parser.add_argument("--user", default=DEFAULT_USER)
     parser.add_argument("--last", type=int, default=1720080,
                         help="the greatest height to fetch, a period boundary past the CSV timeout")
     parser.add_argument("--timeout", type=float, default=1200.0)
@@ -176,10 +176,9 @@ def main(argv=None) -> int:
 
     password = read_password(os.environ, PASSWORD_FILE.expanduser())
     import base64
-    auth = "Basic " + base64.b64encode(f"dogecoinrpc:{password}".encode()).decode()
-    url = f"http://{args.host}:{args.port}/"
+    auth = "Basic " + base64.b64encode(f"{args.user}:{password}".encode()).decode()
     print(f"fetching headers 0 to {args.last} from the node", file=sys.stderr)
-    headers = fetch_headers(url, auth, args.last, args.timeout)
+    headers = fetch_headers(args.url, auth, args.last, args.timeout)
     # Targets: period boundaries around the CSV window, as indices into the oldest-first chain.
     boundaries = [i for i in range(PERIOD, len(headers) + 1, PERIOD)]
     window = [b for b in boundaries if CSV_START - 94608000 <= headers[b - 1]["time"]]

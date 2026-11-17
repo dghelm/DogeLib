@@ -1069,6 +1069,13 @@ A wrapper around the oracle stands in for the harness.
 Unchanged, it must pass on the full stream. Each response mutation must fail with the failure code that it targets.
 One case drops a `compactsize.encode` request from the full stream, and the run must fail with `REQUEST_COUNT` alone.
 
+Only those two cases run the full stream.
+Every mutation runs the reduced stream of `--quick`: 22,667 requests and the two-call composition of the first 32 corpus records.
+The reduced stream holds a response that each mutation changes.
+A mutation that finds no such response fails its case.
+The cases are separate runs of the comparator, four at a time by default, and `--jobs N` changes that number.
+Each full-stream case holds about 3.5 GB of memory.
+
 The witness mutations change `wtxid_hex`, a stack and `has_witness`.
 The work mutations change the magnitude, both flags, the encoded compact and each work operation's result bits.
 
@@ -1078,7 +1085,7 @@ They also change both Merkle root orders and the mutation flag.
 Script mutations change reader fields, evaluation classes, rejection errors, success errors, final stacks and unsupported fields.
 An informational Core result for an unsupported request can differ without a comparison failure.
 
-One mutation runs the full composition path and corrupts a successful second-call stack.
+One mutation corrupts a successful second-call stack of the composition path, and the failure must name that path.
 Another gives an unsupported result an opcode absent from the script instructions.
 Legacy mutations corrupt verdicts, add a forbidden stack, and invent unsupported results for either checker or Core.
 
@@ -1280,7 +1287,7 @@ The run fails with `BLOCK_ASSETS` when a file is absent or does not have its com
 It fails with `REQUEST_COUNT` when the stream does not hold one request for each block of `release.json`.
 
 The ranges are a separate run, not sets of the full run.
-The comparator's self-test repeats the full run five times, with the oracle in both places.
+The comparator's self-test repeats the full run twice, with the oracle in both places.
 On a development machine the oracle takes about 70 seconds for the 11,001 blocks, and Core takes about 3 seconds.
 The largest sigop count of a block is 3,367, so the cost of [issue 149](https://github.com/dghelm/DogeLib/issues/149) does not show on these blocks.
 

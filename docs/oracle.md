@@ -1539,7 +1539,8 @@ The comparator runs the request in a second oracle process, at the same time as 
 The default timeout of that mode is 3,600 seconds.
 
 This closes the first part of exit condition 1 of stage 0010b: agreement on the genesis-to-10,000 range, digests included.
-The recent range needs supplied coins, and the range to height 145,000 is a gate outside CI.
+The recent range needs supplied coins.
+The range to height 145,000 is a gate outside CI, which has not run, and [issue 162](https://github.com/dghelm/DogeLib/issues/162) tracks it.
 Neither is in this comparison.
 
 ### Block subsidy comparison evidence

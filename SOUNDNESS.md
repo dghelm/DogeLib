@@ -1154,7 +1154,8 @@ The source review, not a theorem, connects the fold to the imperative algorithm 
 That run of 2026-11-13 compared the full walk with Core at 11 period boundaries through the CSV window on the real mainnet header chain, and agreed at each for CSV and SegWit, across `DEFINED`, `STARTED` and `FAILED`.
 
 `csv_never_lockedIn` takes a chain of full headers from the mainnet genesis in which every header passed `checkBlockHeader .mainnet`.
-On mainnet `checkBlockHeader` runs `CheckAuxPowProofOfWork` with a strict chain ID of `0x62`, which accepts a header only if it is legacy, with version 1 or 2, or has the chain ID `0x62`.
+On mainnet `checkBlockHeader` runs `CheckAuxPowProofOfWork` with a strict chain ID of `0x62`.
+That check accepts a header only if it is legacy, with version 1 or 2, or has the chain ID `0x62`.
 Both leave the top three version bits `000`, so `versionBitsCondition_false_of_checkBlockHeader` shows that no such header signals.
 With no signals every period has a zero count, and a walk with no signals never leaves `DEFINED`, `STARTED` or `FAILED`.
 So the CSV and SegWit states are never `LOCKED_IN` or `ACTIVE`.
@@ -1186,9 +1187,12 @@ So on such a chain the two reasons behind that branch, `bad-witness-nonce-size` 
 This body returns the adapter error `segwitActive` on an active SegWit state, which the mainnet comparison never sends, and it never returns those two reasons.
 
 The harness builds the block's predecessor and the aligned version-bits boundary from the request's chain, and lets Core compute `VersionBitsState`.
-At a boundary whose median time is at or after the CSV timeout the harness installs `THRESHOLD_FAILED` in `versionbitscache` for CSV and SegWit, for that request only.
+At a boundary whose median time is at or after the CSV timeout, the harness installs `THRESHOLD_FAILED` for CSV and SegWit.
+It writes the state into `versionbitscache` for that request only.
 The seed lets the harness answer without the dense block history that Core's walk would otherwise read.
-A boundary in the gap between the CSV start and timeout is an adapter error, outside the comparison domain, so no continuous-integration request depends on the seed in that gap.
+
+A boundary in the gap between the CSV start and timeout is an adapter error, outside the comparison domain.
+So no continuous-integration request depends on the seed in that gap.
 This seed is a harness input, so the comparison trusts it.
 
 `csv_never_lockedIn` shows that the state is never `LOCKED_IN` or `ACTIVE` on a chain that meets its hypothesis.

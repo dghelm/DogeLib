@@ -2391,7 +2391,7 @@ The theorems:
 - `multisigRecovery_recovery_complete`: the recovery branch implies acceptance when `S.length + 2 ≤ 1000`. `sigAccepted` is already a decided answer.
 - `multisigRecovery_accepted_iff` and `multisigRecovery_twoOfThree_accepted_iff`: the equivalence, for a verifier that decides every request and the ordinary stack bound.
 - `multisigRecovery_ordinary_unsupported` and `multisigRecovery_recovery_unsupported`: an answer `none` on a reached call gives `unsupported`, never a rejection.
-- `multisigRecovery_lockTime_lt`: with `CHECKLOCKTIMEVERIFY`, a false selector and a lock time below 1,000,000 give `UNSATISFIED_LOCKTIME` before any signature check.
+- `multisigRecovery_lockTime_lt`: with `CHECKLOCKTIMEVERIFY`, the stack bound `S.length + 2 ≤ 1000`, a false selector and a lock time below 1,000,000 give `UNSATISFIED_LOCKTIME` before any signature check.
   `multisigRecovery_accepted_lockTime_lt`: such a spend is accepted only through the ordinary branch.
   Without the flag, `OP_CHECKLOCKTIMEVERIFY` is `OP_NOP2`, and a known answer accepts the recovery branch with lock time 0.
 - `multisigRecovery_lockTime_ge_threshold`: with `CHECKLOCKTIMEVERIFY`, the stack bound `S.length + 2 ≤ 1000`, a false selector and a lock time of at least 500,000,000 give `UNSATISFIED_LOCKTIME` before any signature check.

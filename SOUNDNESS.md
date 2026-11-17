@@ -752,7 +752,9 @@ The step makes three choices where Core's source gives no behaviour on the model
   `ancestorHashAt` ends the walk at an anchor, and `isAncestorInIndex` then finds no ancestor (the record's section 5.3).
 - Core visits `gFailedBlocks` in address order (D33, line 180).
   `failedAncestor?` visits the failed list in list order (decision 5).
-  `failedAncestor_verdict_perm` proves that the verdict does not depend on that order, but the marks can differ.
+  `failedAncestor_verdict_perm` proves that, on a well-formed index, the order changes no verdict, except that a `failedAncestor` rejection can name another member.
+It says nothing about the resulting index.
+  The marks can also differ.
 - Core's `AddToBlockIndex` inserts the new entry and then searches for `hashPrevBlock` (D33, lines 2770 and 2772).
   `addToBlockIndex` searches the input index.
   The two differ only for a header whose `hashPrevBlock` is its own hash, a fixed point of double SHA-256.
@@ -762,7 +764,7 @@ The step makes three choices where Core's source gives no behaviour on the model
 The theorems in `Block.Proofs.HeaderSequence` hold for every network and context.
 Each target of the record's section 11 takes an index that satisfies `WellFormed`, as the record requires, even when its proof does not use it:
 
-- `accept_known`: a known hash other than genesis is accepted with the input index.
+- `accept_known`: a known hash other than genesis whose entry has no failure flag is accepted with the input index.
   When its entry has a failure flag, the step returns `duplicate` with the input index.
   No proof-of-work check runs (item 6).
 - `accept_genesis_known`: with an entry under the genesis hash, the step accepts and returns the input index, even when the entry has a failure flag (item 1).
@@ -782,7 +784,7 @@ Each target of the record's section 11 takes an index that satisfies `WellFormed
 - `accept_error_index`: an adapter error, or a rejection other than `failedAncestor`, returns the input index.
   `failedAncestor` changes only `failedChild`, on the keys of `failedChildPath`, and keeps the failed list.
 - `wellFormed_preserved`: each step maps a well-formed index to a well-formed index.
-- `failedAncestor_verdict_perm`: with a permutation of the failed list, the two results are equal, or both are `failedAncestor`.
+- `failedAncestor_verdict_perm`: with a permutation of the failed list, the two verdicts are equal, or both are `failedAncestor`. The resulting indexes can differ.
 - `checkWellFormed_iff`: `checkWellFormed` returns true exactly when the index satisfies `WellFormed`.
 
 Design record 0008, section 13.1, replaces the target `accept_genesis` with `accept_genesis_known`, `accept_genesis_insert` and `accept_genesis_parent`.
@@ -963,7 +965,8 @@ At least two distinct failed members must be ancestors of that header's predeces
 
 Other rejection steps and accepted calls retain the mark comparison.
 The verdict, failure position, reason, score, code, last hash and every added entry remain compared.
-`failedAncestor_verdict_perm` proves verdict independence from failed-list order for the Lean definition, rather than for Core's loop.
+On a well-formed index, `failedAncestor_verdict_perm` proves that the order of the failed list changes no verdict, except the member that a `failedAncestor` rejection names.
+It covers the Lean definition, not Core's loop.
 Initial state, adjusted time and the checkpoint option remain execution boundaries.
 The adapter adds no axiom or compiler substitution.
 
@@ -1207,7 +1210,8 @@ The run checks the links and the pinned checkpoints of the fetched headers.
 It does not run `checkBlockHeader` on them, and it compares only those 11 boundaries.
 
 `bad-blk-weight` is reachable when the body runs alone, because the body has no base-size check.
-`contextualBody_badBlkWeight_unreachable_after_checkBlock` shows that `block.validate` of stage 0010b, which runs `CheckBlock` first, cannot reach it.
+`contextualBody_badBlkWeight_unreachable_after_checkBlock` shows that `block.validate` of stage 0010b, which runs `CheckBlock` first, cannot reach it when the AuxPoW payload transaction has no witness data.
+
 After `CheckBlock` accepts a block, the base size is at most `MAX_BLOCK_BASE_SIZE`.
 If any transaction has witness data, the witness check returns `unexpected-witness` before the weight check.
 Otherwise, under the hypothesis that the AuxPoW payload transaction has no witness data, the full size equals the base size, so the weight is four times the base size and at most `MAX_BLOCK_WEIGHT`.
@@ -1626,7 +1630,9 @@ The codec reads counts with the generic CompactSize decoder, so it is not Core's
 `Transaction.readBase` is Core's `UnserializeTransaction` with `SERIALIZE_TRANSACTION_NO_WITNESS`.
 It is built from readers of the fields with `readFixed`, `readPair`, `readMap` and `CountedList.decodeBounded`.
 `ReaderAgrees c r P` says that the reader `r` accepts exactly what the codec `c` accepts with a value that satisfies `P`, with the same value and remainder.
-Each construction preserves it (`readFixed_agrees`, `readPair_agrees`, `readMap_agrees`, `CountedList.decodeBounded_agrees`), and `readMap_agrees` needs `toFun (invFun b) = b` for every `b`.
+`readFixed_agrees` gives it for `readFixed` with the condition `True`.
+The other constructions preserve it (`readPair_agrees`, `readMap_agrees`, `CountedList.decodeBounded_agrees`), and `readMap_agrees` needs `toFun (invFun b) = b` for every `b`.
+
 `Transaction.WithinMaxSize` says that the number of inputs, the number of outputs and the length of each script are at most `0x02000000`.
 For all bytes, transactions and remainders:
 
@@ -1871,7 +1877,8 @@ For the same script code `sc`, input index `n` and hash type `h` with `IsAllOnly
 - `legacySignatureHashPlan_eq_of_allFields` and `legacyReferencePlan_eq_of_allFields`: the converse, with no hypothesis beyond `IsAllOnly`.
   It also covers the fixed digest.
 - `legacyReferencePlan_eq_iff_allFields` and `legacySignatureHashPlan_eq_iff_allFields` join the two directions.
-- `legacyReferencePlan_allOnly_index_eq`: if the copy of the script code, `referenceScriptCode sc`, is not empty, equal transformation plans at indices `n` and `n'` give `n = n'`.
+- `legacyReferencePlan_allOnly_index_eq`: let `n` be an input index of `tx`, and let the copy of the script code, `referenceScriptCode sc`, be nonempty.
+  Then equal transformation plans at indices `n` and `n'` give `n = n'`.
 
 The index and count restrictions are needed. This proof additionally requires a fully parsed script code.
 When `n` is an input index of neither transaction, both plans are the fixed digest `one`.
@@ -2380,7 +2387,7 @@ The `scriptSig` evaluation checks the 520-byte limit on the push of the redeem s
   `sigR` and `R` pass the encoding predicates, and `sigAccepted` holds for `sigR` against `R`.
 
 `checkSignatureEncoding_ok_iff` and `checkPubKeyEncoding_ok_iff` prove that the predicates are exactly the checks of `Script.SignatureEncoding`, including the LOW_S overflow case.
-By `sigAccepted_iff`, `sigAccepted` means that the key passes `isValidPubKey`.
+By `sigAccepted_iff`, for script code shorter than 2^64 bytes, `sigAccepted` means that the key passes `isValidPubKey`.
 It also means that `verify` answers `some true` on the signature without its hash-type byte and the legacy digest.
 Both cases allow any stack below, nonminimal pushes and any selector bytes, with negative zero as false.
 
@@ -2391,6 +2398,7 @@ The theorems:
 - `multisigRecovery_recovery_complete`: the recovery branch implies acceptance when `S.length + 2 ≤ 1000`. `sigAccepted` is already a decided answer.
 - `multisigRecovery_accepted_iff` and `multisigRecovery_twoOfThree_accepted_iff`: the equivalence, for a verifier that decides every request. The first needs `S.length + n + 1 ≤ 1000`, and the second, with `n = 3`, needs `S.length ≤ 996`.
 - `multisigRecovery_ordinary_unsupported` and `multisigRecovery_recovery_unsupported`: an answer `none` on a reached call gives `unsupported`, never a rejection.
+  The ordinary theorem needs `S.length + n + 1 ≤ 1000`, and the recovery theorem needs `S.length + 2 ≤ 1000`.
 - `multisigRecovery_lockTime_lt`: with `CHECKLOCKTIMEVERIFY`, the stack bound `S.length + 2 ≤ 1000`, a false selector and a lock time below 1,000,000 give `UNSATISFIED_LOCKTIME` before any signature check.
   `multisigRecovery_accepted_lockTime_lt`: such a spend is accepted only through the ordinary branch.
   Without the flag, `OP_CHECKLOCKTIMEVERIFY` is `OP_NOP2`, and a known answer accepts the recovery branch with lock time 0.
@@ -2399,7 +2407,7 @@ The theorems:
   With `multisigRecovery_lockTime_lt`, they cover each case in which the lock-time check of the recovery branch fails.
 - `verifyLegacySpend_scriptSig_rejected` and `verifyLegacySpend_scriptSig_unsupported`: a failed `scriptSig` evaluation passes through.
 
-Every checker call of both branches hashes the transformation-reference digest, Core's `SignatureHashOld`.
+Every checker call of both branches with a nonempty signature and a key that passes `isValidPubKey` hashes the transformation-reference digest, Core's `SignatureHashOld`.
 `multisigRecoveryScript_scanOps`: for `1 ≤ k ≤ n ≤ 16`, 33-byte keys and a 33-byte recovery key, every instruction of the template parses.
 `ordinaryCode_scanOps` and `recoveryCode_scanOps`: so does the script code of each branch, for every signature list, by `effectiveScriptCode_scanOps`.
 These discharge the parsed-script hypothesis of design record 0003, stage 3, for the template.
@@ -2407,7 +2415,7 @@ These discharge the parsed-script hypothesis of design record 0003, stage 3, for
 `transactionChecker_verify_reference` and `sigAccepted_iff_reference` compose a fully parsed script code with `legacySignatureHash_eq_reference` and the count bounds of the `InputContext`.
 `MultisigRecoverySpend.sigAccepted_ordinary_iff_reference` and `MultisigRecoverySpend.sigAccepted_recovery_iff_reference` restate `sigAccepted` on each branch's script code.
 It holds exactly when the key passes `isValidPubKey` and `verify` answers `some true` on the stripped signature, the key and the digest of `legacyReferencePlan`.
-`MultisigRecoverySpend.checkSig_ordinary_reference` and `MultisigRecoverySpend.checkSig_recovery_reference` give the checker's answer as that `verify` call.
+`MultisigRecoverySpend.checkSig_ordinary_reference` and `MultisigRecoverySpend.checkSig_recovery_reference` give the checker's answer as that `verify` call, for a nonempty signature and a key that passes `isValidPubKey`.
 These results concern the digest that the checker passes to `verify`. They add nothing about `verify` itself.
 
 The theorems hold relative to the verifier parameter, under the verifier-agreement hypothesis of [Script signature opcodes and the checker](#script-signature-opcodes-and-the-checker).
@@ -2764,7 +2772,9 @@ Two theorems bound the history that the caller reads.
 `nextWorkRequired_congr_prefix` takes two views that pass `validateWorkView` and start with the same entry at height `h`.
 If they agree on their first `retargetInterval params h + 1` entries, where `params` is the record at the candidate height, the results are equal.
 A retarget reads the entry at index `blocksToGoBack`, at most the interval.
-The recovery walk stops at the latest at a height divisible by the interval (`recoverLastNonMinDifficulty_congr_prefix`).
+The recovery walk stops at the latest at a height divisible by the interval.
+`recoverLastNonMinDifficulty_congr_prefix` takes a positive interval and a first view that passes `validateWorkView`.
+Two views that start with the same entry at height `h` and agree on their first `n > h mod interval` entries give the same recovery.
 
 `nextWorkRequired_ok` shows that a checked view that reaches height 0 gives a value, never an adapter error, for every network and candidate time.
 It uses `difficultyAdjustmentInterval_getConsensus_pos`: every selected record has a positive interval.
@@ -3046,7 +3056,9 @@ A conditional theorem is only as strong as its hypotheses.
 It requires fully parsed script code, fewer than 2^32 inputs and fewer than 2^32 outputs.
 The transformation-reference subsection states these hypotheses and explains the short-push difference.
 
-For the script code of the multisig-with-recovery template, `ordinaryCode_scanOps` and `recoveryCode_scanOps` discharge the parse hypothesis, and the `InputContext` gives the count bounds.
+`ordinaryCode_scanOps` and `recoveryCode_scanOps` take the multisig-with-recovery template for `k` of `n` keys, with `1 ≤ k ≤ n ≤ 16`.
+Each key and the recovery key have 33 bytes.
+For such a template, they discharge the parse hypothesis of its script code, and the `InputContext` gives the count bounds.
 For other scripts, `effectiveScriptCode_scanOps` reduces it to the parse of the script suffix from the cursor.
 Whatever those hypotheses leave unproved is part of what a reader trusts.
 
@@ -3335,6 +3347,42 @@ The harness also calls `GetLegacySigOpCount` and `GetSerializeSize`, and reports
 The oracle adds `diagnostic`, the Lean error with the position of a rejected transaction.
 Core does not report it, so the comparison checks only its form.
 The oracle reads blocks and transactions as byte lists, and `block.check` has no size limit of its own.
+
+For `block.contextual_check_body` the harness selects mainnet and calls Core's `ContextualCheckBlock` on a `CBlock` that Core's stream code reads.
+The request's `chain` is a view from the predecessor, newest first, with the height, time and `nBits` of each entry.
+The harness requires consecutive heights, each from 0 to 2147483646, and builds a synthetic `CBlockIndex` for each entry with only these three fields.
+It links each entry to the next older entry, and builds a skip pointer only when its target lies in the chain.
+It passes the newest entry as the predecessor, or a null predecessor for an empty chain.
+
+Before the call, the harness takes the aligned version-bits boundary at height `p - (p + 1) mod 10080` for the predecessor height `p`, when that height is not negative.
+If the boundary's median time is at or after the CSV timeout 1493596800, the harness seeds the boundary entry in `versionbitscache`.
+The seed is `THRESHOLD_FAILED` for CSV and SegWit.
+If that median time is at or after the CSV start 1462060800 and before the timeout, the harness refuses the request.
+The harness clears `versionbitscache` before and after each request.
+The comparison trusts this seed ([the contextual block body](#the-contextual-block-body)).
+
+The oracle computes the candidate height and the two states from the same chain:
+
+- It refuses a predecessor at height 2147483646 or above, which is outside Core's signed `int` range for the candidate height.
+- It gives each state from the median time of the aligned boundary through `versionBitsStateFromBoundary`, and an adapter error between the CSV start and timeout.
+- It passes the median time of the aligned boundary to the body in place of the median time of the predecessor.
+  `versionBitsStateFromBoundary` never returns `ACTIVE`, and the body reads that value only when CSV is active.
+- It gives the adapter error `noCoinbase` for a block with no transaction, or whose first transaction has no input.
+
+The comparator fails on a response without a verdict, so these adapter errors and harness refusals are outside the comparison domain.
+
+For `block.version_bits_state` the request's `chain` is a sequence of version and time pairs, oldest first.
+Both programs take entry `i` as the block at height `i`, so the first entry is the genesis block.
+Neither program checks that the sequence is a header chain or that it starts at the real genesis block.
+So the comparison trusts the caller's sequence.
+
+The harness builds a synthetic `CBlockIndex` for each entry with only its height, version and time.
+It links each entry to the previous entry, builds its skip pointer and clears `versionbitscache` before and after each request.
+It calls Core's `VersionBitsState` for CSV and SegWit on the last entry with the record of the next height, and seeds no state.
+For an empty chain it returns `DEFINED` for both without a call.
+
+The oracle computes `versionBitsStateFull` on the same sequence.
+`scripts/compare_version_bits_walk.py` checks the links and the pinned checkpoints of the headers that it fetches before it compares.
 
 Any later foreign boundary, such as a C or Rust binding, is listed here with its size and its error handling.
 

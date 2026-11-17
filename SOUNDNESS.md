@@ -133,7 +133,7 @@ No theorem or test here establishes agreement with compiled Core or constant-tim
 The equality includes `none` above `(2^32 - 1) * 32` output bytes.
 Zero iterations uses `U₁`, and zero output bytes returns an empty result.
 Those cases extend RFC 8018 §5.2, which requires positive iterations and output length.
-For an admitted output length, `nb_lt` bounds the number of blocks below 2^32.
+For a positive block size, here 32, and an admitted output length, `nb_lt` bounds the number of blocks below 2^32.
 Thus the four-byte block indices do not wrap during derivation.
 
 The model adapts verified-garbage's `Spec/Pbkdf2.lean` at the pin, under BSD-3-Clause, with its list and bit-vector representation unchanged.
@@ -376,7 +376,7 @@ That claim needs collision resistance of double SHA-256, which DogeLib does not 
 No theorem says that work cannot be reused across chains, or that two chains cannot share a slot.
 
 `findSubseq?_eq_some_iff` and `searchChainRoot_eq_ok_iff` state the search over first occurrences, as `std::search` returns them.
-`checkMerkleBranch_eq_fold` takes the side of step `k` from bit `min k 31` of the index.
+For every index other than −1, `checkMerkleBranch_eq_fold` takes the side of step `k` from bit `min k 31` of the index.
 `getExpectedIndex_eq` gives the closed form modulo 2^32 for `h < 32`, and `getExpectedIndex_mod64` proves the source comment's claim that 64-bit arithmetic gives the same result, for `h ≤ 32`.
 
 C++11 leaves the right shift of a negative `int` implementation-defined (S1, 5.8 paragraph 3).
@@ -582,7 +582,7 @@ The theorems in `Block.Proofs.ContextualCheck` hold for every network, header, a
 - `contextualCheck_no_checkpoint`: with no last checkpoint, the function never returns `bad-fork-prior-to-checkpoint`.
 - `contextualCheck_congr_prefix`: two views that pass `validateWorkView`, start with the same predecessor and agree on their first `contextualViewDepth` entries give the same result.
   The depth is the greater of 11 and `retargetInterval params h + 1`, where `h` is the predecessor height and `params` is the work record at the candidate height.
-  `contextualViewDepth_eq` gives its values.
+  `contextualViewDepth_eq` gives its values for a predecessor height below 2147483647.
   On mainnet and testnet, the depth is 241 below candidate height 145000 and 11 from it.
   On regtest, it is 14401 below candidate height 10 and 11 from it.
 - `contextualCheck_complete`: a view that passes `validateWorkView` and reaches height 0, with an adjusted time in the domain, gives only Core rejections, never an adapter error.
@@ -1626,7 +1626,7 @@ The codec reads counts with the generic CompactSize decoder, so it is not Core's
 `Transaction.readBase` is Core's `UnserializeTransaction` with `SERIALIZE_TRANSACTION_NO_WITNESS`.
 It is built from readers of the fields with `readFixed`, `readPair`, `readMap` and `CountedList.decodeBounded`.
 `ReaderAgrees c r P` says that the reader `r` accepts exactly what the codec `c` accepts with a value that satisfies `P`, with the same value and remainder.
-Each construction preserves it (`readFixed_agrees`, `readPair_agrees`, `readMap_agrees`, `CountedList.decodeBounded_agrees`).
+Each construction preserves it (`readFixed_agrees`, `readPair_agrees`, `readMap_agrees`, `CountedList.decodeBounded_agrees`), and `readMap_agrees` needs `toFun (invFun b) = b` for every `b`.
 `Transaction.WithinMaxSize` says that the number of inputs, the number of outputs and the length of each script are at most `0x02000000`.
 For all bytes, transactions and remainders:
 
@@ -2389,7 +2389,7 @@ The theorems:
 - `multisigRecovery_sound`: acceptance implies one of the two branches. It assumes no stack bound on `S` and no totality of `verify`.
 - `multisigRecovery_ordinary_complete`: the ordinary branch implies acceptance when `S.length + n + 1 ≤ 1000` and the checker decides every visited pair.
 - `multisigRecovery_recovery_complete`: the recovery branch implies acceptance when `S.length + 2 ≤ 1000`. `sigAccepted` is already a decided answer.
-- `multisigRecovery_accepted_iff` and `multisigRecovery_twoOfThree_accepted_iff`: the equivalence, for a verifier that decides every request and the ordinary stack bound.
+- `multisigRecovery_accepted_iff` and `multisigRecovery_twoOfThree_accepted_iff`: the equivalence, for a verifier that decides every request. The first needs `S.length + n + 1 ≤ 1000`, and the second, with `n = 3`, needs `S.length ≤ 996`.
 - `multisigRecovery_ordinary_unsupported` and `multisigRecovery_recovery_unsupported`: an answer `none` on a reached call gives `unsupported`, never a rejection.
 - `multisigRecovery_lockTime_lt`: with `CHECKLOCKTIMEVERIFY`, the stack bound `S.length + 2 ≤ 1000`, a false selector and a lock time below 1,000,000 give `UNSATISFIED_LOCKTIME` before any signature check.
   `multisigRecovery_accepted_lockTime_lt`: such a spend is accepted only through the ordinary branch.

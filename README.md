@@ -3,7 +3,8 @@
 DogeLib is an executable formal specification and proof library for Dogecoin, written in Lean 4.
 
 It specifies part of Dogecoin's consensus behavior: serialization, hashes, header proof of work, header acceptance, and legacy Script verification of one transaction input.
-It does not specify transaction, block or chain validity, so it cannot decide whether a block is valid.
+It also specifies the block checks that need no coins.
+It does not specify `ConnectBlock` or the coin set, so it cannot decide whether a block is valid.
 It states a proposed protocol revision as a named change against that baseline.
 One theorem relates an implementation in another language to the specification: `decode_refines`, for a Rust CompactSize reader.
 
@@ -17,7 +18,7 @@ Three kinds of evidence connect the definitions to Core:
 - The comparison with Core's code on a finite set of requests, which CI runs on every pull request ([docs/oracle.md](docs/oracle.md#the-comparison)).
 - Those reviews of the pull requests.
 
-[docs/reviews/](docs/reviews/README.md) also records seven reads of the definitions against Core's source by an AI model.
+[docs/reviews/](docs/reviews/README.md) also records ten reads of the definitions against Core's source by an AI model.
 A read executes nothing, and it is not a review by a person.
 
 ## Status
@@ -44,6 +45,8 @@ Each item below links to its evidence.
   `contextualCheck_eq_ok_iff` and one theorem for each rejection give the exact result on the domain ([contextual header validation](SOUNDNESS.md#contextual-header-validation)).
 - **Header sequences.** Core's `AcceptBlockHeader` and `ProcessNewBlockHeaders` over an explicit model of the block index, with the chain work of each entry ([design record 0008](docs/design/0008-header-sequence-validation.md)).
   `process_linear` gives the result for headers that extend one entry in order, under its stated hypotheses ([the sequence](SOUNDNESS.md#the-sequence-processnewblockheaders)).
+- **Block checks without coins.** The block codec, `CheckTransaction`, `CheckBlock`, `ContextualCheckBlock` on mainnet, the mainnet block subsidy and the version-bits state, stage 0010a of [design record 0010](docs/design/0010-block-validity.md).
+  `block.check` and `block.contextual_check_body` agree with Core on 11,018 real mainnet blocks ([the block checks](SOUNDNESS.md#block-codec-checktransaction-and-checkblock), [the contextual block body](SOUNDNESS.md#the-contextual-block-body)).
 - **Proposed revisions.** A framework that states a revision of the Script rules and classifies it against the baseline, for example as a `SoftFork` ([design record 0007](docs/design/0007-proposed-revisions.md)).
   It has two invented examples and no proposal for Dogecoin.
   Its compatibility theorems are Script-local: each is about one Script evaluation or one transaction input, not about the network ([the framework](SOUNDNESS.md#proposed-revisions-the-framework)).
@@ -65,7 +68,7 @@ Their verdicts and errors agree with Core's recorded expectations, and the oracl
 The oracle uses `coreVerifier` for its transaction checker and exposes single-signature verification through `pubkey.verify`.
 
 The `dogelib-oracle` program runs the specification on JSON requests, and a harness runs the pinned Core code on the same requests ([docs/oracle.md](docs/oracle.md)).
-A full comparison sends 389,606 stream requests, and it passes only with zero failures.
+A full comparison sends 389,628 stream requests, and it passes only with zero failures.
 The comparator also fails if the number of requests for any operation differs from its table ([counts](docs/oracle.md#the-comparison)).
 The four transaction-reader operations receive 263,929 of the requests, Script evaluation and verification 16,975, and header sequences 257.
 The total includes requests with an unsupported Lean result and 12 checked harness refusals.
@@ -84,7 +87,7 @@ A comparison covers its requests and no other inputs.
 DogeLib has no definition of transaction validity, block validity or chain validity.
 It does not specify these parts of Dogecoin:
 
-- `ContextualCheckBlock` and `ConnectBlock`. `CheckTransaction` and `CheckBlock` are specified, and compared with Core on mutations but not yet on real blocks
+- `ConnectBlock`, and `ContextualCheckBlock` on testnet and regtest
 - The UTXO set, value accounting and fees, and the Script flags of each height. The block subsidy is specified for mainnet alone
 - The sources of the inputs of the contextual header check: the node's clock and peer offsets, its block index and its choice of chain
 - The witness v0 signature hash, and witness script verification

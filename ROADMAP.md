@@ -63,6 +63,7 @@ Each item below is complete.
 ## Next work
 
 Release 0.1.0 is out, as tag `v0.1.0` at commit `7510cc9`.
+[docs/release-notes/0.2.0.md](docs/release-notes/0.2.0.md) holds the notes for release 0.2.0, which is not tagged yet.
 
 An earlier milestone was contextual header validation, under [design record 0006](docs/design/0006-contextual-header-validation.md).
 The maintainer adopted the record on 2026-11-07, with all nine decisions of its section 12.
@@ -126,7 +127,7 @@ A property of an application template belongs in a downstream project.
 ### Block validity
 
 The next milestone is block validity.
-DogeLib has no definition of `ContextualCheckBlock` or `ConnectBlock`, so the oracle cannot judge a block in its context.
+DogeLib has no definition of `ConnectBlock` or the coin set, so the oracle cannot decide whether a block is valid.
 [Design record 0010](docs/design/0010-block-validity.md) defines the milestone. The maintainer adopted it on 2026-11-13.
 
 | Stage | Deliverable | Status |

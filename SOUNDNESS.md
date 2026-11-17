@@ -265,7 +265,7 @@ These claims cover the pure header even when its version sets the AuxPoW bit.
 Core's full `CBlockHeader` then carries an AuxPoW payload, which the full header codec of the next subsection reads (D41).
 
 [Header proof of work](#header-proof-of-work) covers scrypt proof of work and `CheckAuxPowProofOfWork`.
-No theorem establishes contextual header validity beyond [version gating](#version-gating).
+[Contextual header validation](#contextual-header-validation) gives the theorems about `ContextualCheckBlockHeader`, and [version gating](#version-gating) those about the version checks.
 
 [The AuxPoW check](#the-auxpow-check) covers `CAuxPow::check` alone.
 
@@ -277,7 +277,7 @@ Its prefix-length hypothesis establishes that the final leaf is unpaired.
 `computeMerkleRoot_duplicate_last` combines the two for a nonempty even-length prefix `pre` and a leaf `last`.
 The leaves `pre ++ [last, last]` have the root of `pre ++ [last]` and set the mutation flag.
 The theorem states the duplicate-leaf shape of CVE-2012-2459 that the comment in D42 describes, and it needs no hash collision.
-No theorem states what a block validator does with the flag, because DogeLib does not specify `CheckBlock`.
+`checkBlock_rejects_merkleDuplication` states what `checkBlock` does with a duplicated transaction list ([`CheckBlock`](#block-codec-checktransaction-and-checkblock)).
 
 `merkleMutated_iff` characterizes the recursive flag through equal pairs here or among complete parent subtrees.
 The complete-level operation discards an unpaired final subtree.
@@ -435,7 +435,7 @@ The theorem is about the transcribed records.
 A transcription mistake in D14 would make it a claim about the wrong records (A1).
 
 `checkBlockHeader` takes the network as an argument.
-DogeLib does not model the selection of `Params()` or the other checks of `CheckBlock` and `ContextualCheckBlockHeader`, except `checkVersion`.
+DogeLib does not model the selection of `Params()`. [Contextual header validation](#contextual-header-validation) and [the block codec section](#block-codec-checktransaction-and-checkblock) cover `ContextualCheckBlockHeader` and `CheckBlock`.
 A valid AuxPoW header before activation passes `checkBlockHeader`, as it passes Core's `CheckBlockHeader`.
 Only [version gating](#version-gating) rejects it.
 
@@ -1100,7 +1100,7 @@ The definitions differ from the C++ in these places:
 - `checkBlock` takes the network of its header check as a parameter. The oracle and the comparison use mainnet, and testnet and regtest have no comparison evidence here.
 
 No statement of `CheckTransaction` or `CheckBlock` reads a witness stack, so the definitions take the base fields of each transaction.
-A block with witness data can pass `checkBlock`. `ContextualCheckBlock` rejects such a block on main and test, and DogeLib does not define that function yet.
+A block with witness data can pass `checkBlock`. `ContextualCheckBlock` rejects such a block on main and test, and DogeLib defines that function for mainnet only ([the contextual block body](#the-contextual-block-body)).
 
 `Block.read_encode_allowWitness` and `Block.read_encode_base` are round trips over encoder output, under the conditions `Block.RoundTripsAllowWitness` and `Block.RoundTripsBase`.
 Those conditions bound every count by `MAX_SIZE` and require a payload exactly when the AuxPoW flag is set.
@@ -2477,9 +2477,10 @@ The axioms of the 45 theorems in `Work.Proofs.ArithUint256` and `Work.Proofs.Ret
 | `propext`, `Classical.choice`, `Quot.sound` | Every other theorem in `Work.Proofs.ArithUint256` and `Work.Proofs.Retarget`, including `modulatedTimespan_mem`, `retarget_decoded_le_powLimit`, `setCompact_getCompact_le`, `getCompact_setCompact_iff`, `setCompact_fOverflow`, `signedSteps_fit`, `retarget_eq_of_no_wrap` and `no_wrap_of_le_powLimit` |
 Some concrete examples use `decide +kernel`, which the kernel checks without compiled code.
 
-These parts are not proved and not specified:
+These parts are not proved here:
 
 - The checks of `ContextualCheckBlockHeader` other than the version gates, such as `nBits` against `GetNextWorkRequired`, and `CheckBlock`.
+  [Contextual header validation](#contextual-header-validation) and [`CheckBlock`](#block-codec-checktransaction-and-checkblock) specify them.
   [Dogecoin's scrypt digest](#dogecoins-scrypt-digest), [the AuxPoW check](#the-auxpow-check) and [header proof of work](#header-proof-of-work) specify the scrypt digest, `CAuxPow::check` and `CheckAuxPowProofOfWork`.
   The supplied-hash check is specified separately below.
 

@@ -3143,6 +3143,11 @@ The work-parameter search covers each network and height, and the next-work wrap
 The caller's hard-coded activation checks use the previous height, as the next-work subsection explains.
 Version gating takes its record from the caller, and does not select it from a height.
 
+`block.subsidy` takes the height and the previous block hash from the caller.
+Neither the oracle nor the harness checks that the height belongs to a chain or that the hash names its predecessor.
+Below height 145,000 the hash selects the random subsidy, so a wrong hash can change the result while both programs agree.
+No theorem or adapter establishes that context.
+
 `getContextualParams` selects the contextual fields of a record by network and height.
 `lastCheckpoint` takes the node's checkpoint state as an explicit input.
 `contextualCheckBlockHeader` selects its record at the candidate height, and takes the network, the adjusted time and the last known checkpoint as explicit inputs.

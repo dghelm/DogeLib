@@ -752,7 +752,8 @@ The step makes three choices where Core's source gives no behaviour on the model
   `ancestorHashAt` ends the walk at an anchor, and `isAncestorInIndex` then finds no ancestor (the record's section 5.3).
 - Core visits `gFailedBlocks` in address order (D33, line 180).
   `failedAncestor?` visits the failed list in list order (decision 5).
-  `failedAncestor_verdict_perm` proves that, on a well-formed index, the order changes no result, except that a `failedAncestor` rejection can name another member.
+  `failedAncestor_verdict_perm` proves that, on a well-formed index, the order changes no verdict, except that a `failedAncestor` rejection can name another member.
+It says nothing about the resulting index.
   The marks can also differ.
 - Core's `AddToBlockIndex` inserts the new entry and then searches for `hashPrevBlock` (D33, lines 2770 and 2772).
   `addToBlockIndex` searches the input index.
@@ -783,7 +784,7 @@ Each target of the record's section 11 takes an index that satisfies `WellFormed
 - `accept_error_index`: an adapter error, or a rejection other than `failedAncestor`, returns the input index.
   `failedAncestor` changes only `failedChild`, on the keys of `failedChildPath`, and keeps the failed list.
 - `wellFormed_preserved`: each step maps a well-formed index to a well-formed index.
-- `failedAncestor_verdict_perm`: with a permutation of the failed list, the two results are equal, or both are `failedAncestor`.
+- `failedAncestor_verdict_perm`: with a permutation of the failed list, the two verdicts are equal, or both are `failedAncestor`. The resulting indexes can differ.
 - `checkWellFormed_iff`: `checkWellFormed` returns true exactly when the index satisfies `WellFormed`.
 
 Design record 0008, section 13.1, replaces the target `accept_genesis` with `accept_genesis_known`, `accept_genesis_insert` and `accept_genesis_parent`.
@@ -964,7 +965,7 @@ At least two distinct failed members must be ancestors of that header's predeces
 
 Other rejection steps and accepted calls retain the mark comparison.
 The verdict, failure position, reason, score, code, last hash and every added entry remain compared.
-On a well-formed index, `failedAncestor_verdict_perm` proves that the order of the failed list changes no result, except the member that a `failedAncestor` rejection names.
+On a well-formed index, `failedAncestor_verdict_perm` proves that the order of the failed list changes no verdict, except the member that a `failedAncestor` rejection names.
 It covers the Lean definition, not Core's loop.
 Initial state, adjusted time and the checkpoint option remain execution boundaries.
 The adapter adds no axiom or compiler substitution.

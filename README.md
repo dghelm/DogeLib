@@ -3,8 +3,8 @@
 DogeLib is an executable formal specification and proof library for Dogecoin, written in Lean 4.
 
 It specifies part of Dogecoin's consensus behavior: serialization, hashes, header proof of work, header acceptance, and legacy Script verification of one transaction input.
-It also specifies the block checks that need no coins.
-It does not specify `ConnectBlock` or the coin set, so it cannot decide whether a block is valid.
+It also specifies the checks of a mainnet block: those that need no coins, and `ConnectBlock` on a supplied coin set.
+It specifies no block index and no choice of a chain, so it decides the validity of a block only against a supplied predecessor and coin set.
 It states a proposed protocol revision as a named change against that baseline.
 One theorem relates an implementation in another language to the specification: `decode_refines`, for a Rust CompactSize reader.
 
@@ -84,11 +84,12 @@ All 159 eligible transaction inputs and 598 public-key inputs agree with Core.
 For header proof of work, Core and the oracle agree on all 321 recorded mainnet headers, 207 version-gate boundaries and 1,075 seeded mutations ([header evidence](docs/oracle.md#header-proof-of-work-evidence)).
 A comparison covers its requests and no other inputs.
 
-DogeLib has no definition of transaction validity, block validity or chain validity.
+DogeLib has no definition of chain validity.
+`Block.validateBlock` runs Core's five checks of a new mainnet block on a supplied chain view and coin set ([soundness](SOUNDNESS.md#the-coin-set-checktxinputs-and-connectblock)).
 It does not specify these parts of Dogecoin:
 
-- `ConnectBlock`, and `ContextualCheckBlock` on testnet and regtest
-- The UTXO set, value accounting and fees, and the Script flags of each height. The block subsidy is specified for mainnet alone
+- `ConnectBlock` and `ContextualCheckBlock` on testnet and regtest. The block subsidy and coinbase maturity are specified for mainnet alone
+- `ConnectBlock` with script-check threads, with an assumed-valid block or with an active CSV state, and Core's undo data and writes
 - The sources of the inputs of the contextual header check: the node's clock and peer offsets, its block index and its choice of chain
 - The witness v0 signature hash, and witness script verification
 - Chain selection, reorganization and the mempool

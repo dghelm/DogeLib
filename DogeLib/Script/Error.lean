@@ -165,6 +165,51 @@ def name : ScriptError → String
   | witnessUnexpected => "WITNESS_UNEXPECTED"
   | witnessPubkeyType => "WITNESS_PUBKEYTYPE"
 
+/--
+Core's `ScriptErrorString` (D114, `src/script/script_error.cpp`, lines 8 to 93): the text that `CheckInputs` puts into a reject reason.
+`SCRIPT_ERR_UNKNOWN_ERROR` and `SCRIPT_ERR_CLEANSTACK` have no case in Core's `switch`, and get the default text.
+-/
+def description : ScriptError → String
+  | unknownError | cleanStack => "unknown error"
+  | evalFalse => "Script evaluated without error but finished with a false/empty top stack element"
+  | opReturn => "OP_RETURN was encountered"
+  | scriptSize => "Script is too big"
+  | pushSize => "Push value size limit exceeded"
+  | opCount => "Operation limit exceeded"
+  | stackSize => "Stack size limit exceeded"
+  | sigCount => "Signature count negative or greater than pubkey count"
+  | pubkeyCount => "Pubkey count negative or limit exceeded"
+  | verify => "Script failed an OP_VERIFY operation"
+  | equalVerify => "Script failed an OP_EQUALVERIFY operation"
+  | checkMultisigVerify => "Script failed an OP_CHECKMULTISIGVERIFY operation"
+  | checkSigVerify => "Script failed an OP_CHECKSIGVERIFY operation"
+  | numEqualVerify => "Script failed an OP_NUMEQUALVERIFY operation"
+  | badOpcode => "Opcode missing or not understood"
+  | disabledOpcode => "Attempted to use a disabled opcode"
+  | invalidStackOperation => "Operation not valid with the current stack size"
+  | invalidAltstackOperation => "Operation not valid with the current altstack size"
+  | unbalancedConditional => "Invalid OP_IF construction"
+  | negativeLocktime => "Negative locktime"
+  | unsatisfiedLocktime => "Locktime requirement not satisfied"
+  | sigHashtype => "Signature hash type missing or not understood"
+  | sigDer => "Non-canonical DER signature"
+  | minimalData => "Data push larger than necessary"
+  | sigPushOnly => "Only non-push operators allowed in signatures"
+  | sigHighS => "Non-canonical signature: S value is unnecessarily high"
+  | sigNullDummy => "Dummy CHECKMULTISIG argument must be zero"
+  | pubkeyType => "Public key is neither compressed or uncompressed"
+  | minimalIf => "OP_IF/NOTIF argument must be minimal"
+  | sigNullFail => "Signature must be zero for failed CHECK(MULTI)SIG operation"
+  | discourageUpgradableNops => "NOPx reserved for soft-fork upgrades"
+  | discourageUpgradableWitnessProgram => "Witness version reserved for soft-fork upgrades"
+  | witnessProgramWrongLength => "Witness program has incorrect length"
+  | witnessProgramWitnessEmpty => "Witness program was passed an empty witness"
+  | witnessProgramMismatch => "Witness program hash mismatch"
+  | witnessMalleated => "Witness requires empty scriptSig"
+  | witnessMalleatedP2SH => "Witness requires only-redeemscript scriptSig"
+  | witnessUnexpected => "Witness provided for non-witness script"
+  | witnessPubkeyType => "Using non-compressed keys in segwit"
+
 end ScriptError
 
 end DogeLib.Script

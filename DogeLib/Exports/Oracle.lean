@@ -4,6 +4,7 @@ public import DogeLib.Serialization.Exports.Oracle
 public import DogeLib.Transaction.Exports.Oracle
 public import DogeLib.Work.Exports.Oracle
 public import DogeLib.Block.Exports.Oracle
+public import DogeLib.Block.Exports.Validate
 public import DogeLib.Cryptography.Exports.Oracle
 public import DogeLib.Script.Exports.Oracle
 
@@ -40,7 +41,7 @@ def oracleVersion : Operation where
 /-- Every operation of the oracle. -/
 def operations : List Operation :=
   oracleVersion :: Serialization.Exports.operations ++ Transaction.Exports.operations ++ Work.Exports.operations ++
-    Block.Exports.operations ++ Cryptography.Exports.operations ++ Script.Exports.operations
+    Block.Exports.operations ++ [Block.Exports.blockValidate] ++ Cryptography.Exports.operations ++ Script.Exports.operations
 
 /-- The `error` object of a failure. -/
 def failureJson : Failure → Json

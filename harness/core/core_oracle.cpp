@@ -20,6 +20,8 @@
 // tx.check and block.check call Core's CheckTransaction, CheckBlock and
 // GetLegacySigOpCount (SOURCES.md D106) on objects that Core's own stream
 // code reads from the request.
+// block.validate calls Core's five checks of a new block, ConnectBlock among
+// them, on a coin set that the harness carries (core_block_validate.inc).
 //
 // An exception from Core that is not one of the four mapped read errors ends
 // the program with status 3, so it shows as a failed comparison.
@@ -33,6 +35,7 @@
 #include "util.h"
 #include "validation.h"
 #include "chainparams.h"
+#include "coins.h"
 #include "consensus/merkle.h"
 #include "crypto/sha1.h"
 #include "dogecoin.h"
@@ -43,6 +46,7 @@
 #include "primitives/transaction.h"
 #include "script/interpreter.h"
 #include "script/script.h"
+#include "script/sigcache.h"
 #include "serialize.h"
 #include "streams.h"
 #include "timedata.h"
@@ -60,8 +64,10 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
+#include <deque>
 #include <iostream>
 #include <limits>
+#include <map>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -714,6 +720,8 @@ void scriptAdapterFailure(const std::string& reason)
     throw SpecError{error};
 }
 
+#include "core_block_validate.inc"
+
 UniValue run(const UniValue& req)
 {
     const UniValue& opv = arg(req, "op");
@@ -972,6 +980,8 @@ UniValue run(const UniValue& req)
         ok.pushKV("bits", static_cast<uint64_t>(bits));
     } else if (op == "block.header_sequence") {
         ok = headerSequence(req);
+    } else if (op == "block.validate") {
+        return blockValidate(req);
     } else if (op == "block.subsidy") {
         // Core's GetDogecoinBlockSubsidy (D104) with the mainnet record that
         // GetConsensus selects for the height, as ConnectBlock calls it
@@ -1395,6 +1405,9 @@ int main(int argc, char** argv)
         return 2;
     }
     ECCVerifyHandle ecc;
+    // ConnectBlock stores accepted signatures in Core's signature cache, which
+    // has no table before this call (init.cpp:1228).
+    InitSignatureCache();
     // Core's log has no file here. Without this, util.cpp keeps every message in memory.
     fPrintToDebugLog = false;
     // Core formats a timestamp for each message before it discards the message

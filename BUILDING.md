@@ -106,7 +106,8 @@ Its two full-stream cases hold about 3.5 GB of memory each, and `--jobs N` befor
 ### Real mainnet blocks
 
 Two ranges of real mainnet blocks are assets of a GitHub release ([fixtures](tests/block/mainnet-blocks/README.md)).
-Download them, about 46 MB, and compare `block.check` with Core on every block:
+Download them, about 46 MB, and compare `block.check` and `block.contextual_check_body` with Core on every block.
+The same run replays heights 0 to 10,000 through `block.validate` from the empty coin set:
 
 ```bash
 python3 -I scripts/fetch_release_blocks.py
@@ -114,7 +115,8 @@ python3 -I scripts/compare_core.py --mainnet-blocks build/mainnet-blocks .lake/b
 ```
 
 The first command writes the fixtures to `build/mainnet-blocks` and checks them against the committed SHA-256 values.
-The second takes about 1 minute.
+The second takes about 9 minutes, of which the oracle's replay of the 10,001 blocks is about 8.
+The replay runs in its own oracle process, at the same time as the other requests.
 
 ### Compiled Rust CompactSize comparison
 

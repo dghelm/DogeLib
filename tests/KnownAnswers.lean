@@ -2,6 +2,7 @@ import KnownAnswers.AuxPow
 import KnownAnswers.Block
 import KnownAnswers.BlockCheck
 import KnownAnswers.Campaign
+import KnownAnswers.Connect
 import KnownAnswers.ContextualCheck
 import KnownAnswers.ContextualParams
 import KnownAnswers.Genesis
@@ -29,6 +30,7 @@ def KnownAnswers.checks : List (String × IO Nat) :=
     KnownAnswers.Block.checks,
     KnownAnswers.BlockCheck.checks,
     KnownAnswers.Campaign.checks,
+    KnownAnswers.Connect.checks,
     KnownAnswers.ContextualCheck.checks,
     KnownAnswers.ContextualParams.checks,
     KnownAnswers.Genesis.checks,

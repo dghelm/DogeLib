@@ -451,6 +451,7 @@ The latter uses Core's network stream version without `SERIALIZE_TRANSACTION_NO_
 | `block.contextual_check` | `bytes_hex`, exactly 80 bytes, `network`, `chain`, `adjusted_time`, `checkpoints_enabled`, `known_checkpoints` | Boolean `valid`, `reject_reason` (null on acceptance), and Lean-only `diagnostic` |
 | `block.contextual_check_body` | `block_hex`, `mode`, `chain` | Boolean `valid`, `reject_reason`, `dos` and `reject_code` (null on acceptance), and Lean-only `diagnostic` |
 | `block.check_version` | `bytes_hex`, exactly 80 bytes, `network`, `selection_height` | Boolean `valid`, and Lean-only `diagnostic` |
+| `block.validate` | `mode`, `check_pow`, `check_merkle_root`, `adjusted_time`, `chain`, `bip34_ancestor_hex`, `coins`, `blocks_hex` | One record for each block, and the digest of the coin set, as [below](#block-validation) |
 
 `scrypt.hash` fixes N = 1024, r = 1, p = 1 and a 32-byte output.
 The 80 input bytes serve as both password and salt.
@@ -687,6 +688,113 @@ The four reject reasons are `bad-txns-nonfinal` (score 10), `bad-cb-height`, `un
 In `block.validate` of stage 0010b, `CheckBlock` bounds the base size first.
 `contextualBody_badBlkWeight_unreachable_after_checkBlock` then shows that the weight check cannot fire, under the hypothesis that the AuxPoW payload transaction has no witness data.
 
+### Block validation
+
+`block.validate` runs `Block.validateBlock` on a range of mainnet blocks (SOURCES.md D33, D110 and D112, design record 0010, stage 0010b).
+For each block it runs Core's five checks of a new block in Core's order, and stops at the first failure:
+
+1. `CheckBlockHeader`, when `check_pow` is true.
+2. `ContextualCheckBlockHeader`, with checkpoints disabled.
+3. `CheckBlock`, with the flags `check_pow` and `check_merkle_root`.
+4. `ContextualCheckBlock`.
+5. `ConnectBlock`, with `fJustCheck` true and Core's signature check `coreVerifier`.
+
+For the genesis hash, steps 1 and 2 do not run, and `ConnectBlock` adds no coin.
+The operation is mainnet only.
+
+The request supplies the state before the first block, and the operation carries it through the range:
+
+- `mode`: the read mode of every block, as for `block.check`.
+- `check_pow`, `check_merkle_root`: Booleans. Real blocks set both. A request with changed blocks clears `check_pow`, because a changed block has no valid proof of work.
+- `adjusted_time`: the adjusted time of step 2, as for `block.contextual_check`.
+- `chain`: the view of the predecessor of the first block, newest first, each entry `{height, time, bits}`, as for `block.contextual_check_body`.
+  It is empty exactly when the range starts at the genesis block.
+- `bip34_ancestor_hex`: the hash of the ancestor at height 1,034,383 of the predecessor, in serialization order, or null when the predecessor is below that height.
+  `ConnectBlock` skips the BIP30 test when that hash is `BIP34Hash`, which never happens on mainnet (design record 0010, section 2).
+  When the predecessor is at that height, the value must be the previous hash of the first block.
+- `coins`: the coin set before the first block.
+  Each entry is `{txid_hex, coinbase, height, outputs}`, for one transaction ID, as Core's `CCoins`.
+  Each output is `{n, value, script_hex}`, where `n` is the output index, below 1,048,576, and `value` is a string of decimal digits.
+  A transaction ID occurs once, and each entry has at least one output.
+  A script that Core's `IsUnspendable` rejects is a request error, because such an output never enters Core's set.
+- `blocks_hex`: the blocks, each one all of its bytes.
+
+A block must extend the state.
+The genesis block is valid only as the first block of an empty `chain`.
+The previous hash of the first other block names the supplied predecessor.
+Each later block must have the hash of the last accepted block as its previous hash.
+
+An accepted block becomes the new predecessor, and its changes enter the coin set.
+A rejected block changes nothing.
+So a request can hold several candidates for one height: the rejected ones, and then one accepted block.
+
+The result has four fields:
+
+- `blocks`: one record for each block, in order.
+- `out_of_domain_at`: null, or the position of the block that ended the range (see *The arithmetic domain* below).
+- `set_digest_hex`: the digest of the coin set after the last record.
+- `set_coins`: the number of coins in that set.
+
+Each record has these fields:
+
+| Field | Value |
+| --- | --- |
+| `height`, `hash_hex`, `hash_display` | The height of the candidate, and its hash in both byte orders |
+| `valid`, `reject_reason`, `dos`, `reject_code` | The verdict of the first failing step, as for `block.check` |
+| `changes_digest_hex`, `spent`, `created` | For an accepted block: the digest of its changes, and the numbers of spent and created coins. Null for a rejected block |
+| `set_digest_hex` | The digest of the coin set after an accepted block whose height is a multiple of 1,000. Null otherwise |
+| `diagnostic` | Lean only: the name of the failing step and the Lean error, or null |
+
+`ConnectBlock` adds these reject reasons to those of the four earlier steps: `bad-txns-BIP30`, `bad-txns-inputs-missingorspent`, `bad-txns-premature-spend-of-coinbase`, `bad-txns-inputvalues-outofrange`, `bad-txns-in-belowout`, `bad-blk-sigops`, `bad-cb-amount`, and the two script reasons.
+A script reason is `mandatory-script-verify-flag-failed` or `non-mandatory-script-verify-flag`, then a space and the text of Core's `ScriptErrorString` in parentheses.
+The non-mandatory reason has score 0 and `reject_code` 64.
+`bad-txns-premature-spend-of-coinbase` has score 0.
+The other reasons have score 100, and every reason but the non-mandatory one has `reject_code` 16.
+
+#### Digests
+
+Both programs compute each digest from the same records, so equal digests show equal coins.
+A *coin record* is these bytes:
+
+1. One tag byte: 0 for a spent coin, 1 for a created coin, 2 for a member of the whole set.
+2. The outpoint: the 32 bytes of the transaction ID, then the output index in 4 little-endian bytes.
+3. The height of the coin's transaction in 4 little-endian bytes.
+4. One byte: 1 for a coin of a coinbase, and 0 otherwise.
+5. The output as Core serializes a `CTxOut`: the amount in 8 little-endian bytes, the CompactSize length of the script, and the script.
+
+A digest starts as 32 zero bytes.
+Each record replaces the digest `d` with the double SHA-256 of `d` followed by the record.
+
+- `changes_digest_hex` visits the changes of the block in the order of `UpdateCoins`.
+  For each transaction in block order, it takes the coin of each input in input order (tag 0), and then each output that enters the set, in output order (tag 1).
+  An unspendable output enters no set and has no record.
+  The genesis block has no change, so its digest is 32 zero bytes.
+- `set_digest_hex` visits every coin of the set (tag 2).
+  The transaction IDs are in the order of their 32 bytes as byte strings, and the outputs of one ID are in index order.
+
+#### The arithmetic domain
+
+Core adds `int64_t` amounts in `ConnectBlock` with no earlier range check, and an overflow there is undefined behaviour in C++ (design record 0010, section 3).
+`Block.connectBlock` computes in the integers and returns `outOfDomain` when a sum leaves the `int64_t` range.
+The oracle then ends the range: `blocks` holds the records before that block, and `out_of_domain_at` is its position.
+The comparator sends the harness the request without that block and the blocks after it.
+`connect_fits` gives a condition under which no sum leaves the range.
+
+A supplied `value` above `MAX_MONEY` is the error `{"kind": "block_validate", "reason": "coin_value_out_of_range"}`.
+
+#### Errors
+
+A block that does not read gives the `read` or `trailing_bytes` error of `block.check`, with the position of the block as `index`.
+The other errors have the kind `block_validate`, a `reason`, and `index` when a block causes them:
+
+| `reason` | Condition |
+| --- | --- |
+| `coin_value_out_of_range` | A supplied coin has an amount above `MAX_MONEY` |
+| `genesis_after_start` | The genesis block is not the first block of an empty chain |
+| `no_predecessor` | A block that is not the genesis block has an empty chain |
+| `not_linked` | A block does not extend the last accepted block |
+| `outside_model` | `validateBlock` returned a result that is not Core's, and `detail` holds the Lean error. The cases are an adapter error of an earlier step, an active CSV state, an unsupported script capability, a subsidy without fuel, and a repeated transaction ID outside a coinbase |
+
 ### Block subsidy
 
 `block.subsidy` runs `Block.getDogecoinBlockSubsidy`, Core's `GetDogecoinBlockSubsidy` with the mainnet parameter records (SOURCES.md D104, design record 0010).
@@ -784,6 +892,7 @@ These pinned sources supply the work functions and parameter constructors:
 | `block.contextual_check` | `ContextualCheckBlockHeader` on index entries that the harness builds from the request |
 | `block.contextual_check_body` | `SelectParams` for mainnet, then `ContextualCheckBlock` on a `CBlock` that Core's stream code reads, with a predecessor that the harness builds from the chain. `VersionBitsState` reads the aligned boundary's median time, and the harness seeds `THRESHOLD_FAILED` at a boundary at or after the CSV timeout |
 | `block.check` | `SelectParams` for mainnet, then `CheckBlock` on a `CBlock` that Core's stream code reads from the request, with the two flags of the request. Then `GetLegacySigOpCount` for each transaction, `GetSerializeSize` in base mode and `GetHash` |
+| `block.validate` | `SelectParams` for mainnet. Then, for each block that Core's stream code reads: `CheckBlockHeader` when `check_pow` is true, `ContextualCheckBlockHeader`, `CheckBlock`, `ContextualCheckBlock`, and `ConnectBlock` with `fJustCheck` true on a new `CCoinsViewCache` over the carried set. The first two do not run for the genesis hash. `UpdateCoins` on a second cache gives the changes of an accepted block ([choices](#block-validation-in-the-harness)) |
 | `block.subsidy` | `SelectParams` for mainnet, then `GetDogecoinBlockSubsidy` with `Params().GetConsensus(height)` for each case, as `ConnectBlock` calls it (D101, line 1996) |
 | `compactsize.encode` | `WriteCompactSize` into a `CDataStream` |
 | `compactsize.read` | `ReadCompactSize` from a `CDataStream` |
@@ -849,6 +958,8 @@ The harness answers a projection of `dogelib-oracle/1`, not the format itself:
 - `tx.check` and `block.check` have no `diagnostic`. Core reports the reject reason, and not the Lean error or the position of a rejected transaction.
   The harness builds a new `CBlock` for each request, so `fChecked` is false at the call.
   It stops with an unmapped-Core error if that member is set.
+- The block records of `block.validate` have no `diagnostic`, and `out_of_domain_at` is always null.
+  Core has no test for the overflow of its sums, so the harness cannot report one.
 - `block.subsidy` has no `redraws`, because Core does not report the rejected words.
   It has `boost_version` instead: the release of the Boost headers that Core's function was compiled with, such as `1.70.0`.
 - `sighash.legacy` has no `preimage_hex`.
@@ -866,6 +977,30 @@ The harness answers a projection of `dogelib-oracle/1`, not the format itself:
 The harness checks request arguments by the rules of this document.
 Twenty-two adapter-limit boundary requests check both programs against the documented expectations, including `adapter/resource_limit` errors.
 Other argument checks have oracle fixtures but no Core comparison.
+
+### Block validation in the harness
+
+`block.validate` keeps state in the harness for the length of one request: a block index, a coin set, and Core's version-bits cache.
+`harness/core/core_block_validate.inc` holds the code.
+Every verdict comes from Core's five functions.
+The code builds their inputs, and makes these choices (design record 0010, section 5):
+
+- **Script checks.** `nScriptCheckThreads` is 0 and `hashAssumeValid` is null, which are Core's values before `init.cpp` reads the node's options. So `ConnectBlock` checks every script of every input, in input order, with no check queue (D112, lines 1827 to 1849 and 1924).
+  `main` calls `InitSignatureCache`, because `ConnectBlock` stores accepted signatures in that cache.
+- **`fJustCheck`.** `ConnectBlock` runs with `fJustCheck` true on a new `CCoinsViewCache` over the carried set. With that flag it calls `CheckBlock` with both flags false (line 1804), and it returns before it writes undo data or the transaction index (line 2008).
+- **Commit.** After an accepted block, the harness calls `SetBestBlock` and `Flush` on the cache, because `fJustCheck` returns before `SetBestBlock` (line 2035). After a rejected block, the cache is discarded, because `UpdateCoins` runs before the coinbase check (lines 1988 and 1996).
+- **The carried set.** The set is a `CCoinsView` over a `std::map`, as `CCoinsViewTest` of Core's `src/test/coins_tests.cpp`, without that class's random choices. A flush erases an entry that is pruned.
+- **The block index.** The harness builds one `CBlockIndex` for each entry of `chain` and for each accepted block, with Core's skip list where the skip target is inside the chain. `mapBlockIndex` holds the entry of the last accepted block alone, which `CheckInputs` reads for the spend height (lines 1407 to 1411).
+- **The BIP34 ancestor.** `ConnectBlock` reads the hash of the ancestor at `BIP34Height` (line 1877). Inside the supplied chain, the entry of that height gets the supplied hash. Below the chain, the oldest entry gets a predecessor that is its own predecessor and skip entry, as for `block.header_sequence`, so that `GetAncestor` returns it for every lower height.
+- **Refusals.** The harness refuses a request whose chain is too short for Core's other reads: the median time, the retarget history, and the aligned version-bits boundary with its ten predecessors. So Core never reads the added predecessor as history.
+- **Version bits.** The harness seeds `THRESHOLD_FAILED` at a boundary at or after the CSV timeout, as for `block.contextual_check_body` (design record 0010, decision 3).
+- **Restored state.** Every exit clears `mapBlockIndex` and the version-bits cache, and restores `fCheckpointsEnabled` and the mock time.
+
+The harness reads the changes of an accepted block from a second `CCoinsViewCache` over the set before the block.
+For each transaction in order, it reads the entry of each input, calls Core's `UpdateCoins`, and reads the new entry.
+So the spent and created coins are Core's own entries, as they are just before and just after each transaction.
+The harness then requires that the second cache and the cache of `ConnectBlock` hold equal entries for every transaction ID that the block names.
+It stops with exit status 3 if they differ.
 
 ### The comparison
 
@@ -895,6 +1030,7 @@ So a change to a request set changes the table, and this section, in the same pu
 | `block.header.read` | 7,878 |
 | `block.header_sequence` | 257 |
 | `block.subsidy` | 148 |
+| `block.validate` | 42 |
 | `compactsize.encode` | 26 |
 | `compactsize.read` | 404 |
 | `hash.hash160` | 292 |
@@ -1343,6 +1479,65 @@ Every request agrees, and Core returns each of the four reasons.
 `scripts/compare_core.py --mainnet-blocks` also compares the body on 11,018 real blocks: the genesis-to-10000 range, the 1,000 most recent blocks and the 17 rule-change blocks.
 Below the first period the chain is the predecessor alone, and otherwise it reaches the aligned boundary from the committed blocks and the version-bits header runs of `tests/block/mainnet-blocks/version-bits-headers`.
 `scripts/test_oracle.py` checks the 22 requests against their expected verdicts without Core.
+
+### Block validation comparison evidence
+
+The harness calls Core's own five functions, as [above](#block-validation-in-the-harness).
+The comparator requires equal block records, except the oracle's `diagnostic`, and an equal digest and size of the final coin set.
+It checks both sides against Core's text: the score and the code of each reason of `ConnectBlock`.
+A full run fails with `REASON_NOT_REACHED` if Core returns one of the nine reachable reasons of design record 0010, section 5, for no block.
+
+The 42 requests are in eight sets, defined in `scripts/oracle_block_validate.py`.
+They need no download.
+One request starts at the real genesis block.
+The others start at a committed rule-change block: each keeps the real header and chain of that block, replaces the transactions and the Merkle root, and clears `check_pow`.
+Their coins are synthetic.
+
+| Set | Requests | Contents |
+| --- | ---: | --- |
+| Genesis chain | 2 | The genesis block with its real proof of work. A chain of 33 made blocks on the genesis block, with 17 rejected candidates: maturity 30 at depth 29 and 30, the genesis coinbase, unspendable outputs, a missing index, a double spend within a block, a spend of an output that the block creates later, a spend within the block, `bad-txns-in-belowout`, and four script failures |
+| Coinbase maturity | 7 | Depth 29 and 30 for a coin below height 145,000, depth 239 and 240 from it, a coin of maturity 30 spent above height 145,000, and a coin above the spend height |
+| Values and coinbase limit | 7 | `bad-txns-inputvalues-outofrange`, `bad-txns-in-belowout`, a coin of `MAX_MONEY`, and a coinbase that claims one koinu too much at heights 145,000, 599,999 and 600,000, with and without a fee |
+| Arithmetic domain | 5 | Nine fees of `MAX_MONEY` in one block, which Core accepts. A tenth fee, and ten coins of `MAX_MONEY` in one transaction, which end the range. A supplied amount above `MAX_MONEY` |
+| Signature operations | 3 | Exactly 20,000 operations, and 20,001 by a P2SH input, by a later transaction, by a legacy operation in an output and by one in the coinbase. The accurate count of `OP_16 OP_CHECKMULTISIG`. A `scriptSig` that is malformed, has an opcode above `OP_16`, or ends with an opcode that pushes nothing, each of which counts 0 |
+| Script failures | 8 | A signature that is not strict DER below and from `BIP66Height`, with a right and a wrong signature. `OP_CHECKLOCKTIMEVERIFY` below and from `BIP65Height`. The predecessor at `BIP34Height` and above it |
+| BIP30 | 4 | A coinbase and another transaction whose IDs have unspent coins. The same coinbase with the ancestor hash `BIP34Hash`, where Core skips the test and replaces the entry |
+| Order and adapter errors | 6 | One block for each of the five steps, with a later fault in each. A truncated block, bytes after a block, and the three chain errors |
+
+The expectations come from Core's text.
+`scripts/oracle_block_validate.py` also computes every digest a third time, from the definition [above](#digests), in a model of the coin set that takes the verdicts from the expectations.
+All 42 requests agree with Core and with the expectations.
+The block records hold 60 accepted blocks and 54 rejected ones, and Core returns each of the nine reasons.
+
+The signatures are made in the script with the private key 1, which is public test data.
+A signature that is not strict DER has one more zero byte before R.
+Core's verdict on each signature comes from the comparison, not from the script.
+
+The request of the tenth fee is the example of design record 0010, section 3.
+The oracle returns `out_of_domain_at`, and the harness gets the request without that block.
+So no request makes Core add past the `int64_t` range.
+
+`scripts/test_oracle.py` checks the 42 requests against their expectations without Core.
+
+#### Real mainnet blocks from the genesis block
+
+`scripts/compare_core.py --mainnet-blocks` sends one more request: all 10,001 blocks of heights 0 to 10,000, in one `block.validate` request with an empty chain and no coins.
+Both flags are true, so each block passes its real proof of work.
+Each program builds the whole coin set.
+
+Both programs accept every block, and all 10,001 block records agree.
+So do the 11 digests of the whole set, at each multiple of 1,000 and at the end.
+The blocks have 155,931 transactions.
+They spend 197,189 coins and create 340,566, and the final set has 143,377 coins.
+Every spent output in the range is Pay to Public Key Hash or Pay to Public Key, so each input runs one ECDSA verification.
+
+On a development machine the oracle takes about 460 seconds for this request on one core, and Core takes about 12 seconds.
+The comparator runs the request in a second oracle process, at the same time as the other requests of `--mainnet-blocks`.
+The default timeout of that mode is 3,600 seconds.
+
+This closes the first part of exit condition 1 of stage 0010b: agreement on the genesis-to-10,000 range, digests included.
+The recent range needs supplied coins, and the range to height 145,000 is a gate outside CI.
+Neither is in this comparison.
 
 ### Block subsidy comparison evidence
 

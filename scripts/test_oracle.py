@@ -563,13 +563,75 @@ def check_contextual_body(oracle):
     return failures
 
 
+def check_block_validate(oracle):
+    """The expected block records, digests and argument rules of block.validate.
+
+    Every expectation is in scripts/oracle_block_validate.py: the reject reason of each block from
+    Core's text (src/validation.cpp, lines 1415 to 1518 and 1783 to 2008), and each digest from a
+    separate model of the coin set that follows the definition in docs/oracle.md."""
+    from oracle_block_validate import (block_validate_sets, request, EXPECTATIONS, key, malformed, unexpected,
+                                       Base, Coins, coin_id, TRUE, OP_RETURN)
+    from oracle_block_check import genesis_block
+    requests = [req for _, reqs in block_validate_sets() for req in reqs]
+    known = len(requests)
+    example = request([genesis_block()])
+    base = Base(1034384)
+    above = base.request([base.block([base.coinbase()])])
+
+    def with_coins(*entries):
+        return {**example, "coins": list(entries)}
+
+    entry = {"txid_hex": coin_id(1).hex(), "coinbase": False, "height": 5,
+             "outputs": [{"n": 0, "value": "1", "script_hex": TRUE.hex()}]}
+    for bad in [
+        {"op": "block.validate"},
+        *({k: v for k, v in example.items() if k != field} for field in example if field != "op"),
+        {**example, "mode": "witness"},
+        {**example, "check_pow": 1},
+        {**example, "adjusted_time": "0"},
+        {**example, "chain": "x"},
+        {**example, "blocks_hex": "x"},
+        {**example, "blocks_hex": ["zz"]},
+        {**example, "coins": "x"},
+        # The ancestor hash is present exactly when the predecessor is at or above height 1,034,383,
+        # and at that height it is the previous hash of the first block.
+        {**example, "bip34_ancestor_hex": "00" * 32},
+        {**above, "bip34_ancestor_hex": None},
+        {**above, "bip34_ancestor_hex": "00" * 32},
+        with_coins(entry, entry),
+        with_coins({**entry, "outputs": []}),
+        with_coins({**entry, "outputs": entry["outputs"] * 2}),
+        with_coins({**entry, "outputs": [{**entry["outputs"][0], "value": 1}]}),
+        with_coins({**entry, "outputs": [{**entry["outputs"][0], "n": 1048576}]}),
+        with_coins({**entry, "outputs": [{**entry["outputs"][0], "script_hex": bytes([OP_RETURN]).hex()}]}),
+        with_coins({**entry, "outputs": [{**entry["outputs"][0], "script_hex": (TRUE * 10001).hex()}]}),
+        with_coins({**entry, "extra": 1}),
+    ]:
+        requests.append(bad)
+    got = run_requests(oracle, "block validate", [{**req, "id": i} for i, req in enumerate(requests)])
+    if got is None:
+        return 1
+    failures = 0
+    for i, (req, response) in enumerate(zip(requests, got)):
+        if i >= known:
+            fault = None if matches({k: v for k, v in response.items() if k != "id"}, {"error": {"kind": "request"}}) else f"expected a request error, got {json.dumps(response)[:200]}"
+        else:
+            fault = malformed(req, response["ok"], True) if "ok" in response else None
+            fault = fault or unexpected(req, response, EXPECTATIONS[key(req)])
+        if fault:
+            failures += 1
+            print(f"FAIL block validate {i}: {fault}")
+    print(f"block validate oracle: {known} known answers and {len(requests) - known} argument cases, {failures} failures")
+    return failures
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print(__doc__)
         return 2
     oracle = sys.argv[1]
     failures = (check_fixtures(oracle) + check_sighash_corpus(oracle) + check_tx_corpus(oracle)
-                + check_header_sequences(oracle) + check_contextual(oracle) + check_header_pow(oracle) + check_witness_corpus(oracle) + check_hash_block_fixtures(oracle) + check_process(oracle) + check_script_adapter_limits(oracle) + check_subsidy(oracle) + check_block_check(oracle) + check_contextual_body(oracle))
+                + check_header_sequences(oracle) + check_contextual(oracle) + check_header_pow(oracle) + check_witness_corpus(oracle) + check_hash_block_fixtures(oracle) + check_process(oracle) + check_script_adapter_limits(oracle) + check_subsidy(oracle) + check_block_check(oracle) + check_contextual_body(oracle) + check_block_validate(oracle))
     print("PASS" if failures == 0 else f"FAIL: {failures} failures")
     return 0 if failures == 0 else 1
 

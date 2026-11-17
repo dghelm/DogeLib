@@ -1224,6 +1224,97 @@ The comparison evidence is in [COVERAGE.md](COVERAGE.md#operations) and [docs/or
 
 By `#print axioms`, `contextualBody_badBlkWeight_unreachable_after_checkBlock` and `segwit_never_active` depend on `propext`, `Classical.choice` and `Quot.sound`.
 
+### The coin set, `CheckTxInputs` and `ConnectBlock`
+
+Five modules model Core's `ConnectBlock` on mainnet and the functions that it calls: `DogeLib.Block.Coins`, `TxInputs`, `SigOpCost`, `Connect` and `Validate` (D111 to D114, design record 0010, stage 0010b).
+`Validate` also gives the order of the five checks of a new block.
+The source review, not a theorem, connects the definitions to Core.
+[docs/reviews/connect.md](docs/reviews/connect.md) records a model read of the definitions against Core.
+
+**The coin set.**
+`CoinSet` has one `TxCoins` entry for each transaction ID, as Core's `CCoins`.
+It leaves out `nVersion`, `Cleanup`, the cache flags and the layers of caches, and it removes an entry that becomes pruned.
+Each read of validation goes through `IsAvailable` or `IsPruned`, so none of these differences changes a result that the definitions use.
+No theorem states this.
+The map is `Std.TreeMap` of Lean's standard library, which `lake exe check-decls` accepts as code that the kernel can unfold.
+
+**The arithmetic domain.**
+Core adds `int64_t` amounts in four places before any range check (design record 0010, section 3):
+
+- `GetValueIn` adds the amounts of a transaction's coins.
+- `ConnectBlock` adds each fee to `nFees` before `CheckInputs` runs.
+- `ConnectBlock` adds the subsidy to `nFees`.
+- `CheckTxInputs` adds each amount before it tests the amount and the sum.
+
+A sum outside the `int64_t` range is undefined behaviour in C++, so Core's source does not define its result on such a block.
+The definitions compute in the integers.
+When one of those sums leaves the range, `connectBlock` returns `outOfDomain`.
+That result is not a verdict, and it claims nothing about Core.
+
+`connect_fits` proves that `connectBlock` never returns `outOfDomain` under two hypotheses:
+
+1. `CoinSet.ValuesInRange`: every output that the coin set holds has an amount from 0 to `MAX_MONEY`.
+2. `spentValue`, plus `MAX_MONEY` and the subsidy, is below `2^63`.
+
+`spentValue` adds the amounts of the coins that all input occurrences of the block spend.
+It values each transaction against the set just before it, with the unchecked change `applyTransaction` between transactions.
+So it counts a coin that an earlier transaction of the block created.
+It is defined for every block, so the bound also covers a block that `connectBlock` rejects.
+
+Hypothesis 1 holds for the empty set, and the oracle refuses a supplied amount above `MAX_MONEY`.
+`connectBlock` runs `CheckTransaction` on every transaction before it changes the set.
+`applyTransaction_range` shows that the change of one such transaction keeps hypothesis 1.
+No theorem states that the result of `connectBlock` keeps it.
+Hypothesis 2 holds for real blocks by a wide margin.
+It does not hold for the total supply, which is above `2^63` koinu, so the theorem is about one block and not about a chain.
+
+`connect_fits` is a statement about the Lean sums.
+It does not prove that Core's compiled code computes those sums, or that a compiler keeps the source order of Core's additions.
+
+**The unreachable fee reasons.**
+`checkTxInputs_ne_feeNegative` and `checkTxInputs_ne_feeOutOfRange` prove that `checkTxInputs` never returns the two fee failures.
+The second holds for an output total that is not negative.
+`connectBlock_ne_feeNegative` and `connectBlock_ne_feeOutOfRange` prove that `connectBlock` never rejects a block with either reason.
+They hold for every verifier, context, coin set and block.
+
+**The sequence-lock reason.**
+The reason `bad-txns-nonfinal` of `ConnectBlock` has no theorem, and `connectBlock` has no such test.
+The module `DogeLib.Block.Connect` cites the argument.
+Without an active CSV state, Core's lock pair is (-1, -1), and no height or median time past is below 0.
+With an active CSV state `connectBlock` returns `csvActive`, which is outside the model.
+`csv_never_lockedIn` shows that this state does not occur on a mainnet header chain whose headers pass the header checks.
+
+**Results outside the model.**
+`connectBlock` returns six results that are not Core's: `outOfDomain`, `csvActive`, `scriptUnsupported`, `subsidy`, `newCoinsExist` and `contextBounds`.
+`newCoinsExist` marks a transaction that is not a coinbase and has the ID of an entry that is not pruned.
+Core's `ModifyNewCoins` then throws `std::logic_error` or replaces the entry, by the state of its cache.
+
+With BIP30 enforced, an earlier transaction of the same block made that entry, so two transactions of the block have one ID.
+Two equal transactions do not reach the result, because the second finds its inputs spent.
+So only a collision of double SHA-256 reaches it.
+With BIP30 skipped, an entry of an earlier block also reaches it.
+No theorem states this, and no comparison request reaches the result.
+
+**Script verification.**
+`connectBlock` takes the elliptic-curve check as the parameter `verify`, as `verifyLegacySpend` does.
+The oracle passes `coreVerifier`.
+The agreement of `coreVerifier` with Core is the A1 claim of [Secp256k1 public-key parser and Core's verifier](#secp256k1-public-key-parser-and-cores-verifier).
+
+The definition describes Core with no script-check threads and no assumed-valid block, where Core checks every script in input order.
+With check threads, the reject reason is that of the first failing check that a thread reports.
+With an assumed-valid block, Core skips the scripts.
+Neither configuration is modelled.
+
+**Block validation.**
+`validateBlock` is the composition of the five checks in the order of `AcceptBlockHeader`, `AcceptBlock` and `ConnectBlock`.
+It is not Core's `AcceptBlock` or `ProcessNewBlock`: it has no block index, it chooses no chain, and it writes nothing.
+The caller supplies the view of the predecessor and establishes that `hashPrevBlock` names it.
+
+The comparison evidence is in [COVERAGE.md](COVERAGE.md#operations) and [docs/oracle.md](docs/oracle.md#block-validation-comparison-evidence).
+`block.validate` compares each block's verdict, reason, score and code with Core's own functions, and compares the digests of the coins ([B4](#b4-the-oracle-and-foreign-boundaries)).
+
+By `#print axioms`, `connect_fits`, `checkTxInputs_ne_feeNegative`, `checkTxInputs_ne_feeOutOfRange`, `connectBlock_ne_feeNegative` and `connectBlock_ne_feeOutOfRange` depend on `propext`, `Classical.choice` and `Quot.sound`.
+
 ### RIPEMD-160 and Hash160
 
 `Ripemd160.hash` adapts EthLib's executable definition at `6a93711`, as SOURCES.md records.
@@ -3499,6 +3590,22 @@ For an empty chain it returns `DEFINED` for both without a call.
 
 The oracle computes `versionBitsStateFull` on the same sequence.
 `scripts/compare_version_bits_walk.py` checks the links and the pinned checkpoints of the headers that it fetches before it compares.
+
+For `block.validate` the harness calls Core's five checks of a new block on each block, in Core's order: `CheckBlockHeader`, `ContextualCheckBlockHeader`, `CheckBlock`, `ContextualCheckBlock` and `ConnectBlock`.
+It carries a coin set and a block index through the request.
+[docs/oracle.md](docs/oracle.md#block-validation-in-the-harness) lists its choices.
+Users trust these parts of the harness, which no Core function supplies:
+
+- The coin view over a `std::map`, and the commit after an accepted block. `ConnectBlock` runs with `fJustCheck` true, so Core's own `SetBestBlock` and its writes do not run.
+- The block index. It has one entry for each supplied chain entry and each accepted block, and `mapBlockIndex` holds one entry. An added predecessor carries the hash of the ancestor at `BIP34Height`. The harness refuses a request whose chain is too short for Core's other reads.
+- The seed of `THRESHOLD_FAILED`, as for `block.contextual_check_body`.
+- The digests. The harness reads the spent and created coins from a second cache, on which it calls Core's `UpdateCoins`. It requires that this cache ends equal to the cache of `ConnectBlock`.
+
+Core runs with no script-check threads and a null `hashAssumeValid`, so the comparison covers that configuration alone.
+The harness cannot observe a signed overflow in Core.
+The comparator therefore sends it no block that the oracle reports as `outOfDomain`, and agreement says nothing about such a block.
+The oracle keeps a whole request in memory, and `block.validate` has no size limit of its own.
+The request of 10,001 real blocks has about 88 MB of JSON.
 
 Any later foreign boundary, such as a C or Rust binding, is listed here with its size and its error handling.
 

@@ -13,7 +13,7 @@ Core's `ConnectBlock` on mainnet: the checks of a block against the coin set, an
 
 The sources are at the Core pin (SOURCES.md):
 
-- `ConnectBlock`, `src/validation.cpp`, lines 1783 to 2008 (D112, and D101 for the rules by height).
+- `ConnectBlock`, `src/validation.cpp`, lines 1783 to 2009 (D112, and D101 for the rules by height).
 - `CheckInputs`, lines 1462 to 1518, and `CScriptCheck::operator()`, lines 1398 to 1405 (D112).
 - `STANDARD_NOT_MANDATORY_VERIFY_FLAGS`, `src/policy/policy.h`, lines 88 to 105, with `MANDATORY_SCRIPT_VERIFY_FLAGS`, `src/script/standard.h`, line 43 (D114).
 - `UpdateCoins`, lines 1366 to 1390 (D111).
@@ -337,11 +337,11 @@ def connectTransactions (verify : SignatureVerifier) (ctx : ConnectContext) (fla
     | .ok st' => connectTransactions verify ctx flags (index + 1) st' rest
 
 /--
-Core's `ConnectBlock` on mainnet (D112, lines 1783 to 2008), with the first failing check as its error.
+Core's `ConnectBlock` on mainnet (D112, lines 1783 to 2009), with the first failing check as its error.
 Core returns `true` exactly when the result is `.ok`, for an input inside the model.
 
 `verify` is the elliptic-curve check of `verifyLegacySpend`.
-`fJustCheck` selects the flags of `CheckBlock`, as in Core. The definition returns before Core's writes, which follow line 2008.
+`fJustCheck` selects the flags of `CheckBlock`, as in Core. The definition returns before Core's writes, which follow line 2009.
 `s` is the view, whose best block is the predecessor.
 The module documentation lists the checks in Core's order.
 -/

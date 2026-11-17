@@ -154,6 +154,8 @@ UniValue blockValidate(const UniValue& req)
             if (key != "height" && key != "time" && key != "bits") throw RequestError{"unknown chain entry field"};
         chain.emplace_back();
         // The oracle's adapter refuses a predecessor at height 2147483646 or above (bodyStates).
+        // Core can represent the candidate height 2147483647. The limit is the adapter's, and
+        // docs/oracle.md states it, so no request compares that height.
         chain.back().nHeight = static_cast<int>(argInt(e, "height", 0, 2147483645));
         chain.back().nTime = argU32(e, "time");
         chain.back().nBits = argU32(e, "bits");

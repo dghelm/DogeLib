@@ -64,7 +64,7 @@ This section is an addendum, not part of the read. The line numbers in the findi
 
 - Finding 1 (the view after a failure). The module documentation of `DogeLib.Block.Connect` has the section *What a failure leaves out*, which states that `connectBlock` returns no changed set with an error, and that a caller of Core must discard the view.
 - Finding 2 (`AbortNode`). The same section states that `connectBlock` does not model `AbortNode` for `fJustCheck` false, and why `validateBlock` cannot reach it.
-- Finding 3 (the greatest height). The harness refuses a chain entry at height 2147483646, as the oracle's adapter does. Both programs then return a request error for that predecessor.
+- Finding 3 (the greatest height). The harness refuses a chain entry at height 2147483646, as the oracle's adapter does. Both programs then return a request error for that predecessor. The limit is narrower than Core's domain, which has the candidate height 2147483647. [docs/oracle.md](../oracle.md#block-validation) states the limit, and no request compares that height.
 - Finding 4 (`BIP34Hash`) is not correct, and the document is unchanged. `BIP34Hash` is `80d13642…1e797a`, the hash of block 1,032,483 ([fixture](../../tests/block/mainnet-bip66-headers/README.md)). The block at `BIP34Height`, 1,034,383, has the hash `251f53c3…39f7f6` in the committed rule-change fixture. So the ancestor at `BIP34Height` never has the hash `BIP34Hash` on mainnet, as design record 0010, section 2, says.
 
 No finding is consensus-divergent.

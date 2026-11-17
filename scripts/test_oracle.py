@@ -567,7 +567,7 @@ def check_block_validate(oracle):
     """The expected block records, digests and argument rules of block.validate.
 
     Every expectation is in scripts/oracle_block_validate.py: the reject reason of each block from
-    Core's text (src/validation.cpp, lines 1415 to 1518 and 1783 to 2008), and each digest from a
+    Core's text (src/validation.cpp, lines 1415 to 1518 and 1783 to 2009), and each digest from a
     separate model of the coin set that follows the definition in docs/oracle.md."""
     from oracle_block_validate import (block_validate_sets, request, EXPECTATIONS, key, malformed, unexpected,
                                        Base, Coins, coin_id, TRUE, OP_RETURN)

@@ -709,6 +709,8 @@ The request supplies the state before the first block, and the operation carries
 - `adjusted_time`: the adjusted time of step 2, as for `block.contextual_check`.
 - `chain`: the view of the predecessor of the first block, newest first, each entry `{height, time, bits}`, as for `block.contextual_check_body`.
   It is empty exactly when the range starts at the genesis block.
+  A predecessor at height 2,147,483,646 or above is a request error in both programs, as for `block.contextual_check_body`.
+  Core can represent the candidate height 2,147,483,647, so this limit is narrower than Core's domain, and no request compares that height.
 - `bip34_ancestor_hex`: the hash of the ancestor at height 1,034,383 of the predecessor, in serialization order, or null when the predecessor is below that height.
   `ConnectBlock` skips the BIP30 test when that hash is `BIP34Hash`, which never happens on mainnet (design record 0010, section 2).
   When the predecessor is at that height, the value must be the previous hash of the first block.
@@ -987,8 +989,8 @@ The code builds their inputs, and makes these choices (design record 0010, secti
 
 - **Script checks.** `nScriptCheckThreads` is 0 and `hashAssumeValid` is null, which are Core's values before `init.cpp` reads the node's options. So `ConnectBlock` checks every script of every input, in input order, with no check queue (D112, lines 1827 to 1849 and 1924).
   `main` calls `InitSignatureCache`, because `ConnectBlock` stores accepted signatures in that cache.
-- **`fJustCheck`.** `ConnectBlock` runs with `fJustCheck` true on a new `CCoinsViewCache` over the carried set. With that flag it calls `CheckBlock` with both flags false (line 1804), and it returns before it writes undo data or the transaction index (line 2008).
-- **Commit.** After an accepted block, the harness calls `SetBestBlock` and `Flush` on the cache, because `fJustCheck` returns before `SetBestBlock` (line 2035). After a rejected block, the cache is discarded, because `UpdateCoins` runs before the coinbase check (lines 1988 and 1996).
+- **`fJustCheck`.** `ConnectBlock` runs with `fJustCheck` true on a new `CCoinsViewCache` over the carried set. With that flag it calls `CheckBlock` with both flags false (line 1804), and it returns before it writes undo data or the transaction index (line 2009).
+- **Commit.** After an accepted block, the harness calls `SetBestBlock` and `Flush` on the cache, because `fJustCheck` returns at line 2009, before `SetBestBlock` (line 2035). After a rejected block, the cache is discarded, because `UpdateCoins` runs before the coinbase check (lines 1988 and 1996).
 - **The carried set.** The set is a `CCoinsView` over a `std::map`, as `CCoinsViewTest` of Core's `src/test/coins_tests.cpp`, without that class's random choices. A flush erases an entry that is pruned.
 - **The block index.** The harness builds one `CBlockIndex` for each entry of `chain` and for each accepted block, with Core's skip list where the skip target is inside the chain. `mapBlockIndex` holds the entry of the last accepted block alone, which `CheckInputs` reads for the spend height (lines 1407 to 1411).
 - **The BIP34 ancestor.** `ConnectBlock` reads the hash of the ancestor at `BIP34Height` (line 1877). Inside the supplied chain, the entry of that height gets the supplied hash. Below the chain, the oldest entry gets a predecessor that is its own predecessor and skip entry, as for `block.header_sequence`, so that `GetAncestor` returns it for every lower height.

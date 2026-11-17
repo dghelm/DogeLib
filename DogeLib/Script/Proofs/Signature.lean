@@ -159,14 +159,14 @@ theorem transactionChecker_checkSig_fixed {tx : Transaction} {nIn : UInt32} (ver
 /--
 Take transactions `tx` and `tx'`, input indices `nIn` and `nIn'`, and script codes `code` and `code'` shorter than 2^64 bytes.
 Take a verifier, a signature and a public key.
-Assume that, when the signature is `s ++ [hashType]`, both requests satisfy `ReachesFixedDigest` for `hashType` zero-extended to 32 bits.
+Assume that, when the key passes `isValidPubKey` and the signature is `s ++ [hashType]`, both requests satisfy `ReachesFixedDigest` for `hashType` zero-extended to 32 bits.
 Then the two checkers give the same answer.
 An empty signature and a key that fails `isValidPubKey` need no assumption: both give `some false`.
 -/
 theorem transactionChecker_checkSig_fixed_congr {tx tx' : Transaction} {nIn nIn' : UInt32}
     (verify : SignatureVerifier) {sig key code code' : List UInt8} (hc : code.length < 2 ^ 64)
     (hc' : code'.length < 2 ^ 64)
-    (hf : ∀ s hashType, sig = s ++ [hashType] →
+    (hf : ∀ s hashType, isValidPubKey key = true → sig = s ++ [hashType] →
       ReachesFixedDigest tx nIn hashType.toUInt32 ∧ ReachesFixedDigest tx' nIn' hashType.toUInt32) :
     (transactionChecker tx nIn verify).checkSig sig key code =
       (transactionChecker tx' nIn' verify).checkSig sig key code' := by
@@ -175,7 +175,7 @@ theorem transactionChecker_checkSig_fixed_congr {tx tx' : Transaction} {nIn nIn'
   · rcases List.eq_nil_or_concat sig with hs | ⟨s, b, hs⟩
     · subst hs; rw [transactionChecker_emptySig _ _ _ _ hk, transactionChecker_emptySig _ _ _ _ hk]
     · subst hs
-      obtain ⟨h1, h2⟩ := hf s b (List.concat_eq_append ..)
+      obtain ⟨h1, h2⟩ := hf s b hk (List.concat_eq_append ..)
       rw [List.concat_eq_append, transactionChecker_checkSig_fixed _ _ hk hc h1,
         transactionChecker_checkSig_fixed _ _ hk hc' h2]
 

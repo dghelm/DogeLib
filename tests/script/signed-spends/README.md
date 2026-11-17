@@ -111,7 +111,7 @@ The Core comparison sends the 44 spends through `script.verify_legacy` and their
 The signing transaction has two inputs and one output, and the generator signs input 1.
 The generator calls `SignatureHash` in `SIGVERSION_BASE`, `CKey::Sign` with `test_case=0` and `VerifyScript` with `TransactionSignatureChecker`, as for `recovery.jsonl`.
 `CKey::Sign` uses RFC 6979 nonces, so each key has one signature for the digest `one`.
-The `signatures_hex` of every record with only SINGLE hash types therefore differ only in their last byte.
+For a given key, the recorded signatures over `one` therefore differ only in their last byte, the hash type.
 The private keys are public test data. Never send funds to these keys.
 
 ### Records

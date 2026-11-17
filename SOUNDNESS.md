@@ -2471,7 +2471,8 @@ By `#print axioms` with Lean `v4.35.0`:
 
 Core's `SignatureHash` returns the fixed digest `one` when the hash type is SINGLE and `nIn` is at least the number of outputs (D3, lines 1231 to 1236).
 `CheckSig` then verifies the signature against `one`, and reads no part of the transaction (D3, lines 1253 to 1272).
-So the same signature bytes pass for the same key in every other spend that reaches the same condition.
+So that check gives the same answer for the same signature bytes and key in every other transaction that reaches the same condition.
+A whole spend can still differ, because its scripts, its flags or its other checks differ.
 Every spend that Core verifies with `SIGVERSION_BASE` has this behavior.
 
 `DogeLib.Script.Proofs.CheckerExtension` and `DogeLib.Script.Proofs.FixedDigest` state the behavior for a whole spend.
@@ -2536,7 +2537,8 @@ Core's `CheckInputs` calls the checker only for an index below the number of inp
 
 Core's block and mempool validation verifies through a signature cache (SOURCES.md, D111).
 The cache stores only successful checks.
-Its entry is a hash of the three arguments of `VerifySignature`: the signature hash, the public key and the signature without its hash-type byte.
+Its entry is a hash of a nonce of the process and the three arguments of `VerifySignature`.
+The arguments are the signature hash, the public key and the signature without its hash-type byte.
 So a cache hit gives the result that `CPubKey::Verify` gives on the same arguments, unless two entries collide under SHA-256.
 On the fixed digest, the three arguments do not depend on the transaction, and neither does a cache hit.
 DogeLib does not model the cache, and this argument is a reading of D111, not a theorem.

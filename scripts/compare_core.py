@@ -947,7 +947,8 @@ def compare(req: dict, ours: dict, core: dict, peer: str = "core") -> tuple[str,
     if not json_equal(ours, core):
         if req["op"] == "pubkey.verify":
             return "PUBKEY_VALID", f"first difference at {first_difference(ours, core)}"
-        if {k: v for k, v in req.items() if k != "id"} in signature_spends() + fixed_digest_spends():
+        if (req["op"] == "script.verify_legacy" and
+                {k: v for k, v in req.items() if k != "id"} in signature_spends() + fixed_digest_spends()):
             return "SIGNATURE_VERDICT", f"first difference at {first_difference(ours, core)}"
         return "MISMATCH", f"first difference at {first_difference(ours, core)}"
     return None

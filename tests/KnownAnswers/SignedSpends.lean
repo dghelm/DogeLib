@@ -191,8 +191,8 @@ def checkFixedDigest : IO Nat := do
         unless agrees got do
           IO.eprintln s!"FAIL fixed-digest spend {r.id}: transaction-free result {repr got}"
           failures := failures + 1
-  unless lines.length == 44 && accepted == 32 && free == 37 do
-    IO.eprintln s!"FAIL fixed-digest fixture counts: {lines.length} records, {accepted} accepted, {free} transaction-free"
+  unless lines.length == 44 && accepted == 32 && free == 37 && digests == 142 do
+    IO.eprintln s!"FAIL fixed-digest fixture counts: {lines.length} records, {accepted} accepted, {free} transaction-free, {digests} digests"
     failures := failures + 1
   IO.println s!"fixed-digest spends: {lines.length} verdict/error comparisons, {digests} digests, {free} transaction-free results, {failures} failures"
   return failures

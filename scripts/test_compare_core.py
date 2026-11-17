@@ -1,6 +1,6 @@
 """Self-test of scripts/compare_core.py. It needs the oracle, not Dogecoin Core.
 
-Usage: python3 -I scripts/test_compare_core.py <dogelib-oracle>
+Usage: python3 -I scripts/test_compare_core.py [--jobs N] <dogelib-oracle>
 
 A wrapper around the oracle stands in for the Core harness. With no change it
 answers the harness's projection of each response, and the comparison must
@@ -8,10 +8,22 @@ pass on the full request stream. Each mutation then changes one response or
 the wrapper's behaviour, and the comparison must fail with the failure code
 that the mutation targets.
 
+Two cases run the full stream: the positive control, and the run with one
+request dropped, which must fail the request count. Every other case runs
+`compare_core.py --quick` or one of the two separate modes. A --quick run has
+a reduced stream, the composition of a few corpus records, and the version and
+AuxPoW reconstruction calls. A mutation changes one response of that run, or
+the wrapper's behaviour as a process. A response mutation that finds no
+response to change fails its case.
+
+The cases run N at a time, 4 by default or the number of CPUs when that is
+smaller. Each full-stream case holds about 3.5 GB of memory.
+
 The script also runs as that wrapper:
     test_compare_core.py --wrap <mode> <role> <dogelib-oracle> [--version]
 """
 
+import concurrent.futures
 import json
 import os
 import pathlib
@@ -620,10 +632,15 @@ def main() -> int:
         return compare_core.main()
     if len(sys.argv) >= 5 and sys.argv[1] == "--wrap":
         return wrap(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5:])
-    if len(sys.argv) != 2:
+    arguments = sys.argv[1:]
+    jobs = min(4, os.cpu_count() or 1)
+    if len(arguments) == 3 and arguments[0] == "--jobs" and arguments[1].isdecimal() and int(arguments[1]) > 0:
+        jobs = int(arguments[1])
+        arguments = arguments[2:]
+    if len(arguments) != 1:
         print(__doc__, file=sys.stderr)
         return 2
-    oracle = str(pathlib.Path(sys.argv[1]).resolve())
+    oracle = str(pathlib.Path(arguments[0]).resolve())
     failures = 0
     from compare_core import compare as compare_response
     check_sequence_comparison()
@@ -671,37 +688,47 @@ def main() -> int:
             assert script[0] <= 5 and script[1 + script[0]:] == bytes([op, 117, 81])
             assert r["checker"] == "transaction" and not harness_refused(r)
     print("ok   refusal precedence and reached timelock constructions")
+    cases = []
+
+    def case(function):
+        cases.append(function)
+
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = pathlib.Path(tmpdir)
+        unchanged = wrapper(tmp, "none", "core", oracle)
 
-        # Positive control on the full stream, whose input and output exceed a pipe's capacity.
-        result = compare(oracle, wrapper(tmp, "none", "core", oracle), [])
-        total = [line for line in result.stdout.splitlines() if line.startswith("total:")]
-        if result.returncode != 0 or not total or not total[0].endswith(" 0 failures"):
-            failures += 1
-            print(f"FAIL positive control: exit {result.returncode}\n{result.stdout[-2000:]}{result.stderr[-2000:]}")
-        else:
-            print(f"ok   positive control: {total[0]}")
+        def fail_codes(result):
+            return {line.split()[1] for line in result.stdout.splitlines() if line.startswith("FAIL ")}
 
-        result = compare(oracle, wrapper(tmp, "none", "core", oracle),
-                         ["--compare-sanity-gap", "--quick"], driver=__file__)
-        codes = {line.split()[1] for line in result.stdout.splitlines() if line.startswith("FAIL ")}
-        if (result.returncode != 1 or codes != {"TX_VALID_CORE_COUNT"} or
-                "FAIL TX_VALID_CORE_COUNT 90 acceptance checks, expected 91" not in result.stdout):
-            failures += 1
-            print(f"FAIL acceptance check count: exit {result.returncode}\n{result.stdout[-2000:]}{result.stderr[-2000:]}")
-        else:
-            print("ok   acceptance check count: FAIL TX_VALID_CORE_COUNT")
+        def tail(result, length=2000):
+            return f"exit {result.returncode}\n{result.stdout[-length:]}{result.stderr[-length:]}"
 
-        # The full stream with one request dropped. --quick does not check the counts.
-        result = compare(oracle, wrapper(tmp, "none", "core", oracle), ["--compare-count-gap"], driver=__file__)
-        codes = {line.split()[1] for line in result.stdout.splitlines() if line.startswith("FAIL ")}
-        if (result.returncode != 1 or codes != {"REQUEST_COUNT"} or
-                "FAIL REQUEST_COUNT compactsize.encode: 25 requests, expected 26" not in result.stdout):
-            failures += 1
-            print(f"FAIL operation request count: exit {result.returncode}\n{result.stdout[-2000:]}{result.stderr[-2000:]}")
-        else:
-            print("ok   operation request count: FAIL REQUEST_COUNT")
+        # Each case returns None and a summary when it passes, or a description of the failure.
+        @case
+        def positive_control():
+            # The full stream, whose input and output exceed a pipe's capacity.
+            result = compare(oracle, unchanged, [])
+            total = [line for line in result.stdout.splitlines() if line.startswith("total:")]
+            if result.returncode != 0 or not total or not total[0].endswith(" 0 failures"):
+                return f"positive control: {tail(result)}", None
+            return None, f"positive control: {total[0]}"
+
+        @case
+        def operation_request_count():
+            # The full stream with one request dropped. --quick does not check the counts.
+            result = compare(oracle, unchanged, ["--compare-count-gap"], driver=__file__)
+            if (result.returncode != 1 or fail_codes(result) != {"REQUEST_COUNT"} or
+                    "FAIL REQUEST_COUNT compactsize.encode: 25 requests, expected 26" not in result.stdout):
+                return f"operation request count: {tail(result)}", None
+            return None, "operation request count: FAIL REQUEST_COUNT"
+
+        @case
+        def acceptance_check_count():
+            result = compare(oracle, unchanged, ["--compare-sanity-gap", "--quick"], driver=__file__)
+            if (result.returncode != 1 or fail_codes(result) != {"TX_VALID_CORE_COUNT"} or
+                    "FAIL TX_VALID_CORE_COUNT 90 acceptance checks, expected 91" not in result.stdout):
+                return f"acceptance check count: {tail(result)}", None
+            return None, "acceptance check count: FAIL TX_VALID_CORE_COUNT"
 
         # --mainnet-blocks: a directory without the fixtures, and a fixture that is
         # consistent with its own SHA256SUMS but not with the committed hashes.
@@ -710,76 +737,99 @@ def main() -> int:
         other = tmp / "other-blocks"
         release = json.loads((ROOT / "tests/block/mainnet-blocks/release.json").read_text())
         shutil.copytree(ROOT / "tests/block/mainnet-blocks/rule-changes", other / release["ranges"][0]["name"])
-        for label, directory, message in (("absent", absent, "cannot read the fixture"),
-                                          ("other", other, "SHA256SUMS does not have the committed hashes")):
-            result = compare(oracle, wrapper(tmp, "none", "core", oracle), ["--mainnet-blocks", str(directory)])
-            codes = {line.split()[1] for line in result.stdout.splitlines() if line.startswith("FAIL ")}
-            if result.returncode != 1 or codes != {"BLOCK_ASSETS"} or message not in result.stdout:
-                failures += 1
-                print(f"FAIL mainnet blocks {label}: exit {result.returncode}\n{result.stdout[-2000:]}{result.stderr[-2000:]}")
-            else:
-                print(f"ok   mainnet blocks {label}: FAIL BLOCK_ASSETS")
+
+        def mainnet_blocks(label, directory, message):
+            def run():
+                result = compare(oracle, unchanged, ["--mainnet-blocks", str(directory)])
+                if result.returncode != 1 or fail_codes(result) != {"BLOCK_ASSETS"} or message not in result.stdout:
+                    return f"mainnet blocks {label}: {tail(result)}", None
+                return None, f"mainnet blocks {label}: FAIL BLOCK_ASSETS"
+            return run
+
+        case(mainnet_blocks("absent", absent, "cannot read the fixture"))
+        case(mainnet_blocks("other", other, "SHA256SUMS does not have the committed hashes"))
 
         rust_modes = {"none": None, "version": "VERSION", "consumed": "MISMATCH", "reason": "MISMATCH",
                       "rest_hex": "MISMATCH", "request_error": "REQUEST_ERROR", "drop": "COUNT",
                       "id": "ID", "malformed": "MALFORMED"}
-        for mode, code in rust_modes.items():
-            result = compare(oracle, wrapper(tmp, "none", "core", oracle),
-                             ["--rust-compactsize", wrapper(tmp, mode, "rust", oracle)])
-            codes = {line.split()[1] for line in result.stdout.splitlines() if line.startswith("FAIL ")}
-            if result.returncode != (1 if code else 0) or (code and code not in codes):
-                failures += 1
-                print(f"FAIL Rust {mode}: exit {result.returncode}\n{result.stdout[-1500:]}{result.stderr[-1500:]}")
-            else:
-                print(f"ok   Rust {mode}: {code or 'positive control'}")
 
-        for mode, (role, code) in MUTATIONS.items():
-            env = dict(os.environ)
-            pidfile = tmp / f"{mode}.pid"
-            env["COMPARE_SELFTEST_PIDFILE"] = str(pidfile)
+        # Each wrapper file is written here, before the first case runs. A file that one thread
+        # still writes while another starts a process cannot be executed.
+        def rust(mode, code):
+            adapter = wrapper(tmp, mode, "rust", oracle)
+
+            def run():
+                result = compare(oracle, unchanged, ["--rust-compactsize", adapter])
+                if result.returncode != (1 if code else 0) or (code and code not in fail_codes(result)):
+                    return f"Rust {mode}: {tail(result, 1500)}", None
+                return None, f"Rust {mode}: {code or 'positive control'}"
+            return run
+
+        for mode, code in rust_modes.items():
+            case(rust(mode, code))
+
+        def mutation(mode, role, code):
             if role == "both":
                 oracle_side, harness_side = wrapper(tmp, mode, "oracle", oracle), wrapper(tmp, mode, "core", oracle)
             else:
                 w = wrapper(tmp, mode, role, oracle)
-                oracle_side, harness_side = (w, wrapper(tmp, "none", "core", oracle)) if role == "oracle" else (oracle, w)
-            extra = ([] if mode in ("composition_stack", "targeted_early_error", "contextual_reason_value") else ["--quick"]) + ["--timeout", "5" if mode == "hang" else "120"]
-            result = compare(oracle_side, harness_side, extra, env)
-            codes = {line.split()[1] for line in result.stdout.splitlines() if line.startswith("FAIL ")}
-            if result.returncode != 1 or code not in codes:
-                failures += 1
-                print(f"FAIL {mode}: expected exit 1 with FAIL {code}, got exit {result.returncode}, codes {sorted(codes)}")
-                print(result.stdout[-1500:] + result.stderr[-1500:])
-                continue
-            if mode in ("contextual_reason_value", "sequence_projected") and (codes != {code} or "first difference at" not in result.stdout):
-                failures += 1
-                print(f"FAIL {mode}: did not reach result-value comparison: {result.stdout[-1500:]}")
-                continue
-            if mode == "targeted_early_error" and codes != {"TARGETED_OPCODE"}:
-                failures += 1
-                print(f"FAIL {mode}: expected matching early errors, got failure codes {sorted(codes)}")
-                continue
-            if mode.startswith("refused_"):
-                summaries = [line for line in result.stdout.splitlines() if line.startswith("Script harness refusal domain:")]
-                if not summaries or "8 requests, 0 compared, 0 unsupported, 8 harness-refused, 1 disagreements" not in summaries[0]:
-                    failures += 1
-                    print(f"FAIL {mode}: failed refusal counted as compared: {summaries}")
-                    continue
-            if mode == "hang":
-                # The wrapper's child must be gone with it.
-                pid = int(pidfile.read_text())
-                time.sleep(0.2)
-                try:
-                    os.kill(pid, 0)
-                    failures += 1
-                    print(f"FAIL hang: child {pid} of the wrapper still runs")
-                    os.kill(pid, 9)
-                    continue
-                except ProcessLookupError:
-                    pass
-            print(f"ok   {mode}: FAIL {code}")
-    print(f"{len(MUTATIONS) + len(rust_modes) + 5} cases, {failures} failures")
-    return 1 if failures else 0
+                oracle_side, harness_side = (w, unchanged) if role == "oracle" else (oracle, w)
 
+            def run():
+                env = dict(os.environ)
+                pidfile = tmp / f"{mode}.pid"
+                env["COMPARE_SELFTEST_PIDFILE"] = str(pidfile)
+                # Each of these mutations runs with --quick, which reaches the response or the behaviour that it changes.
+                result = compare(oracle_side, harness_side, ["--quick", "--timeout", "5" if mode == "hang" else "120"], env)
+                codes = fail_codes(result)
+                if result.returncode != 1 or code not in codes:
+                    return (f"{mode}: expected exit 1 with FAIL {code}, got exit {result.returncode}, codes {sorted(codes)}\n"
+                            f"{result.stdout[-1500:]}{result.stderr[-1500:]}"), None
+                if mode in ("contextual_reason_value", "sequence_projected") and (codes != {code} or "first difference at" not in result.stdout):
+                    return f"{mode}: did not reach result-value comparison: {result.stdout[-1500:]}", None
+                if mode == "targeted_early_error" and codes != {"TARGETED_OPCODE"}:
+                    return f"{mode}: expected matching early errors, got failure codes {sorted(codes)}", None
+                if mode == "composition_stack" and "FAIL MISMATCH Script corpus composition" not in result.stdout:
+                    return f"{mode}: the failure is not in the composition path: {result.stdout[-1500:]}", None
+                if mode.startswith("refused_"):
+                    summaries = [line for line in result.stdout.splitlines() if line.startswith("Script harness refusal domain:")]
+                    if not summaries or "8 requests, 0 compared, 0 unsupported, 8 harness-refused, 1 disagreements" not in summaries[0]:
+                        return f"{mode}: failed refusal counted as compared: {summaries}", None
+                if mode == "hang":
+                    # The wrapper's child must be gone with it.
+                    pid = int(pidfile.read_text())
+                    time.sleep(0.2)
+                    try:
+                        os.kill(pid, 0)
+                        os.kill(pid, 9)
+                        return f"hang: child {pid} of the wrapper still runs", None
+                    except ProcessLookupError:
+                        pass
+                return None, f"{mode}: FAIL {code}"
+            return run
+
+        for mode, (role, code) in MUTATIONS.items():
+            case(mutation(mode, role, code))
+
+        def timed(function):
+            started = time.monotonic()
+            failure, summary = function()
+            return failure, summary, time.monotonic() - started
+
+        # The cases are independent runs of the comparator. The two full-stream cases come
+        # first, so that they run beside the short cases. The results print in case order.
+        started = time.monotonic()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
+            for failure, summary, seconds in pool.map(timed, cases):
+                if failure:
+                    failures += 1
+                    print(f"FAIL {failure}", flush=True)
+                else:
+                    print(f"ok   {summary} ({seconds:.1f} s)", flush=True)
+        elapsed = time.monotonic() - started
+    assert len(cases) == len(MUTATIONS) + len(rust_modes) + 5
+    print(f"{len(cases) + 1} cases, {failures} failures, {elapsed:.0f} s with {jobs} parallel cases")
+    return 1 if failures else 0
 
 if __name__ == "__main__":
     sys.exit(main())

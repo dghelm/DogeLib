@@ -31,7 +31,7 @@ by default. Each file must have the hash that
 tests/block/mainnet-blocks/release.json gives, or the run fails with
 `FAIL BLOCK_ASSETS`. The stream must hold one request for each block of
 release.json. The ranges are a separate run because the comparator's
-self-test repeats the full stream several times.
+self-test runs the full stream twice.
 
 The transaction field walker below only locates fields in transactions that
 are known to parse. No expected value comes from this script.
@@ -56,7 +56,7 @@ from oracle_script import script_sets, corpus_records, evaluation, validate_eval
 
 from oracle_pubkey import pubkey_sets, signature_spends
 from oracle_header_sequence import sequence_sets, EXPECTATIONS as SEQUENCE_EXPECTATIONS, key as sequence_key, exclude_marks, core_refusal, SEED as SEQUENCE_SEED
-from oracle_contextual import contextual_sets, EXPECTATIONS as CONTEXT_EXPECTATIONS, key as context_key
+from oracle_contextual import contextual_sets, EXPECTATIONS as CONTEXT_EXPECTATIONS, key as context_key, SEED as CONTEXT_SEED
 from oracle_contextual_body import (contextual_body_sets, compare as compare_body,
                                     reasons_reached as body_reasons_reached,
                                     reasons_missing as body_reasons_missing,
@@ -681,7 +681,10 @@ def set_hash_boundaries(algorithm: str) -> list[dict]:
             for n in sorted(lengths)]
 
 
-QUICK_SEQUENCE_MUTATIONS = 8
+# The number of requests that --quick takes from the start of each sampled set.
+QUICK_SAMPLE = 8
+# The number of corpus records whose two-call composition --quick runs.
+QUICK_COMPOSITIONS = 32
 QUICK_SETS = (CHECK_QUICK_SET, "subsidy boundaries and fixed schedule", "header sequence regtest 34", "header sequence state boundaries", "contextual boundaries", "header PoW fixtures", "full header readers", "header version boundaries", "pubkey Core signatures", "Script signature verdict", "fixtures", "compactsize", "sighash endpoints", "witness flags and stacks",
               "work compact boundaries", "regtest legacy wrap case", "work missing skip traversal", "header field boundaries", "Merkle generated",
               "RIPEMD-160 padding boundaries", "Hash160 padding boundaries", "SHA-1 padding boundaries", "Script reader truncations", "Script resource boundaries", "Script resource boundaries base",
@@ -984,9 +987,11 @@ def compare_adapter_limits(oracle, harness, timeout):
     return failures
 
 
-def compare_compositions(oracle, harness, timeout):
-    """Run two calls per corpus record, with each side's own successful stack."""
-    records = corpus_records()
+def compare_compositions(oracle, harness, timeout, limit=None):
+    """Run two calls per corpus record, with each side's own successful stack.
+
+    `limit` keeps only the first records, for --quick."""
+    records = corpus_records()[:limit]
     first = [{**evaluation(bytes.fromhex(r["scriptSig_hex"]), r["effective_flags_mask"]),
               "id": f"composition-{r['source_index']}"} for r in records]
     try:
@@ -1092,7 +1097,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--timeout", type=float, default=600.0)
     parser.add_argument("--quick", action="store_true",
-                        help=f"only the sets {', '.join(QUICK_SETS)} and a sample of the seeded sequence mutations, for the comparator's self-test")
+                        help=f"only the sets {', '.join(QUICK_SETS)}, the first {QUICK_SAMPLE} requests of the seeded "
+                             f"sequence mutations, of the seeded contextual mutations and of each targeted timelock set, "
+                             f"and the composition of the first {QUICK_COMPOSITIONS} corpus records, for the comparator's self-test")
     parser.add_argument("--rust-compactsize", metavar="PATH",
                         help="compare only CompactSize reader requests with this native Rust adapter as a third program")
     parser.add_argument("--mainnet-blocks", metavar="DIR",
@@ -1156,11 +1163,13 @@ def main() -> int:
     else:
         sets, excluded = request_sets()
     if args.quick:
-        # The first few seeded sequence mutations have no fixture expectation, so the self-test
-        # can reach the Lean and Core cross-comparison without streaming all of them.
-        sample = f"header sequence mutations seed {SEQUENCE_SEED}"
+        # The first few seeded sequence and contextual mutations have no fixture expectation, so
+        # the self-test can reach the Lean and Core cross-comparison without streaming all of them.
+        # A sampled targeted set keeps its name, because the reached-opcode check selects by name.
+        sampled = (f"header sequence mutations seed {SEQUENCE_SEED}", f"contextual mutations seed {CONTEXT_SEED}")
         sets = ([(name, reqs) for name, reqs in sets if name in QUICK_SETS] +
-                [(f"{name} sample", reqs[:QUICK_SEQUENCE_MUTATIONS]) for name, reqs in sets if name == sample])
+                [(f"{name} sample", reqs[:QUICK_SAMPLE]) for name, reqs in sets if name in sampled] +
+                [(name, reqs[:QUICK_SAMPLE]) for name, reqs in sets if name.startswith("Script targeted ")])
     print(f"fixtures left out: {len(excluded)}")
     for e in excluded:
         print(f"  {e}")
@@ -1270,7 +1279,9 @@ def main() -> int:
     if args.mainnet_blocks:
         failures.extend(check_operation_counts(requests, {**mainnet_range_counts(), **mainnet_body_counts()},
                                                "tests/block/mainnet-blocks/release.json"))
-    elif not args.quick and not args.rust_compactsize:
+    elif args.quick and not args.rust_compactsize:
+        failures.extend(compare_compositions(args.oracle, args.harness, args.timeout, QUICK_COMPOSITIONS))
+    elif not args.rust_compactsize:
         failures.extend(compare_adapter_limits(args.oracle, args.harness, args.timeout))
         failures.extend(compare_compositions(args.oracle, args.harness, args.timeout))
         failures.extend(check_operation_counts(requests))

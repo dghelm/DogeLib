@@ -1153,18 +1153,22 @@ So the fold over every boundary equals `GetStateFor` at the last boundary.
 The source review, not a theorem, connects the fold to the imperative algorithm of Core, and the run outside continuous integration gives the empirical evidence.
 That run of 2026-11-13 compared the full walk with Core at 11 period boundaries through the CSV window on the real mainnet header chain, and agreed at each for CSV and SegWit, across `DEFINED`, `STARTED` and `FAILED`.
 
-`csv_never_lockedIn` takes a chain of full headers from the mainnet genesis in which every header passed `checkBlockHeader`.
+`csv_never_lockedIn` takes a chain of full headers from the mainnet genesis in which every header passed `checkBlockHeader .mainnet`.
 On mainnet `checkBlockHeader` runs `CheckAuxPowProofOfWork` with a strict chain ID of `0x62`, which accepts a header only if it is legacy, with version 1 or 2, or has the chain ID `0x62`.
 Both leave the top three version bits `000`, so `versionBitsCondition_false_of_checkBlockHeader` shows that no such header signals.
 With no signals every period has a zero count, and a walk with no signals never leaves `DEFINED`, `STARTED` or `FAILED`.
 So the CSV and SegWit states are never `LOCKED_IN` or `ACTIVE`.
+
 The hypothesis is about a genesis-rooted chain whose headers pass the check, and an arbitrary supplied index does not meet it.
+No theorem shows that the real mainnet chain meets the hypothesis.
 The median time of each boundary comes from the chain, so the conclusion holds whatever the times are.
 The theorem does not cover testnet, where `fStrictChainId` is false, or regtest.
 
-`versionBits_shortcut` takes a boundary list with no signals and the shortcut's result at the last boundary.
+`versionBits_shortcut` takes a positive threshold, a boundary list with no signals and the shortcut's result at the last boundary.
 When the median is below the start time the state is `DEFINED`, and when it is at or after the timeout the state is `FAILED`.
-The `FAILED` case uses `csv_never_lockedIn`, through the no-signal hypothesis, to exclude a transition into `ACTIVE`.
+The `FAILED` case uses `walk_notLockedIn`: with a positive threshold, a walk over boundaries with no signals is never `LOCKED_IN` or `ACTIVE`.
+So the state before the last boundary is `DEFINED`, `STARTED` or `FAILED`, and each goes to `FAILED` at or after the timeout.
+The threshold hypothesis is necessary: with a threshold of 0, a period with no signals can enter `LOCKED_IN`.
 
 By `#print axioms`, `csv_never_lockedIn` and `versionBitsCondition_false_of_checkBlockHeader` depend on `propext`, `Classical.choice` and `Quot.sound`, and `versionBits_shortcut` depends on `propext` and `Quot.sound`.
 
@@ -1175,16 +1179,28 @@ By `#print axioms`, `csv_never_lockedIn` and `versionBitsCondition_false_of_chec
 The source review, not a theorem, connects the definition to Core.
 
 The body takes the CSV and SegWit states as inputs, where Core calls `VersionBitsState`, and reads only whether each state is `ACTIVE`.
-On mainnet neither is ever active, which `csv_never_lockedIn` and `segwit_never_active` establish.
-So the lock-time cutoff is always the block time, and the witness-commitment branch never runs.
-The two reasons behind that branch, `bad-witness-nonce-size` and `bad-witness-merkle-match`, are therefore unreachable on mainnet.
+`csv_never_lockedIn` and `segwit_never_active` show that neither is active on a header chain from the mainnet genesis in which every header passed `checkBlockHeader .mainnet`.
+No theorem shows that the real mainnet chain meets this hypothesis.
+On a chain that meets it, the lock-time cutoff is always the block time, and the witness-commitment branch never runs.
+So on such a chain the two reasons behind that branch, `bad-witness-nonce-size` and `bad-witness-merkle-match`, are unreachable.
 This body returns the adapter error `segwitActive` on an active SegWit state, which the mainnet comparison never sends, and it never returns those two reasons.
 
 The harness builds the block's predecessor and the aligned version-bits boundary from the request's chain, and lets Core compute `VersionBitsState`.
 At a boundary whose median time is at or after the CSV timeout the harness installs `THRESHOLD_FAILED` in `versionbitscache` for CSV and SegWit, for that request only.
-This seed is a harness input, justified by `csv_never_lockedIn` and `versionBits_shortcut`: on the real chain the state is never `LOCKED_IN` or `ACTIVE`, and `DEFINED`, `STARTED` and `FAILED` all go to `FAILED` at or after the timeout, so `FAILED` is Core's own result.
 The seed lets the harness answer without the dense block history that Core's walk would otherwise read.
 A boundary in the gap between the CSV start and timeout is an adapter error, outside the comparison domain, so no continuous-integration request depends on the seed in that gap.
+This seed is a harness input, so the comparison trusts it.
+
+`csv_never_lockedIn` shows that the state is never `LOCKED_IN` or `ACTIVE` on a chain that meets its hypothesis.
+With Core's positive threshold, `versionBits_shortcut` then shows that the full walk gives `FAILED` at a boundary at or after the timeout.
+The source review connects the walk to Core's `GetStateFor`, so on such a chain `FAILED` is Core's own result.
+
+No theorem shows that the real mainnet chain meets the hypothesis.
+The version-bits walk outside continuous integration gives finite evidence for the real chain.
+On 2026-11-13 it agreed with Core's `VersionBitsState`, which ran on the full chain without the seed, at 11 period boundaries through the CSV window.
+The boundaries include some at or after the timeout, and the run compared both CSV and SegWit.
+The run checks the links and the pinned checkpoints of the fetched headers.
+It does not run `checkBlockHeader` on them, and it compares only those 11 boundaries.
 
 `bad-blk-weight` is reachable when the body runs alone, because the body has no base-size check.
 `contextualBody_badBlkWeight_unreachable_after_checkBlock` shows that `block.validate` of stage 0010b, which runs `CheckBlock` first, cannot reach it.
@@ -3408,7 +3424,7 @@ The handler rejects an unknown tag and a declaration that is not a theorem, and 
 It adds no declaration, and it does not change a statement or a proof.
 A tag is a label that an author chose. No check shows that it describes its theorem.
 
-The default declaration check loads `DogeLib`, `DogeLib.Proofs`, `DogeLib.Exports` and `Refinement` with their private proof bodies.
+The default declaration check loads six roots with their private proof bodies: `DogeLib`, `DogeLib.Proofs`, `DogeLib.Exports`, `DogeLib.Proposals`, `DogeLib.Proposals.Proofs` and `Refinement`.
 It requires every `.lean` source under `DogeLib/` and `Refinement/Refinement/`, plus their library roots, to appear in that imported environment.
 An unreachable module fails the check, including a leaf omitted from its layer root.
 This reachability check does not replay kernel checks or detect a metaprogram that bypassed them.

@@ -674,7 +674,7 @@ It has three required fields:
 
 The candidate height is the predecessor's height plus one.
 The body reads the version-bits states of CSV and SegWit only to test whether either is active.
-On mainnet neither is ever active, which `csv_never_lockedIn` and `segwit_never_active` establish.
+`csv_never_lockedIn` and `segwit_never_active` show that neither is active on a header chain from the mainnet genesis in which every header passed `checkBlockHeader .mainnet`.
 Below the first period the aligned boundary is null and both states are `DEFINED`.
 Otherwise the boundary's median time selects the case of design record 0010, section 4.
 Below the CSV start the state is `DEFINED`, and at or after the CSV timeout the state is `FAILED`.

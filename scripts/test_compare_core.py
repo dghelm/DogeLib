@@ -9,10 +9,12 @@ the wrapper's behaviour, and the comparison must fail with the failure code
 that the mutation targets.
 
 Two cases run the full stream: the positive control, and the run with one
-request dropped, which must fail the request count. Every other case runs the
-reduced stream of `compare_core.py --quick` or one of the two separate modes.
-The reduced stream holds a response that each mutation changes, and a mutation
-with no such response fails its case.
+request dropped, which must fail the request count. Every other case runs
+`compare_core.py --quick` or one of the two separate modes. A --quick run has
+a reduced stream, the composition of a few corpus records, and the version and
+AuxPoW reconstruction calls. A mutation changes one response of that run, or
+the wrapper's behaviour as a process. A response mutation that finds no
+response to change fails its case.
 
 The cases run N at a time, 4 by default or the number of CPUs when that is
 smaller. Each full-stream case holds about 3.5 GB of memory.
@@ -777,7 +779,7 @@ def main() -> int:
                 env = dict(os.environ)
                 pidfile = tmp / f"{mode}.pid"
                 env["COMPARE_SELFTEST_PIDFILE"] = str(pidfile)
-                # Every mutation runs on the reduced stream of --quick, which holds a response for each of them.
+                # Every mutation runs with --quick, which reaches the response or the behaviour that it changes.
                 result = compare(oracle_side, harness_side, ["--quick", "--timeout", "5" if mode == "hang" else "120"], env)
                 codes = fail_codes(result)
                 if result.returncode != 1 or code not in codes:

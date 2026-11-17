@@ -144,7 +144,8 @@ theorem contextualBody_badBlkWeight_unreachable_after_checkBlock (network : Work
 
 /--
 On a header chain from the mainnet genesis in which every header passed `checkBlockHeader`, the SegWit state is never `ACTIVE`.
-Core guards the witness-commitment checks with an active SegWit state, so `bad-witness-nonce-size` and `bad-witness-merkle-match` are unreachable on mainnet.
+Core guards the witness-commitment checks with an active SegWit state, so `bad-witness-nonce-size` and `bad-witness-merkle-match` are unreachable on such a chain.
+No theorem shows that the real mainnet chain meets the hypothesis.
 -/
 @[theorem_tag property]
 theorem segwit_never_active (chain : List BlockHeader)

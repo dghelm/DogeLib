@@ -1070,11 +1070,12 @@ Unchanged, it must pass on the full stream. Each response mutation must fail wit
 One case drops a `compactsize.encode` request from the full stream, and the run must fail with `REQUEST_COUNT` alone.
 
 Only those two cases run the full stream.
-Every mutation runs the comparator with `--quick`.
+Every mutation of the oracle and Core comparison runs the comparator with `--quick`.
 Such a run has a reduced stream of 22,667 requests and the two-call composition of the first 32 corpus records.
 It also makes the version and AuxPoW reconstruction calls.
 A mutation changes one response of that run, or the wrapper's behaviour as a process.
 A response mutation that finds no response to change fails its case.
+
 The cases are separate runs of the comparator, four at a time by default, and `--jobs N` changes that number.
 Each full-stream case holds about 3.5 GB of memory.
 

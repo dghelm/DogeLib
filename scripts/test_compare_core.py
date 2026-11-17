@@ -779,7 +779,7 @@ def main() -> int:
                 env = dict(os.environ)
                 pidfile = tmp / f"{mode}.pid"
                 env["COMPARE_SELFTEST_PIDFILE"] = str(pidfile)
-                # Every mutation runs with --quick, which reaches the response or the behaviour that it changes.
+                # Each of these mutations runs with --quick, which reaches the response or the behaviour that it changes.
                 result = compare(oracle_side, harness_side, ["--quick", "--timeout", "5" if mode == "hang" else "120"], env)
                 codes = fail_codes(result)
                 if result.returncode != 1 or code not in codes:

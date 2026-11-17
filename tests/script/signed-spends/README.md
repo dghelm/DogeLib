@@ -82,3 +82,74 @@ Choose available CPUs when the machine has fewer than 32.
 The generator takes no arguments and writes only JSONL to stdout.
 The regeneration check requires byte-for-byte agreement and never rewrites committed expectations.
 The Core CI job runs that check after the harness build.
+
+## Fixed-digest spends
+
+`fixed-digest.jsonl` contains 44 signed spends that reach, or just miss, the fixed digest of `SIGHASH_SINGLE`.
+Core's `SignatureHash` returns the digest `one` when the hash type is SINGLE and the input index is at least the number of outputs (`src/script/interpreter.cpp`, lines 1225 to 1236).
+The source of every digest, signature and expected verdict is Dogecoin Core at the same revision.
+No DogeLib result supplies an expectation.
+
+`lake test` runs all 44 records through `verifyLegacySpend` with `coreVerifier`, and compares the Boolean verdict and the ScriptError name.
+It compares `legacySignatureHash` with each recorded digest, 142 in all.
+For the 37 records with at most `input_index` outputs and only SINGLE hash types, it also runs `verifyScript` with `fixedDigestChecker`, which has no transaction.
+That call is the right side of `verifyLegacySpend_eq_fixedDigest` in `DogeLib.Script.Proofs.FixedDigest`, and it must give Core's verdict.
+The Core comparison sends the 44 spends through `script.verify_legacy` and their 71 signature hashes through `sighash.legacy`, and rechecks them against live Core.
+
+### Provenance
+
+`harness/core/core_signer_fixed_digest.cpp` builds five kinds of output script for the test keys with private scalars 1, 2 and 3:
+
+| `coin` | Script |
+| --- | --- |
+| `p2pkh` | `OP_DUP OP_HASH160 <HASH160 P1> OP_EQUALVERIFY OP_CHECKSIG` |
+| `multisig` | `OP_2 <P1> <P2> <P3> OP_3 OP_CHECKMULTISIG` |
+| `p2sh-multisig` | `OP_HASH160 <HASH160 redeem> OP_EQUAL`, where `redeem` is the `multisig` script |
+| `…-codeseparator` | The same script with `OP_CODESEPARATOR` before its signature opcode |
+| `…-verify` | The same script with `OP_CHECKSIGVERIFY OP_1` or `OP_CHECKMULTISIGVERIFY OP_1` in place of its signature opcode |
+
+The signing transaction has two inputs and one output, and the generator signs input 1.
+The generator calls `SignatureHash` in `SIGVERSION_BASE`, `CKey::Sign` with `test_case=0` and `VerifyScript` with `TransactionSignatureChecker`, as for `recovery.jsonl`.
+`CKey::Sign` uses RFC 6979 nonces, so each key has one signature for the digest `one`.
+The `signatures_hex` of every record with only SINGLE hash types therefore differ only in their last byte.
+The private keys are public test data. Never send funds to these keys.
+
+### Records
+
+| Field | Meaning |
+| --- | --- |
+| `id`, `group`, `change` | Case identifier, its group, and the fields of the spend that differ from the signing transaction |
+| `core_revision`, `generator` | Core compatibility pin and the generator source path |
+| `keys`, `signers`, `hash_types` | The fixed keys, the signers in signature order and the hash-type byte of each signature |
+| `signing_coin`, `signing_tx_hex`, `signing_input_index`, `signing_script_code_hex` | The arguments of the `SignatureHash` call that each signature signs |
+| `digests_hex`, `signatures_hex` | Core's digest for each signing call, in Core storage order, and each signature with its hash-type byte |
+| `coin`, `script_pubkey_hex`, `redeem_script_hex`, `script_code_hex` | The spent output script, its redeem script if it has one, and the script code that `EvalScript` passes to `CheckSig` |
+| `tx_hex`, `input_index`, `output_count` | The signed spending transaction, the spent input and the number of outputs |
+| `spend_digests_hex` | Core's `SignatureHash` of the spending transaction for each hash type |
+| `flags` | The flags of `VerifyScript`: 543 as for `recovery.jsonl`, or 541 with `STRICTENC` clear |
+| `core_valid`, `core_error` | Core's `VerifyScript` Boolean verdict and ScriptError name |
+
+The groups:
+
+| `group` | Records | Core's verdict |
+| --- | ---: | --- |
+| `baseline` | 5 | Accepted: the spend is the signing transaction |
+| `transplant` | 17 | Accepted: the same signatures in another spend whose input index is at least its number of outputs |
+| `hash type` | 3 | Accepted: `0x83`, SINGLE with ANYONECANPAY |
+| `boundary` | 5 | Rejected: the spend has one more output, so its digest is not `one` |
+| `undefined hash type` | 12 | `0x23`, `0xa3` and `0xe3`: accepted with `STRICTENC` clear, and `SIG_HASHTYPE` with it set |
+| `mixed hash types` | 2 | One SINGLE and one ALL signature: accepted in the signing transaction, and rejected after a change of the outpoint |
+
+A `transplant` record changes one group of fields: the outpoint and sequence of the input, the index, or the number of outputs.
+Other records change the version, lock time and output, or the script code.
+The rejections of the `boundary` group are `EVAL_FALSE`, `CHECKSIGVERIFY` and `CHECKMULTISIGVERIFY`.
+
+### Reproduction
+
+```bash
+build/core-harness/core-signer --fixed-digest > .lane/fixed-digest.jsonl
+cmp tests/script/signed-spends/fixed-digest.jsonl .lane/fixed-digest.jsonl
+python3 -I scripts/check_signed_spends.py build/core-harness/core-signer
+```
+
+The regeneration check requires byte-for-byte agreement for both fixture files.

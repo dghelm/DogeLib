@@ -54,7 +54,7 @@ from oracle_hash_block import header_fields, header_records, header_fixtures, me
 
 from oracle_script import script_sets, corpus_records, evaluation, validate_eval, adapter_limit_cases, legacy_sets, harness_refused, refused_set, tx_spend_sets, locktime_sets, refusal_precedence_set
 
-from oracle_pubkey import pubkey_sets, signature_spends
+from oracle_pubkey import fixed_digest_spends, pubkey_sets, signature_spends
 from oracle_header_sequence import sequence_sets, EXPECTATIONS as SEQUENCE_EXPECTATIONS, key as sequence_key, exclude_marks, core_refusal, SEED as SEQUENCE_SEED
 from oracle_contextual import contextual_sets, EXPECTATIONS as CONTEXT_EXPECTATIONS, key as context_key, SEED as CONTEXT_SEED
 from oracle_contextual_body import (contextual_body_sets, compare as compare_body,
@@ -96,9 +96,9 @@ EXPECTED_OPERATION_COUNTS = {
     "pubkey.verify": 602,
     "script.eval": 8882,
     "script.read_op": 1233,
-    "script.verify_legacy": 8093,
+    "script.verify_legacy": 8137,
     "scrypt.hash": 272,
-    "sighash.legacy": 4425,
+    "sighash.legacy": 4496,
     "tx.check": 1384,
     "tx.decode_base": 37694,
     "tx.decode_witness": 45958,
@@ -754,6 +754,7 @@ def request_sets() -> tuple[list[tuple[str, list[dict]]], list[str]]:
     sets.append(("tx.check corpus", check_corpus_requests(corpus, witness_corpus)))
     sets.extend(pubkey_sets())
     sets.append(("Script signature verdict", signature_spends()))
+    sets.append(("Script fixed-digest spends", fixed_digest_spends()))
     sets.append(("Script campaign fixtures", campaign_fixtures()))
     sets.extend(script_sets())
     sets.extend(legacy_sets())
@@ -946,7 +947,7 @@ def compare(req: dict, ours: dict, core: dict, peer: str = "core") -> tuple[str,
     if not json_equal(ours, core):
         if req["op"] == "pubkey.verify":
             return "PUBKEY_VALID", f"first difference at {first_difference(ours, core)}"
-        if {k: v for k, v in req.items() if k != "id"} in signature_spends():
+        if {k: v for k, v in req.items() if k != "id"} in signature_spends() + fixed_digest_spends():
             return "SIGNATURE_VERDICT", f"first difference at {first_difference(ours, core)}"
         return "MISMATCH", f"first difference at {first_difference(ours, core)}"
     return None

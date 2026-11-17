@@ -126,3 +126,15 @@ def signature_spends():
     return [dict(op='script.verify_legacy', tx_hex=r['tx_hex'], input_index=r['input_index'],
                  prevout_script_hex=r['script_pubkey_hex'], flags=r['flags'], checker='transaction')
             for r in records]
+
+
+def fixed_digest_spends():
+    """The fixed-digest fixtures: each spend, and the signature hash of each of its signatures."""
+    path = ROOT / 'tests/script/signed-spends/fixed-digest.jsonl'
+    requests = []
+    for r in (json.loads(line) for line in path.read_text().splitlines()):
+        requests.append(dict(op='script.verify_legacy', tx_hex=r['tx_hex'], input_index=r['input_index'],
+                             prevout_script_hex=r['script_pubkey_hex'], flags=r['flags'], checker='transaction'))
+        requests.extend(dict(op='sighash.legacy', tx_hex=r['tx_hex'], input_index=r['input_index'],
+                             script_code_hex=r['script_code_hex'], hash_type=h) for h in r['hash_types'])
+    return requests

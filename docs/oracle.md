@@ -736,6 +736,7 @@ python3 -I scripts/compare_core.py .lake/build/bin/dogelib-oracle build/core-har
 The build also produces `core-signer`, a fixture generator that calls Core's `SignatureHash`, `CKey::Sign` and `VerifyScript`.
 Its fixed private keys are public test data.
 [Signed recovery-template fixtures](../tests/script/signed-spends/README.md) record its inputs, signatures, Core verdicts and reproduction commands.
+`core-signer --fixed-digest` generates the [fixed-digest fixtures](../tests/script/signed-spends/README.md#fixed-digest-spends) of the same directory.
 It runs outside the oracle comparison loop.
 
 The build script exports the pinned commit from the clone with `git archive`.
@@ -878,7 +879,7 @@ For `sighash.legacy` with plan `hash_bytes`, the double SHA-256 of the oracle's 
 This checks the preimage against Core's digest, not byte by byte against a preimage from Core.
 Outside the checked `harness-refused` category, a request error from either program fails the comparison.
 
-A full comparison with Core `e0a1c157791544e818c901bd9341896965afbf9d` sends 389,628 stream requests.
+A full comparison with Core `e0a1c157791544e818c901bd9341896965afbf9d` sends 389,743 stream requests.
 The table `EXPECTED_OPERATION_COUNTS` of `scripts/compare_core.py` gives the number of requests for each operation.
 A full run fails with `REQUEST_COUNT` when the count of any operation differs from the table.
 So a change to a request set changes the table, and this section, in the same pull request:
@@ -906,9 +907,9 @@ So a change to a request set changes the table, and this section, in the same pu
 | `pubkey.verify` | 602 |
 | `script.eval` | 8,882 |
 | `script.read_op` | 1,233 |
-| `script.verify_legacy` | 8,093 |
+| `script.verify_legacy` | 8,137 |
 | `scrypt.hash` | 272 |
-| `sighash.legacy` | 4,425 |
+| `sighash.legacy` | 4,496 |
 | `tx.check` | 1,384 |
 | `tx.decode_base` | 37,694 |
 | `tx.decode_witness` | 45,958 |
@@ -918,11 +919,11 @@ So a change to a request set changes the table, and this section, in the same pu
 | `work.get_compact` | 1,552 |
 | `work.next` | 1,353 |
 | `work.set_compact` | 5,140 |
-| Total | 389,628 |
+| Total | 389,743 |
 
 The four transaction-reader operations receive 263,929 of the requests.
 Most of them are proper prefixes and field changes of corpus transactions.
-`script.eval` and `script.verify_legacy` receive 16,975, and `block.header_sequence` receives 257.
+`script.eval` and `script.verify_legacy` receive 17,019, and `block.header_sequence` receives 257.
 So the total is mostly evidence about the transaction readers.
 
 The pull request records the tested DogeLib revision.
@@ -951,6 +952,7 @@ The transaction inputs and targeted timelocks have these counts:
 | Public-key infinity constructions | 36 | 36 | 0 | 0 | 0 |
 | Public-key x above order, including changed S and R | 72 | 72 | 0 | 0 | 0 |
 | Signed recovery spends | 25 | 25 | 0 | 0 | 0 |
+| Fixed-digest spends and their signature hashes | 115 | 115 | 0 | 0 | 0 |
 | Targeted CLTV, transaction, seed `20261107` | 932 | 932 | 0 | 0 | 0 |
 | Targeted CSV, transaction, seed `20261107` | 940 | 940 | 0 | 0 | 0 |
 | Refusal precedence | 7 | 7 | 0 | 0 | 0 |

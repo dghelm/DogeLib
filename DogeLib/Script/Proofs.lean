@@ -1,7 +1,9 @@
 module
 
+public import DogeLib.Script.Proofs.CheckerExtension
 public import DogeLib.Script.Proofs.CoreVerifier
 public import DogeLib.Script.Proofs.Eval
+public import DogeLib.Script.Proofs.FixedDigest
 public import DogeLib.Script.Proofs.Instruction
 public import DogeLib.Script.Proofs.MultisigRecovery
 public import DogeLib.Script.Proofs.Number

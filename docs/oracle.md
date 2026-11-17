@@ -928,7 +928,12 @@ The pull request records the tested DogeLib revision.
 The comparison passes with zero failures, including 12 checked harness refusals, plus 22 adapter-limit cases and the 1,193 two-call compositions.
 The adapter-limit cases and the compositions run outside the stream, so the table does not count them.
 With `--quick` or `--rust-compactsize`, the comparator sends a subset and does not check the table.
-With `--mainnet-blocks DIR`, it sends only the real mainnet blocks: 11,001 `block.check` requests on the [two ranges](#transaction-and-block-check-comparison-evidence) and 11,018 [`block.contextual_check_body`](#contextual-block-body-comparison-evidence) requests, 22,019 in all, and checks their number against `tests/block/mainnet-blocks/release.json`.
+
+With `--mainnet-blocks DIR`, the comparator sends only requests on real mainnet blocks, 22,019 in all.
+Of these, 11,001 are `block.check` requests on the [two ranges](#transaction-and-block-check-comparison-evidence).
+The other 11,018 are [`block.contextual_check_body`](#contextual-block-body-comparison-evidence) requests on the two ranges and the 17 blocks of `tests/block/mainnet-blocks/rule-changes`.
+The comparator checks each count against `tests/block/mainnet-blocks/release.json` and the number of blocks in that directory.
+
 The transaction inputs and targeted timelocks have these counts:
 
 | Stream | Requests | Agreement | Unsupported | Harness-refused | Disagreements |

@@ -265,7 +265,7 @@ These claims cover the pure header even when its version sets the AuxPoW bit.
 Core's full `CBlockHeader` then carries an AuxPoW payload, which the full header codec of the next subsection reads (D41).
 
 [Header proof of work](#header-proof-of-work) covers scrypt proof of work and `CheckAuxPowProofOfWork`.
-No theorem establishes contextual header validity beyond [version gating](#version-gating).
+[Contextual header validation](#contextual-header-validation) gives the theorems about `ContextualCheckBlockHeader`, and [version gating](#version-gating) those about the version checks.
 
 [The AuxPoW check](#the-auxpow-check) covers `CAuxPow::check` alone.
 
@@ -435,7 +435,7 @@ The theorem is about the transcribed records.
 A transcription mistake in D14 would make it a claim about the wrong records (A1).
 
 `checkBlockHeader` takes the network as an argument.
-DogeLib does not model the selection of `Params()` or the other checks of `CheckBlock` and `ContextualCheckBlockHeader`, except `checkVersion`.
+DogeLib does not model the selection of `Params()`. [Contextual header validation](#contextual-header-validation) and [the block codec section](#block-codec-checktransaction-and-checkblock) cover `ContextualCheckBlockHeader` and `CheckBlock`.
 A valid AuxPoW header before activation passes `checkBlockHeader`, as it passes Core's `CheckBlockHeader`.
 Only [version gating](#version-gating) rejects it.
 

@@ -3716,6 +3716,12 @@ So agreement shows equal coins only if double SHA-256 is collision resistant, wh
 The harness cannot observe a signed overflow in Core.
 The comparator therefore sends it no block that the oracle reports as `outOfDomain`, and agreement says nothing about such a block.
 The oracle keeps a whole request in memory, and `block.validate` has no size limit of its own.
+A `block.validate` request with `blocks_file` is the exception: both programs read the named file one block at a time.
+For that request the `dogelib-oracle` executable opens a file that the caller names, which no other operation does.
+The read is in `Block.Exports.blockValidateFile`, an `IO` function outside the specification, and each block then goes through `validateStep`, the same function as a block of `blocks_hex`.
+The comparison trusts that the file holds the intended blocks.
+`scripts/replay_blocks.py` checks each block against a pinned hash before a replay.
+That check shows the intended transactions only if SHA-256 is collision resistant, which DogeLib does not model (A4).
 The request of 10,001 real blocks has about 88 MB of JSON.
 
 Any later foreign boundary, such as a C or Rust binding, is listed here with its size and its error handling.

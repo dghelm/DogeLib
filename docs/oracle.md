@@ -720,6 +720,8 @@ The request supplies the state before the first block, and the operation carries
   A transaction ID occurs once, and each entry has at least one output.
   A script that Core's `IsUnspendable` rejects is a request error, because such an output never enters Core's set.
 - `blocks_hex`: the blocks, each one all of its bytes.
+- `blocks_file`: in the place of `blocks_hex`, the path of a file that holds the blocks (see *Blocks from a file* below).
+  A request has exactly one of the two.
 
 A block must extend the state.
 The genesis block is valid only as the first block of an empty `chain`.
@@ -786,6 +788,24 @@ The comparator sends the harness the request without that block and the blocks a
 
 A supplied `value` above `MAX_MONEY` is the error `{"kind": "block_validate", "reason": "coin_value_out_of_range"}`.
 
+#### Blocks from a file
+
+A request with `blocks_file` names a file in the format of `blocks.bin` of `scripts/fetch_blocks.py`.
+For each block the file has the height and the length as 4-byte little-endian integers, and then the bytes of the block.
+A relative path starts at the working directory of the program.
+Both programs read one record at a time, so the file can be larger than memory.
+The state, the checks, the result and the errors are those of a request with `blocks_hex`, and `index` is the position of the record.
+
+The height of each record must be the height of its candidate.
+A rejected block changes nothing, so the record after it has the same height.
+A length above Core's `MAX_SIZE`, 33,554,432 bytes, is an error.
+An empty file gives no block record.
+
+The `dogelib-oracle` executable alone answers such a request, through `Exports.respondIO`.
+The function `Exports.respond` reads no file, and returns a request error for the argument.
+The executable writes one line to standard error after each accepted block whose height is a multiple of 1,000.
+A file request has no `blocks_hex` list to shorten, so the comparison fails if the oracle ends the range of a file at a block outside the arithmetic domain.
+
 #### Errors
 
 A block that does not read gives the `read` or `trailing_bytes` error of `block.check`, with the position of the block as `index`.
@@ -797,6 +817,10 @@ The other errors have the kind `block_validate`, a `reason`, and `index` when a 
 | `genesis_after_start` | The genesis block is not the first block of an empty chain |
 | `no_predecessor` | A block that is not the genesis block has an empty chain |
 | `not_linked` | A block does not extend the last accepted block |
+| `file_unreadable` | The file of `blocks_file` does not open |
+| `file_truncated` | The file ends inside the 8 bytes before a block, or inside a block |
+| `file_record_too_long` | A record of the file gives a length above 33,554,432 bytes |
+| `file_height` | A record of the file gives a height that is not the height of its candidate |
 | `outside_model` | `validateBlock` returned a result that is not Core's, and `detail` holds the Lean error. The cases are an adapter error of an earlier step, an active CSV state, an unsupported script capability, a subsidy without fuel, and a repeated transaction ID outside a coinbase |
 
 ### Block subsidy

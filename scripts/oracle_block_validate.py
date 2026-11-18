@@ -844,6 +844,67 @@ def mainnet_validate_counts() -> dict[str, int]:
 
 
 # ---------------------------------------------------------------------------
+# Requests that name a file
+
+
+def file_record(height: int, raw: bytes) -> bytes:
+    """One record of a `blocks.bin` file: the height and the length as 4-byte little-endian integers, then the block."""
+    return height.to_bytes(4, "little") + len(raw).to_bytes(4, "little") + raw
+
+
+def file_request(req: dict, path) -> dict:
+    """The request `req` with `blocks_file` in the place of `blocks_hex`."""
+    return {**{k: v for k, v in req.items() if k != "blocks_hex"}, "blocks_file": str(path)}
+
+
+def file_twins(requests: list[dict], responses: list[dict], directory) -> list[tuple[dict, dict]]:
+    """For each request with one record for each block: the same request with its blocks in a file, and the `ok` object to expect.
+
+    The heights of the records come from the response to `req`, so a rejected candidate and the
+    block after it have one height. The expected object is that response's, so the two ways to
+    supply the blocks must give one result."""
+    twins = []
+    for number, (req, response) in enumerate(zip(requests, responses)):
+        ok = response.get("ok")
+        if not isinstance(ok, dict) or ok.get("out_of_domain_at") is not None or len(ok["blocks"]) != len(req["blocks_hex"]):
+            continue
+        path = pathlib.Path(directory) / f"twin-{number}.bin"
+        path.write_bytes(b"".join(file_record(record["height"], bytes.fromhex(raw))
+                                  for record, raw in zip(ok["blocks"], req["blocks_hex"])))
+        twins.append((file_request(req, path), ok))
+    return twins
+
+
+def file_faults(directory) -> list[tuple[dict, dict]]:
+    """Requests whose file or arguments are faulty, each with the expected error. `{"kind": "request"}` stands for any request error."""
+    directory = pathlib.Path(directory)
+    genesis = genesis_block()
+    example = request([])
+
+    def case(name: str, content: bytes | None) -> dict:
+        path = directory / f"fault-{name}.bin"
+        if content is not None:
+            path.write_bytes(content)
+        return file_request(example, path)
+
+    def failure(reason: str, index: int | None = None) -> dict:
+        return {"kind": "block_validate", "reason": reason, **({} if index is None else {"index": index})}
+
+    good = file_record(0, genesis)
+    return [
+        (case("missing", None), failure("file_unreadable")),
+        (case("short-head", good + b"\x00" * 5), failure("file_truncated", 1)),
+        (case("short-block", good[:-1]), failure("file_truncated", 0)),
+        (case("too-long", (0).to_bytes(4, "little") + (0x02000001).to_bytes(4, "little")), failure("file_record_too_long", 0)),
+        (case("height", file_record(1, genesis)), failure("file_height", 0)),
+        (case("twice", good + file_record(1, genesis)), failure("genesis_after_start", 1)),
+        ({**case("both", good), "blocks_hex": []}, {"kind": "request"}),
+        ({**file_request(example, ""), "blocks_file": 1}, {"kind": "request"}),
+        ({k: v for k, v in case("no-mode", good).items() if k != "mode"}, {"kind": "request"}),
+    ]
+
+
+# ---------------------------------------------------------------------------
 # Comparison
 
 

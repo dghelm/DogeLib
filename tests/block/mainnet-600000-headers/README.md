@@ -44,7 +44,7 @@ It staged both output files and published them only after every check passed.
 ## Evidence boundary
 
 All three sources are untrusted.
-No existing committed fixture or Core checkpoint reaches these four heights.
+No other committed fixture or Core checkpoint anchors these four heights.
 Thus their agreement does not authenticate mainnet membership or connect this range to a checkpoint.
 It gives independent agreement on the recorded bytes instead of relying only on the maintainer's node.
 

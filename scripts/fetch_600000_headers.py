@@ -130,7 +130,10 @@ def electrum_headers(server: tuple[str, int], timeout: float, exchange=electrum_
     version, result = exchange(server, timeout)
     if not (isinstance(version, list) and len(version) == 2 and all(isinstance(v, str) for v in version)):
         raise fb.FetchError(f"{source}: server.version result is malformed")
-    if not isinstance(result, dict) or result.get("count") != COUNT:
+    if not isinstance(result, dict):
+        raise fb.FetchError(f"{source}: header result has the wrong count")
+    count = result.get("count")
+    if type(count) is not int or count != COUNT:
         raise fb.FetchError(f"{source}: header result has the wrong count")
     value = result.get("hex")
     if not isinstance(value, str) or len(value) % 2 or re.fullmatch(r"[0-9a-fA-F]*", value) is None:

@@ -39,7 +39,7 @@ The checks establish consistency with the recorded commitments, subject to the h
 
 [`mainnet-blocks/README.md`](mainnet-blocks/README.md) describes the complete mainnet blocks of the `block.check` comparison: 17 committed blocks at the rule changes, and two ranges that a GitHub release stores.
 [`mainnet-600000-headers/README.md`](mainnet-600000-headers/README.md) records the three-source provenance of the four pure headers at heights 599,998–600,001.
-Those headers pin four rule-change blocks that previously had only the label `linked`.
+Those headers pin four of the rule-change blocks.
 
 `tests/KnownAnswers/Serialization.lean` records the genesis transaction and header literals in `KnownAnswers.Codec`.
 Their expected commitments come from Core's `src/chainparams.cpp` at the SOURCES.md pin (D9).

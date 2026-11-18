@@ -690,7 +690,7 @@ In `block.validate` of stage 0010b, `CheckBlock` bounds the base size first.
 
 ### Block validation
 
-`block.validate` runs `Block.validateBlock` on a range of mainnet blocks (SOURCES.md D33, D110 and D112, design record 0010, stage 0010b).
+`block.validate` runs `Block.validateBlock` on a range of mainnet blocks (SOURCES.md D33, D110 and D114, design record 0010, stage 0010b).
 For each block it runs Core's five checks of a new block in Core's order, and stops at the first failure:
 
 1. `CheckBlockHeader`, when `check_pow` is true.
@@ -987,7 +987,7 @@ Other argument checks have oracle fixtures but no Core comparison.
 Every verdict comes from Core's five functions.
 The code builds their inputs, and makes these choices (design record 0010, section 5):
 
-- **Script checks.** `nScriptCheckThreads` is 0 and `hashAssumeValid` is null, which are Core's values before `init.cpp` reads the node's options. So `ConnectBlock` checks every script of every input, in input order, with no check queue (D112, lines 1827 to 1849 and 1924).
+- **Script checks.** `nScriptCheckThreads` is 0 and `hashAssumeValid` is null, which are Core's values before `init.cpp` reads the node's options. So `ConnectBlock` checks every script of every input, in input order, with no check queue (D114, lines 1827 to 1849 and 1924).
   `main` calls `InitSignatureCache`, because `ConnectBlock` stores accepted signatures in that cache.
 - **`fJustCheck`.** `ConnectBlock` runs with `fJustCheck` true on a new `CCoinsViewCache` over the carried set. With that flag it calls `CheckBlock` with both flags false (line 1804), and it returns before it writes undo data or the transaction index (line 2009).
 - **Commit.** After an accepted block, the harness calls `SetBestBlock` and `Flush` on the cache, because `fJustCheck` returns at line 2009, before `SetBestBlock` (line 2035). After a rejected block, the cache is discarded, because `UpdateCoins` runs before the coinbase check (lines 1988 and 1996).
@@ -1016,7 +1016,7 @@ For `sighash.legacy` with plan `hash_bytes`, the double SHA-256 of the oracle's 
 This checks the preimage against Core's digest, not byte by byte against a preimage from Core.
 Outside the checked `harness-refused` category, a request error from either program fails the comparison.
 
-A full comparison with Core `e0a1c157791544e818c901bd9341896965afbf9d` sends 389,743 stream requests.
+A full comparison with Core `e0a1c157791544e818c901bd9341896965afbf9d` sends 389,785 stream requests.
 The table `EXPECTED_OPERATION_COUNTS` of `scripts/compare_core.py` gives the number of requests for each operation.
 A full run fails with `REQUEST_COUNT` when the count of any operation differs from the table.
 So a change to a request set changes the table, and this section, in the same pull request:
@@ -1057,7 +1057,7 @@ So a change to a request set changes the table, and this section, in the same pu
 | `work.get_compact` | 1,552 |
 | `work.next` | 1,353 |
 | `work.set_compact` | 5,140 |
-| Total | 389,743 |
+| Total | 389,785 |
 
 The four transaction-reader operations receive 263,929 of the requests.
 Most of them are proper prefixes and field changes of corpus transactions.

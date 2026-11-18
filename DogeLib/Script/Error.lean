@@ -166,7 +166,7 @@ def name : ScriptError → String
   | witnessPubkeyType => "WITNESS_PUBKEYTYPE"
 
 /--
-Core's `ScriptErrorString` (D114, `src/script/script_error.cpp`, lines 8 to 94): the text that `CheckInputs` puts into a reject reason.
+Core's `ScriptErrorString` (D116, `src/script/script_error.cpp`, lines 8 to 94): the text that `CheckInputs` puts into a reject reason.
 `SCRIPT_ERR_UNKNOWN_ERROR` and `SCRIPT_ERR_CLEANSTACK` have no case in Core's `switch`, and get the default text.
 -/
 def description : ScriptError → String

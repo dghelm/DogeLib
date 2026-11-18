@@ -9,7 +9,7 @@ public import DogeLib.Transaction.Txid
 
 The unspent transaction outputs that `ConnectBlock` reads and changes: Core's `CCoins` and the part of `CCoinsViewCache` that validation uses.
 
-The sources are at the Core pin (SOURCES.md, D111):
+The sources are at the Core pin (SOURCES.md, D113):
 
 - `CCoins`, `src/coins.h`, lines 74 to 243, with `CCoins::Spend`, `src/coins.cpp`, lines 35 to 42.
 - `CScript::IsUnspendable`, `src/script/script.h`, lines 635 to 638, with `MAX_SCRIPT_SIZE`, line 31.
@@ -61,14 +61,14 @@ The oracle's digest of the whole set visits the entries in that order (`docs/ora
 namespace DogeLib.Block
 open DogeLib.Transaction
 
-/-- `MAX_SCRIPT_SIZE` (`src/script/script.h`, line 31, D111). -/
+/-- `MAX_SCRIPT_SIZE` (`src/script/script.h`, line 31, D113). -/
 def maxScriptSize : Nat := 10000
 
-/-- `OP_RETURN` (`src/script/script.h`, line 82, D111). -/
+/-- `OP_RETURN` (`src/script/script.h`, line 82, D113). -/
 def opReturn : UInt8 := 0x6a
 
 /--
-Core's `CScript::IsUnspendable` (D111, `src/script/script.h`, lines 635 to 638).
+Core's `CScript::IsUnspendable` (D113, `src/script/script.h`, lines 635 to 638).
 A script is unspendable when its first byte is `OP_RETURN`, or when it has more than `MAX_SCRIPT_SIZE` bytes.
 -/
 def isUnspendable (s : Script) : Bool :=
@@ -87,7 +87,7 @@ structure Coin where
 /-- The amount of a coin as an integer. -/
 def Coin.value (c : Coin) : Int := c.out.amount.toInt
 
-/-- The entry of one transaction ID: Core's `CCoins` (D111, `src/coins.h`, lines 74 to 243), without `nVersion`. -/
+/-- The entry of one transaction ID: Core's `CCoins` (D113, `src/coins.h`, lines 74 to 243), without `nVersion`. -/
 structure TxCoins where
   /-- The transaction ID, which is the key of the entry. -/
   txid : Hash256
@@ -100,20 +100,20 @@ structure TxCoins where
   deriving DecidableEq
 
 /--
-Core's `CCoins::FromTx` (D111, `src/coins.h`, lines 90 to 96) for a transaction in a block at `height`.
+Core's `CCoins::FromTx` (D113, `src/coins.h`, lines 90 to 96) for a transaction in a block at `height`.
 It copies the outputs, and `ClearUnspendable` makes each unspendable output null.
 -/
 def TxCoins.ofTx (tx : Transaction) (height : Nat) : TxCoins :=
   ⟨tx.txid, tx.isCoinBase, height,
     tx.outputs.val.map fun o => if isUnspendable o.scriptPubKey then none else some o⟩
 
-/-- Core's `CCoins::IsPruned` (D111, `src/coins.h`, lines 229 to 234): every output is null. -/
+/-- Core's `CCoins::IsPruned` (D113, `src/coins.h`, lines 229 to 234): every output is null. -/
 def TxCoins.isPruned (c : TxCoins) : Bool := c.outputs.all Option.isNone
 
-/-- The output at index `n` when Core's `CCoins::IsAvailable(n)` holds (D111, `src/coins.h`, lines 223 to 225): the index is inside `vout`, and the output is not null. -/
+/-- The output at index `n` when Core's `CCoins::IsAvailable(n)` holds (D113, `src/coins.h`, lines 223 to 225): the index is inside `vout`, and the output is not null. -/
 def TxCoins.available (c : TxCoins) (n : Nat) : Option TxOut := (c.outputs[n]?).join
 
-/-- Core's `CCoins::Spend(n)` (D111, `src/coins.cpp`, lines 35 to 42): the output at index `n` becomes null. An index outside `vout` changes nothing. -/
+/-- Core's `CCoins::Spend(n)` (D113, `src/coins.cpp`, lines 35 to 42): the output at index `n` becomes null. An index outside `vout` changes nothing. -/
 def TxCoins.spend (c : TxCoins) (n : Nat) : TxCoins := { c with outputs := c.outputs.set n none }
 
 /-- The key of a transaction ID in the coin set: its 32 bytes as a big-endian number. -/
@@ -127,11 +127,11 @@ structure CoinSet where
 /-- The set with no coin. -/
 def CoinSet.empty : CoinSet := ⟨{}⟩
 
-/-- The entry of a transaction ID: Core's `AccessCoins` (D111, `src/coins.cpp`, lines 155 to 162). -/
+/-- The entry of a transaction ID: Core's `AccessCoins` (D113, `src/coins.cpp`, lines 155 to 162). -/
 def CoinSet.accessCoins (s : CoinSet) (txid : Hash256) : Option TxCoins := s.entries[txidKey txid]?
 
 /--
-The coin of an outpoint, or `none` when Core's `HaveInputs` test fails for it (D111, `src/coins.cpp`, lines 284 to 297): the transaction ID has no entry, or the output is not available.
+The coin of an outpoint, or `none` when Core's `HaveInputs` test fails for it (D113, `src/coins.cpp`, lines 284 to 297): the transaction ID has no entry, or the output is not available.
 The coin has the output that `GetOutputFor` returns (lines 265 to 270).
 -/
 def CoinSet.coin (s : CoinSet) (o : OutPoint) : Option Coin :=
@@ -146,7 +146,7 @@ def CoinSet.haveUnspent (s : CoinSet) (txid : Hash256) : Bool :=
   | some c => !c.isPruned
 
 /--
-The step of `UpdateCoins` for one input (D111, `src/validation.cpp`, lines 1370 to 1378): the output of the outpoint becomes null.
+The step of `UpdateCoins` for one input (D113, `src/validation.cpp`, lines 1370 to 1378): the output of the outpoint becomes null.
 An entry that becomes pruned leaves the set.
 Core asserts that the output is available. Without an entry the set does not change.
 -/
@@ -158,7 +158,7 @@ def CoinSet.spend (s : CoinSet) (o : OutPoint) : CoinSet :=
     if c'.isPruned then ⟨s.entries.erase (txidKey o.hash)⟩ else ⟨s.entries.insert (txidKey o.hash) c'⟩
 
 /--
-The last step of `UpdateCoins` (D111, `src/validation.cpp`, line 1389): the entry of the transaction's ID becomes `TxCoins.ofTx tx height`.
+The last step of `UpdateCoins` (D113, `src/validation.cpp`, line 1389): the entry of the transaction's ID becomes `TxCoins.ofTx tx height`.
 An earlier entry of that ID is replaced.
 A transaction whose outputs are all unspendable gets no entry.
 -/

@@ -9,7 +9,7 @@ public import DogeLib.Block.ContextualBody
 The checks that Core runs on a new mainnet block, in Core's order, on a supplied chain view and coin set.
 
 Core has no one function with these steps.
-`AcceptBlock` runs the header and block checks when a block arrives, and `ConnectBlock` runs later, when the block joins the active chain (SOURCES.md, D33, D110 and D112):
+`AcceptBlock` runs the header and block checks when a block arrives, and `ConnectBlock` runs later, when the block joins the active chain (SOURCES.md, D33, D110 and D114):
 
 1. `CheckBlockHeader` (`AcceptBlockHeader`, line 3224).
 2. `ContextualCheckBlockHeader` (line 3238).
@@ -26,7 +26,7 @@ For the genesis hash, `AcceptBlockHeader` skips steps 1 and 2 (line 3212), and `
 
 - It has no block index. The caller supplies the view of the predecessor, and establishes that `hashPrevBlock` is the hash of that predecessor. `AcceptBlockHeader` finds the predecessor under that hash, and its other steps (`duplicate` and the three `bad-prevblk` cases) are in `acceptBlockHeader` of `DogeLib.Block.HeaderSequence`.
 - It writes nothing, and it chooses no chain.
-- `ConnectBlock` runs with `fJustCheck` true, so its own `CheckBlock` call has both flags false (D112, line 1804). Step 3 has already run with the caller's flags. When a node connects a block that step 3 accepted with both flags true, `CheckBlock` returns at once, because step 3 set `fChecked` (D106, lines 2943 and 2997).
+- `ConnectBlock` runs with `fJustCheck` true, so its own `CheckBlock` call has both flags false (D114, line 1804). Step 3 has already run with the caller's flags. When a node connects a block that step 3 accepted with both flags true, `CheckBlock` returns at once, because step 3 set `fChecked` (D106, lines 2943 and 2997).
 
 Core's callers pass both flags of step 3 as true.
 The flags are parameters here for the comparison.

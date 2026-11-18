@@ -13,10 +13,10 @@ Core's `ConnectBlock` on mainnet: the checks of a block against the coin set, an
 
 The sources are at the Core pin (SOURCES.md):
 
-- `ConnectBlock`, `src/validation.cpp`, lines 1783 to 2009 (D112, and D101 for the rules by height).
-- `CheckInputs`, lines 1462 to 1518, and `CScriptCheck::operator()`, lines 1398 to 1405 (D112).
-- `STANDARD_NOT_MANDATORY_VERIFY_FLAGS`, `src/policy/policy.h`, lines 88 to 105, with `MANDATORY_SCRIPT_VERIFY_FLAGS`, `src/script/standard.h`, line 43 (D114).
-- `UpdateCoins`, lines 1366 to 1390 (D111).
+- `ConnectBlock`, `src/validation.cpp`, lines 1783 to 2009 (D114, and D101 for the rules by height).
+- `CheckInputs`, lines 1462 to 1518, and `CScriptCheck::operator()`, lines 1398 to 1405 (D114).
+- `STANDARD_NOT_MANDATORY_VERIFY_FLAGS`, `src/policy/policy.h`, lines 88 to 105, with `MANDATORY_SCRIPT_VERIFY_FLAGS`, `src/script/standard.h`, line 43 (D116).
+- `UpdateCoins`, lines 1366 to 1390 (D113).
 
 `connectBlock` follows Core's statements in order, and returns the first failure:
 
@@ -102,7 +102,7 @@ def bip34Hash? : Option Hash256 :=
   hash256OfHex? "0x80d1364201e5df97e696c03bdd24dc885e8617b9de51e453c10a4f629b1e797a"
 
 /--
-`STANDARD_NOT_MANDATORY_VERIFY_FLAGS` (D114, `src/policy/policy.h`, lines 88 to 105): the standard flags without the mandatory flag `P2SH` (`src/script/standard.h`, line 43).
+`STANDARD_NOT_MANDATORY_VERIFY_FLAGS` (D116, `src/policy/policy.h`, lines 88 to 105): the standard flags without the mandatory flag `P2SH` (`src/script/standard.h`, line 43).
 -/
 def standardNotMandatoryVerifyFlags : UInt32 :=
   ScriptFlags.derSig ||| ScriptFlags.strictEnc ||| ScriptFlags.minimalData ||| ScriptFlags.nullDummy |||
@@ -210,7 +210,7 @@ def ConnectBlockError.rejectCode : ConnectBlockError → Nat
 /-- True for Core's rejections, and false for the results outside the model. -/
 def ConnectBlockError.isRejection (e : ConnectBlockError) : Bool := e.rejectReason.isSome
 
-/-- The coin of each input, in order, or `none` when Core's `HaveInputs` fails (D111, `src/coins.cpp`, lines 284 to 297). -/
+/-- The coin of each input, in order, or `none` when Core's `HaveInputs` fails (D113, `src/coins.cpp`, lines 284 to 297). -/
 def lookupInputs (s : CoinSet) : List TxIn → Option (List Coin)
   | [] => some []
   | input :: rest =>
@@ -219,7 +219,7 @@ def lookupInputs (s : CoinSet) : List TxIn → Option (List Coin)
     | some c => (lookupInputs s rest).map (c :: ·)
 
 /--
-Core's `CCoinsViewCache::GetValueIn` (D111, `src/coins.cpp`, lines 272 to 282) from the partial sum `acc`: the sum of the amounts of the coins.
+Core's `CCoinsViewCache::GetValueIn` (D113, `src/coins.cpp`, lines 272 to 282) from the partial sum `acc`: the sum of the amounts of the coins.
 Core adds with no range check. The result is `none` when a partial sum leaves the `int64_t` range.
 -/
 def getValueIn (acc : Int) : List Coin → Option Int
@@ -247,7 +247,7 @@ def inputContext? (tx : Transaction) (input : Nat) : Option InputContext :=
   else none
 
 /--
-The script check of one input in `CheckInputs` (D112, lines 1483 to 1516), with the classification of a failure.
+The script check of one input in `CheckInputs` (D114, lines 1483 to 1516), with the classification of a failure.
 `txIndex` and `input` name the input in the error.
 -/
 def checkInputScript (verify : SignatureVerifier) (flags : UInt32) (txIndex : Nat) (tx : Transaction)
@@ -266,7 +266,7 @@ def checkInputScript (verify : SignatureVerifier) (flags : UInt32) (txIndex : Na
         | .unsupported u => .error (.scriptUnsupported u)
       else .error (.script txIndex input true e)
 
-/-- The script loop of `CheckInputs` (D112, lines 1482 to 1516) from input `input`: the first failure, in input order. -/
+/-- The script loop of `CheckInputs` (D114, lines 1482 to 1516) from input `input`: the first failure, in input order. -/
 def checkInputScripts (verify : SignatureVerifier) (flags : UInt32) (txIndex : Nat) (tx : Transaction)
     (input : Nat) : List Coin → Except ConnectBlockError Unit
   | [] => .ok ()
@@ -276,7 +276,7 @@ def checkInputScripts (verify : SignatureVerifier) (flags : UInt32) (txIndex : N
     | .ok () => checkInputScripts verify flags txIndex tx (input + 1) rest
 
 /--
-Core's `CheckInputs` (D112, lines 1462 to 1518) for a transaction that is not a coinbase, with script checks and no check queue.
+Core's `CheckInputs` (D114, lines 1462 to 1518) for a transaction that is not a coinbase, with script checks and no check queue.
 `checkTxInputs` runs first, at the spend height `height`. Then the script of each input runs, in input order.
 -/
 def checkInputs (verify : SignatureVerifier) (height : Nat) (flags : UInt32) (txIndex : Nat)
@@ -297,7 +297,7 @@ structure ConnectState where
   /-- The changes so far, newest first. -/
   changes : List CoinChange
 
-/-- The spends of `UpdateCoins` (D111, lines 1370 to 1386): each input's output becomes null, in input order. -/
+/-- The spends of `UpdateCoins` (D113, lines 1370 to 1386): each input's output becomes null, in input order. -/
 def spendInputs (s : CoinSet) : List TxIn → CoinSet
   | [] => s
   | input :: rest => spendInputs (s.spend input.prevout) rest
@@ -337,7 +337,7 @@ def connectTransactions (verify : SignatureVerifier) (ctx : ConnectContext) (fla
     | .ok st' => connectTransactions verify ctx flags (index + 1) st' rest
 
 /--
-Core's `ConnectBlock` on mainnet (D112, lines 1783 to 2009), with the first failing check as its error.
+Core's `ConnectBlock` on mainnet (D114, lines 1783 to 2009), with the first failing check as its error.
 Core returns `true` exactly when the result is `.ok`, for an input inside the model.
 
 `verify` is the elliptic-curve check of `verifyLegacySpend`.

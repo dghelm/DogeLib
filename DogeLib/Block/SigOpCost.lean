@@ -11,8 +11,8 @@ Core's `GetTransactionSigOpCost` on mainnet, with the count of Pay to Script Has
 
 The sources are at the Core pin (SOURCES.md):
 
-- `GetP2SHSigOpCount` and `GetTransactionSigOpCost`, `src/validation.cpp`, lines 489 to 521 (D112).
-- `CScript::GetSigOpCount(bool fAccurate)` and `CScript::GetSigOpCount(const CScript& scriptSig)`, `src/script/script.cpp`, lines 156 to 201 (D107, D113).
+- `GetP2SHSigOpCount` and `GetTransactionSigOpCost`, `src/validation.cpp`, lines 489 to 521 (D114).
+- `CScript::GetSigOpCount(bool fAccurate)` and `CScript::GetSigOpCount(const CScript& scriptSig)`, `src/script/script.cpp`, lines 156 to 201 (D107, D115).
 
 ## The accurate count
 
@@ -83,7 +83,7 @@ def getSigOpCountAccurate (script : List UInt8) : Nat :=
   accurateSigOps opInvalidOpcode ((scanOps script).1.map Prod.fst)
 
 /--
-The loop of `CScript::GetSigOpCount(const CScript& scriptSig)` (D113, lines 189 to 196) from cursor `pc`.
+The loop of `CScript::GetSigOpCount(const CScript& scriptSig)` (D115, lines 189 to 196) from cursor `pc`.
 `data` is the data of the instruction before the cursor.
 The result is `none` when a read fails or an opcode is above `OP_16`, and otherwise the data of the last instruction.
 -/
@@ -98,7 +98,7 @@ termination_by script.length - pc
 decreasing_by omega
 
 /--
-Core's `CScript::GetSigOpCount(const CScript& scriptSig)` (D113, lines 180 to 201) for a P2SH `scriptPubKey`.
+Core's `CScript::GetSigOpCount(const CScript& scriptSig)` (D115, lines 180 to 201) for a P2SH `scriptPubKey`.
 A `scriptSig` with a failed read or an opcode above `OP_16` counts 0.
 Otherwise the result is the accurate count of the data that the last instruction of `scriptSig` pushes.
 -/
@@ -108,7 +108,7 @@ def p2shSigOpCount (scriptSig : List UInt8) : Nat :=
   | some redeem => getSigOpCountAccurate redeem
 
 /--
-Core's `GetP2SHSigOpCount` (D112, lines 489 to 502) for a transaction that is not a coinbase, as a natural number.
+Core's `GetP2SHSigOpCount` (D114, lines 489 to 502) for a transaction that is not a coinbase, as a natural number.
 `coins` holds the coin that each input spends, in input order.
 An input counts only when its coin has the P2SH template.
 Core's result is this number modulo `2^32`.
@@ -119,7 +119,7 @@ def getP2SHSigOpCount (tx : Transaction) (coins : List Coin) : Nat :=
     else 0).sum
 
 /--
-Core's `GetTransactionSigOpCost` (D112, lines 504 to 521) without `SCRIPT_VERIFY_WITNESS`.
+Core's `GetTransactionSigOpCost` (D114, lines 504 to 521) without `SCRIPT_VERIFY_WITNESS`.
 `coins` holds the coin that each input spends, in input order. A coinbase reads none.
 `p2sh` is whether the flags have `SCRIPT_VERIFY_P2SH`.
 -/

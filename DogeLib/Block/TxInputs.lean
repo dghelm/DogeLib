@@ -7,7 +7,7 @@ public import DogeLib.Block.Coins
 
 Core's `Consensus::CheckTxInputs` on mainnet: the checks of the coins that a transaction spends.
 
-The source is `src/validation.cpp`, lines 1415 to 1460, at the Core pin (SOURCES.md, D112).
+The source is `src/validation.cpp`, lines 1415 to 1460, at the Core pin (SOURCES.md, D114).
 `checkTxInputs` follows its statements in order, and returns the first failure.
 
 The function takes the coins, not the coin set.
@@ -62,7 +62,7 @@ def moneyRange (v : Int) : Bool := 0 ≤ v && v ≤ maxMoney
 /--
 `nCoinbaseMaturity` of the mainnet record that `GetConsensus(height)` selects (D100, `src/chainparams.cpp`, lines 92 and 131).
 It is 30 below height 145,000, and 240 from that height.
-Core selects the record by the height of the coin, not of the spending block (D112, line 1433).
+Core selects the record by the height of the coin, not of the spending block (D114, line 1433).
 -/
 def coinbaseMaturity (coinHeight : Nat) : Nat := if coinHeight < 145000 then 30 else 240
 
@@ -70,7 +70,7 @@ def coinbaseMaturity (coinHeight : Nat) : Nat := if coinHeight < 145000 then 30 
 Core throws when an amount or a partial sum is outside `MoneyRange`. A transaction that `checkTransaction` accepts has no such amount or sum. -/
 def _root_.DogeLib.Transaction.Transaction.valueOut (tx : Transaction) : Int := (tx.outputs.val.map fun o => o.amount.toInt).sum
 
-/-- The failures of `Consensus::CheckTxInputs`, in source order (D112), and the domain error. -/
+/-- The failures of `Consensus::CheckTxInputs`, in source order (D114), and the domain error. -/
 inductive CheckTxInputsError where
   /-- A coinbase coin is spent at a depth below its maturity: `bad-txns-premature-spend-of-coinbase`, score 0 (line 1436). -/
   | prematureSpendOfCoinbase
@@ -86,7 +86,7 @@ inductive CheckTxInputsError where
   | outOfDomain
   deriving DecidableEq, Repr
 
-/-- Core's reject reason for each failure (D112), and `none` for the domain error. -/
+/-- Core's reject reason for each failure (D114), and `none` for the domain error. -/
 def CheckTxInputsError.rejectReason : CheckTxInputsError → Option String
   | .prematureSpendOfCoinbase => some "bad-txns-premature-spend-of-coinbase"
   | .inputValuesOutOfRange => some "bad-txns-inputvalues-outofrange"
@@ -101,7 +101,7 @@ def CheckTxInputsError.dosScore : CheckTxInputsError → Nat
   | _ => 100
 
 /--
-The loop over the inputs (D112, lines 1425 to 1445), with the sum of the earlier coins in `nValueIn`.
+The loop over the inputs (D114, lines 1425 to 1445), with the sum of the earlier coins in `nValueIn`.
 `spendHeight` is `nSpendHeight`, the height of the spending block.
 For each coin in input order:
 
@@ -121,7 +121,7 @@ def checkInputValues (spendHeight : Nat) (nValueIn : Int) : List Coin → Except
     else checkInputValues spendHeight (nValueIn + c.value) rest
 
 /--
-Core's `Consensus::CheckTxInputs` (D112, lines 1415 to 1460) after its `HaveInputs` test, with the first failing check as its error.
+Core's `Consensus::CheckTxInputs` (D114, lines 1415 to 1460) after its `HaveInputs` test, with the first failing check as its error.
 `coins` holds the coin that each input spends, in input order, and `valueOut` is `tx.GetValueOut()`.
 
 1. `checkInputValues` accepts the coins, and gives their sum `nValueIn`.

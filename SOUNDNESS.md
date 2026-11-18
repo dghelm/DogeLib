@@ -1226,7 +1226,7 @@ By `#print axioms`, `contextualBody_badBlkWeight_unreachable_after_checkBlock` a
 
 ### The coin set, `CheckTxInputs` and `ConnectBlock`
 
-Five modules model Core's `ConnectBlock` on mainnet and the functions that it calls: `DogeLib.Block.Coins`, `TxInputs`, `SigOpCost`, `Connect` and `Validate` (D111 to D114, design record 0010, stage 0010b).
+Five modules model Core's `ConnectBlock` on mainnet and the functions that it calls: `DogeLib.Block.Coins`, `TxInputs`, `SigOpCost`, `Connect` and `Validate` (D113 to D116, design record 0010, stage 0010b).
 `Validate` also gives the order of the five checks of a new block.
 The source review, not a theorem, connects the definitions to Core.
 [docs/reviews/connect.md](docs/reviews/connect.md) records a model read of the definitions against Core.

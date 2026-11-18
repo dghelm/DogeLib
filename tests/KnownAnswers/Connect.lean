@@ -12,7 +12,7 @@ None of them comes from DogeLib.
 - `GetSigOpCount`, `src/test/sigopcount_tests.cpp`, lines 28 to 64 (SOURCES.md D109): the counts with `fAccurate` true of four scripts, and the counts of two `scriptSig` values against a Pay to Script Hash (P2SH) script.
   The test pushes each redeem script with `CScript::operator<<` on a byte vector, which writes the shortest push (D24).
 - `nCoinbaseMaturity`, `src/chainparams.cpp`, lines 92 and 131 (D100): 30 in the record of height 0, and 240 in the record of height 145,000, which the record of height 371,337 copies.
-- The genesis block: `ConnectBlock` accepts it after `CheckBlock` and changes no coin (`src/validation.cpp`, lines 1804 and 1819 to 1825, D112). A mainnet node accepts that block.
+- The genesis block: `ConnectBlock` accepts it after `CheckBlock` and changes no coin (`src/validation.cpp`, lines 1804 and 1819 to 1825, D114). A mainnet node accepts that block.
 -/
 namespace KnownAnswers.Connect
 open DogeLib DogeLib.Block DogeLib.Transaction

@@ -1,5 +1,5 @@
 // block.validate: Core's five checks of a new mainnet block, in the order of
-// AcceptBlock and ConnectBlock (SOURCES.md D33, D110 and D112; design record
+// AcceptBlock and ConnectBlock (SOURCES.md D33, D110 and D114; design record
 // 0010, section 5), on a chain and a coin set that the request supplies and
 // the harness carries from each accepted block to the next.
 //
@@ -320,7 +320,7 @@ UniValue blockValidate(const UniValue& req)
             if (valid) {
                 // The changes, read from a second cache that repeats Core's
                 // UpdateCoins on the transactions in order. The genesis block
-                // changes nothing (D112, lines 1821 to 1825).
+                // changes nothing (D114, lines 1821 to 1825).
                 if (!genesis) {
                     CCoinsViewCache shadow(&store);
                     for (const auto& tx : block.vtx) {

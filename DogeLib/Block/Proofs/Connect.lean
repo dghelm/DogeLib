@@ -79,7 +79,7 @@ theorem checkInputValues_ok_range {spendHeight : Nat} : ∀ {coins : List Coin} 
 
 /--
 `checkTxInputs` never returns `feeNegative`, whose reject reason is `bad-txns-fee-negative`.
-The statement before Core's test returns when the coins are worth less than the outputs (D112, lines 1447 to 1454).
+The statement before Core's test returns when the coins are worth less than the outputs (D114, lines 1447 to 1454).
 -/
 @[theorem_tag property]
 theorem checkTxInputs_ne_feeNegative (spendHeight : Nat) (coins : List Coin) (valueOut : Int) :
@@ -98,7 +98,7 @@ theorem checkTxInputs_ne_feeNegative (spendHeight : Nat) (coins : List Coin) (va
 
 /--
 For an output total that is not negative, `checkTxInputs` never returns `feeOutOfRange`, whose reject reason is `bad-txns-fee-outofrange`.
-The fee is at most the sum of the coins, which the loop over the inputs keeps at most `MAX_MONEY` (D112, lines 1441 to 1457).
+The fee is at most the sum of the coins, which the loop over the inputs keeps at most `MAX_MONEY` (D114, lines 1441 to 1457).
 `CheckTransaction` gives the hypothesis for every transaction of a block that `CheckBlock` accepted.
 -/
 @[theorem_tag property]

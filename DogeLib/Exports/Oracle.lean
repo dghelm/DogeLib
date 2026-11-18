@@ -57,23 +57,40 @@ def runRequestWith (ops : List Operation) (fields : Args) : Except Failure Json 
       throw (.request s!"unknown argument {key} for operation {name}")
   op.run fields
 
+/-- The response to one line of input, or `none` for a blank line, where `run` answers the fields of a request object. -/
+def respondM {m : Type → Type} [Monad m] (run : Args → m (Except Failure Json)) (line : String) : m (Option Json) := do
+  let line := line.trimAscii.copy
+  if line.isEmpty then return none
+  let (id, result) : Json × Except Failure Json ← match Json.parse line with
+    | .error e => pure (.null, .error (.request s!"invalid JSON: {e}"))
+    | .ok (.obj fields) => do pure ((fields.get? "id").getD .null, ← run fields)
+    | .ok _ => pure (.null, .error (.request "the request must be a JSON object"))
+  return some <| match result with
+    | .ok j => Json.mkObj [("id", id), ("ok", j)]
+    | .error f => Json.mkObj [("id", id), ("error", failureJson f)]
+
 /-- The response to one line of input, or `none` for a blank line. -/
 def respondWith (ops : List Operation) (line : String) : Option Json :=
-  let line := line.trimAscii.copy
-  if line.isEmpty then none
-  else
-    let (id, result) : Json × Except Failure Json := match Json.parse line with
-      | .error e => (.null, .error (.request s!"invalid JSON: {e}"))
-      | .ok (.obj fields) => ((fields.get? "id").getD .null, runRequestWith ops fields)
-      | .ok _ => (.null, .error (.request "the request must be a JSON object"))
-    some <| match result with
-      | .ok j => Json.mkObj [("id", id), ("ok", j)]
-      | .error f => Json.mkObj [("id", id), ("error", failureJson f)]
+  Id.run (respondM (fun fields => pure (runRequestWith ops fields)) line)
 
 /-- Run a request with the baseline oracle operations. -/
 def runRequest (fields : Args) : Except Failure Json := runRequestWith operations fields
 
 /-- Answer a line with the baseline oracle operations. -/
 def respond (line : String) : Option Json := respondWith operations line
+
+/--
+Run a request in `IO`.
+A `block.validate` request with the argument `blocks_file` reads that file through `Block.Exports.blockValidateFile`.
+Every other request has the result of `runRequest`.
+-/
+def runRequestIO (fields : Args) : IO (Except Failure Json) :=
+  if fields.get? "op" == some (.str Block.Exports.blockValidate.name) && fields.contains "blocks_file" then
+    Block.Exports.blockValidateFile fields
+  else
+    pure (runRequest fields)
+
+/-- Answer a line in `IO`, with `runRequestIO`. This is the response of the `dogelib-oracle` executable. -/
+def respondIO (line : String) : IO (Option Json) := respondM runRequestIO line
 
 end DogeLib.Exports

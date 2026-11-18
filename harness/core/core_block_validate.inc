@@ -131,8 +131,11 @@ void readCoins(const UniValue& req, MemoryCoinsView& store)
 
 UniValue blockValidate(const UniValue& req)
 {
+    // The blocks come from `blocks_hex`, or from the file that `blocks_file` names.
+    const bool fromFile = req.exists("blocks_file");
     checkArgs(req, "block.validate", {"mode", "check_pow", "check_merkle_root", "adjusted_time", "chain",
-                                      "bip34_ancestor_hex", "coins", "blocks_hex"});
+                                      "bip34_ancestor_hex", "coins", fromFile ? "blocks_file" : "blocks_hex"});
+    if (fromFile && !arg(req, "blocks_file").isStr()) throw RequestError{"blocks_file must be a string"};
     LOCK(cs_main);
     SelectParams(CBaseChainParams::MAIN);
     const int version = headerStreamVersion(req);
@@ -197,8 +200,21 @@ UniValue blockValidate(const UniValue& req)
     MemoryCoinsView store;
     readCoins(req, store);
 
-    const auto& raws = arg(req, "blocks_hex");
+    // A file has the format of `blocks.bin` of scripts/fetch_blocks.py: for
+    // each block the height and the length as 4-byte little-endian integers,
+    // then the block. The loop below reads one record at a time.
+    const UniValue noBlocks(UniValue::VARR);
+    const UniValue& raws = fromFile ? noBlocks : arg(req, "blocks_hex");
     if (!raws.isArray()) throw RequestError{"blocks_hex must be an array"};
+    std::ifstream file;
+    if (fromFile) {
+        file.open(arg(req, "blocks_file").get_str(), std::ios::binary);
+        if (!file) throw SpecError{validateFailure("file_unreadable")};
+    }
+    auto littleEndian = [](const unsigned char* p) {
+        return static_cast<uint32_t>(p[0]) | static_cast<uint32_t>(p[1]) << 8 | static_cast<uint32_t>(p[2]) << 16 |
+               static_cast<uint32_t>(p[3]) << 24;
+    };
 
     // Core's state for this request, restored on every exit.
     struct Restore {
@@ -217,11 +233,27 @@ UniValue blockValidate(const UniValue& req)
 
     bool tipHashKnown = false;
     UniValue records(UniValue::VARR);
-    for (size_t index = 0; index < raws.size(); ++index) {
-        if (!raws[index].isStr()) throw RequestError{"blocks_hex must contain hexadecimal strings"};
-        UniValue field(UniValue::VOBJ);
-        field.pushKV("blocks_hex", raws[index]);
-        const auto bytes = argHex(field, "blocks_hex");
+    for (size_t index = 0;; ++index) {
+        std::vector<unsigned char> bytes;
+        int64_t fileHeight = -1;
+        if (fromFile) {
+            unsigned char head[8];
+            file.read(reinterpret_cast<char*>(head), 8);
+            if (file.gcount() == 0) break;
+            if (file.gcount() != 8) throw SpecError{validateFailure("file_truncated", index)};
+            fileHeight = littleEndian(head);
+            const uint32_t length = littleEndian(head + 4);
+            if (length > MAX_SIZE) throw SpecError{validateFailure("file_record_too_long", index)};
+            bytes.resize(length);
+            file.read(reinterpret_cast<char*>(bytes.data()), length);
+            if (static_cast<uint64_t>(file.gcount()) != length) throw SpecError{validateFailure("file_truncated", index)};
+        } else {
+            if (index >= raws.size()) break;
+            if (!raws[index].isStr()) throw RequestError{"blocks_hex must contain hexadecimal strings"};
+            UniValue field(UniValue::VOBJ);
+            field.pushKV("blocks_hex", raws[index]);
+            bytes = argHex(field, "blocks_hex");
+        }
         CDataStream ds(bytes, SER_NETWORK, version);
         CBlock block;
         try {
@@ -288,6 +320,9 @@ UniValue blockValidate(const UniValue& req)
                 }
             }
         }
+
+        // A record of a file gives the height of its block.
+        if (fromFile && fileHeight != height) throw SpecError{validateFailure("file_height", index)};
 
         CValidationState state;
         bool valid = true;

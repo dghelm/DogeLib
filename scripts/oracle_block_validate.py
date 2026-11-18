@@ -856,7 +856,8 @@ def harness_request(req: dict, ours: dict) -> dict:
     if req["op"] != "block.validate" or not isinstance(ok, dict):
         return req
     end = ok.get("out_of_domain_at")
-    if type(end) is not int or not 0 <= end < len(req["blocks_hex"]):
+    # A request with `blocks_file` has no list to shorten. `compare` fails it when the oracle ends the range.
+    if "blocks_hex" not in req or type(end) is not int or not 0 <= end < len(req["blocks_hex"]):
         return req
     return {**req, "blocks_hex": req["blocks_hex"][:end]}
 
@@ -875,8 +876,10 @@ def malformed(req: dict, ok, oracle: bool) -> str | None:
     if oracle:
         if end is not None and (type(end) is not int or end != len(ok["blocks"])):
             return "has an out_of_domain_at that is not the number of its blocks"
-        if end is None and len(ok["blocks"]) != len(req["blocks_hex"]):
+        if end is None and "blocks_hex" in req and len(ok["blocks"]) != len(req["blocks_hex"]):
             return "does not have one record for each block"
+        if end is not None and "blocks_file" in req:
+            return "reports a block of a file outside the domain, and the harness cannot stop before it"
     elif end is not None:
         return "is the harness and reports a block outside the domain"
     fields = BLOCK_FIELDS | ({"diagnostic"} if oracle else set())

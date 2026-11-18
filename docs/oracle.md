@@ -755,7 +755,9 @@ The other reasons have score 100, and every reason but the non-mandatory one has
 
 #### Digests
 
-Both programs compute each digest from the same records, so equal digests show equal coins.
+Both programs compute each digest from the same records.
+The comparison checks the digests and the counts, not the records.
+So equal digests show equal coins only if double SHA-256 is collision resistant, which DogeLib does not model (SOUNDNESS.md, A4 and B4).
 A *coin record* is these bytes:
 
 1. One tag byte: 0 for a spent coin, 1 for a created coin, 2 for a member of the whole set.
@@ -1006,7 +1008,8 @@ It stops with exit status 3 if they differ.
 
 ### The comparison
 
-`scripts/compare_core.py` gives each request its own `id` and sends both programs the same text.
+`scripts/compare_core.py` gives each request its own `id` and sends both programs the same text, with one exception.
+For a `block.validate` request in which the oracle reports `out_of_domain_at`, the harness gets the request without that block and the blocks after it ([the arithmetic domain](#the-arithmetic-domain)).
 For supported requests, the two responses must be equal as JSON values, subject to the signature-preimage and Lean-diagnostic projections below.
 For `script.eval` and `script.verify_legacy`, an unsupported Lean result excludes that request from verdict agreement.
 The comparator validates both result shapes and the checker-specific unsupported reasons, then reports the unsupported reason and Core outcome separately.

@@ -5,11 +5,17 @@ Usage: python3 -I scripts/compare_core.py [--timeout SECONDS] [--quick] <dogelib
 The harness, harness/core/core_oracle.cpp, runs Dogecoin Core's own code and
 answers a projection of dogelib-oracle/1 (docs/oracle.md, "The Core harness").
 This script builds a deterministic stream of well-formed requests, runs each
-program once on the whole stream, and requires the two responses to every
+program on it, and requires the two responses to every
 supported request to be equal as JSON values, except for the preimage projection: Core does not expose
 the preimage of `sighash.legacy`, so the oracle's `preimage_hex` must hash to
 Core's digest instead.
 Script unsupported results have no compared verdict and are counted separately.
+
+Each program runs once on the whole stream, with two exceptions for `block.validate`.
+With --mainnet-blocks, the oracle answers the `block.validate` requests in a second process that
+runs at the same time as the first (`run_oracle`).
+The harness gets a `block.validate` request without the first block that the oracle reports as
+out of the arithmetic domain, and without the blocks after it (`harness_request`).
 
 Each failure line starts with `FAIL <CODE>`; scripts/test_compare_core.py
 relies on the codes. The exit status is 0 only when every response agrees.

@@ -3602,6 +3602,9 @@ Users trust these parts of the harness, which no Core function supplies:
 - The digests. The harness reads the spent and created coins from a second cache, on which it calls Core's `UpdateCoins`. It requires that this cache ends equal to the cache of `ConnectBlock`.
 
 Core runs with no script-check threads and a null `hashAssumeValid`, so the comparison covers that configuration alone.
+The comparison of the coins is a comparison of digests.
+The two programs agree on the chained double SHA-256 digests of the coin records and on the counts, and the comparator does not read the records.
+So agreement shows equal coins only if double SHA-256 is collision resistant, which DogeLib does not model (A4).
 The harness cannot observe a signed overflow in Core.
 The comparator therefore sends it no block that the oracle reports as `outOfDomain`, and agreement says nothing about such a block.
 The oracle keeps a whole request in memory, and `block.validate` has no size limit of its own.

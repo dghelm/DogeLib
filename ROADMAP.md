@@ -62,8 +62,8 @@ Each item below is complete.
 
 ## Next work
 
-Release 0.1.0 is out, as tag `v0.1.0` at commit `7510cc9`.
-[docs/release-notes/0.2.0.md](docs/release-notes/0.2.0.md) holds the notes for release 0.2.0, which is not tagged yet.
+Release 0.2.0 is out, as tag `v0.2.0` at commit `ea335a0` ([notes](docs/release-notes/0.2.0.md)).
+Release 0.1.0 is tag `v0.1.0` at commit `7510cc9`.
 
 An earlier milestone was contextual header validation, under [design record 0006](docs/design/0006-contextual-header-validation.md).
 The maintainer adopted the record on 2026-11-07, with all nine decisions of its section 12.

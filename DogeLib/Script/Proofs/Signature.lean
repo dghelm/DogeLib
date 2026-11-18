@@ -1,6 +1,7 @@
 module
 
 public import DogeLib.Script.Signature
+public import DogeLib.Transaction.Proofs.LegacySighash
 
 /-!
 # Proofs: `Script.Signature`
@@ -12,6 +13,8 @@ public import DogeLib.Script.Signature
 - `transactionChecker_emptySig`: with a valid key, an empty signature gives `some false`, for every verifier.
 - `transactionChecker_verify`: otherwise the result is exactly `verify` on the signature without its last byte, the key and `legacySignatureHash` with that byte zero-extended as the hash type.
 - `transactionChecker_verify_congr`: two verifiers that agree on that one request give the same result.
+- `transactionChecker_checkSig_fixed`: when the request reaches the fixed digest, the result is `verify` on the signature without its last byte, the key and `legacyOne`.
+  `transactionChecker_checkSig_fixed_congr`: two such requests give the same answer for any transactions, input indices and script codes.
 - `baseChecker_checkLockTime`, `baseChecker_checkSequence`: `BaseSignatureChecker` fails every lock-time and sequence check.
 - `transactionChecker_checkLockTime`, `transactionChecker_checkSequence`: for an input in range, the checks are `lockTimeSatisfied` and `sequenceSatisfied` on its sequence, for every verifier.
   `transactionChecker_checkLockTime_none`, `transactionChecker_checkSequence_none`: for an index outside the inputs, both give `none`.
@@ -140,6 +143,41 @@ theorem transactionChecker_verify_congr (tx : Transaction) (nIn : UInt32) {v w :
     · subst hs
       rw [List.concat_eq_append, transactionChecker_verify _ _ _ _ _ hk hc, transactionChecker_verify _ _ _ _ _ hk hc]
       exact h s b (List.concat_eq_append ..) hk
+
+/--
+Take a transaction, an input index, a verifier, signature bytes `sig` and a last byte `hashType`.
+Take a script code shorter than 2^64 bytes and a public key that passes `isValidPubKey`.
+If the request satisfies `ReachesFixedDigest` for `hashType` zero-extended to 32 bits, the check of `sig ++ [hashType]` is `verify sig key legacyOne`.
+The verifier receives no part of the transaction, the input index, the script code or the hash type.
+-/
+theorem transactionChecker_checkSig_fixed {tx : Transaction} {nIn : UInt32} (verify : SignatureVerifier)
+    (sig : List UInt8) {hashType : UInt8} {key code : List UInt8} (hk : isValidPubKey key = true)
+    (hc : code.length < 2 ^ 64) (hf : ReachesFixedDigest tx nIn hashType.toUInt32) :
+    (transactionChecker tx nIn verify).checkSig (sig ++ [hashType]) key code = verify sig key legacyOne := by
+  rw [transactionChecker_verify _ _ _ _ _ hk hc, legacySignatureHash_eq_legacyOne _ hf]
+
+/--
+Take transactions `tx` and `tx'`, input indices `nIn` and `nIn'`, and script codes `code` and `code'` shorter than 2^64 bytes.
+Take a verifier, a signature and a public key.
+Assume that, when the key passes `isValidPubKey` and the signature is `s ++ [hashType]`, both requests satisfy `ReachesFixedDigest` for `hashType` zero-extended to 32 bits.
+Then the two checkers give the same answer.
+An empty signature and a key that fails `isValidPubKey` need no assumption: both give `some false`.
+-/
+theorem transactionChecker_checkSig_fixed_congr {tx tx' : Transaction} {nIn nIn' : UInt32}
+    (verify : SignatureVerifier) {sig key code code' : List UInt8} (hc : code.length < 2 ^ 64)
+    (hc' : code'.length < 2 ^ 64)
+    (hf : ∀ s hashType, isValidPubKey key = true → sig = s ++ [hashType] →
+      ReachesFixedDigest tx nIn hashType.toUInt32 ∧ ReachesFixedDigest tx' nIn' hashType.toUInt32) :
+    (transactionChecker tx nIn verify).checkSig sig key code =
+      (transactionChecker tx' nIn' verify).checkSig sig key code' := by
+  cases hk : isValidPubKey key
+  · rw [transactionChecker_invalidKey _ _ _ _ _ hk, transactionChecker_invalidKey _ _ _ _ _ hk]
+  · rcases List.eq_nil_or_concat sig with hs | ⟨s, b, hs⟩
+    · subst hs; rw [transactionChecker_emptySig _ _ _ _ hk, transactionChecker_emptySig _ _ _ _ hk]
+    · subst hs
+      obtain ⟨h1, h2⟩ := hf s b hk (List.concat_eq_append ..)
+      rw [List.concat_eq_append, transactionChecker_checkSig_fixed _ _ hk hc h1,
+        transactionChecker_checkSig_fixed _ _ hk hc' h2]
 
 /-! ## Ordered matching -/
 

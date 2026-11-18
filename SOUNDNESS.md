@@ -1736,6 +1736,9 @@ For every script code, transaction, input index and hash type:
 
 - `legacySignatureHashPlan_eq_fixedDigest_iff`: the plan is `fixedDigest legacyOne` exactly when `nIn` is at least the number of inputs. With SINGLE, it is also `legacyOne` when `nIn` is at least the number of outputs.
 - `legacySignatureHashPlan_eq_hashBytes`: otherwise the plan is `hashBytes (legacyPreimage …)`.
+- `legacySignatureHash_eq_legacyOne`: under `ReachesFixedDigest`, the condition of the first item, the digest is `legacyOne`.
+  `legacySignatureHash_eq_of_reachesFixedDigest`: so two such requests have equal digests, for any script codes, transactions, input indices and hash types.
+  [The fixed digest of `SIGHASH_SINGLE`](#script-worked-property-the-fixed-digest-of-sighash_single) states the result for a whole spend.
 - `legacyPreimage_eq`: the preimage is a body, then the 4 bytes of the hash type. The body depends on the hash type only through its ANYONECANPAY, NONE and SINGLE flags. `HashType.flags_eq_of_and` says that the flags depend only on the bits `0x9f`.
 - `scriptCodeBytes_eq_encode`: when no instruction parse failed and no instruction is `OP_CODESEPARATOR`, the script code is written as the ordinary encoding of the script.
 - `readOp_eq_op_iff` and `readOp_eq_stop_iff`: `readOp` reads an instruction exactly when the bytes start with an opcode, its length field and its data. The field has the width that the opcode requires, and the data has the size that they give. It stops exactly on a short push or the empty script.
@@ -1768,7 +1771,7 @@ By `#print axioms` with Lean `v4.35.0`:
 | `readPush_op_append`, `readOp_op_append`, `readOp_stop_nil`, `lengthFieldWidth_of_gt`, `lengthFieldWidth_of_lt`, `pushSize_of_gt` | `propext` |
 | `readPush_eq_op_iff`, `readPush_eq_stop_iff` | `propext`, `Quot.sound` |
 | `readOp_cons_eq`, `readOp_eq_op_iff`, `readOp_eq_stop_iff` | `propext`, `Classical.choice`, `Quot.sound` |
-| `readOp_rest_length`, `readOp_stop_prefix`, `scanOps_prefix`, `scanOps_eq_of_complete`, `legacySignatureHashPlan_eq_fixedDigest_iff`, `legacySignatureHashPlan_eq_hashBytes`, `legacyPreimage_eq`, `HashType.flags_eq_of_and`, `LegacyHashPlan.digest_fixedDigest`, `LegacyHashPlan.digest_hashBytes_val` | `propext`, `Quot.sound` |
+| `readOp_rest_length`, `readOp_stop_prefix`, `scanOps_prefix`, `scanOps_eq_of_complete`, `legacySignatureHashPlan_eq_fixedDigest_iff`, `legacySignatureHashPlan_eq_hashBytes`, `legacySignatureHash_eq_legacyOne`, `legacySignatureHash_eq_of_reachesFixedDigest`, `legacyPreimage_eq`, `HashType.flags_eq_of_and`, `LegacyHashPlan.digest_fixedDigest`, `LegacyHashPlan.digest_hashBytes_val` | `propext`, `Quot.sound` |
 | `scriptCodeBytes_eq_encode` | `propext`, `Classical.choice`, `Quot.sound` |
 
 ### Legacy signature hash: transformation reference
@@ -2228,6 +2231,8 @@ For every transaction, input index and verifier:
 - `transactionChecker_invalidKey` and `transactionChecker_emptySig`: a key that fails `isValidPubKey` gives `some false`, and with a valid key so does an empty signature. Neither case depends on `verify`.
 - `transactionChecker_verify`: for a valid key, a signature `sig ++ [h]` and a script code shorter than 2^64 bytes, the result is `verify sig key d`. Here `d` is `legacySignatureHash` of the script code with the hash type `h` zero-extended to 32 bits.
 - `transactionChecker_verify_congr`: two verifiers that agree on that one request give the same result.
+- `transactionChecker_checkSig_fixed`: when the request also satisfies `ReachesFixedDigest` for `h`, the result is `verify sig key legacyOne`.
+  `transactionChecker_checkSig_fixed_congr`: two such requests give the same answer for any transactions, input indices and script codes shorter than 2^64 bytes.
 
 For the opcodes, with any checker `c`:
 
@@ -2285,7 +2290,7 @@ By `#print axioms` with Lean `v4.35.0`:
 | --- | --- |
 | `baseChecker_checkSig`, `tail_sublist_of_cons` | None |
 | `PairsMatch.length_eq`, `orderedMatch_length`, `multisigLoop_ok`, `multisigLoop_error` | `propext` |
-| `transactionChecker_invalidKey`, `transactionChecker_emptySig`, `transactionChecker_verify`, `transactionChecker_verify_congr`, `greedyMatchNoExit_iff`, `greedyMatchNoExit_short`, `greedyMatch_eq_noExit`, `greedyMatch_iff`, `execOpcode_signature_none`, `execOpcode_checkSig`, `execOpcode_checkMultisig`, the `checkSigStep_*` and `checkMultisigStep_*` theorems except `checkMultisigStep_matching_pushOrder`, `multisigCheck_ok`, `multisigLoop_multisigCheck_error`, `evalInstruction_signature_skipped` | `propext`, `Quot.sound` |
+| `transactionChecker_invalidKey`, `transactionChecker_emptySig`, `transactionChecker_verify`, `transactionChecker_verify_congr`, `transactionChecker_checkSig_fixed`, `transactionChecker_checkSig_fixed_congr`, `greedyMatchNoExit_iff`, `greedyMatchNoExit_short`, `greedyMatch_eq_noExit`, `greedyMatch_iff`, `execOpcode_signature_none`, `execOpcode_checkSig`, `execOpcode_checkMultisig`, the `checkSigStep_*` and `checkMultisigStep_*` theorems except `checkMultisigStep_matching_pushOrder`, `multisigCheck_ok`, `multisigLoop_multisigCheck_error`, `evalInstruction_signature_skipped` | `propext`, `Quot.sound` |
 | `pairsMatch_append`, `pairsMatch_reverse`, `orderedMatch_reverse`, `checkMultisigStep_matching_pushOrder` | `propext`, `Classical.choice`, `Quot.sound` |
 
 ### Script lock times and `VerifyScript`
@@ -2461,6 +2466,103 @@ By `#print axioms` with Lean `v4.35.0`:
 | `multisigRecoveryScript_length_le`, `ordinaryCode_length_lt`, `recoveryCode_length_lt` | `propext`, `Quot.sound` |
 | `scanOps_cons_opcode`, `keys_scanOps`, `redeemTail_scanOps`, `multisigRecoveryScript_scanOps`, `ordinaryCode_scanOps`, `recoveryCode_scanOps`, `transactionChecker_verify_reference`, `sigAccepted_iff_reference`, `MultisigRecoverySpend.sigAccepted_ordinary_iff_reference`, `MultisigRecoverySpend.sigAccepted_recovery_iff_reference`, `MultisigRecoverySpend.checkSig_ordinary_reference`, `MultisigRecoverySpend.checkSig_recovery_reference` | `propext`, `Classical.choice`, `Quot.sound` |
 | `MultisigRecoverySpend.sigAccepted_ordinary_allOnly_commits`, `MultisigRecoverySpend.sigAccepted_recovery_allOnly_commits` | `propext`, `Classical.choice`, `Quot.sound` |
+
+### Script worked property: the fixed digest of `SIGHASH_SINGLE`
+
+Core's `SignatureHash` returns the fixed digest `one` when the hash type is SINGLE and `nIn` is at least the number of outputs (D3, lines 1231 to 1236).
+`CheckSig` then verifies the signature against `one` (D3, lines 1253 to 1272).
+`SignatureHash` reads the number of inputs and the number of outputs to reach that branch, and the check reads no other part of the transaction.
+So that check gives the same answer for the same signature bytes and key in every other transaction that reaches the same condition.
+A whole spend can still differ, because its scripts, its flags or its other checks differ.
+Every spend that Core verifies with `SIGVERSION_BASE` has this behavior.
+
+`DogeLib.Script.Proofs.CheckerExtension` and `DogeLib.Script.Proofs.FixedDigest` state the behavior for a whole spend.
+The statements are about `verifyLegacySpend`, and they add no definition to the specification.
+
+`d.Extends c` says that the checker `d` gives the answer of the checker `c` on every request that `c` answers.
+For all checkers `c` and `d` such that `d` extends `c`:
+
+- `evalScript_checker_extends` and `verifyScript_checker_extends`: the call with `c` is unsupported, or the call with `d` gives the same result.
+- `verifyScript_checker_congr`: two checkers that extend `c` give the same `verifyScript` result, when the call with `c` is decided.
+
+A result is *decided* when it is not unsupported (`EvalResult.Decided`, `VerifyResult.Decided`).
+An unavailable checker answer gives an unsupported result at the opcode that asked.
+So a decided call with `c` asked only the requests that `c` answers, and the theorems need no list of the requests of a run.
+
+`fixedDigestChecker verify` is a checker without a transaction.
+It gives `some false` for a key that fails `isValidPubKey`, and then for an empty signature, as `transactionChecker` does.
+Take a signature whose last byte is a SINGLE hash type, and a script code shorter than 2^64 bytes.
+The checker gives `verify` on the signature without that byte, the key and `legacyOne`.
+Every other signature check is unavailable, and so is every lock-time and sequence check.
+It is a device of the theorems, not a model of a Core class.
+
+- `transactionChecker_extends_fixedDigestChecker`: for a transaction with at most `nIn` outputs, `transactionChecker tx nIn verify` extends `fixedDigestChecker verify`.
+- `verifyLegacySpend_eq_fixedDigest`: for an `InputContext` with at most `index` outputs, assume that `verifyScript` with `fixedDigestChecker` is decided on the input's `scriptSig` and the previous `scriptPubKey`.
+  Then `verifyLegacySpend` gives the same result.
+  That result reads the transaction only through the bytes of `scriptSig`.
+- `verifyLegacySpend_fixedDigest_congr`: two such inputs with the same `scriptSig` and the same previous `scriptPubKey` give the same result.
+  The two transactions can differ in the version, the outpoints, the sequences, the other inputs, the outputs and the lock time.
+  The two indices can differ.
+
+A flag set with an unsupported bit gives the same unsupported result on both sides of each equation.
+So the hypothesis applies only to supported flag sets.
+
+`fixedDigestChecker` answers a signature check with an invalid key or an empty signature.
+It answers a check with a SINGLE hash type when `verify` decides the request on `legacyOne` (`fixedDigestChecker_checkSig_ne_none`).
+`coreVerifier` decides every request.
+So such a check does not make the call undecided.
+That covers `OP_CHECKSIGVERIFY`, `OP_CHECKMULTISIGVERIFY`, `OP_CODESEPARATOR` and a signature push that `FindAndDelete` removes.
+The call is not decided when a reached check has a valid key and a nonempty signature with another hash type.
+It is also not decided when CLTV or CSV reaches the checker.
+The theorems say nothing about such a spend.
+So they locate the transaction dependence of a spend in those requests.
+
+Three theorems discharge the hypothesis for a template, for every flag set:
+
+- `verifyLegacySpend_p2pkh_fixedDigest`: `scriptSig` is `pushScript [sig, key]`, and the previous `scriptPubKey` is `p2pkhScriptPubKey h` for 20 bytes `h`.
+- `verifyLegacySpend_multisig_fixedDigest`: `scriptSig` is `pushScript (dummy :: sigs)`, and the previous `scriptPubKey` is `multisigScript m keys`.
+- `verifyLegacySpend_p2shMultisig_fixedDigest`: `scriptSig` also pushes `multisigScript m keys`, and the previous `scriptPubKey` is its P2SH commitment.
+
+Each assumes at most `index` outputs, `HasSingleHashType` for every signature, and a verifier that decides every request on `legacyOne`.
+The multisig theorems assume `1 ≤ m ≤ n ≤ 16` for `n` keys and exactly `m` signatures.
+`HasSingleHashType sig` holds when `sig` is empty or the low five bits of its last byte are 3.
+That includes `0x03`, `0x83` and undefined bytes such as `0x23`, which the encoding check rejects only under `STRICTENC`.
+
+`pushScript` pushes each item with `CScript() << item`, so the theorems do not cover another encoding of the same pushes.
+`coreVerifier` decides every request (`coreVerifier_some`).
+The theorems do not assume that the HASH160 digest of the key is `h`, that a signature verifies, or that the spend is accepted.
+
+The theorems compare results of the Lean definitions for two transactions.
+They hold relative to the verifier parameter, under the verifier-agreement hypothesis of [Script signature opcodes and the checker](#script-signature-opcodes-and-the-checker).
+They do not say that a signature for `legacyOne` exists for a key, or that one is hard to compute.
+They do not say that the second transaction is valid in a chain: a spend also needs an unspent output with that `scriptPubKey`.
+`InputContext` excludes an index at or after the number of inputs, where Core's `SignatureHash` also returns `one`.
+Core's `CheckInputs` calls the checker only for an index below the number of inputs ([`src/validation.cpp`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.cpp), lines 1482 to 1488).
+
+Core's block and mempool validation verifies through a signature cache (SOURCES.md, D111).
+The cache stores only successful checks.
+Its entry is a hash of a nonce of the process and the three arguments of `VerifySignature`.
+The arguments are the signature hash, the public key and the signature without its hash-type byte.
+So a cache hit gives the result that `CPubKey::Verify` gives on the same arguments, unless two entries collide under SHA-256.
+On the fixed digest, the signature hash does not depend on the transaction.
+The key and the signature come from the scripts.
+So for the same key and signature bytes, a cache hit does not depend on the rest of the transaction.
+DogeLib does not model the cache, and this argument is a reading of D111, not a theorem.
+
+Core's compiled code supplies the verdicts of the 44 records of [`fixed-digest.jsonl`](tests/script/signed-spends/README.md#fixed-digest-spends), with fixed test keys.
+`lake test` and the live Core comparison check DogeLib against them, as [B4](#b4-the-oracle-and-foreign-boundaries) states.
+The records reuse one signature of each key in other transactions, at another index, with no outputs, and with another script code.
+They include the boundary of one more output, where Core rejects the same signature.
+They are finite evidence for these scripts and keys, not a theorem about Core.
+By `#print axioms` with Lean `v4.35.0`:
+
+| Theorem | Axioms |
+| --- | --- |
+| `SignatureChecker.Extends.refl` | None |
+| `EvalResult.Decided.ne_unsupported`, `VerifyResult.Decided.ne_unsupported`, `forall_byte_of_forall_lt`, `multisigLoop_error_mem`, `pushOpcode_facts` | `propext` |
+| `pushHeader_opcode_le` | `Quot.sound` |
+| `checkSigStep_checker_extends`, `multisigCheck_checker_extends`, `multisigLoop_extends`, `checkMultisigStep_checker_extends`, `checkLockTimeStep_checker_extends`, `checkSequenceStep_checker_extends`, `execOpcode_checker_extends`, `evalInstruction_checker_extends`, `evalScript_checker_extends`, `verifyScript_checker_extends`, `verifyScript_checker_congr`, `verifyScript_decided`, `transactionChecker_extends_fixedDigestChecker`, `fixedDigestChecker_checkSig_ne_none`, `verifyLegacySpend_eq_fixedDigest`, `verifyLegacySpend_fixedDigest_congr`, `multisigCheck_ne_unsupported`, `checkSigStep_ne_unsupported`, `isPayToScriptHash_multisigScript` | `propext`, `Quot.sound` |
+| `evalLoop_pushScript`, `evalScript_pushScript`, `evalScript_p2pkh_decided`, `evalScript_multisigScript_decided`, `verifyLegacySpend_p2pkh_fixedDigest`, `verifyLegacySpend_multisig_fixedDigest`, `verifyLegacySpend_p2shMultisig_fixedDigest`, `coreVerifier_legacyOne_ne_none` | `propext`, `Classical.choice`, `Quot.sound` |
 
 ### Compact encoding and difficulty retarget
 
@@ -3098,6 +3200,9 @@ Source review, not a theorem, connects the executable to Core's `scrypt_1024_1_1
 The comparison of digests with Core's compiled scrypt covers only the requests that it sends (B4).
 
 `checkAuxPowProofOfWork_iff` characterizes DogeLib's definition of `CheckAuxPowProofOfWork`, and no theorem connects that definition to Core's code.
+`verifyLegacySpend_eq_fixedDigest` and `verifyLegacySpend_fixedDigest_congr` require at most `index` outputs and a decided call with `fixedDigestChecker`.
+The three template theorems replace the second hypothesis by the template, `HasSingleHashType` for each signature and a verifier that decides every request on `legacyOne`.
+[The fixed digest of `SIGHASH_SINGLE`](#script-worked-property-the-fixed-digest-of-sighash_single) states each hypothesis.
 DogeLib does not specify full header validity: [Header proof of work](#header-proof-of-work) lists the checks that it omits.
 
 The median-time-past theorems require a view that passes `validateWorkView`, and most of them require at least `medianTimeSpan` entries.
@@ -3309,6 +3414,9 @@ Fixture users trust the generator's template construction, high-S conversion, se
 The generator records its source blob and uses Core's randomness code with a stderr logging adapter.
 Byte-for-byte regeneration checks reproducibility, but does not establish agreement with DogeLib.
 
+`core-signer --fixed-digest` generates the [fixed-digest fixtures](tests/script/signed-spends/README.md#fixed-digest-spends) from `harness/core/core_signer_fixed_digest.cpp` in the same way.
+Its users trust the generator's script and transaction construction in the same way, and its records have no source blob.
+
 `scripts/convert_script_tests.py` transcribes Core's `BuildCreditingTransaction` and `BuildSpendingTransaction` (D46) into its `context` function.
 The [Script corpus](tests/script/corpus/README.md) commits the transaction bytes that this function generates for each record.
 `lake test`, the oracle and the Core harness all receive those generated bytes, and the transaction checker hashes them.
@@ -3320,6 +3428,9 @@ It compares both the Boolean verdict and the ScriptError name against Core's rec
 The oracle and live Core also compare all 25 records through `script.verify_legacy` with the transaction checker.
 These checks cover the three 2-of-3 signer pairs, the recovery branch and every recorded mutation.
 They provide finite comparison evidence, without a theorem about all signed spends.
+
+`lake test` also runs the 44 fixed-digest records through the same comparison, and compares `legacySignatureHash` with the 142 digests that Core recorded.
+The oracle and live Core compare the 44 spends and their 71 signature hashes.
 
 Both programs could be wrong in the same way on an input that the comparison does not send.
 

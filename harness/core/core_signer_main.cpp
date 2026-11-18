@@ -2,6 +2,7 @@
 #define main fixtureMain
 #include "core_signer.cpp"
 #undef main
+#include "core_signer_fixed_digest.cpp"
 
 namespace {
 // All Core references here use e0a1c157791544e818c901bd9341896965afbf9d.
@@ -94,6 +95,15 @@ int main(int argc, char** argv) {
         version.pushKV("request_source_blob", CORE_SIGNER_REQUEST_BLOB);
         std::cout << version.write() << std::endl;
         return 0;
+    }
+    if (argc == 2 && std::string(argv[1]) == "--fixed-digest") {
+        // The records of tests/script/signed-spends/fixed-digest.jsonl.
+        ECC_Start();
+        int result = 0;
+        try { ECCVerifyHandle verify; generateFixedDigest(); }
+        catch (const std::exception& e) { std::cerr << e.what() << '\n'; result = 1; }
+        ECC_Stop();
+        return result;
     }
     if (argc != 2 || std::string(argv[1]) != "--sign") return fixtureMain(argc, argv);
     // D91, key.cpp: 300–324. D50, pubkey.cpp: 299–316, ECCVerifyHandle.

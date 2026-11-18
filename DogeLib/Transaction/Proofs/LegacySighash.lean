@@ -8,6 +8,8 @@ public import DogeLib.Transaction.Proofs.Txid
 # Proofs: `Transaction.LegacySighash`
 
 - `legacySignatureHashPlan_eq_fixedDigest_iff` and `legacySignatureHashPlan_eq_hashBytes`: the plan is the fixed digest `legacyOne` exactly when `nIn` is not an input index, or the hash type is SINGLE and `nIn` is not an output index. Otherwise the plan hashes `legacyPreimage`.
+- `ReachesFixedDigest` and `legacySignatureHash_eq_legacyOne`: a request that reaches the fixed digest has the digest `legacyOne`.
+  `legacySignatureHash_eq_of_reachesFixedDigest`: two such requests have equal digests, for any script codes, transactions, input indices and hash types.
 - `legacyPreimage_eq`: the preimage is a body that depends on the hash type only through its three flags, then the 4 bytes of the hash type.
 - `HashType.flags_eq_of_and`: two hash types that agree on the bits `0x9f` have the same flags.
 - `readOp_stop_prefix` and `readOp_stop_nil`: the bytes that a failing `readOp` call passes.
@@ -61,6 +63,35 @@ theorem legacySignatureHashPlan_eq_hashBytes (sc : Script) (tx : Transaction) (n
     have := hOut hs
     omega
   simp only [h1, ↓reduceIte, h2]
+
+/-! ## The fixed digest -/
+
+/--
+The condition under which `SignatureHash` returns the fixed digest `one` (D3, lines 1225 to 1236).
+Either `nIn` is at least the number of inputs, or the hash type is SINGLE and `nIn` is at least the number of outputs.
+The condition reads no other part of the transaction, and it does not read the script code.
+`legacySignatureHashPlan_eq_fixedDigest_iff` proves that the plan is the fixed digest exactly under this condition.
+-/
+def ReachesFixedDigest (tx : Transaction) (nIn hashType : UInt32) : Prop :=
+  tx.inputs.val.length ≤ nIn.toNat ∨ (HashType.isSingle hashType = true ∧ tx.outputs.val.length ≤ nIn.toNat)
+
+/--
+For every script code, transaction, input index and hash type with `ReachesFixedDigest`: the digest is `legacyOne`.
+The statement assumes no property of the hash function.
+-/
+theorem legacySignatureHash_eq_legacyOne (sc : Script) {tx : Transaction} {nIn h : UInt32}
+    (hf : ReachesFixedDigest tx nIn h) : legacySignatureHash sc tx nIn h = legacyOne := by
+  rw [legacySignatureHash, (legacySignatureHashPlan_eq_fixedDigest_iff sc tx nIn h).mpr hf]
+  rfl
+
+/--
+For all script codes `sc` and `sc'`, transactions, input indices and hash types: if both requests satisfy `ReachesFixedDigest`, their digests are equal.
+So the digest of such a request does not depend on the script code, the transaction, the input index or the hash type.
+-/
+theorem legacySignatureHash_eq_of_reachesFixedDigest (sc sc' : Script) {tx tx' : Transaction} {nIn nIn' h h' : UInt32}
+    (hf : ReachesFixedDigest tx nIn h) (hf' : ReachesFixedDigest tx' nIn' h') :
+    legacySignatureHash sc tx nIn h = legacySignatureHash sc' tx' nIn' h' := by
+  rw [legacySignatureHash_eq_legacyOne sc hf, legacySignatureHash_eq_legacyOne sc' hf']
 
 /-! ## The hash type -/
 

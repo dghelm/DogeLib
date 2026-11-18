@@ -755,7 +755,7 @@ The other reasons have score 100, and every reason but the non-mandatory one has
 
 #### Digests
 
-Both programs compute each digest from the same records.
+Each program computes each digest from its own coin records, with the record format and the order below.
 The comparison checks the digests and the counts, not the records.
 So equal digests show equal coins only if double SHA-256 is collision resistant, which DogeLib does not model (SOUNDNESS.md, A4 and B4).
 A *coin record* is these bytes:

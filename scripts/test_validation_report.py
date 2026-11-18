@@ -242,6 +242,9 @@ class Reports(unittest.TestCase):
             'release-block-fetch-tests': 'python3 -I scripts/test_fetch_release_blocks.py',
             'mainnet-block-ranges': 'python3 -I scripts/fetch_release_blocks.py && '
                                     'python3 -I scripts/compare_core.py --mainnet-blocks build/mainnet-blocks .lake/build/bin/dogelib-oracle build/core-harness/core-oracle',
+            'mainnet-replay-to-145-000': 'python3 -I scripts/replay_blocks.py --output build/replay-145000 .lake/build/bin/dogelib-oracle build/core-harness/core-oracle '
+                                         'build/mainnet-blocks/genesis-10000 build/mainnet-blocks/range-10001-145000',
+            'replay-tool-self-test': 'python3 -I scripts/test_replay_blocks.py .lake/build/bin/dogelib-oracle build/core-harness/core-oracle',
             'lane-tool': 'bash scripts/test_lane.sh',
         }
         self.assertEqual({g['slug']: g['command'] for g in gates}, expected)

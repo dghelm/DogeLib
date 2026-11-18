@@ -49,21 +49,37 @@ The label `auth` of each block records the result of the last check:
 
 | Set | `pinned` | `linked` | Pinned by |
 | --- | ---: | ---: | --- |
-| Rule changes | 13 | 4 | [`tests/work/mainnet-headers`](../../work/mainnet-headers) for 144,998 to 145,001, [`mainnet-subsidy-prev-hashes`](../mainnet-subsidy-prev-hashes/README.md) for 144,998 and 144,999, [`mainnet-auxpow-activation-headers`](../mainnet-auxpow-activation-headers) for 371,336 to 371,338, [`mainnet-bip66-headers`](../mainnet-bip66-headers) for 1,034,382 to 1,034,384, [`mainnet-bip65-headers`](../mainnet-bip65-headers) for 3,464,750 to 3,464,752, and Core's checkpoints at 145,000 and 371,337 (D9) |
+| Rule changes | 17 | 0 | The committed sources below |
 | Genesis to 10,000 | 10,001 | 0 | `mainnet-subsidy-prev-hashes` for every height, and Core's checkpoint at 0 |
 | Recent | 0 | 1,000 | None |
+
+The rule-change blocks use these pin sources:
+
+- [`tests/work/mainnet-headers`](../../work/mainnet-headers) for heights 144,998 to 145,001.
+- [`mainnet-subsidy-prev-hashes`](../mainnet-subsidy-prev-hashes/README.md) for heights 144,998 and 144,999.
+- [`mainnet-auxpow-activation-headers`](../mainnet-auxpow-activation-headers) for heights 371,336 to 371,338.
+- [`mainnet-600000-headers`](../mainnet-600000-headers/README.md) for heights 599,998 to 600,001.
+- [`mainnet-bip66-headers`](../mainnet-bip66-headers) for heights 1,034,382 to 1,034,384.
+- [`mainnet-bip65-headers`](../mainnet-bip65-headers) for heights 3,464,750 to 3,464,752.
+- Core's checkpoints at heights 145,000 and 371,337 (D9).
 
 A `pinned` block has a hash that a committed fixture or a Core checkpoint gives.
 With the Merkle check, that hash commits to every transaction ID of the block, if SHA-256 is collision resistant.
 It does not commit to the bytes of an AuxPoW payload or to witness data.
 
 A `linked` block has no pinned hash.
-The four linked blocks of the rule changes are 599,998 to 600,001, and every block of the recent range is linked.
+Every block of the recent range is linked.
 Such a block is consistent with its own header and with its neighbours in the fixture, and nothing connects it to a pinned hash.
 The first block of each linked run was compared only with the node's own answer for the height below it.
 The manifest records that as `"previous": "node"`.
+
 So the statement that these bytes are the mainnet blocks of those heights rests on the node.
 The highest checkpoint of Core at the pin is at height 5,050,000, below the recent range.
+
+The blocks at heights 599,998 to 600,001 match the committed pure-header fixture for that range.
+The node and two public TLS Electrum servers agreed on the header bytes.
+All three sources are untrusted, and no checkpoint connects to the range.
+The block run keeps `"previous": "node"` because no fixture pins height 599,997.
 
 The comparison adds one check for every block, pinned or linked: Core's own `CheckBlock` accepts it with `fCheckPOW` true.
 So the header, or the parent header of the AuxPoW payload, has a scrypt digest that meets the target of the block's own `nBits`.
@@ -74,7 +90,7 @@ No check compares that `nBits` with the difficulty that the chain requires at th
 
 | Set | Bytes of the blocks | `blocks.bin` | `blocks.bin` with xz | `manifest.json` | `manifest.json` with xz |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Rule changes | 344,408 | 344,544 | 268,444 | 4,250 | 1,460 |
+| Rule changes | 344,408 | 344,544 | 268,444 | 4,348 | 1,464 |
 | Genesis to 10,000 | 43,937,365 | 44,017,373 | 31,077,776 | 1,490,331 | 389,756 |
 | Recent | 19,939,510 | 19,947,510 | 14,701,988 | 153,517 | 41,956 |
 

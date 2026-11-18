@@ -31,11 +31,14 @@ No run contains a Core checkpoint height (SOURCES.md D9).
 So the fetch authenticated each run by the double-SHA-256 link from its last header to the first committed block of its group.
 The committed blocks carry their own provenance in the rule-change and release block fixtures.
 
-Four rule-change groups are pinned through those fixtures.
+Five rule-change groups are pinned through those fixtures.
 The groups 144,998–145,001 and 371,336–371,338 are pinned through the checkpoints 145,000 and 371,337 and the committed header fixtures.
 The groups 1,034,382–1,034,384 and 3,464,750–3,464,752 are pinned through the BIP66 and BIP65 header fixtures.
-So the runs that join those four groups are pinned transitively.
-The group at 599,998–600,001 and the recent range are node-sourced, so their runs are linked to node-sourced blocks, as the block fixtures record.
+
+The group at 599,998–600,001 is pinned through its committed header fixture.
+Its three untrusted sources agreed on the bytes, but no checkpoint connects to the range.
+So the runs that join those five groups are pinned transitively to their block fixtures.
+The recent range remains linked to node-sourced blocks, as its block fixture records.
 A `uint256S` display-order checkpoint that a future run contained would be checked against D9, and `manifest.json` records any that a run holds.
 
 To re-fetch into another directory, run:

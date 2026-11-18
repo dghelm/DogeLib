@@ -3641,11 +3641,16 @@ A `pinned` block has a hash that a committed fixture or a Core checkpoint gives.
 If SHA-256 is collision resistant, that hash fixes the 80-byte header and every transaction ID.
 It does not fix the bytes of an AuxPoW payload or of witness data.
 
-A `linked` block has no pinned hash: 1,004 of the 11,018 blocks, which are heights 599,998 to 600,001 and the 1,000 recent blocks.
+A `linked` block has no pinned hash: the 1,000 recent blocks of the 11,018 blocks.
 Its previous-hash field links it to the block below it in the fixture.
 The first block of a linked run was compared with the node's own hash for the height below.
 So the run connects to no pinned hash.
 The repository therefore does not show that a linked block is the mainnet block of its height. That statement rests on the node.
+
+The four blocks at heights 599,998 to 600,001 are `pinned` by their committed pure headers.
+The node and two public TLS Electrum servers returned the same header bytes.
+All three sources are untrusted, and no checkpoint connects to this range.
+Thus their agreement does not establish mainnet membership.
 
 The comparison result does not depend on that statement.
 For each block, pinned or linked, it shows that `checkBlock` and Core's `CheckBlock` give the same result on these bytes.

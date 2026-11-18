@@ -8,15 +8,17 @@ public import DogeLib.Script.Proofs.MultisigRecovery
 # Proofs: the fixed digest of `SIGHASH_SINGLE`
 
 Core's `SignatureHash` returns the fixed digest `one` when the hash type is SINGLE and the input index is at least the number of outputs (D3, lines 1231 to 1236).
-`ReachesFixedDigest` in `DogeLib.Transaction.Proofs.LegacySighash` is that condition, and `legacyOne` is the digest.
-A signature check on that digest reads no part of the transaction.
+`SignatureHash` also returns `one` when the input index is at least the number of inputs (D3, lines 1225 to 1229).
+`ReachesFixedDigest` in `DogeLib.Transaction.Proofs.LegacySighash` is the disjunction of the two conditions, and `legacyOne` is the digest.
+`InputContext` excludes the second condition, so this module uses the first.
+A signature check on that digest reads no part of the transaction other than those counts.
 This module states that fact for a whole legacy spend.
 
 ## The transaction-free checker
 
 `fixedDigestChecker verify` is a `SignatureChecker` without a transaction.
 It answers a signature check only when the signature is empty, the key fails `isValidPubKey`, or the hash type is SINGLE.
-For a SINGLE hash type it asks `verify` about the digest `legacyOne`.
+For a SINGLE hash type it asks `verify` about the digest `legacyOne`, and it has an answer when `verify` has one.
 Every other signature check is unavailable, and so is every lock-time and sequence check.
 
 - `transactionChecker_extends_fixedDigestChecker`: for a transaction with at most `nIn` outputs, `transactionChecker` gives every answer of `fixedDigestChecker`.

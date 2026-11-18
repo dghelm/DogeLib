@@ -2470,7 +2470,8 @@ By `#print axioms` with Lean `v4.35.0`:
 ### Script worked property: the fixed digest of `SIGHASH_SINGLE`
 
 Core's `SignatureHash` returns the fixed digest `one` when the hash type is SINGLE and `nIn` is at least the number of outputs (D3, lines 1231 to 1236).
-`CheckSig` then verifies the signature against `one`, and reads no part of the transaction (D3, lines 1253 to 1272).
+`CheckSig` then verifies the signature against `one` (D3, lines 1253 to 1272).
+`SignatureHash` reads the number of outputs to reach that branch, and the check reads no other part of the transaction.
 So that check gives the same answer for the same signature bytes and key in every other transaction that reaches the same condition.
 A whole spend can still differ, because its scripts, its flags or its other checks differ.
 Every spend that Core verifies with `SIGVERSION_BASE` has this behavior.
@@ -2506,7 +2507,10 @@ It is a device of the theorems, not a model of a Core class.
 A flag set with an unsupported bit gives the same unsupported result on both sides of each equation.
 So the hypothesis applies only to supported flag sets.
 
-The call is decided when each reached signature check has an invalid key, an empty signature or a SINGLE hash type.
+`fixedDigestChecker` answers a signature check with an invalid key or an empty signature.
+It answers a check with a SINGLE hash type when `verify` decides the request on `legacyOne` (`fixedDigestChecker_checkSig_ne_none`).
+`coreVerifier` decides every request.
+So such a check does not make the call undecided.
 That covers `OP_CHECKSIGVERIFY`, `OP_CHECKMULTISIGVERIFY`, `OP_CODESEPARATOR` and a signature push that `FindAndDelete` removes.
 The call is not decided when a reached check has a valid key and a nonempty signature with another hash type.
 It is also not decided when CLTV or CSV reaches the checker.
@@ -2540,7 +2544,9 @@ The cache stores only successful checks.
 Its entry is a hash of a nonce of the process and the three arguments of `VerifySignature`.
 The arguments are the signature hash, the public key and the signature without its hash-type byte.
 So a cache hit gives the result that `CPubKey::Verify` gives on the same arguments, unless two entries collide under SHA-256.
-On the fixed digest, the three arguments do not depend on the transaction, and neither does a cache hit.
+On the fixed digest, the first argument does not depend on the transaction.
+The key and the signature come from the scripts.
+So for the same key and signature bytes, a cache hit does not depend on the rest of the transaction.
 DogeLib does not model the cache, and this argument is a reading of D111, not a theorem.
 
 Core's compiled code supplies the verdicts of the 44 records of [`fixed-digest.jsonl`](tests/script/signed-spends/README.md#fixed-digest-spends), with fixed test keys.

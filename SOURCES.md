@@ -422,7 +422,7 @@ D3 supplies `SignatureHash` and `VerifyScript`, with D4's base transaction seria
 The template follows `DogeLib.Script.multisigRecoveryScript` and design record 0005, section 8.
 [The fixtures](tests/script/signed-spends/README.md) record the signing inputs, generator source blob and Core verdicts.
 
-A second generator, `harness/core/core_signer_fixed_digest.cpp`, uses the same Core calls for spends that reach the fixed digest of `SIGHASH_SINGLE` (D3, lines 1225 to 1236).
+A second generator, `harness/core/core_signer_fixed_digest.cpp`, uses the same Core calls for spends that reach, or just miss, the fixed digest of `SIGHASH_SINGLE` (D3, lines 1225 to 1236).
 Its output scripts follow D112, and `DogeLib.Script.p2pkhScriptPubKey` and `DogeLib.Script.multisigScript` in `DogeLib.Script.Proofs.FixedDigest` give the same bytes.
 The fixtures record each signing request, Core's digests and Core's verdicts.
 

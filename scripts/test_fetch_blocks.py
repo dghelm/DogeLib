@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests of scripts/fetch_blocks.py, without a node and without a network.
+"""Tests of the block and height-600,000 header fetchers, without a network.
 
 Usage: python3 -I scripts/test_fetch_blocks.py
 
@@ -20,10 +20,12 @@ import tempfile
 import traceback
 import unittest
 import urllib.error
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 import fetch_blocks as fb  # noqa: E402
+import fetch_600000_headers as h600  # noqa: E402
 
 GENESIS_HASH = "1a91e3dace36e2be3bf030a65679fe821aa1d6ef92e7c9902eb318182c355691"
 # No pinned source of the repository covers a height from BASE.
@@ -239,11 +241,161 @@ class PinnedSources(Case):
         self.assertEqual(names(145000), ["tests/work/mainnet-headers", fb.CHECKPOINT_SOURCE])
         self.assertEqual(names(145001), ["tests/work/mainnet-headers"])
         self.assertEqual(names(371336), ["tests/block/mainnet-auxpow-activation-headers"])
+        for height in range(599998, 600002):
+            self.assertEqual(names(height), ["tests/block/mainnet-600000-headers"])
         self.assertEqual(names(1034383), ["tests/block/mainnet-bip66-headers"])
         self.assertEqual(names(3464751), ["tests/block/mainnet-bip65-headers"])
-        for height in (599999, 600000, 600001, 10001 + 145030, BASE):
+        for height in (599997, 600002, 10001 + 145030, BASE):
             self.assertEqual(names(height), [])
         self.assertEqual(len(fb.CHECKPOINTS), 23)
+
+    def test_600000_fixture_has_exactly_the_rule_change_hashes(self):
+        source = "tests/block/mainnet-600000-headers"
+        expected = {
+            599998: "6ff217f1e1204f2552aefdbdc3eb1cf8857a067b7206dd52d67cdcee1d37d981",
+            599999: "9b72ab55c1dd7b9eb1a2f4dc89f6909fd7b2648581f2223fccf7057116fbe18d",
+            600000: "caa5446c05c8e51cf7985a6cb4da4dc2b730e4ec399dc95b2a094df6bdd4f268",
+            600001: "eb058cbb071b0e4b224f8dd9feb82d1955028acfb864a61588866c240235cb49",
+        }
+        table = REAL_PINS.tables[source]
+        self.assertEqual(sorted(table), list(expected))
+        self.assertEqual({height: fb.display(value) for height, value in table.items()}, expected)
+
+
+class HeaderAuthentication(Case):
+    def headers(self):
+        blocks = make_chain(h600.COUNT)
+        return [raw[:80] for raw in blocks.values()]
+
+    def stream(self, headers, trailing=b""):
+        coinbase = genesis_block()[81:]
+        payload = (
+            coinbase + bytes(32) + b"\x00" + u32(0)
+            + b"\x00" + u32(0) + header(2, bytes(32), bytes(32), 1, 1, 1)
+        )
+        records = [pure + (payload if int.from_bytes(pure[:4], "little") & fb.AUXPOW_FLAG else b"")
+                   for pure in headers]
+        return b"".join(records) + trailing
+
+    def exchange(self, headers, *, count=h600.COUNT, trailing=b""):
+        return (
+            ["ElectrumX 1.16.0", "1.4"],
+            {"count": count, "hex": self.stream(headers, trailing).hex()},
+        )
+
+    def test_three_sources_agree_before_the_fixture_is_written(self):
+        headers = self.headers()
+        fetched = []
+
+        def remote(server, timeout):
+            fetched.append(server)
+            return list(headers)
+
+        agreed = h600.fetch_fixture(
+            self.dir, node_fetch=lambda rpc: list(headers), electrum_fetch=remote)
+        self.assertEqual(agreed, headers)
+        self.assertEqual(fetched, list(h600.SERVERS))
+        self.assertEqual((self.dir / "headers.txt").read_text(), h600.fixture_text(headers))
+        fb.check_sums(self.dir, ("headers.txt",))
+
+    def test_each_remote_disagreement_fails_before_the_fixture_is_written(self):
+        headers = self.headers()
+        changed = list(headers)
+        changed[-1] = changed[-1][:-1] + bytes([changed[-1][-1] ^ 1])
+        for disagreeing in h600.SERVERS:
+            def remote(server, timeout):
+                return changed if server == disagreeing else list(headers)
+
+            with self.subTest(server=disagreeing):
+                with self.assertRaisesRegex(fb.FetchError, "disagrees with the node at height 600001"):
+                    h600.fetch_fixture(
+                        self.dir, node_fetch=lambda rpc: list(headers), electrum_fetch=remote)
+                self.assertFalse(self.dir.exists())
+
+    def test_unavailable_remote_fails_before_the_fixture_is_written(self):
+        headers = self.headers()
+
+        def remote(server, timeout):
+            if server == h600.SERVERS[1]:
+                raise fb.FetchError("unreachable")
+            return list(headers)
+
+        with self.assertRaisesRegex(fb.FetchError, "unreachable"):
+            h600.fetch_fixture(
+                self.dir, node_fetch=lambda rpc: list(headers), electrum_fetch=remote)
+        self.assertFalse(self.dir.exists())
+
+    def test_node_header_must_match_getblockhash(self):
+        headers = self.headers()
+
+        class Node:
+            def block_hash(self, height):
+                index = height - h600.FIRST
+                value = fb.sha256d(headers[index])
+                return bytes(32) if index == 2 else value
+
+            def block(self, claimed):
+                index = 2 if claimed == bytes(32) else next(
+                    i for i, value in enumerate(headers) if fb.sha256d(value) == claimed)
+                return headers[index]
+
+        with self.assertRaisesRegex(fb.FetchError, "height 600000 does not match getblockhash"):
+            h600.node_headers(Node())
+
+    def test_electrum_response_id_and_shape(self):
+        cases = (
+            (b'{"id":9,"result":[],"error":null}\n', "wrong JSON-RPC id"),
+            (b'{"id":1,"result":[]}', "has no newline"),
+            (b'not-json\n', "is not JSON"),
+            (b'{"id":1}\n', "is malformed"),
+            (b'{"id":1,"result":null,"error":{"code":1}}\n', "reports an error"),
+        )
+        for data, message in cases:
+            with self.subTest(message=message):
+                with self.assertRaisesRegex(fb.FetchError, message):
+                    h600.read_response(io.BytesIO(data), 1, "server")
+        self.assertEqual(h600.read_response(io.BytesIO(b'{"id":1,"result":[]}\n'), 1, "server"), [])
+
+    def test_electrum_header_result_must_be_exact(self):
+        headers = self.headers()
+        good = lambda server, timeout: self.exchange(headers)
+        self.assertEqual(h600.electrum_headers(h600.SERVERS[0], 1, good), headers)
+
+        cases = (
+            ((["one"], {"count": h600.COUNT, "hex": self.stream(headers).hex()}),
+             "server.version result is malformed"),
+            ((["one", "two"], {"count": h600.COUNT - 1, "hex": self.stream(headers).hex()}),
+             "wrong count"),
+            ((["one", "two"], {"count": float(h600.COUNT), "hex": self.stream(headers).hex()}),
+             "wrong count"),
+            ((["one", "two"], {"count": True, "hex": self.stream(headers).hex()}),
+             "wrong count"),
+            ((["one", "two"], {"count": h600.COUNT, "hex": "zz"}),
+             "not hexadecimal"),
+            ((["one", "two"], {"count": h600.COUNT, "hex": self.stream(headers)[:-1].hex()}),
+             "malformed full-header stream"),
+            ((["one", "two"], {"count": h600.COUNT, "hex": self.stream(headers, b"x").hex()}),
+             "trailing bytes"),
+        )
+        for response, message in cases:
+            with self.subTest(message=message):
+                with self.assertRaisesRegex(fb.FetchError, message):
+                    h600.electrum_headers(h600.SERVERS[0], 1, lambda server, timeout: response)
+
+    def test_write_failure_removes_the_staged_directory(self):
+        with mock.patch.object(h600.os, "rename", side_effect=OSError("planted write failure")):
+            with self.assertRaisesRegex(OSError, "planted write failure"):
+                h600.write_fixture(self.dir, self.headers())
+        self.assertFalse(self.dir.exists())
+        self.assertEqual(list(self.dir.parent.glob(f".{self.dir.name}.tmp-*")), [])
+
+    def test_existing_output_is_preserved(self):
+        self.dir.mkdir()
+        marker = self.dir / "keep"
+        marker.write_text("unchanged\n")
+        with self.assertRaisesRegex(fb.FetchError, "output already exists"):
+            h600.write_fixture(self.dir, self.headers())
+        self.assertEqual(marker.read_text(), "unchanged\n")
 
 
 class GoodFetches(Case):

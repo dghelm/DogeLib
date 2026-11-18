@@ -257,7 +257,9 @@ The ranges are assets of the GitHub release `fixtures-mainnet-blocks-2026-11-13`
 
 `scripts/fetch_blocks.py` checked each block against its header hash, its Merkle root, its neighbours, and the pinned hashes of the repository.
 Those hashes come from the subsidy fixture, the header fixtures and Core's checkpoints (D9, `src/chainparams.cpp`, lines 180 to 205).
-1,004 blocks have no pinned hash, and the README names them.
+The header fixture at heights 599,998 to 600,001 comes from the node and two public TLS Electrum servers.
+All three untrusted sources agreed on its bytes, but no checkpoint connects to its range.
+The 1,000 recent blocks have no pinned hash.
 The fixtures change no reference pin.
 
 ## Header-sequence fixture evidence

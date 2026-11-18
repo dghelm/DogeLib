@@ -196,6 +196,7 @@ class Reports(unittest.TestCase):
                               '(cd tests/work/mainnet-headers && sha256sum -c SHA256SUMS) && '
                               '(cd tests/block && sha256sum -c SHA256SUMS) && '
                               '(cd tests/block/mainnet-auxpow-activation-headers && sha256sum -c SHA256SUMS) && '
+                              '(cd tests/block/mainnet-600000-headers && sha256sum -c SHA256SUMS) && '
                               '(cd tests/block/mainnet-bip65-headers && sha256sum -c SHA256SUMS) && '
                               '(cd tests/block/mainnet-bip66-headers && sha256sum -c SHA256SUMS) && '
                               '(cd tests/block/mainnet-auxpow-activation-full-headers && sha256sum -c SHA256SUMS) && '

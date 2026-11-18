@@ -1270,14 +1270,16 @@ It returns each of the nine reasons of `CheckTransaction` 3 times or more.
 
 | Set | Heights | Blocks | `pinned` | `linked` | Compared in |
 | --- | --- | ---: | ---: | ---: | --- |
-| Rule changes | 144,998 to 145,001, 371,336 to 371,338, 599,998 to 600,001, 1,034,382 to 1,034,384, 3,464,750 to 3,464,752 | 17 | 13 | 4 | The full run, set *Mainnet rule changes* |
+| Rule changes | 144,998 to 145,001, 371,336 to 371,338, 599,998 to 600,001, 1,034,382 to 1,034,384, 3,464,750 to 3,464,752 | 17 | 17 | 0 | The full run, set *Mainnet rule changes* |
 | Genesis to 10,000 | 0 to 10,000 | 10,001 | 10,001 | 0 | `--mainnet-blocks` |
 | Recent | 6,455,302 to 6,456,301 | 1,000 | 0 | 1,000 | `--mainnet-blocks` |
 
 A `pinned` block has a hash that a committed fixture or a Core checkpoint gives.
 A `linked` block has no pinned hash.
 It is consistent with its header and with its neighbours, and its place in the chain rests on the node.
-The linked blocks are 599,998 to 600,001 and the whole recent range.
+The linked blocks are the whole recent range.
+The blocks at heights 599,998 to 600,001 match a committed header fixture.
+The node and two public TLS Electrum servers agreed on those bytes, but no checkpoint connects to that range.
 
 The rule-change blocks are committed.
 The two ranges have 44.0 MB and 19.9 MB, so they are assets of a GitHub release (design record 0010, decision 2).

@@ -100,6 +100,7 @@ HEADER_FIXTURES = (
     "tests/work/mainnet-genesis-headers",  # heights 0 to 12
     "tests/work/mainnet-headers",  # heights 144719 to 145030
     "tests/block/mainnet-auxpow-activation-headers",  # heights 371320 to 371340
+    "tests/block/mainnet-600000-headers",  # heights 599998 to 600001
     "tests/block/mainnet-bip66-headers",  # heights 1032483 to 1034390
     "tests/block/mainnet-bip65-headers",  # heights 3464739 to 3464760
 )

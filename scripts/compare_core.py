@@ -5,11 +5,17 @@ Usage: python3 -I scripts/compare_core.py [--timeout SECONDS] [--quick] <dogelib
 The harness, harness/core/core_oracle.cpp, runs Dogecoin Core's own code and
 answers a projection of dogelib-oracle/1 (docs/oracle.md, "The Core harness").
 This script builds a deterministic stream of well-formed requests, runs each
-program once on the whole stream, and requires the two responses to every
+program on it, and requires the two responses to every
 supported request to be equal as JSON values, except for the preimage projection: Core does not expose
 the preimage of `sighash.legacy`, so the oracle's `preimage_hex` must hash to
 Core's digest instead.
 Script unsupported results have no compared verdict and are counted separately.
+
+Each program runs once on the whole stream, with two exceptions for `block.validate`.
+With --mainnet-blocks, the oracle answers the `block.validate` requests in a second process that
+runs at the same time as the first (`run_oracle`).
+The harness gets a `block.validate` request without the first block that the oracle reports as
+out of the arithmetic domain, and without the blocks after it (`harness_request`).
 
 Each failure line starts with `FAIL <CODE>`; scripts/test_compare_core.py
 relies on the codes. The exit status is 0 only when every response agrees.
@@ -38,6 +44,7 @@ are known to parse. No expected value comes from this script.
 """
 
 import argparse
+import concurrent.futures
 import hashlib
 import json
 import os
@@ -63,6 +70,11 @@ from oracle_contextual_body import (contextual_body_sets, compare as compare_bod
                                     mainnet_body_sets, mainnet_body_counts)
 from oracle_header_pow import header_pow_sets, CODES as HEADER_CODES, EXPECTATIONS as HEADER_EXPECTATIONS, key as header_key
 from oracle_subsidy import subsidy_sets, compare as compare_subsidy
+from oracle_block_validate import (block_validate_sets, compare as compare_validate, harness_request,
+                                   reasons_reached as validate_reasons_reached,
+                                   reasons_missing as validate_reasons_missing,
+                                   mainnet_validate_sets, mainnet_validate_counts,
+                                   QUICK_SETS as VALIDATE_QUICK_SETS)
 from oracle_block_check import block_check_sets, corpus_requests as check_corpus_requests, compare as compare_block_check, reasons_reached, reasons_missing, LABELS as CHECK_LABELS, QUICK_SET as CHECK_QUICK_SET, mainnet_range_sets, mainnet_range_counts, BlockAssets
 
 ORACLE_FORMAT = "dogelib-oracle/1"
@@ -84,6 +96,7 @@ EXPECTED_OPERATION_COUNTS = {
     "block.header.read": 7878,
     "block.header_sequence": 257,
     "block.subsidy": 148,
+    "block.validate": 42,
     "compactsize.encode": 26,
     "compactsize.read": 404,
     "hash.hash160": 292,
@@ -157,6 +170,23 @@ def run_stream(program: str, requests: list[dict], timeout: float, args: list[st
             raise RunError("ID", f"{program}: expected id {req['id']}, got {json.dumps(resp.get('id'))}")
         responses.append(resp)
     return responses
+
+
+def run_oracle(program: str, requests: list[dict], timeout: float, split: bool) -> list[dict]:
+    """The oracle's responses to `requests`.
+
+    With `split`, the `block.validate` requests go to a second process that runs at the same time as
+    the first. The replay of 10,001 real blocks takes the oracle several minutes on one core, which
+    is longer than every other request of that run together."""
+    replay = [i for i, r in enumerate(requests) if r["op"] == "block.validate"] if split else []
+    if not replay:
+        return run_stream(program, requests, timeout)
+    chosen = set(replay)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        others = pool.submit(run_stream, program, [r for i, r in enumerate(requests) if i not in chosen], timeout)
+        replayed = iter(run_stream(program, [requests[i] for i in replay], timeout))
+        rest = iter(others.result())
+    return [next(replayed) if i in chosen else next(rest) for i in range(len(requests))]
 
 
 # ---------------------------------------------------------------------------
@@ -685,7 +715,7 @@ def set_hash_boundaries(algorithm: str) -> list[dict]:
 QUICK_SAMPLE = 8
 # The number of corpus records whose two-call composition --quick runs.
 QUICK_COMPOSITIONS = 32
-QUICK_SETS = (CHECK_QUICK_SET, "subsidy boundaries and fixed schedule", "header sequence regtest 34", "header sequence state boundaries", "contextual boundaries", "header PoW fixtures", "full header readers", "header version boundaries", "pubkey Core signatures", "Script signature verdict", "fixtures", "compactsize", "sighash endpoints", "witness flags and stacks",
+QUICK_SETS = (CHECK_QUICK_SET, *VALIDATE_QUICK_SETS, "subsidy boundaries and fixed schedule", "header sequence regtest 34", "header sequence state boundaries", "contextual boundaries", "header PoW fixtures", "full header readers", "header version boundaries", "pubkey Core signatures", "Script signature verdict", "fixtures", "compactsize", "sighash endpoints", "witness flags and stacks",
               "work compact boundaries", "regtest legacy wrap case", "work missing skip traversal", "header field boundaries", "Merkle generated",
               "RIPEMD-160 padding boundaries", "Hash160 padding boundaries", "SHA-1 padding boundaries", "Script reader truncations", "Script resource boundaries", "Script resource boundaries base",
               "Script legacy corpus base", "Script legacy corpus transaction", "Script harness refusal domain", "Script refusal precedence",
@@ -751,6 +781,7 @@ def request_sets() -> tuple[list[tuple[str, list[dict]]], list[str]]:
     sets.extend(sequence_sets())
     sets.extend(subsidy_sets())
     sets.extend(block_check_sets())
+    sets.extend(block_validate_sets())
     sets.append(("tx.check corpus", check_corpus_requests(corpus, witness_corpus)))
     sets.extend(pubkey_sets())
     sets.append(("Script signature verdict", signature_spends()))
@@ -872,6 +903,8 @@ def compare(req: dict, ours: dict, core: dict, peer: str = "core") -> tuple[str,
         return compare_body(req, ours, core, peer)
     if req["op"] == "block.subsidy":
         return compare_subsidy(req, ours, core, peer)
+    if req["op"] == "block.validate":
+        return compare_validate(req, ours, core, peer)
     if req["op"] in CHECK_LABELS:
         return compare_block_check(req, ours, core, peer)
     if req["op"] == "block.contextual_check":
@@ -1097,7 +1130,9 @@ def check_auxpow_pow_reconstruction(harness, timeout):
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--timeout", type=float, default=600.0)
+    parser.add_argument("--timeout", type=float,
+                        help="seconds for each program run: 600 by default, and 3600 with --mainnet-blocks, "
+                             "where the oracle replays 10,001 blocks")
     parser.add_argument("--quick", action="store_true",
                         help=f"only the sets {', '.join(QUICK_SETS)}, the first {QUICK_SAMPLE} requests of the seeded "
                              f"sequence mutations, of the seeded contextual mutations and of each targeted timelock set, "
@@ -1105,13 +1140,15 @@ def main() -> int:
     parser.add_argument("--rust-compactsize", metavar="PATH",
                         help="compare only CompactSize reader requests with this native Rust adapter as a third program")
     parser.add_argument("--mainnet-blocks", metavar="DIR",
-                        help="compare only block.check on the real mainnet block ranges under DIR, "
-                             "which scripts/fetch_release_blocks.py writes")
+                        help="compare only block.check, block.contextual_check_body and block.validate on the "
+                             "real mainnet block ranges under DIR, which scripts/fetch_release_blocks.py writes")
     parser.add_argument("oracle")
     parser.add_argument("harness")
     args = parser.parse_args()
     if args.mainnet_blocks and (args.quick or args.rust_compactsize):
         parser.error("--mainnet-blocks runs alone, without --quick or --rust-compactsize")
+    if args.timeout is None:
+        args.timeout = 3600.0 if args.mainnet_blocks else 600.0
 
     revision = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True)
     dirty = subprocess.run(["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True)
@@ -1156,12 +1193,13 @@ def main() -> int:
         print("CompactSize-only: compiled Rust, oracle and Core (reader only, no Rust encoder)")
     elif args.mainnet_blocks:
         try:
-            sets = mainnet_range_sets(args.mainnet_blocks) + mainnet_body_sets(args.mainnet_blocks)
+            sets = (mainnet_range_sets(args.mainnet_blocks) + mainnet_body_sets(args.mainnet_blocks) +
+                    mainnet_validate_sets(args.mainnet_blocks))
             excluded = []
         except BlockAssets as e:
             print(f"FAIL BLOCK_ASSETS {e}. Run python3 -I scripts/fetch_release_blocks.py first.")
             return 1
-        print(f"Mainnet block ranges only: block.check and block.contextual_check_body on the fixtures under {args.mainnet_blocks}")
+        print(f"Mainnet block ranges only: block.check, block.contextual_check_body and block.validate on the fixtures under {args.mainnet_blocks}")
     else:
         sets, excluded = request_sets()
     if args.quick:
@@ -1183,8 +1221,9 @@ def main() -> int:
             requests.append({**r, "id": f"c{len(requests)}"})
             owner.append(name)
     try:
-        ours = run_stream(args.oracle, requests, args.timeout)
-        core = run_stream(args.harness, requests, args.timeout)
+        ours = run_oracle(args.oracle, requests, args.timeout, bool(args.mainnet_blocks))
+        # The harness gets no block that the oracle found outside the int64 range (design record 0010, section 3).
+        core = run_stream(args.harness, [harness_request(r, a) for r, a in zip(requests, ours)], args.timeout)
         rust = run_stream(args.rust_compactsize, requests, args.timeout, rust_args) if args.rust_compactsize else None
     except RunError as e:
         print(f"FAIL {e.code} {e}")
@@ -1271,7 +1310,14 @@ def main() -> int:
         if body_reached:
             print("block.contextual_check_body: " + ", ".join(f"{name} {count}"
                   for name, count in sorted(body_reached.items())))
+        validate_reached = validate_reasons_reached(requests, core)
+        if validate_reached:
+            print("block.validate block records: " + ", ".join(f"{name} {count}"
+                  for name, count in sorted(validate_reached.items())))
         if not args.quick and not args.mainnet_blocks:
+            for missing in validate_reasons_missing(validate_reached):
+                failures.append("REASON_NOT_REACHED")
+                print(f"FAIL REASON_NOT_REACHED Core returned {missing} for no block")
             for missing in reasons_missing(reached):
                 failures.append("REASON_NOT_REACHED")
                 print(f"FAIL REASON_NOT_REACHED Core returned {missing} for no request")
@@ -1279,7 +1325,8 @@ def main() -> int:
                 failures.append("REASON_NOT_REACHED")
                 print(f"FAIL REASON_NOT_REACHED Core returned {missing} for no request")
     if args.mainnet_blocks:
-        failures.extend(check_operation_counts(requests, {**mainnet_range_counts(), **mainnet_body_counts()},
+        failures.extend(check_operation_counts(requests, {**mainnet_range_counts(), **mainnet_body_counts(),
+                                                          **mainnet_validate_counts()},
                                                "tests/block/mainnet-blocks/release.json"))
     elif args.quick and not args.rust_compactsize:
         failures.extend(compare_compositions(args.oracle, args.harness, args.timeout, QUICK_COMPOSITIONS))

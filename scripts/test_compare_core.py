@@ -64,6 +64,11 @@ MUTATIONS = {
     **{f"check_block_{field}": ("core", "BLOCK_CHECK") for field in
        ("reason", "dos", "sigops", "transactions", "corruption", "hash", "error", "core_diagnostic")},
     "check_block_diagnostic": ("oracle", "BLOCK_CHECK"),
+    **{f"validate_{field}": ("core", "BLOCK_VALIDATE") for field in
+       ("reason", "dos", "changes_digest", "spent", "set_digest", "block_set_digest", "set_coins", "hash", "records",
+        "out_of_domain", "core_diagnostic", "error")},
+    "validate_diagnostic": ("oracle", "BLOCK_VALIDATE"),
+    "validate_hidden_domain": ("oracle", "BLOCK_VALIDATE"),
     "signature_verdict": ("core", "SIGNATURE_VERDICT"),
     "targeted_early_error": ("both", "TARGETED_OPCODE"),
     "tx_valid_core_rejection": ("core", "TX_VALID_CORE"),
@@ -185,6 +190,10 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
             # The harness has no Lean diagnostic. One mutation keeps it in block.check.
             if not (mode == "check_block_core_diagnostic" and request["op"] == "block.check"):
                 ok.pop("diagnostic", None)
+            # Each block record of block.validate has its own diagnostic. One mutation keeps them.
+            if request["op"] == "block.validate" and mode != "validate_core_diagnostic":
+                for record in ok.get("blocks", []):
+                    record.pop("diagnostic", None)
         if role == "core" and request["op"] == "block.subsidy" and "redraws" in ok:
             # The harness names its Boost release and reports no rejected words.
             del ok["redraws"]
@@ -266,6 +275,43 @@ def wrap(mode: str, role: str, oracle: str, args: list[str]) -> int:
             "error": (lambda r: r["id"] in ids and r.get("error", {}).get("reason") == "truncated",
                       lambda r: r["error"].__setitem__("reason", "non_canonical")),
         }[field]
+        # The version handshake and the auxiliary calls hold no request of the operation.
+        if ids:
+            mutate_first(responses, test, change)
+    elif mode.startswith("validate_") and mode != "validate_core_diagnostic":
+        ids = {r["id"] for r in requests if r["op"] == "block.validate"}
+
+        def records(r, valid):
+            return [b for b in r.get("ok", {}).get("blocks", []) if b["valid"] is valid] if r["id"] in ids else []
+
+        def first(valid, change, test=lambda b: True):
+            return (lambda r: any(test(b) for b in records(r, valid)),
+                    lambda r: change(next(b for b in records(r, valid) if test(b))))
+
+        def other_reason(b):
+            b["reject_reason"] = "bad-cb-amount" if b["reject_reason"] != "bad-cb-amount" else "bad-blk-sigops"
+
+        test, change = {
+            "reason": first(False, other_reason, lambda b: b["dos"] == 100 and b["reject_code"] == 16),
+            "dos": first(False, lambda b: b.__setitem__("dos", b["dos"] + 1)),
+            # The genesis block has the digest of no change, 32 zero bytes, so the new value is another one.
+            "changes_digest": first(True, lambda b: b.__setitem__("changes_digest_hex", "11" * 32)),
+            "spent": first(True, lambda b: b.__setitem__("spent", b["spent"] + 1)),
+            "block_set_digest": first(True, lambda b: b.__setitem__("set_digest_hex", "11" * 32),
+                                      lambda b: b["set_digest_hex"] is not None),
+            "hash": first(True, lambda b: b.update(hash_hex=b["hash_display"], hash_display=b["hash_hex"])),
+            "diagnostic": first(False, lambda b: b.pop("diagnostic")),
+            "set_digest": (lambda r: r["id"] in ids and "ok" in r, set_ok("set_digest_hex", "11" * 32)),
+            "set_coins": (lambda r: r["id"] in ids and "ok" in r,
+                          lambda r: r["ok"].__setitem__("set_coins", r["ok"]["set_coins"] + 1)),
+            "records": (lambda r: r["id"] in ids and r.get("ok", {}).get("blocks"), lambda r: r["ok"]["blocks"].pop()),
+            "out_of_domain": (lambda r: r["id"] in ids and "ok" in r, set_ok("out_of_domain_at", 0)),
+            # The oracle hides the block outside the int64 range, so the harness gets it.
+            "hidden_domain": (lambda r: r["id"] in ids and r.get("ok", {}).get("out_of_domain_at") is not None,
+                              set_ok("out_of_domain_at", None)),
+            "error": (lambda r: r["id"] in ids and r.get("error", {}).get("reason") == "not_linked",
+                      lambda r: r["error"].__setitem__("reason", "no_predecessor")),
+        }[mode[9:]]
         # The version handshake and the auxiliary calls hold no request of the operation.
         if ids:
             mutate_first(responses, test, change)

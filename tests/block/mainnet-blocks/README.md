@@ -145,6 +145,10 @@ They reach `bad-txnmrklroot` after a passed header test only with another transa
 The run requires the committed hashes of `release.json` for each file, and it fails with `BLOCK_ASSETS` without them.
 Both programs must return a valid verdict, and the hash, the number of transactions and the base size that the manifest gives.
 
+The same run replays the genesis-to-10,000 range through `block.validate`, in one request from the empty coin set (design record 0010, section 5).
+`scripts/oracle_block_validate.py` builds that request and the 42 requests of the full comparison, which change the committed rule-change blocks.
+[docs/oracle.md](../../../docs/oracle.md#block-validation-comparison-evidence) records the results.
+
 Three blocks of the recent range, at heights 6,455,642, 6,456,071 and 6,456,247, have a base size 36 bytes below their size.
 The coinbase transaction of the parent block in their AuxPoW payload is in the extended format, with one witness item of 32 bytes.
 `CheckBlock` measures the block without those bytes.

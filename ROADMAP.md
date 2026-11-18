@@ -127,14 +127,14 @@ A property of an application template belongs in a downstream project.
 ### Block validity
 
 The next milestone is block validity.
-DogeLib has no definition of `ConnectBlock` or the coin set, so the oracle cannot decide whether a block is valid.
+Stages 0010a and 0010b define the checks of a block in its context, through `ConnectBlock`.
 [Design record 0010](docs/design/0010-block-validity.md) defines the milestone. The maintainer adopted it on 2026-11-13.
 
 | Stage | Deliverable | Status |
 | --- | --- | --- |
 | 0 | The harness compiles Core's `src/validation.cpp`. `block.contextual_check` and `block.header_sequence` call Core's own functions. | Implemented |
 | 0010a | Block checks without coins: `CheckTransaction`, `CheckBlock`, `ContextualCheckBlock`, the subsidy and the version-bits state, compared with Core on two mainnet ranges and on mutations | Implemented. `block.subsidy`, `tx.check`, `block.check` and `block.contextual_check_body` agree with Core on mutations for each reachable reject reason ([COVERAGE.md](COVERAGE.md#operations)). `block.check` and `block.contextual_check_body` agree on 11,018 real mainnet blocks: heights 0 to 10,000, the 1,000 blocks from 6,455,302, and 17 blocks at and next to the rule changes ([fixtures](tests/block/mainnet-blocks/README.md)). The version-bits walk agrees with Core on the mainnet header chain through the CSV window, in a run outside CI. `csv_never_lockedIn` and `versionBits_shortcut` justify the `FAILED` seed of decision 3. |
-| 0010b | Block connection: the coin set, `ConnectBlock` and `block.validate`, replayed with Core | Not started |
+| 0010b | Block connection: the coin set, `ConnectBlock` and `block.validate`, replayed with Core | Part 1 implemented. `block.validate` agrees with Core on mutations for each reachable reject reason of `ConnectBlock`, and on a replay of mainnet heights 0 to 10,000 from the empty coin set, with the digests of each block's coin changes and of the whole set ([COVERAGE.md](COVERAGE.md#operations)). `connect_fits` gives the arithmetic domain. Open: the replay to height 145,000 outside CI, which has not run ([issue 162](https://github.com/dghelm/DogeLib/issues/162)), and the recent range, which needs the coin fetch tool |
 | 0010c | Properties of connection: available spends, the value bound and the issuance bound | Not started |
 
 One other candidate is unscheduled, and it needs an approved scope before work starts:

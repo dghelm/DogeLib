@@ -1358,14 +1358,14 @@ The theorem does not say that the scripts of the inputs pass, that a coinbase co
 
 `connect_value_bound` is the second property of design record 0010, section 6.
 `CoinSet.totalValue` is the sum of the amounts of all the outputs that the entries of a set hold, in the integers with no bound.
-It counts each coin that `CoinSet.coin` returns once.
-It also counts an output that `CoinSet.coin` cannot return.
-Such an output is in an entry whose key is not `txidKey` of a transaction ID, or it has an index of `2^32` or more.
-`CoinSet.addTx` makes no such entry, but no theorem states that a set has none.
-An extra output only raises the total, so the bounds below also bound the coins that `CoinSet.coin` returns, for amounts that are not negative.
-
 Suppose that the coin set has amounts in range (`CoinSet.ValuesInRange`), and that `connectBlock` accepts a block on it.
 Then the total value of the new set is at most the total value of the first set plus `subsidyValue` of the context.
+
+The total counts each coin that `CoinSet.coin` returns once.
+It also counts an output that `CoinSet.coin` cannot return.
+Such an output is in an entry whose key is not `txidKey` of a transaction ID, or it has an index of `2^32` or more.
+`CoinSet.addTx` stores each entry under `txidKey` of its transaction ID, and no theorem states that a set has no such output.
+An extra output only raises the total, so the bounds of this section also bound the coins that `CoinSet.coin` returns, for amounts that are not negative.
 
 Design record 0010 also lists a successful subsidy and the arithmetic domain of its section 3 as assumptions.
 For a block whose hash is not the genesis hash, `connectBlock_ok` derives from acceptance that the subsidy has a value.

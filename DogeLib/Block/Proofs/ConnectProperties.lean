@@ -106,6 +106,7 @@ A change of the representation of `CoinSet` needs new proofs of these statements
 
 /--
 The total value of a coin set: the sum of `TxCoins.value` over its entries, in the integers.
+
 It counts every output that an entry of the set holds.
 So it counts each coin that `CoinSet.coin` returns once.
 It also counts an output that `CoinSet.coin` cannot return.

@@ -279,9 +279,11 @@ It models the element loop of `Unserialize_impl` for a vector of `unsigned char`
 That loop is at `src/serialize.h` lines 660 to 674 for `std::vector`, and at lines 592 to 606 for `prevector` (D1).
 Core reads the bytes in blocks of at most 5000000.
 The blocks do not change the result: the read fails exactly when fewer than `n` bytes remain (`CDataStream::read`, D21).
+It tests the length of the first `n` bytes, not of all of `bs`, so a read costs steps in `n` only.
+`readBytes_eq_ite` of the proof library gives the same function with the test `n ≤ bs.length`.
 -/
 def readBytes (n : Nat) (bs : List UInt8) : Except ReadError (List UInt8 × List UInt8) :=
-  if n ≤ bs.length then .ok (bs.take n, bs.drop n) else .error .truncated
+  if (bs.take n).length = n then .ok (bs.take n, bs.drop n) else .error .truncated
 
 /--
 Dogecoin Core's reader of a vector, `Unserialize_impl` in `src/serialize.h` (D1), over a byte list.

@@ -44,10 +44,14 @@ These are the changes:
 
 namespace DogeLib.Serialization
 
-/-- The first `n` bytes as a `Bytes n`, with the bytes after them, or `none` when there are fewer than `n` bytes. -/
+/--
+The first `n` bytes as a `Bytes n`, with the bytes after them, or `none` when there are fewer than `n` bytes.
+It tests the length of the first `n` bytes, not of all of `bs`, so a read costs steps in `n` only.
+`decodeBytes_eq_dite` of the proof library gives the same function with the test `n ≤ bs.length`.
+-/
 def decodeBytes (n : Nat) (bs : List UInt8) : Option (Bytes n × List UInt8) :=
-  if h : n ≤ bs.length then
-    some (⟨bs.take n, List.length_take_of_le h⟩, bs.drop n)
+  if h : (bs.take n).length = n then
+    some (⟨bs.take n, h⟩, bs.drop n)
   else none
 
 /--

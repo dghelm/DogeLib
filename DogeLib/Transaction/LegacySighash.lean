@@ -347,8 +347,73 @@ def legacySignatureHashPlan (scriptCode : Script) (tx : Transaction) (nIn hashTy
   else if HashType.isSingle hashType ∧ tx.outputs.val.length ≤ nIn.toNat then .fixedDigest legacyOne
   else .hashBytes (legacyPreimage scriptCode tx nIn hashType)
 
-/-- `SignatureHash` with `SIGVERSION_BASE`: the digest of `legacySignatureHashPlan`. -/
+/-! ## The packed preimage
+
+The preimage as a `ByteArray`, written in one pass with the packed encoders.
+`legacySignatureHash` hashes it, so that a signature check does not build the preimage as a list of bytes.
+`toList_legacyPreimageBytes` of the proof library shows that it has the bytes of `legacyPreimage`.
+-/
+
+/-- Input `i` as `legacyInputBytes` writes it, appended to `acc`. `code` is `scriptCodeBytes` of the script code. -/
+def legacyInputInto (code : List UInt8) (nIn : Nat) (zeroSequence : Bool) (i : Nat) (txin : TxIn)
+    (acc : ByteArray) : ByteArray :=
+  if i = nIn then
+    PackedCodec.encodeInto txin.sequence (pushBytes code (PackedCodec.encodeInto txin.prevout acc))
+  else
+    PackedCodec.encodeInto (if zeroSequence then (0 : UInt32) else txin.sequence)
+      (PackedCodec.encodeInto Script.empty (PackedCodec.encodeInto txin.prevout acc))
+
+/-- The inputs of a list, with indices from `i`, each as `legacyInputInto` writes it. -/
+def legacyInputsLoop (code : List UInt8) (nIn : Nat) (zeroSequence : Bool) :
+    Nat → List TxIn → ByteArray → ByteArray
+  | _, [], acc => acc
+  | i, txin :: rest, acc =>
+    legacyInputsLoop code nIn zeroSequence (i + 1) rest (legacyInputInto code nIn zeroSequence i txin acc)
+
+/-- The bytes of `legacyInputsBytes`, appended to `acc`. -/
+def legacyInputsInto (scriptCode : Script) (tx : Transaction) (nIn : UInt32)
+    (anyoneCanPay zeroSequence : Bool) (acc : ByteArray) : ByteArray :=
+  let code := scriptCodeBytes scriptCode
+  if anyoneCanPay then
+    legacyInputsLoop code nIn.toNat zeroSequence nIn.toNat ((tx.inputs.val.drop nIn.toNat).take 1)
+      (CompactSize.encodeInto 1 acc)
+  else
+    let n := tx.inputs.val.length % 2 ^ 32
+    legacyInputsLoop code nIn.toNat zeroSequence 0 (tx.inputs.val.take n)
+      (CompactSize.encodeInto (UInt64.ofNat n) acc)
+
+/-- The outputs of a list for SINGLE, with indices from `o`: output `nIn` itself, and `TxOut.null` for every other one. -/
+def legacySingleOutputsLoop (nIn : Nat) : Nat → List TxOut → ByteArray → ByteArray
+  | _, [], acc => acc
+  | o, out :: rest, acc =>
+    legacySingleOutputsLoop nIn (o + 1) rest (PackedCodec.encodeInto (if o = nIn then out else TxOut.null) acc)
+
+/-- The bytes of `legacyOutputsBytes`, appended to `acc`. -/
+def legacyOutputsInto (tx : Transaction) (nIn : UInt32) (none single : Bool) (acc : ByteArray) : ByteArray :=
+  if none then CompactSize.encodeInto 0 acc
+  else if single then
+    let n := (nIn.toNat + 1) % 2 ^ 32
+    legacySingleOutputsLoop nIn.toNat 0 (tx.outputs.val.take n) (CompactSize.encodeInto (UInt64.ofNat n) acc)
+  else
+    let n := tx.outputs.val.length % 2 ^ 32
+    CountedList.pushElems (tx.outputs.val.take n) (CompactSize.encodeInto (UInt64.ofNat n) acc)
+
+/-- The bytes of `legacyPreimage` in a `ByteArray`. -/
+def legacyPreimageBytes (scriptCode : Script) (tx : Transaction) (nIn hashType : UInt32) : ByteArray :=
+  let acc := PackedCodec.encodeInto tx.version ByteArray.empty
+  let acc := legacyInputsInto scriptCode tx nIn (HashType.anyoneCanPay hashType)
+    (HashType.isSingle hashType || HashType.isNone hashType) acc
+  let acc := legacyOutputsInto tx nIn (HashType.isNone hashType) (HashType.isSingle hashType) acc
+  PackedCodec.encodeInto hashType (PackedCodec.encodeInto tx.lockTime acc)
+
+/--
+`SignatureHash` with `SIGVERSION_BASE`: `legacyOne` in the two cases of a fixed digest, and otherwise the double SHA-256 of the preimage.
+It hashes the packed preimage `legacyPreimageBytes`.
+`legacySignatureHash_eq_digest` of the proof library shows that it is the digest of `legacySignatureHashPlan`.
+-/
 def legacySignatureHash (scriptCode : Script) (tx : Transaction) (nIn hashType : UInt32) : Hash256 :=
-  (legacySignatureHashPlan scriptCode tx nIn hashType).digest
+  if tx.inputs.val.length ≤ nIn.toNat then legacyOne
+  else if HashType.isSingle hashType ∧ tx.outputs.val.length ≤ nIn.toNat then legacyOne
+  else digestToHash256 (Cryptography.Hash.Sha256d.hash (legacyPreimageBytes scriptCode tx nIn hashType))
 
 end DogeLib.Transaction

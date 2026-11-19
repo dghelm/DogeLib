@@ -36,7 +36,7 @@ theorem legacySignatureHash_eq_reference_of_readBase (sc : Script) (bs : List UI
     (hRead : Transaction.readBase bs = .ok (tx, rest))
     (hParse : (scanOps sc.bytes.val).2 = []) :
     legacySignatureHash sc tx nIn h = (legacyReferencePlan sc tx nIn h).digest := by
-  rw [legacySignatureHash, legacySignatureHashPlan_eq_reference_of_readBase
+  rw [legacySignatureHash_eq_digest, legacySignatureHashPlan_eq_reference_of_readBase
     sc bs tx rest nIn h hRead hParse]
 
 /--
@@ -61,7 +61,7 @@ theorem legacySignatureHash_eq_reference_of_decodeBaseComplete (sc : Script) (bs
     (hRead : Transaction.decodeBaseComplete bs = .ok tx)
     (hParse : (scanOps sc.bytes.val).2 = []) :
     legacySignatureHash sc tx nIn h = (legacyReferencePlan sc tx nIn h).digest := by
-  rw [legacySignatureHash, legacySignatureHashPlan_eq_reference_of_decodeBaseComplete
+  rw [legacySignatureHash_eq_digest, legacySignatureHashPlan_eq_reference_of_decodeBaseComplete
     sc bs tx nIn h hRead hParse]
 
 /--
@@ -89,7 +89,7 @@ theorem legacySignatureHash_eq_reference_of_readAllowWitness (sc : Script) (bs :
     (hRead : Transaction.readAllowWitness bs = .ok (w, rest))
     (hParse : (scanOps sc.bytes.val).2 = []) :
     legacySignatureHash sc w.tx nIn h = (legacyReferencePlan sc w.tx nIn h).digest := by
-  rw [legacySignatureHash, legacySignatureHashPlan_eq_reference_of_readAllowWitness
+  rw [legacySignatureHash_eq_digest, legacySignatureHashPlan_eq_reference_of_readAllowWitness
     sc bs w rest nIn h hRead hParse]
 
 end DogeLib.Transaction

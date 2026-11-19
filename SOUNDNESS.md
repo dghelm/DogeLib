@@ -1264,7 +1264,7 @@ It is defined for every block, so the bound also covers a block that `connectBlo
 Hypothesis 1 holds for the empty set, and the oracle refuses a supplied amount above `MAX_MONEY`.
 `connectBlock` runs `CheckTransaction` on every transaction before it changes the set.
 `applyTransaction_range` shows that the change of one such transaction keeps hypothesis 1.
-No theorem states that the result of `connectBlock` keeps it.
+`connect_valuesInRange` shows that the result of an accepted `connectBlock` keeps it.
 Hypothesis 2 holds for real blocks by a wide margin.
 It does not hold for the total supply, which is above `2^63` koinu, so the theorem is about one block and not about a chain.
 
@@ -1314,6 +1314,109 @@ The comparison evidence is in [COVERAGE.md](COVERAGE.md#operations) and [docs/or
 `block.validate` compares each block's verdict, reason, score and code with Core's own functions, and compares the digests of the coins ([B4](#b4-the-oracle-and-foreign-boundaries)).
 
 By `#print axioms`, `connect_fits`, `checkTxInputs_ne_feeNegative`, `checkTxInputs_ne_feeOutOfRange`, `connectBlock_ne_feeNegative` and `connectBlock_ne_feeOutOfRange` depend on `propext`, `Classical.choice` and `Quot.sound`.
+
+### `connect_spends_available`: each input spends a present coin
+
+`connect_spends_available` (in `DogeLib.Block.Proofs.ConnectProperties`) is the first property of design record 0010, section 6.
+Suppose that `connectBlock` accepts a block on a coin set, and that the block's hash is not the hash of the mainnet genesis block.
+Let `tx` be a transaction of the block that is not a coinbase.
+`coinsBefore` is the set just before `tx`: the first set after the changes of the earlier transactions of the block.
+So a coin that an earlier transaction of the block created is in `coinsBefore`, unless a transaction between them spent it.
+The theorem has three conclusions:
+
+1. The outpoints of the inputs of `tx` are pairwise different.
+2. Every input of `tx` has a coin in `coinsBefore`.
+3. After the spends of `tx`, no input of `tx` has a coin.
+
+Conclusion 1 is the part that excludes the bug class of CVE-2018-17144, in which one transaction of a block names an outpoint twice.
+Without it, conclusion 2 holds for two inputs that name one present coin.
+The proof takes conclusion 1 from the duplicate-input check of `checkTransaction`, which `checkBlock` runs inside `connectBlock`.
+
+The theorem holds for every verifier, both values of `fJustCheck`, every context and every coin set.
+It does not need `CoinSet.ValuesInRange`.
+`connectBlock_ok_coins` shows that `coinsBefore` at the end of the block is the new set of the result.
+
+**The genesis hash.**
+`connectBlock` accepts a block with the hash of the mainnet genesis block after `checkBlock` accepts it and before the transaction loop.
+Core's `ConnectBlock` does the same (D114, lines 1804 and 1821 to 1825).
+`connectBlock_genesis` states that case: the result is the unchanged set, with no change.
+
+Conclusions 2 and 3 describe the transaction loop, which does not run in that case.
+So the theorem has the hypothesis that the hash is another one.
+The hypothesis follows Core's own special case.
+
+**Coins as created, not outpoints.**
+Conclusion 3 is about the set after the spends of `tx` and before the outputs of `tx` enter.
+A later transaction with the same ID can create another coin at an outpoint that was spent.
+That can occur when every coin of the earlier entry is spent, or for a coinbase with BIP30 skipped.
+The theorem does not exclude a spend of the later coin, because it is another coin at the same outpoint.
+
+The theorem does not say that the scripts of the inputs pass, that a coinbase coin is mature, or that the amounts suffice.
+`connectBlock` tests those conditions, and no theorem here states them.
+
+### `connect_value_bound`: a block adds at most its subsidy
+
+`connect_value_bound` is the second property of design record 0010, section 6.
+`CoinSet.totalValue` is the sum of the amounts of all the outputs that the entries of a set hold, in the integers with no bound.
+Suppose that the coin set has amounts in range (`CoinSet.ValuesInRange`), and that `connectBlock` accepts a block on it.
+Then the total value of the new set is at most the total value of the first set plus `subsidyValue` of the context.
+
+The total counts each coin that `CoinSet.coin` returns once.
+It also counts an output that `CoinSet.coin` cannot return.
+Such an output is in an entry whose key is not `txidKey` of a transaction ID, or it has an index of `2^32` or more.
+`CoinSet.addTx` stores each entry under `txidKey` of its transaction ID, and no theorem states that a set has no such output.
+An extra output only raises the total, so the bounds of this section also bound the coins that `CoinSet.coin` returns, for amounts that are not negative.
+
+Design record 0010 also lists a successful subsidy and the arithmetic domain of its section 3 as assumptions.
+For a block whose hash is not the genesis hash, `connectBlock_ok` derives from acceptance that the subsidy has a value.
+Acceptance also means that the result is not `outOfDomain`, so each sum that the run tested was in the `int64_t` range.
+Acceptance does not give the bound of `connect_fits`, which is a sufficient condition for that domain and not a necessary one.
+So the theorem has `CoinSet.ValuesInRange` as its only hypothesis besides acceptance.
+For a block with the genesis hash, the set does not change, and the bound holds because a subsidy is not negative.
+
+The proof follows the fees.
+A transaction that is not a coinbase removes the coins of its inputs and adds its outputs, and `nFees` grows by the difference.
+`checkBlock` accepts one coinbase, in the first position, and `connectBlock` accepts it only when it pays at most `nFees` plus the subsidy.
+The proof needs the pairwise different outpoints of `connect_spends_available`: a coin that two inputs name would count twice in `nFees` and leave the set once.
+
+The bound is an upper bound only, for three reasons:
+
+- A coinbase can pay less than `nFees` plus the subsidy.
+- An unspendable output does not enter the set.
+- A new entry replaces an earlier entry of the same transaction ID, whose coins leave the set. The proof uses `CoinSet.ValuesInRange` here, and only for the lower bound 0.
+
+`connect_valuesInRange` proves that the new set has amounts in range, so the hypothesis holds again for the next block.
+The theorem relates two Lean sums.
+It does not show that Core's coin database has that total.
+`subsidyValue` is the subsidy of the supplied context, whether or not the context belongs to the block.
+
+### `chain_issuance_bound`: a chain holds at most the sum of its subsidies
+
+`chain_issuance_bound` is the third property of design record 0010, section 6.
+`connectChain` runs `connectBlock` on a list of blocks in order, each with its own context, and gives each block the set of the block before.
+
+Take a block with the hash of the mainnet genesis block, and a list of blocks after it.
+Suppose that `connectChain` accepts all of them from the empty set.
+Suppose also that the contexts are linked (`ChainLinked`).
+So the heights are 1, 2 and so on, and each previous hash is the hash of the block before.
+Then the total value of the final set is at most `chainSubsidy`, the sum of the subsidies of those heights and hashes.
+
+The genesis block adds no coin, so its subsidy is not in the sum.
+The empty set has amounts in range, and `connect_valuesInRange` keeps that property, so the theorem has no hypothesis on amounts.
+The sum is an integer with no `int64_t` bound, because the supply is above `2^63` koinu.
+The bound is an upper bound only, for the three reasons of `connect_value_bound`.
+
+`connectChain_issuance_bound` is the same bound for any supplied contexts, from any set with amounts in range.
+In that statement a height can repeat, so it is not a statement about a chain without `ChainLinked`.
+
+The theorem is about `connectBlock` block by block, on the Lean definitions.
+It does not include the header checks or `ContextualCheckBlock`, and it does not say which chain a node selects.
+`ChainLinked` does not require that `hashPrevBlock` of a header is the hash of the block before, because `connectBlock` does not read that field.
+The fields `bip34Ancestor` and `csvActive` of each context are free.
+
+`lake test` pins `CoinSet.totalValue` and `chainSubsidy` on a chain of the genesis block and one block at height 1 ([COVERAGE.md](COVERAGE.md#operations)).
+
+By `#print axioms`, `connect_spends_available`, `connect_valuesInRange`, `connect_value_bound`, `connectChain_issuance_bound` and `chain_issuance_bound` depend on `propext`, `Classical.choice` and `Quot.sound`.
 
 ### RIPEMD-160 and Hash160
 

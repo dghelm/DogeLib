@@ -283,13 +283,15 @@ def blockValidateFile (fields : Args) : IO (Except Failure Json) := do
     if length > maxFileBlockSize then return .error (validateFailure "file_record_too_long" [("index", natJson index)])
     let raw ← readUpTo handle length
     if raw.size != length then return .error (validateFailure "file_truncated" [("index", natJson index)])
+    -- The step is the last use of `run`, so that it can change the records and the coin set in place.
+    let before := run.view.head?.map (·.nHeight)
     match validateStep options run raw.toList (some (fileU32 head 0)) with
     | .error f => return .error f
     | .ok next =>
-      if next.view.length != run.view.length then
-        if let some entry := next.view.head? then
-          if entry.nHeight % setDigestInterval == 0 then
-            IO.eprintln s!"block.validate: accepted height {entry.nHeight}"
+      -- An accepted block puts its own height, which is new, at the head of the view.
+      if let some entry := next.view.head? then
+        if some entry.nHeight != before && entry.nHeight % setDigestInterval == 0 then
+          IO.eprintln s!"block.validate: accepted height {entry.nHeight}"
       run := next
     if run.outOfDomain.isSome then break
   return .ok (validateResult run)

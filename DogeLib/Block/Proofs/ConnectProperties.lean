@@ -21,11 +21,13 @@ The three properties of design record 0010, section 6, for `connectBlock`:
 Design record 0010 states the targets for a coin set with amounts in range, a successful subsidy and the arithmetic domain of its section 3.
 The theorems take acceptance, `connectBlock … = .ok r`, as their hypothesis.
 `connectBlock_ok` derives the last two conditions from acceptance, for a block without the genesis hash.
-The subsidy has a value, and no sum left the `int64_t` range.
+The subsidy has a value, and the result is not `outOfDomain`, so each sum that the run tested was in the `int64_t` range.
+Acceptance does not give the sufficient bound of `connect_fits`.
 So only `CoinSet.ValuesInRange` stays as a separate hypothesis, and only the value bounds need it.
 
 `connect_spends_available` excludes a block with the hash of the mainnet genesis block.
-`connectBlock` accepts such a block before it reads a transaction, as Core does (D114, lines 1821 to 1825), and `connectBlock_genesis` states that result.
+`connectBlock` accepts such a block after `checkBlock` and before the transaction loop, as Core does (D114, lines 1821 to 1825).
+`connectBlock_genesis` states that result.
 
 ## What the theorems do not say
 
@@ -51,13 +53,6 @@ def TxCoins.value (c : TxCoins) : Int := ((c.outputs.filterMap id).map fun o => 
 def entryValue : Option TxCoins → Int
   | none => 0
   | some c => c.value
-
-/--
-The total value of a coin set: the sum of `TxCoins.value` over its entries, in the integers.
-It is the sum of the amounts of all the coins of the set.
-The sum has no bound, because the supply of Dogecoin is above `2^63` koinu (design record 0010, section 3).
--/
-def CoinSet.totalValue (s : CoinSet) : Int := s.entries.foldl (fun acc _ c => acc + c.value) 0
 
 /--
 The coin set just before the transaction at `index`: the set `s` after the unchecked changes (`applyTransaction`) of the transactions before that index.
@@ -103,10 +98,22 @@ def chainSubsidy (prev : Block) (height : Nat) : List Block → Int
 
 /-! ## The coin set as a map
 This section is the only part of the module that reads `CoinSet.entries`.
+It has the definition of `CoinSet.totalValue` and the lemmas that depend on the map.
 The later sections use the set through seven of its statements:
 `CoinSet.totalValue_empty`, `CoinSet.empty_valuesInRange`, `CoinSet.entryValue_nonneg`, `CoinSet.totalValue_spend`, `CoinSet.totalValue_addTx`, `CoinSet.coin_spend_self` and `CoinSet.coin_spend_of_ne`.
 A change of the representation of `CoinSet` needs new proofs of these statements, and of no later theorem.
 -/
+
+/--
+The total value of a coin set: the sum of `TxCoins.value` over its entries, in the integers.
+It counts every output that an entry of the set holds.
+So it counts each coin that `CoinSet.coin` returns once.
+It also counts an output that `CoinSet.coin` cannot return.
+Such an output is in an entry whose key is not `txidKey` of a transaction ID, or it has an index of `2^32` or more.
+`CoinSet.addTx` stores each entry under `txidKey` of its transaction ID, and no theorem states that a set has only such entries.
+The sum has no bound, because the supply of Dogecoin is above `2^63` koinu (design record 0010, section 3).
+-/
+def CoinSet.totalValue (s : CoinSet) : Int := s.entries.foldl (fun acc _ c => acc + c.value) 0
 
 /-- A left fold that adds the entry values equals the start value plus the sum of the values. -/
 private theorem foldl_add_value : ∀ (l : List (Nat × TxCoins)) (acc : Int),
@@ -767,7 +774,9 @@ The facts that an accepted `connectBlock` supplies.
 1. The header has the hash of the mainnet genesis block, and the result is the unchanged set with no change.
 2. The header has another hash. The transaction loop accepted from the set `s` with `nFees` 0. The subsidy has a value. `nFees` plus the subsidy is in the `int64_t` range. The first transaction pays at most `nFees` plus the subsidy. The new set is the set of the loop.
 
-So a successful subsidy and the arithmetic domain of design record 0010, section 3, are consequences of acceptance in case 2.
+So in case 2 acceptance supplies a successful subsidy.
+The result is also not `outOfDomain`, so each sum that the run tested was in the `int64_t` range.
+Acceptance does not supply the bound of `connect_fits`, which is a sufficient condition and not a necessary one.
 -/
 theorem connectBlock_ok {verify : SignatureVerifier} {fJustCheck : Bool} {ctx : ConnectContext} {s : CoinSet}
     {b : Block} {r : ConnectResult} (h : connectBlock verify fJustCheck ctx s b = .ok r) :
@@ -823,7 +832,7 @@ theorem connectBlock_ok {verify : SignatureVerifier} {fJustCheck : Bool} {ctx : 
 
 /--
 `connectBlock` accepts a block with the hash of the mainnet genesis block without a change: the result is the set `s` and no change.
-The definition follows Core's own special case (D114, lines 1821 to 1825), which returns before it reads a transaction.
+The definition follows Core's own special case (D114, lines 1821 to 1825), which returns after `CheckBlock` accepts and before the transaction loop.
 -/
 theorem connectBlock_genesis {verify : SignatureVerifier} {fJustCheck : Bool} {ctx : ConnectContext} {s : CoinSet}
     {b : Block} {r : ConnectResult} (h : connectBlock verify fJustCheck ctx s b = .ok r)
@@ -871,7 +880,8 @@ It needs no hypothesis on the amounts of the set.
 `connectBlock_ok_coins` shows that the last of these sets is the new set of the result.
 
 The genesis hypothesis matches Core's own special case in `ConnectBlock` (D114, lines 1821 to 1825).
-For a block with the genesis hash, `connectBlock` reads no transaction, and `connectBlock_genesis` states its result.
+For a block with the genesis hash, `connectBlock` returns after `checkBlock` and does not run the transaction loop.
+`connectBlock_genesis` states its result.
 
 The statement is about coins as created, not about outpoints.
 Conclusion 3 is about the set after the spends of `tx` and before its outputs enter.
@@ -945,7 +955,7 @@ Then `CoinSet.totalValue` of the new set is at most that of `s` plus `subsidyVal
 
 `subsidyValue` is the subsidy of the context's height and previous hash.
 Take a block whose hash is not the genesis hash.
-Acceptance then shows that the subsidy has a value and that no sum left the `int64_t` range (`connectBlock_ok`).
+Acceptance then shows that the subsidy has a value and that the result is not `outOfDomain` (`connectBlock_ok`).
 For a block with the genesis hash, the set does not change.
 
 The fees cancel: each fee leaves the set with the inputs, and the coinbase can claim it.

@@ -1337,8 +1337,10 @@ It does not need `CoinSet.ValuesInRange`.
 `connectBlock_ok_coins` shows that `coinsBefore` at the end of the block is the new set of the result.
 
 **The genesis hash.**
-`connectBlock` accepts a block with the hash of the mainnet genesis block before it reads a transaction, as Core's `ConnectBlock` does (D114, lines 1821 to 1825).
+`connectBlock` accepts a block with the hash of the mainnet genesis block after `checkBlock` accepts it and before the transaction loop.
+Core's `ConnectBlock` does the same (D114, lines 1804 and 1821 to 1825).
 `connectBlock_genesis` states that case: the result is the unchanged set, with no change.
+
 Conclusions 2 and 3 describe the transaction loop, which does not run in that case.
 So the theorem has the hypothesis that the hash is another one.
 The hypothesis follows Core's own special case.
@@ -1355,12 +1357,20 @@ The theorem does not say that the scripts of the inputs pass, that a coinbase co
 ### `connect_value_bound`: a block adds at most its subsidy
 
 `connect_value_bound` is the second property of design record 0010, section 6.
-`CoinSet.totalValue` is the sum of the amounts of all the coins of a set, in the integers with no bound.
+`CoinSet.totalValue` is the sum of the amounts of all the outputs that the entries of a set hold, in the integers with no bound.
+It counts each coin that `CoinSet.coin` returns once.
+It also counts an output that `CoinSet.coin` cannot return.
+Such an output is in an entry whose key is not `txidKey` of a transaction ID, or it has an index of `2^32` or more.
+`CoinSet.addTx` makes no such entry, but no theorem states that a set has none.
+An extra output only raises the total, so the bounds below also bound the coins that `CoinSet.coin` returns, for amounts that are not negative.
+
 Suppose that the coin set has amounts in range (`CoinSet.ValuesInRange`), and that `connectBlock` accepts a block on it.
 Then the total value of the new set is at most the total value of the first set plus `subsidyValue` of the context.
 
 Design record 0010 also lists a successful subsidy and the arithmetic domain of its section 3 as assumptions.
-`connectBlock_ok` derives both from acceptance, for a block whose hash is not the genesis hash.
+For a block whose hash is not the genesis hash, `connectBlock_ok` derives from acceptance that the subsidy has a value.
+Acceptance also means that the result is not `outOfDomain`, so each sum that the run tested was in the `int64_t` range.
+Acceptance does not give the bound of `connect_fits`, which is a sufficient condition for that domain and not a necessary one.
 So the theorem has `CoinSet.ValuesInRange` as its only hypothesis besides acceptance.
 For a block with the genesis hash, the set does not change, and the bound holds because a subsidy is not negative.
 

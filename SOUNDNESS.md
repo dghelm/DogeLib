@@ -1321,7 +1321,7 @@ By `#print axioms`, `connect_fits`, `checkTxInputs_ne_feeNegative`, `checkTxInpu
 Suppose that `connectBlock` accepts a block on a coin set, and that the block's hash is not the hash of the mainnet genesis block.
 Let `tx` be a transaction of the block that is not a coinbase.
 `coinsBefore` is the set just before `tx`: the first set after the changes of the earlier transactions of the block.
-So a coin that an earlier transaction of the block created is in `coinsBefore`.
+So a coin that an earlier transaction of the block created is in `coinsBefore`, unless a transaction between them spent it.
 The theorem has three conclusions:
 
 1. The outpoints of the inputs of `tx` are pairwise different.

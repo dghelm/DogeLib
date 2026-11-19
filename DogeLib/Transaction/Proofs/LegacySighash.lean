@@ -1,7 +1,9 @@
 module
 
+public import DogeLib.Base.Proofs.ByteArray
 public import DogeLib.Serialization.Proofs.CountedList
 public import DogeLib.Transaction.LegacySighash
+public import DogeLib.Transaction.Proofs.Serialization
 public import DogeLib.Transaction.Proofs.Txid
 
 /-!
@@ -21,6 +23,8 @@ public import DogeLib.Transaction.Proofs.Txid
 - `readOp_eq_op_iff`: `readOp` reads an instruction exactly when the bytes start with an opcode, its length field and its data.
 - `readOp_eq_stop_iff`: `readOp` stops exactly on a short push or on the empty script.
 - `readPush_eq_op_iff` and `readPush_eq_stop_iff`: the two results of `readPush`.
+- `toList_legacyPreimageBytes`: the packed preimage `legacyPreimageBytes` has the bytes of `legacyPreimage`.
+- `legacySignatureHash_eq_digest`: `legacySignatureHash`, which hashes the packed preimage, is the digest of `legacySignatureHashPlan`.
 
 These are statements about the definitions. They do not say that the definitions match Core. The known answers in `tests/KnownAnswers/Transaction.lean` compare them with Core's corpus and with preimages derived from Core's source.
 -/
@@ -75,14 +79,112 @@ The condition reads no other part of the transaction, and it does not read the s
 def ReachesFixedDigest (tx : Transaction) (nIn hashType : UInt32) : Prop :=
   tx.inputs.val.length ≤ nIn.toNat ∨ (HashType.isSingle hashType = true ∧ tx.outputs.val.length ≤ nIn.toNat)
 
+/-! ## The packed preimage -/
+
+/-- For every byte array `b`, the byte array of the bytes of `b` is `b`. -/
+theorem _root_.ByteArray.toList_toByteArray_eq (b : ByteArray) : b.toList.toByteArray = b := by
+  have e : b.toList.toByteArray.data = b.data := Array.toList_inj.mp (by
+    rw [← ByteArray.toList_eq_data_toList, ← ByteArray.toList_eq_data_toList, List.toList_toByteArray])
+  revert e
+  generalize b.toList.toByteArray = c
+  intro e
+  cases b; cases c; cases e; rfl
+
+/-- For every script code, index and input, `legacyInputInto` appends the bytes of `legacyInputBytes`. -/
+theorem toList_legacyInputInto (sc : Script) (nIn : Nat) (z : Bool) (i : Nat) (txin : TxIn) (acc : ByteArray) :
+    (legacyInputInto (scriptCodeBytes sc) nIn z i txin acc).toList =
+      acc.toList ++ legacyInputBytes sc nIn z i txin := by
+  unfold legacyInputInto legacyInputBytes
+  split <;> simp [LawfulPackedCodec.toList_encodeInto, toList_pushBytes, List.append_assoc]
+
+/-- For every start index `i` and list of inputs, `legacyInputsLoop` appends the bytes of each input with its index from `i`. -/
+theorem toList_legacyInputsLoop (sc : Script) (nIn : Nat) (z : Bool) :
+    ∀ (i : Nat) (l : List TxIn) (acc : ByteArray),
+      (legacyInputsLoop (scriptCodeBytes sc) nIn z i l acc).toList =
+        acc.toList ++ (l.mapIdx fun j x => legacyInputBytes sc nIn z (i + j) x).flatten
+  | i, [], acc => by simp [legacyInputsLoop]
+  | i, x :: l, acc => by
+    have hf : (fun j x => legacyInputBytes sc nIn z (i + 1 + j) x) =
+        (fun j x => legacyInputBytes sc nIn z (i + (j + 1)) x) := by
+      funext j x; congr 1; omega
+    rw [legacyInputsLoop, toList_legacyInputsLoop sc nIn z (i + 1) l, toList_legacyInputInto,
+      List.mapIdx_cons, List.flatten_cons, hf, Nat.add_zero, List.append_assoc]
+
+/-- For every start index `o` and list of outputs, `legacySingleOutputsLoop` appends each output for SINGLE with its index from `o`. -/
+theorem toList_legacySingleOutputsLoop (nIn : Nat) :
+    ∀ (o : Nat) (l : List TxOut) (acc : ByteArray),
+      (legacySingleOutputsLoop nIn o l acc).toList =
+        acc.toList ++ (l.mapIdx fun j out => Codec.encode (if o + j = nIn then out else TxOut.null)).flatten
+  | o, [], acc => by simp [legacySingleOutputsLoop]
+  | o, x :: l, acc => by
+    have hf : (fun j out => Codec.encode (if o + 1 + j = nIn then out else TxOut.null)) =
+        (fun j out => Codec.encode (if o + (j + 1) = nIn then out else TxOut.null)) := by
+      funext j out; congr 2; simp only [Nat.add_assoc, Nat.add_comm 1 j]
+    rw [legacySingleOutputsLoop, toList_legacySingleOutputsLoop nIn (o + 1) l,
+      LawfulPackedCodec.toList_encodeInto, List.mapIdx_cons, List.flatten_cons, hf, Nat.add_zero,
+      List.append_assoc]
+
+/-- For every script code, transaction, input index and flags, `legacyInputsInto` appends the bytes of `legacyInputsBytes`. -/
+theorem toList_legacyInputsInto (sc : Script) (tx : Transaction) (nIn : UInt32) (acp z : Bool) (acc : ByteArray) :
+    (legacyInputsInto sc tx nIn acp z acc).toList = acc.toList ++ legacyInputsBytes sc tx nIn acp z := by
+  unfold legacyInputsInto legacyInputsBytes
+  split
+  · rw [toList_legacyInputsLoop, CompactSize.toList_encodeInto, List.append_assoc]
+    congr 2
+    cases tx.inputs.val.drop nIn.toNat with
+    | nil => simp
+    | cons x t => simp
+  · rw [toList_legacyInputsLoop, CompactSize.toList_encodeInto, List.append_assoc]
+    simp only [Nat.zero_add]
+
+/-- For every transaction, input index and flags, `legacyOutputsInto` appends the bytes of `legacyOutputsBytes`. -/
+theorem toList_legacyOutputsInto (tx : Transaction) (nIn : UInt32) (none single : Bool) (acc : ByteArray) :
+    (legacyOutputsInto tx nIn none single acc).toList = acc.toList ++ legacyOutputsBytes tx nIn none single := by
+  unfold legacyOutputsInto legacyOutputsBytes
+  split
+  · rw [CompactSize.toList_encodeInto]
+  · split
+    · rw [toList_legacySingleOutputsLoop, CompactSize.toList_encodeInto, List.append_assoc]
+      simp only [Nat.zero_add]
+    · rw [CountedList.toList_pushElems, CompactSize.toList_encodeInto, List.append_assoc]
+
+/-- For every script code, transaction, input index and hash type, the packed preimage has the bytes of `legacyPreimage`. -/
+theorem toList_legacyPreimageBytes (sc : Script) (tx : Transaction) (nIn h : UInt32) :
+    (legacyPreimageBytes sc tx nIn h).toList = legacyPreimage sc tx nIn h := by
+  unfold legacyPreimageBytes legacyPreimage legacyBody
+  rw [LawfulPackedCodec.toList_encodeInto, LawfulPackedCodec.toList_encodeInto, toList_legacyOutputsInto,
+    toList_legacyInputsInto, LawfulPackedCodec.toList_encodeInto]
+  simp [List.append_assoc]
+
+/--
+For every script code, transaction, input index and hash type, `legacySignatureHash` is the digest of `legacySignatureHashPlan`.
+That digest is `legacyOne` for a fixed digest, and otherwise the double SHA-256 of `legacyPreimage`.
+-/
+theorem legacySignatureHash_eq_digest (sc : Script) (tx : Transaction) (nIn h : UInt32) :
+    legacySignatureHash sc tx nIn h = (legacySignatureHashPlan sc tx nIn h).digest := by
+  unfold legacySignatureHash legacySignatureHashPlan
+  split
+  · rfl
+  · split
+    · rfl
+    · simp only [LegacyHashPlan.digest]
+      rw [← toList_legacyPreimageBytes, ByteArray.toList_toByteArray_eq]
+
 /--
 For every script code, transaction, input index and hash type with `ReachesFixedDigest`: the digest is `legacyOne`.
 The statement assumes no property of the hash function.
 -/
 theorem legacySignatureHash_eq_legacyOne (sc : Script) {tx : Transaction} {nIn h : UInt32}
     (hf : ReachesFixedDigest tx nIn h) : legacySignatureHash sc tx nIn h = legacyOne := by
-  rw [legacySignatureHash, (legacySignatureHashPlan_eq_fixedDigest_iff sc tx nIn h).mpr hf]
-  rfl
+  unfold legacySignatureHash
+  split
+  · rfl
+  · split
+    · rfl
+    · rename_i h1 h2
+      rcases hf with hi | ⟨hs, ho⟩
+      · exact absurd hi h1
+      · exact absurd ⟨hs, ho⟩ h2
 
 /--
 For all script codes `sc` and `sc'`, transactions, input indices and hash types: if both requests satisfy `ReachesFixedDigest`, their digests are equal.

@@ -25,7 +25,7 @@ These are the changes:
 - Upstream proves the laws inside the instances. Here they are separate theorems and the instances `instLawfulCodecBytes` and `instLawfulPackedCodecBytes`.
 - `abstractParse_readBytes` also shows that the check `Bytes.ofListExact?` of `readBytes` never fails.
 - `decodeBytes_eq_none_iff` is DogeLib's.
-- Lean `v4.35.0` deprecates `dif_pos` and `dif_neg`, so the proofs use `simp` with the condition.
+- Lean `v4.35.0` deprecates `dif_pos` and `dif_neg`, so the proofs use `simp` with the condition, or their replacements `dite_eq_left` and `dite_eq_right`.
 - The namespace, the module header and the doc comments are DogeLib's.
 -/
 
@@ -33,17 +33,30 @@ These are the changes:
 
 namespace DogeLib.Serialization
 
+/--
+For every `n` and all bytes `bs`, `decodeBytes n bs` is the read with the test `n ≤ bs.length`.
+It gives the first `n` bytes and the rest when the test holds, and `none` when it fails.
+-/
+theorem decodeBytes_eq_dite (n : Nat) (bs : List UInt8) :
+    decodeBytes n bs =
+      if h : n ≤ bs.length then some (⟨bs.take n, List.length_take_of_le h⟩, bs.drop n) else none := by
+  unfold decodeBytes
+  by_cases h : n ≤ bs.length
+  · rw [dite_eq_left (List.length_take_of_le h), dite_eq_left h]
+  · have ht : ¬ (bs.take n).length = n := fun e => h (e ▸ List.length_take_le' n bs)
+    rw [dite_eq_right ht, dite_eq_right h]
+
 /-- The round trip: for every `n`, every `b : Bytes n` and all bytes `rest`, `decodeBytes n (b.val ++ rest) = some (b, rest)`. -/
 theorem decodeBytes_encode {n : Nat} (b : Bytes n) (rest : List UInt8) :
     decodeBytes n (b.val ++ rest) = some (b, rest) := by
   obtain ⟨bs, hb⟩ := b
   subst hb
-  simp [decodeBytes]
+  simp [decodeBytes_eq_dite]
 
 /-- Canonicality: for every `n`, if `decodeBytes n bs = some (b, rest)`, then `bs = b.val ++ rest`. -/
 theorem decodeBytes_canonical {n : Nat} (bs : List UInt8) (b : Bytes n) (rest : List UInt8)
     (h : decodeBytes n bs = some (b, rest)) : bs = b.val ++ rest := by
-  unfold decodeBytes at h
+  rw [decodeBytes_eq_dite] at h
   split at h
   · simp only [Option.some.injEq, Prod.mk.injEq] at h
     obtain ⟨rfl, rfl⟩ := h
@@ -53,7 +66,7 @@ theorem decodeBytes_canonical {n : Nat} (bs : List UInt8) (b : Bytes n) (rest : 
 /-- For every `n` and all bytes `bs`, `decodeBytes n bs = none` exactly when `bs` has fewer than `n` bytes. -/
 theorem decodeBytes_eq_none_iff (n : Nat) (bs : List UInt8) :
     decodeBytes n bs = none ↔ bs.length < n := by
-  unfold decodeBytes
+  rw [decodeBytes_eq_dite]
   split
   · next h => simp only [reduceCtorEq, false_iff, Nat.not_lt]; exact h
   · next h => simp only [true_iff]; omega
@@ -81,7 +94,8 @@ So the check `Bytes.ofListExact?` inside `readBytes` never fails.
 -/
 theorem abstractParse_readBytes (n : Nat) (s : ByteSlice) :
     abstractParse (readBytes n s) = decodeBytes n s.toList := by
-  unfold readBytes decodeBytes
+  rw [decodeBytes_eq_dite]
+  unfold readBytes
   by_cases h : n ≤ s.size
   · have hl : ((s.take n).toList).length = n := by
       rw [ByteSlice.length_toList, ByteSlice.size_take, Nat.min_eq_left h]

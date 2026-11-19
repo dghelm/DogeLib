@@ -404,7 +404,7 @@ The converse at the level of digests is not proved. It would need collision resi
 theorem legacySignatureHash_eq_of_allFields (sc : Script) (tx tx' : Transaction) (n h : UInt32)
     (hh : HashType.IsAllOnly h) (hf : legacyAllFields tx = legacyAllFields tx') :
     legacySignatureHash sc tx n h = legacySignatureHash sc tx' n h := by
-  rw [legacySignatureHash, legacySignatureHash, legacySignatureHashPlan_eq_of_allFields sc tx tx' n h hh hf]
+  rw [legacySignatureHash_eq_digest, legacySignatureHash_eq_digest, legacySignatureHashPlan_eq_of_allFields sc tx tx' n h hh hf]
 
 /-! ## The signed input's position -/
 

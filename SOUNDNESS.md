@@ -1584,6 +1584,8 @@ Each fixed-width instance discharges that hypothesis by `rfl`.
 
 The laws also hold for the codec of byte strings of a fixed length `n`, for every `n` (`instLawfulCodecBytes`), and so for `Hash256`, which is `Bytes 32`.
 `decodeBytes_eq_none_iff` says that this decoder rejects exactly the inputs with fewer than `n` bytes.
+`decodeBytes` tests the length of the first `n` bytes, so a read takes steps in `n`, not in the length of the input.
+`decodeBytes_eq_dite` proves it equal to the read with the test `n ≤ bs.length`.
 
 A decoder that satisfies these laws rejects every input that does not start with a canonical encoding.
 The laws do not say which values a Dogecoin rule accepts.
@@ -1629,8 +1631,8 @@ By `#print axioms` with Lean `v4.35.0`:
 
 | Theorem | Axioms |
 | --- | --- |
-| `Bytes.length_val` | None |
-| `LawfulCodec.ofEquiv`, `LawfulPackedCodec.ofEquiv`, `encode_injective`, `setWidth_setWidth_eq_self`, `instLawfulCodecBytes`, `decodeBytes_encode`, `decodeBytes_canonical`, `Bytes.encode_length`, `Bytes.ofListExact?_eq_some_iff`, `Bytes.ofListExact?_val`, `Bytes.val_reverse`, `Bytes.reverse_reverse`, `Hash256.length_displayBytes`, `Hash256.ofDisplayBytes?_displayBytes`, `Hash256.displayBytes_ofDisplayBytes?` | `propext` |
+| `Bytes.length_val`, `Bytes.encode_length` | None |
+| `LawfulCodec.ofEquiv`, `LawfulPackedCodec.ofEquiv`, `encode_injective`, `setWidth_setWidth_eq_self`, `instLawfulCodecBytes`, `decodeBytes_encode`, `decodeBytes_canonical`, `decodeBytes_eq_dite`, `Bytes.ofListExact?_eq_some_iff`, `Bytes.ofListExact?_val`, `Bytes.val_reverse`, `Bytes.reverse_reverse`, `Hash256.length_displayBytes`, `Hash256.ofDisplayBytes?_displayBytes`, `Hash256.displayBytes_ofDisplayBytes?` | `propext` |
 | `instLawfulCodecProd`, `instLawfulCodecUInt8` to `instLawfulCodecUInt64`, `lawfulCodec_bitVecCodecLE`, `decodeBitVecLE_encodeBitVecLE`, `decodeBitVecLE_canonical`, `instLawfulPackedCodecProd`, `toList_pushBitVecLE`, `LawfulPackedCodec.toList_encode`, `ByteArray.toList_eq_data_toList`, `decodeBytes_eq_none_iff`, `toList_pushBytes` | `propext`, `Quot.sound` |
 | `instLawfulPackedCodecUInt8` to `instLawfulPackedCodecUInt64`, `abstractParse_readBitVecLE`, `LawfulPackedCodec.abstractParse_decode`, `LawfulPackedCodec.abstractParse_decode_toByteArray`, `ByteSlice.toList_of_uncons_some`, `ByteSlice.toList_drop`, `instLawfulPackedCodecBytes`, `abstractParse_readBytes` | `propext`, `Classical.choice`, `Quot.sound` |
 
@@ -1776,6 +1778,7 @@ Two theorems need no assumption on `elem`.
 `decodeBounded_of_count_error` says that an error of Core's count reader is the error of the list reader.
 So a count above `MAX_SIZE` is `tooLarge`, and no element is read.
 `decodeBoundedBytes_eq` says that the block read of bytes, `decodeBoundedBytes`, is `decodeBounded readByte` on every input, including its errors.
+Its block read `readBytes` tests the length of the first `n` bytes, and `readBytes_eq_ite` proves it equal to the read with the test `n ≤ bs.length`.
 
 No theorem says which error an element failure gives.
 It is the error of `elem`, and a later layer that defines an element reader states it.
@@ -1803,7 +1806,7 @@ By `#print axioms` with Lean `v4.35.0`:
 | Theorem | Axioms |
 | --- | --- |
 | `readElemsBounded_toOption` | None |
-| `ofList?_eq_some`, `val_of_ofList?`, `decodeElems_encodeElems`, `toList_pushElems`, `readElemsBounded_readByte`, `readElemsBoundedLoop_eq`, `readElemsBoundedLoop_nil` | `propext` |
+| `ofList?_eq_some`, `val_of_ofList?`, `decodeElems_encodeElems`, `toList_pushElems`, `readBytes_eq_ite`, `readElemsBounded_readByte`, `readElemsBoundedLoop_eq`, `readElemsBoundedLoop_nil` | `propext` |
 | `decodeElemsLoop_eq`, `decodeElemsLoop_nil`, `readElemsLoop_eq`, `readElemsLoop_nil`, `instLawfulCodecCountedList`, `decode_encode`, `decode_canonical`, `decode_eq_some_iff`, `decodeElems_length`, `decodeElems_canonical`, `abstractParse_readElems`, `encode_uint8`, `decode_uint8_cons`, `decode_uint8_nil`, `encodeElems_uint8`, `decodeElems_uint8`, `decodeBounded_eq_ok_iff_parts`, `decodeBounded_of_count_error`, `readByte_toOption`, `decodeBoundedBytes_eq`, `decodeBoundedBytes_maxSize_succ`, `decode_maxSize_succ` | `propext`, `Quot.sound` |
 | `instLawfulPackedCodecCountedList`, `instLawfulPackedCodecCountedListBytes`, `abstractParse_readByteList`, `decodeBounded_eq_ok_iff`, `decodeBounded_encode` | `propext`, `Classical.choice`, `Quot.sound` |
 
@@ -1933,6 +1936,8 @@ For every script code, transaction, input index and hash type:
 - `legacySignatureHash_eq_legacyOne`: under `ReachesFixedDigest`, the condition of the first item, the digest is `legacyOne`.
   `legacySignatureHash_eq_of_reachesFixedDigest`: so two such requests have equal digests, for any script codes, transactions, input indices and hash types.
   [The fixed digest of `SIGHASH_SINGLE`](#script-worked-property-the-fixed-digest-of-sighash_single) states the result for a whole spend.
+- `legacySignatureHash_eq_digest`: `legacySignatureHash` is the digest of `legacySignatureHashPlan`.
+  `legacySignatureHash` hashes `legacyPreimageBytes`, a `ByteArray` that the packed encoders write, and `toList_legacyPreimageBytes` says that its bytes are `legacyPreimage`.
 - `legacyPreimage_eq`: the preimage is a body, then the 4 bytes of the hash type. The body depends on the hash type only through its ANYONECANPAY, NONE and SINGLE flags. `HashType.flags_eq_of_and` says that the flags depend only on the bits `0x9f`.
 - `scriptCodeBytes_eq_encode`: when no instruction parse failed and no instruction is `OP_CODESEPARATOR`, the script code is written as the ordinary encoding of the script.
 - `readOp_eq_op_iff` and `readOp_eq_stop_iff`: `readOp` reads an instruction exactly when the bytes start with an opcode, its length field and its data. The field has the width that the opcode requires, and the data has the size that they give. It stops exactly on a short push or the empty script.
@@ -1963,10 +1968,10 @@ By `#print axioms` with Lean `v4.35.0`:
 | --- | --- |
 | `readPush_stop` | None |
 | `readPush_op_append`, `readOp_op_append`, `readOp_stop_nil`, `lengthFieldWidth_of_gt`, `lengthFieldWidth_of_lt`, `pushSize_of_gt` | `propext` |
-| `readPush_eq_op_iff`, `readPush_eq_stop_iff` | `propext`, `Quot.sound` |
+| `readPush_eq_op_iff`, `readPush_eq_stop_iff`, `ByteArray.toList_toByteArray_eq` | `propext`, `Quot.sound` |
 | `readOp_cons_eq`, `readOp_eq_op_iff`, `readOp_eq_stop_iff` | `propext`, `Classical.choice`, `Quot.sound` |
 | `readOp_rest_length`, `readOp_stop_prefix`, `scanOps_prefix`, `scanOps_eq_of_complete`, `legacySignatureHashPlan_eq_fixedDigest_iff`, `legacySignatureHashPlan_eq_hashBytes`, `legacySignatureHash_eq_legacyOne`, `legacySignatureHash_eq_of_reachesFixedDigest`, `legacyPreimage_eq`, `HashType.flags_eq_of_and`, `LegacyHashPlan.digest_fixedDigest`, `LegacyHashPlan.digest_hashBytes_val` | `propext`, `Quot.sound` |
-| `scriptCodeBytes_eq_encode` | `propext`, `Classical.choice`, `Quot.sound` |
+| `scriptCodeBytes_eq_encode`, `toList_legacyInputInto`, `toList_legacyInputsLoop`, `toList_legacyInputsInto`, `toList_legacySingleOutputsLoop`, `toList_legacyOutputsInto`, `toList_legacyPreimageBytes`, `legacySignatureHash_eq_digest` | `propext`, `Classical.choice`, `Quot.sound` |
 
 ### Legacy signature hash: transformation reference
 

@@ -425,7 +425,7 @@ theorem legacySignatureHash_eq_reference (sc : Script) (tx : Transaction) (nIn h
     (hParse : (scanOps sc.bytes.val).2 = []) (hIn : tx.inputs.val.length < 2 ^ 32)
     (hOut : tx.outputs.val.length < 2 ^ 32) :
     legacySignatureHash sc tx nIn h = (legacyReferencePlan sc tx nIn h).digest := by
-  rw [legacySignatureHash, legacySignatureHashPlan_eq_reference sc tx nIn h hParse hIn hOut]
+  rw [legacySignatureHash_eq_digest, legacySignatureHashPlan_eq_reference sc tx nIn h hParse hIn hOut]
 
 /-! ## A script on which the definitions differ -/
 

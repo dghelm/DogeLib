@@ -512,16 +512,28 @@ theorem readByte_toOption (bs : List UInt8) :
   | nil => rfl
   | cons b t => rw [decode_uint8_cons]; rfl
 
+/--
+For every `n` and all bytes `bs`, `readBytes n bs` is the read with the test `n ≤ bs.length`.
+It gives the first `n` bytes and the rest when the test holds, and `truncated` when it fails.
+-/
+theorem readBytes_eq_ite (n : Nat) (bs : List UInt8) :
+    readBytes n bs = if n ≤ bs.length then .ok (bs.take n, bs.drop n) else .error .truncated := by
+  unfold readBytes
+  by_cases h : n ≤ bs.length
+  · rw [ite_eq_left_of_eq_true _ _ (eq_true (List.length_take_of_le h)), ite_eq_left_of_eq_true _ _ (eq_true h)]
+  · have ht : ¬ (bs.take n).length = n := fun e => h (e ▸ List.length_take_le' n bs)
+    rw [ite_eq_right_of_eq_false _ _ (eq_false ht), ite_eq_right_of_eq_false _ _ (eq_false h)]
+
 /-- For every `n` and all bytes `bs`, reading `n` bytes one at a time with `readByte` gives the same result as the block read `readBytes n bs`, including the error. -/
 theorem readElemsBounded_readByte (n : Nat) (bs : List UInt8) :
     readElemsBounded readByte n bs = readBytes n bs := by
   induction n generalizing bs with
-  | zero => simp [readElemsBounded, readBytes]
+  | zero => simp [readElemsBounded, readBytes_eq_ite]
   | succ n ih =>
     cases bs with
-    | nil => simp [readElemsBounded, readByte, readBytes]
+    | nil => simp [readElemsBounded, readByte, readBytes_eq_ite]
     | cons b t =>
-      simp only [readElemsBounded, readByte, ih, readBytes, List.length_cons]
+      simp only [readElemsBounded, readByte, ih, readBytes_eq_ite, List.length_cons]
       by_cases h : n ≤ t.length
       · simp [h]
       · simp [h]
@@ -701,8 +713,8 @@ theorem abstractRead_decodeBoundedSlice {α : Type}
 theorem abstractRead_readBytesSlice (n : Nat) (s : ByteSlice) :
     abstractRead (readBytesSlice n s) = readBytes n s.toList := by
   by_cases h : n ≤ s.size
-  · simp [readBytesSlice, readBytes, h]
-  · simp [readBytesSlice, readBytes, h]
+  · simp [readBytesSlice, readBytes_eq_ite, h]
+  · simp [readBytesSlice, readBytes_eq_ite, h]
 
 /-- For every slice, the packed bounded byte vector reader preserves the complete result of the list reader. -/
 theorem abstractRead_decodeBoundedBytesSlice (s : ByteSlice) :

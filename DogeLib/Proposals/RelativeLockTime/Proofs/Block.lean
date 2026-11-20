@@ -4,6 +4,7 @@ public import DogeLib.Block.Proofs.ContextualCheck
 public import DogeLib.Proposals.Framework.Proofs.Block
 public import DogeLib.Proposals.Framework.Proofs.Compatibility
 public import DogeLib.Proposals.RelativeLockTime.Proofs.CheckSequence
+public import DogeLib.Proposals.RelativeLockTime.Proofs.SequenceLocks
 
 /-!
 # Proofs: `Proposals.RelativeLockTime` at the block level
@@ -166,12 +167,28 @@ theorem spend_restricts {verify : SignatureVerifier} {active : Bool} {height : N
   | false => exact h'
   | true => exact csvFlag_soft_fork_local h'
 
+/-! ## The transaction test -/
+
+/-- With `active` false, or with a version below 2 as an unsigned value, the transaction test of the revision accepts. For every view, height, index and list of coins. -/
+theorem txTest_inactive {active : Bool} {tx : Transaction} (h : active = false ∨ tx.version.toNat < 2)
+    (view : List BlockIndex) (height index : Nat) (coins : List Coin) :
+    txTest active view height index tx coins = .ok () := by
+  simp only [txTest, sequenceLocks_inactive h, BlockOutcome.map]
+
+/-- The transaction test of the revision accepts exactly when `sequenceLocks` accepts. -/
+theorem txTest_eq_ok_iff {active : Bool} {view : List BlockIndex} {height index : Nat} {tx : Transaction}
+    {coins : List Coin} :
+    txTest active view height index tx coins = .ok () ↔ sequenceLocks active view height index tx coins = .ok () := by
+  unfold txTest
+  cases sequenceLocks active view height index tx coins <;> simp [BlockOutcome.map]
+
 /-! ## Inactive equality -/
 
 /-- The revision has the inactive equality of the block layer: with `active` false, each of its parts has its baseline value. -/
-theorem blockRevision_inactiveBaseline (verify : SignatureVerifier) :
-    (blockRevision verify : BlockRevision ScriptError Unsupported ρ μ).InactiveBaseline id id verify :=
-  ⟨fun _ _ _ => rfl, scriptFlags_inactive, fun _ _ _ _ => rfl, lockTimeArgs_inactive⟩
+theorem blockRevision_inactiveBaseline (verify : SignatureVerifier) (view : List BlockIndex) :
+    (blockRevision verify view).InactiveBaseline id id verify :=
+  ⟨fun _ _ _ => rfl, scriptFlags_inactive, fun height index tx coins => txTest_inactive (tx := tx) (.inl rfl) view height index coins,
+    lockTimeArgs_inactive⟩
 
 /--
 The target `relativeLockTime_inactive_eq` of design record 0012, section 9.3, for the revision with the rules of BIP 113 and BIP 112.
@@ -179,42 +196,42 @@ With `active` false, `validateBlockWithActive` with the revision equals the embe
 The equality covers every acceptance, each rejection and each result outside the model.
 For every pair of embeddings, verifier, pair of flags, context, coin set and block.
 -/
-theorem relativeLockTime_inactive_eq (V : ValidateEmbedding ρ μ ρ' μ') (E : ConnectEmbedding ScriptError Unsupported ρ μ)
-    (verify : SignatureVerifier) (fCheckPOW fCheckMerkleRoot : Bool) (ctx : ValidateContext) (s : CoinSet)
-    (b : Block) :
-    validateBlockWithActive V E (blockRevision verify) false fCheckPOW fCheckMerkleRoot ctx s b =
+theorem relativeLockTime_inactive_eq (V : ValidateEmbedding ConnectRejection ConnectReason ρ' μ') (E : ConnectEmbedding ScriptError Unsupported ConnectRejection ConnectReason)
+    (verify : SignatureVerifier) (view : List BlockIndex) (fCheckPOW fCheckMerkleRoot : Bool) (ctx : ValidateContext)
+    (s : CoinSet) (b : Block) :
+    validateBlockWithActive V E (blockRevision verify view) false fCheckPOW fCheckMerkleRoot ctx s b =
       V.ofBaseline E id id (validateBlock verify fCheckPOW fCheckMerkleRoot ctx s b) :=
-  validateBlockWithActive_inactive V E (blockRevision_inactiveBaseline verify) fCheckPOW fCheckMerkleRoot ctx s b
+  validateBlockWithActive_inactive V E (blockRevision_inactiveBaseline verify view) fCheckPOW fCheckMerkleRoot ctx s b
 
 /--
 The target `relativeLockTime_activation` of design record 0012, section 9.3, for the revision with the rules of BIP 113 and BIP 112.
 Where the activation is inactive on mainnet at the height of the block, `validateBlockWith` with the revision equals the embedded result of `validateBlock`.
 For every activation, pair of embeddings, verifier, pair of flags, context, coin set and block.
 -/
-theorem relativeLockTime_activation (V : ValidateEmbedding ρ μ ρ' μ') (E : ConnectEmbedding ScriptError Unsupported ρ μ)
-    (verify : SignatureVerifier) {a : Activation} (fCheckPOW fCheckMerkleRoot : Bool) {ctx : ValidateContext}
-    (hact : a.isActive .mainnet ctx.height = false) (s : CoinSet) (b : Block) :
-    validateBlockWith V E (blockRevision verify) a fCheckPOW fCheckMerkleRoot ctx s b =
+theorem relativeLockTime_activation (V : ValidateEmbedding ConnectRejection ConnectReason ρ' μ') (E : ConnectEmbedding ScriptError Unsupported ConnectRejection ConnectReason)
+    (verify : SignatureVerifier) (view : List BlockIndex) {a : Activation} (fCheckPOW fCheckMerkleRoot : Bool)
+    {ctx : ValidateContext} (hact : a.isActive .mainnet ctx.height = false) (s : CoinSet) (b : Block) :
+    validateBlockWith V E (blockRevision verify view) a fCheckPOW fCheckMerkleRoot ctx s b =
       V.ofBaseline E id id (validateBlock verify fCheckPOW fCheckMerkleRoot ctx s b) :=
-  validateBlockWith_inactive V E (blockRevision_inactiveBaseline verify) fCheckPOW fCheckMerkleRoot hact s b
+  validateBlockWith_inactive V E (blockRevision_inactiveBaseline verify view) fCheckPOW fCheckMerkleRoot hact s b
 
 /-- `relativeLockTime_activation` for a block below the activation height `h₀` of mainnet. -/
-theorem relativeLockTime_activation_of_lt (V : ValidateEmbedding ρ μ ρ' μ')
-    (E : ConnectEmbedding ScriptError Unsupported ρ μ) (verify : SignatureVerifier) {a : Activation}
-    (fCheckPOW fCheckMerkleRoot : Bool) {ctx : ValidateContext} {h₀ : Nat} (hheight : a.height .mainnet = some h₀)
-    (hlt : ctx.height < h₀) (s : CoinSet) (b : Block) :
-    validateBlockWith V E (blockRevision verify) a fCheckPOW fCheckMerkleRoot ctx s b =
+theorem relativeLockTime_activation_of_lt (V : ValidateEmbedding ConnectRejection ConnectReason ρ' μ')
+    (E : ConnectEmbedding ScriptError Unsupported ConnectRejection ConnectReason) (verify : SignatureVerifier) (view : List BlockIndex)
+    {a : Activation} (fCheckPOW fCheckMerkleRoot : Bool) {ctx : ValidateContext} {h₀ : Nat}
+    (hheight : a.height .mainnet = some h₀) (hlt : ctx.height < h₀) (s : CoinSet) (b : Block) :
+    validateBlockWith V E (blockRevision verify view) a fCheckPOW fCheckMerkleRoot ctx s b =
       V.ofBaseline E id id (validateBlock verify fCheckPOW fCheckMerkleRoot ctx s b) :=
-  relativeLockTime_activation V E verify fCheckPOW fCheckMerkleRoot (Activation.isActive_lt hheight hlt) s b
+  relativeLockTime_activation V E verify view fCheckPOW fCheckMerkleRoot (Activation.isActive_lt hheight hlt) s b
 
 /-- `relativeLockTime_activation` for an activation with no activation height on mainnet, at every height. -/
-theorem relativeLockTime_activation_of_none (V : ValidateEmbedding ρ μ ρ' μ')
-    (E : ConnectEmbedding ScriptError Unsupported ρ μ) (verify : SignatureVerifier) {a : Activation}
-    (fCheckPOW fCheckMerkleRoot : Bool) (ctx : ValidateContext) (hnone : a.height .mainnet = none) (s : CoinSet)
-    (b : Block) :
-    validateBlockWith V E (blockRevision verify) a fCheckPOW fCheckMerkleRoot ctx s b =
+theorem relativeLockTime_activation_of_none (V : ValidateEmbedding ConnectRejection ConnectReason ρ' μ')
+    (E : ConnectEmbedding ScriptError Unsupported ConnectRejection ConnectReason) (verify : SignatureVerifier) (view : List BlockIndex)
+    {a : Activation} (fCheckPOW fCheckMerkleRoot : Bool) (ctx : ValidateContext) (hnone : a.height .mainnet = none)
+    (s : CoinSet) (b : Block) :
+    validateBlockWith V E (blockRevision verify view) a fCheckPOW fCheckMerkleRoot ctx s b =
       V.ofBaseline E id id (validateBlock verify fCheckPOW fCheckMerkleRoot ctx s b) :=
-  relativeLockTime_activation V E verify fCheckPOW fCheckMerkleRoot (Activation.none_inactive hnone ctx.height) s b
+  relativeLockTime_activation V E verify view fCheckPOW fCheckMerkleRoot (Activation.none_inactive hnone ctx.height) s b
 
 /-! ## Restriction -/
 
@@ -225,18 +242,18 @@ For every `active`, pair of embeddings, verifier, pair of flags, context and coi
 The statement has no hypothesis on the times: `validateBlockWithActive` runs the contextual header check before the body check.
 The proof uses conditions 1, 2 and 4 of design record 0012, section 6.4: `spend_restricts` for the flag, `scriptFlags_p2sh`, and `lockTimeCutoff_le` for the cutoff.
 -/
-theorem relativeLockTime_restricts {V : ValidateEmbedding ρ μ ρ' μ'} {E : ConnectEmbedding ScriptError Unsupported ρ μ}
-    {verify : SignatureVerifier} {active fCheckPOW fCheckMerkleRoot : Bool} {ctx : ValidateContext} {s : CoinSet}
-    {b : Block} {r : ConnectResult}
-    (h : validateBlockWithActive V E (blockRevision verify) active fCheckPOW fCheckMerkleRoot ctx s b = .ok r) :
+theorem relativeLockTime_restricts {V : ValidateEmbedding ConnectRejection ConnectReason ρ' μ'} {E : ConnectEmbedding ScriptError Unsupported ConnectRejection ConnectReason}
+    {verify : SignatureVerifier} {view : List BlockIndex} {active fCheckPOW fCheckMerkleRoot : Bool}
+    {ctx : ValidateContext} {s : CoinSet} {b : Block} {r : ConnectResult}
+    (h : validateBlockWithActive V E (blockRevision verify view) active fCheckPOW fCheckMerkleRoot ctx s b = .ok r) :
     validateBlock verify fCheckPOW fCheckMerkleRoot ctx s b = .ok r := by
-  refine validateBlockWithActive_restricts (rev := blockRevision verify)
+  refine validateBlockWithActive_restricts (rev := blockRevision verify view)
     (fun ictx spk hacc => spend_restricts hacc) (scriptFlags_p2sh _ _) (fun hpass => ?_) h
   cases hcsv : ctx.csvActive with
   | false => exact lockTimeCutoff_le hcsv hpass
   | true =>
     have hg := connectBlockWith_ok_genesis_of_csvActive (validateBlockWithActive_ok_connect h) hcsv
-    have hargs : (blockRevision (ρ := ρ) (μ := μ) verify).lockTimeArgs active ctx b = baselineLockTimeArgs ctx :=
+    have hargs : (blockRevision verify view).lockTimeArgs active ctx b = baselineLockTimeArgs ctx :=
       lockTimeArgs_of_not_applicable (not_applicable_of_genesis hg)
     rw [hargs]
     exact Int.le_refl _
@@ -272,11 +289,11 @@ For every pair of embeddings, verifier, pair of flags, context and coin set.
 `scriptFlags` does not read the block.
 A block that is not applicable and passes the contextual header check has the genesis hash, and `connectBlockWith` connects no transaction of it.
 -/
-theorem relativeLockTime_eq_of_not_applicable (V : ValidateEmbedding ρ μ ρ' μ')
-    (E : ConnectEmbedding ScriptError Unsupported ρ μ) (verify : SignatureVerifier)
+theorem relativeLockTime_eq_of_not_applicable (V : ValidateEmbedding ConnectRejection ConnectReason ρ' μ')
+    (E : ConnectEmbedding ScriptError Unsupported ConnectRejection ConnectReason) (verify : SignatureVerifier) (view : List BlockIndex)
     (active fCheckPOW fCheckMerkleRoot : Bool) {ctx : ValidateContext} (s : CoinSet) {b : Block}
     (happ : applicable ctx b = false) :
-    validateBlockWithActive V E (blockRevision verify) active fCheckPOW fCheckMerkleRoot ctx s b =
+    validateBlockWithActive V E (blockRevision verify view) active fCheckPOW fCheckMerkleRoot ctx s b =
       V.ofBaseline E id id (validateBlock verify fCheckPOW fCheckMerkleRoot ctx s b) := by
   rw [← validateBlockWithActive_ofBaseline V E id id verify active]
   apply validateBlockWithActive_congr_of_passed
@@ -347,21 +364,26 @@ theorem baselineSpendCheck_withCsvFlag_of_untouched {verify : SignatureVerifier}
     verifyScriptWith_flags_congr _ (unsupportedFlagBits_withCsvFlag g) (hasFlag_withCsvFlag g (by decide))]
 
 /--
-Take a block with no instruction `0xb2` in a script of a spend (`BlockUntouched isCsvOpcode`), on a coin set.
+Take a block on a coin set with two properties.
+No script of a spend of the block holds an instruction `0xb2` (`BlockUntouched isCsvOpcode`).
+The transaction test of the revision accepts every transaction of the block that is not a coinbase, with the coins of its inputs.
 Then `connectBlockWith` with the revision equals `connectBlockWith` with the baseline revision, for every `active`.
 The equality covers both runs of each script check.
 -/
-theorem connectBlockWith_eq_of_opcode_untouched (E : ConnectEmbedding ScriptError Unsupported ρ μ)
-    (verify : SignatureVerifier) (active fJustCheck : Bool) {ctx : ConnectContext} {s : CoinSet} {b : Block}
-    (hfree : BlockUntouched isCsvOpcode verify ctx.height s b) :
-    connectBlockWith E (blockRevision verify) active fJustCheck ctx s b =
+theorem connectBlockWith_eq_of_untouched (E : ConnectEmbedding ScriptError Unsupported ConnectRejection ConnectReason)
+    (verify : SignatureVerifier) (view : List BlockIndex) (active fJustCheck : Bool) {ctx : ConnectContext}
+    {s : CoinSet} {b : Block} (hfree : BlockUntouched isCsvOpcode verify ctx.height s b)
+    (htest : ∀ i tx, b.transactions[i]? = some tx → tx.isCoinBase = false → ∀ coins,
+      txTest active view ctx.height i tx coins = .ok ()) :
+    connectBlockWith E (blockRevision verify view) active fJustCheck ctx s b =
       connectBlockWith E (.baseline id id verify) active fJustCheck ctx s b := by
   cases active with
   | false =>
-    exact connectBlockWith_congr_revision E fJustCheck (fun _ _ _ _ _ _ _ _ _ => rfl) rfl (fun _ _ _ _ _ _ => rfl)
+    exact connectBlockWith_congr_revision E fJustCheck (fun _ _ _ _ _ _ _ _ _ => rfl) rfl
+      (fun i tx hi hcb coins _ => htest i tx hi hcb coins)
   | true =>
     refine connectBlockWith_congr_scripts E fJustCheck (fun i tx hi hcb coins hl => ?_) (scriptFlags_p2sh true _)
-      (fun _ _ _ _ _ _ => rfl)
+      (fun i tx hi hcb coins _ => htest i tx hi hcb coins)
     show checkInputScriptsWith E (baselineSpendCheck id id verify) (withCsvFlag (connectScriptFlags ctx.height)) i tx 0
       coins = checkInputScriptsWith E (baselineSpendCheck id id verify) (connectScriptFlags ctx.height) i tx 0 coins
     apply checkInputScriptsWith_withCsvFlag
@@ -378,17 +400,18 @@ theorem connectBlockWith_eq_of_opcode_untouched (E : ConnectEmbedding ScriptErro
 The body check on a block without a cutoff transaction.
 Take a context with `csvActive` false, and a block whose contextual header check passes (`contextualHeaderPassed`).
 Let the block have no cutoff transaction (`CutoffUntouched`), when the view has a median time past `median`.
-Then `contextualBodyWith` gives one result for the revision and for the baseline revision, for every `active`.
-The body check runs no script, so the statement has no condition on opcode `0xb2`.
+Then `contextualBodyWith` gives one result for the revision and for the baseline revision, for every `active` and every view argument of the revision.
+The body check runs no script and no transaction test, so the statement has no condition on opcode `0xb2` or on a sequence.
 The cutoff count of `block.contextual_check_body` rests on this theorem.
 -/
-theorem contextualBody_eq_of_cutoff_untouched (verify : SignatureVerifier) (active : Bool) {ctx : ValidateContext}
-    {b : Block} (hcsv : ctx.csvActive = false)
+theorem contextualBody_eq_of_cutoff_untouched (verify : SignatureVerifier) (view : List BlockIndex) (active : Bool)
+    {ctx : ValidateContext} {b : Block} (hcsv : ctx.csvActive = false)
     (hfree : ∀ median, medianTimePast ctx.view = .ok median →
       CutoffUntouched median (b.header.pure.nTime.toNat : Int) b.transactions)
     (hpass : contextualHeaderPassed ctx b) :
-    contextualBodyWith (blockRevision (ρ := ρ) (μ := μ) verify) active ctx b =
-      contextualBodyWith (BlockRevision.baseline (ρ := ρ) (μ := μ) id id verify) active ctx b := by
+    contextualBodyWith (blockRevision verify view) active ctx b =
+      contextualBodyWith (BlockRevision.baseline (ρ := ConnectRejection) (μ := ConnectReason) id id verify) active
+        ctx b := by
   simp only [contextualBodyWith, blockRevision, BlockRevision.baseline]
   cases active with
   | false => rw [lockTimeArgs_inactive]
@@ -405,30 +428,64 @@ theorem contextualBody_eq_of_cutoff_untouched (verify : SignatureVerifier) (acti
           hfree median hmed
 
 /--
-The part of `relativeLockTime_eq_of_untouched` of design record 0012, section 9.3, for the rules of BIP 113 and BIP 112.
-Take a context with `csvActive` false, and a block on a coin set with two properties.
+No transaction of the list is an object of the rule of BIP 68.
+Each transaction that is not a coinbase has a version below 2 as an unsigned value, or every one of its inputs has a sequence with bit 31 set.
+-/
+def SequenceUntouched (txs : List Transaction) : Prop :=
+  ∀ tx ∈ txs, tx.isCoinBase = false →
+    tx.version.toNat < 2 ∨ ∀ input ∈ tx.inputs.val, input.sequence.toNat &&& sequenceLockTimeDisableFlag ≠ 0
+
+/--
+On an applicable block whose contextual header check passes, the transaction test of the revision on the view of the context accepts every transaction that is not an object of the rule of BIP 68.
+-/
+theorem txTest_of_sequence_untouched {ctx : ValidateContext} {b : Block} (happ : applicable ctx b = true)
+    (hpass : contextualHeaderPassed ctx b) {tx : Transaction}
+    (h : tx.version.toNat < 2 ∨ ∀ input ∈ tx.inputs.val, input.sequence.toNat &&& sequenceLockTimeDisableFlag ≠ 0)
+    (active : Bool) (index : Nat) (coins : List Coin) :
+    txTest active ctx.view ctx.height index tx coins = .ok () := by
+  rcases h with h | h
+  · exact txTest_inactive (.inr h) _ _ _ _
+  · obtain ⟨median, hmed, -⟩ := medianTimePast_of_headerPassed happ hpass
+    rw [txTest_eq_ok_iff]
+    rcases hview : ctx.view with _ | ⟨prev, rest⟩
+    · exact sequenceLocks_empty_view _ _ _ _ _
+    · rw [hview] at hmed
+      exact sequenceLocks_of_disabled (by simp [ValidateContext.height, hview]) hmed h active index coins
+
+/--
+The target `relativeLockTime_eq_of_untouched` of design record 0012, section 9.3.
+Take a context with `csvActive` false, and a block on a coin set in which no rule has an object:
 
 1. The block has no cutoff transaction (`CutoffUntouched`), when the view has a median time past `median`.
    A cutoff transaction has a time lock time from `median` to below the time of the block, and an input whose sequence is not `SEQUENCE_FINAL`.
-2. No script of a spend of the block holds an instruction `0xb2` (`BlockUntouched isCsvOpcode`).
+2. No transaction that is not a coinbase has both a version of at least 2 and an input whose sequence has bit 31 clear (`SequenceUntouched`).
+3. No script of a spend of the block holds an instruction `0xb2` (`BlockUntouched isCsvOpcode`).
    The scripts are each `scriptSig`, each spent `scriptPubKey` and each P2SH redeem script.
 
-Then `validateBlockWithActive` with the revision equals the embedded result of `validateBlock`, for every `active`.
-So a block whose two verdicts differ has a cutoff transaction or a script with that instruction.
+Then `validateBlockWithActive` with the revision on the view of the context equals the embedded result of `validateBlock`, for every `active`.
+So a block whose two verdicts differ has an object of one of the three rules.
+A block that is not applicable needs none of the three conditions (`relativeLockTime_eq_of_not_applicable`).
 For every pair of embeddings, verifier and pair of flags.
 -/
-theorem relativeLockTime_eq_of_cutoff_opcode_untouched (V : ValidateEmbedding ρ μ ρ' μ')
-    (E : ConnectEmbedding ScriptError Unsupported ρ μ) (verify : SignatureVerifier)
+theorem relativeLockTime_eq_of_untouched (V : ValidateEmbedding ConnectRejection ConnectReason ρ' μ')
+    (E : ConnectEmbedding ScriptError Unsupported ConnectRejection ConnectReason) (verify : SignatureVerifier)
     (active fCheckPOW fCheckMerkleRoot : Bool) {ctx : ValidateContext} {s : CoinSet} {b : Block}
     (hcsv : ctx.csvActive = false)
     (hfree : ∀ median, medianTimePast ctx.view = .ok median →
       CutoffUntouched median (b.header.pure.nTime.toNat : Int) b.transactions)
+    (hseq : SequenceUntouched b.transactions)
     (hop : BlockUntouched isCsvOpcode verify ctx.height s b) :
-    validateBlockWithActive V E (blockRevision verify) active fCheckPOW fCheckMerkleRoot ctx s b =
+    validateBlockWithActive V E (blockRevision verify ctx.view) active fCheckPOW fCheckMerkleRoot ctx s b =
       V.ofBaseline E id id (validateBlock verify fCheckPOW fCheckMerkleRoot ctx s b) := by
-  rw [← validateBlockWithActive_ofBaseline V E id id verify active]
-  apply validateBlockWithActive_congr
-  · exact contextualBody_eq_of_cutoff_untouched verify active hcsv hfree
-  · exact connectBlockWith_eq_of_opcode_untouched E verify active true (ctx := connectContextOf ctx b) hop
+  cases happ : applicable ctx b with
+  | false => exact relativeLockTime_eq_of_not_applicable V E verify _ active fCheckPOW fCheckMerkleRoot s happ
+  | true =>
+    rw [← validateBlockWithActive_ofBaseline V E id id verify active]
+    apply validateBlockWithActive_congr_of_passed
+    · exact contextualBody_eq_of_cutoff_untouched verify _ active hcsv hfree
+    · intro hpass
+      exact connectBlockWith_eq_of_untouched E verify _ active true (ctx := connectContextOf ctx b) hop
+        (fun i tx hi hcb coins =>
+          txTest_of_sequence_untouched happ hpass (hseq tx (List.mem_of_getElem? hi) hcb) active i coins)
 
 end DogeLib.Proposals.RelativeLockTime

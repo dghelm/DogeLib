@@ -3365,9 +3365,9 @@ The faulty variant has no restriction theorem, because its spend check accepts a
 The theorems do not say:
 
 - That a revision is a soft fork of the network. A restriction theorem covers one block on one coin set. The statement for a chain needs an induction, and the full claim needs a legacy projection (design record 0007, section 8.3).
-- Anything about a list of blocks. `connectChainWith_restricts` of design record 0012, section 9.1, is not stated.
+- Anything about a list of blocks beyond `connectChainWith_restricts`: a list that the revised connection accepts is accepted by `connectChain`, to the same final coin set. The statement is for connection alone, and it does not require that the list is a chain.
 - Anything about a revision of the count of signature operations, of the amounts or of a header check. Those parts are the baseline's.
-- Anything about Core. No Core behaviour exists for an example, so no comparison supports its revised verdict. [The lock-time cutoff of `RelativeLockTime`](#proposed-revisions-relativelocktime-the-lock-time-cutoff) has a comparison with Core's dormant code, under its own label.
+- Anything about Core. No Core behaviour exists for an example, so no comparison supports its revised verdict. [The lock-time cutoff of `RelativeLockTime`](#proposed-revisions-relativelocktime) has a comparison with Core's dormant code, under its own label.
 - That the proposal executable computes these definitions correctly beyond its test. The agreement theorems are about the Lean definitions, and `dogelib-proposal-oracle` is compiled code ([docs/oracle.md](docs/oracle.md#the-proposal-executable)).
 
 The proof of `validateBlockWith_ofBaseline` does not unfold `validateBlock` with the `unfold` tactic.
@@ -3460,12 +3460,12 @@ It has these boundaries:
 By `#print axioms` with Lean `v4.35.0`, every theorem of the example depends on `propext` and `Quot.sound` only.
 The theorems are `lockStep_false`, `lockCheck_corrected_next`, `correctedStep_restricts`, `revisedVerifyScript_inactive_eq`, `revisedSpend_inactive_eq`, `inactiveEq`, `corrected_verifyScript_soft_fork_local`, `corrected_soft_fork_local`, `corrected_restrictsAcceptance`, `faultyStep_pops`, `faultyStep_not_restricts`, `faulty_counterexample`, `faulty_counterexample_short`, `faulty_not_restrictsAcceptance`, `faulty_not_softFork`, `faulty_strict`, `faulty_incompatible`, `corrected_counterexample`, `corrected_strict`, `corrected_use` and `corrected_softFork`.
 
-### Proposed revisions: `RelativeLockTime`, the lock-time cutoff and the opcode
+### Proposed revisions: `RelativeLockTime`
 
 `DogeLib.Proposals.RelativeLockTime` is a proposed revision with a public proposal for Dogecoin ([design record 0012](docs/design/0012-relative-lock-time.md)).
 Design record 0012 covers the rules of BIP 68, BIP 112 and BIP 113, which discussion 3509 of `dogecoin/dogecoin` proposed to activate (SOURCES.md, P1 to P4).
-**The revision is partial: it has the rules of BIP 113 and BIP 112.**
-Every statement below is about those two rules, and none is about the three rules together.
+The revision has the three rules.
+Its block-level claim is `relativeLockTime_softFork`, and the list below states it with its parts.
 DogeLib takes no position on the activation of these rules.
 
 The rule of BIP 113 replaces the lock-time cutoff of `IsFinalTx` in `ContextualCheckBlock` (D110, lines 3127 to 3140).
@@ -3482,12 +3482,31 @@ The revision defines no second opcode. Its `scriptFlags` add `SCRIPT_VERIFY_CHEC
 The flag is not mandatory, so the second script run of a failed input has no CSV flag, as in Core's `CheckInputs` (D101, lines 1488 to 1512).
 `scriptFlags` does not read the block. `relativeLockTime_eq_of_not_applicable` shows that the revision still equals the baseline on a block that is not applicable.
 
+The rule of BIP 68 gives the sequence of an input the meaning of a relative lock time.
+Core's `ConnectBlock` runs `SequenceLocks` on each transaction that is not a coinbase, with `LOCKTIME_VERIFY_SEQUENCE` only in an active CSV state (D114, lines 309 to 384, 1906 to 1911 and 1948 to 1959).
+The baseline has no definition of that test. The revision defines it as `sequenceLocks`, with unbounded integers, and runs it as the transaction test of the block layer.
+The test applies to a transaction whose version is at least 2 as an unsigned value. Let `n` be the low 16 bits of a sequence with bit 31 clear, and `c` the height of the spent coin.
+With bit 22 clear the lock is met when `c + n` is at most the height of the block.
+With bit 22 set it is met when `t + 512 * n` is at most the median time past of the predecessor, where `t` is the median time past of the ancestor at height `max (c - 1) 0`.
+A transaction with a lock that is not met gets `RevisionError.sequenceLocks`, Core's `bad-txns-nonfinal` of `ConnectBlock`.
+
+The test reads ancestor times in the view of the predecessor, which the revision takes as an argument. `revisedValidate` passes the view of its context.
+The ancestor at height `a` is the view entry at depth `height - 1 - a`, and its median is `Work.medianTimePast` of the view from that entry.
+The test has three results outside the model, and none is a rejection:
+
+- `heightOutOfDomain`: an input with a lock spends a coin at a height of at least `2^31 - 65535`. Core computes `c + n - 1` from the left in `int`, and the sum `c + 65535` then does not fit.
+- `coinAboveBlock`: a time lock reads a coin above the block. For a coin one block above, Core reads the median of the block itself, and for a higher coin it dereferences a null pointer (D114, line 348).
+- `ancestorOutsideView`: the view does not give a median that the test reads. The first entry of the view is not at the height below the block, or the view is too short at the predecessor or at the ancestor of a time lock.
+
+So the revision gives no verdict on those inputs, where Core has one or has undefined behaviour.
+
 - `relativeLockTime_inactive_eq`: with `active` false, the revision equals the embedded result of `validateBlock`, for every context.
   `relativeLockTime_activation` gives the same equality for `validateBlockWith` where an activation is inactive at the height of the block.
 - `relativeLockTime_restricts`: if the revision accepts a block, `validateBlock` accepts it, with the same coin set and the same changes.
-  The theorem holds for every `active` and every context, on an applicable block or not. It covers the cutoff and the flag.
-- `relativeLockTime_eq_of_cutoff_opcode_untouched`: take a context with `csvActive` false, and a block with two properties.
-  It has no cutoff transaction, and no script of a spend holds an instruction `0xb2`.
+  The theorem holds for every `active` and every context, on an applicable block or not. It covers the three rules.
+  A result outside the model is not an acceptance, so the theorem says nothing about a block with such a result.
+- `relativeLockTime_eq_of_untouched`: take a context with `csvActive` false, and a block with three properties.
+  It has no cutoff transaction. No transaction that is not a coinbase has both a version of at least 2 and an input whose sequence has bit 31 clear. No script of a spend holds an instruction `0xb2`.
   Then the revision equals the embedded result of `validateBlock`.
   A cutoff transaction has a time lock time from the median cutoff to below the block time, and an input whose sequence is not `SEQUENCE_FINAL`.
   The scripts of a spend are its `scriptSig`, the spent `scriptPubKey` and a P2SH redeem script.
@@ -3505,13 +3524,37 @@ The flag is not mandatory, so the second script run of a failed input has no CSV
 - `opcode_strict` and `opcode_use`: two made blocks at height 145,000 that spend a coin with the script `01 01 b2`, with the sequence 1.
   With transaction version 1, `validateBlock` accepts the block, and the active revision rejects it with `UNSATISFIED_LOCKTIME`, as a failure that is not mandatory.
   With version 2, the active revision accepts the block.
-- `opcode_softFork`: the framework's `SoftFork` with those two witnesses. It is block-level, and it is about the partial revision.
+- `opcode_softFork`: the framework's `SoftFork` with those two witnesses. It is block-level.
+- `sequenceLocks_inactive`, `sequenceLocks_iff`: the rule for one transaction, on a supplied view and supplied coins.
+  With `active` false, or with a version below 2, the test accepts.
+  With `active` true, a view that is not empty, a version of at least 2 and a result that is not outside the model, the test accepts exactly when each input with bit 31 clear meets its lock.
+- `sequenceLocks_fits`: each sum of `CalculateSequenceLocks` fits `int` or `int64_t`. The theorem has no hypothesis, because `heightOutOfDomain` excludes the coin heights at which a sum can overflow.
+- `sequence_strict` and `sequence_use`: two made blocks at height 145,000.
+  The first spends a coin at height 144,999 with the sequence 2, from a transaction of version 2. `validateBlock` accepts it, and the active revision rejects it with `RevisionError.sequenceLocks`.
+  The second is the block of `opcode_use`: its input has a met height lock of one block on a coin at height 1.
+- `relativeLockTime_softFork`: the block-level claim of design record 0012, section 9.3.
+  The revision is a soft fork of `validateBlock` at the level of one block, in the sense of the framework's `SoftFork`, with the use predicate of each of the three rules.
+  Its parts are the inactive equality, the restriction, three strictness witnesses (`relativeLockTime_strict`) and three use witnesses (`relativeLockTime_use`).
+- `relativeLockTime_chain`: take a list of blocks, each with the view of its predecessor and its context.
+  If the revised connection accepts the list from a coin set, `connectChain` accepts it from that set, to the same final coin set. For every activation.
+  The statement is about `connectBlock` alone, so it covers the flag and the sequence locks, and not the cutoff.
+  It does not require that the contexts or the views are those of one chain.
+- `relativeLock_enforced`: suppose that the active revision accepts an applicable block.
+  Take an input of a transaction that is not a coinbase, which spends a coin whose script is a push of an operand of at most 5 bytes, then `0xb2`, then a script without `0xb2`. Let the `scriptSig` have no `0xb2`.
+  Let the operand have bits 31 and 22 clear, with the low 16 bits `d`. Then the height of the block is at least the height of the coin plus `d`.
+  The opcode bounds the sequence of the input, and the sequence lock bounds the depth of the coin.
+  The coin is that of the set just before the transaction, so it can be a coin that the same block created.
 
 | Hypothesis | Used by | Where Core enforces it |
 | --- | --- | --- |
 | The median time past of the predecessor is below the time of the block. | `lockTimeCutoff_le` | `ContextualCheckBlockHeader`, `time-too-old` (D33, line 3104). `validateBlock` runs it first, so `relativeLockTime_restricts` does not assume it. |
 | The block is applicable. | The revised rule | It is part of the definition, and no theorem assumes it. Core reads the median only with a predecessor (D110, line 3135). |
-| `csvActive` of the context is false. | `relativeLockTime_eq_of_cutoff_opcode_untouched` | The field is the version-bits state of the pin. `csv_never_lockedIn` shows that it is never active on a mainnet header chain whose headers passed `checkBlockHeader`. No theorem shows that the real chain meets that hypothesis. |
+| `csvActive` of the context is false. | `relativeLockTime_eq_of_untouched` | The field is the version-bits state of the pin. `csv_never_lockedIn` shows that it is never active on a mainnet header chain whose headers passed `checkBlockHeader`. No theorem shows that the real chain meets that hypothesis. |
+| The height bound of the sequence locks: a coin height below `2^31 - 65535`. | `sequenceLocks_fits` | Not enforced as a rule. A coin height is at most the height of a block of its chain, and mainnet heights are far below the bound. The definition returns `heightOutOfDomain` above it, so no theorem assumes the bound. |
+| The height of a coin is at most the height of the block. | Time locks of `sequenceLocks` | Not enforced as a rule. It holds for a coin set that a replay built. A supplied coin set can break it, and the result is then `coinAboveBlock`. Core has a defined result for a coin one block above, which the revision does not give. |
+| The view is the view of the predecessor, down to the ancestors that the time locks read. | `sequenceLocks` | Core walks its own block index. The revision returns `ancestorOutsideView` when the view is too short or starts at another height. No definition checks that the times of the view are those of the real chain: the view is an input, as for `validateBlock`. |
+| The result of the sequence locks is not outside the model. | `sequenceLocks_iff` | The three reasons are limits of the specification. Core has no such result. |
+| The domain of `validateBlock` and `connectBlock` (design record 0010, section 3). | Every block-level theorem | As in that record. The revision adds no sum of amounts. |
 
 `Work.medianTimePast` returns an adapter error for a view that is invalid or too short, and `lockTimeArgs` then gives the arguments of the baseline.
 No result of `validateBlockWithActive` reads that case: `contextualCheckBlockHeader` computes the same median first, and returns the adapter error (`lockTimeArgs_of_headerPassed`).
@@ -3523,12 +3566,19 @@ Each uses a definition of Lean core by well-founded recursion, which the kernel 
 `witness_medianTimePast` uses `medianTimePast_mem`, because the median sorts with `List.mergeSort`. Every entry of the made view has one time.
 The witness blocks are at height 145,000, where the subsidy is a fixed amount. Below that height the subsidy runs a Mersenne Twister on a `Vector`.
 The opcode witnesses have no signature opcode, so no check calls the verifier.
+The transaction test reads the median time past of the view, so `witnessRevision` holds its value, and `witnessRevision_eq` proves that the revision on the witness view is that revision.
+Both witnesses of the sequence locks have a height lock. No witness in the kernel has a time lock, and the known answers of `lake test` cover time locks.
+
+The targets add no axiom and no trust assumption: each depends on `propext`, `Classical.choice` and `Quot.sound` alone.
 
 The theorems do not say:
 
-- Anything about sequence locks. That rule is not in the revision. So no theorem says that a coin has a depth when `OP_CHECKSEQUENCEVERIFY` passes: the opcode bounds the sequence of the input alone.
+- The time form of `relativeLock_enforced`, for an operand with bit 22 set. `sequenceLocks_iff` states the time lock of one input, and no theorem joins it with the opcode.
+- That a lock with `n` equal to 0 always passes. For a time lock that needs a median time past that does not decrease along the view, which no theorem here states.
+- Anything about a block on which the sequence locks give a result outside the model. The restriction reads accepted blocks alone.
+- That `relativeLock_enforced` holds without its conditions. On a block that is not applicable, or for another form of script, no check of the rule need run.
 - Anything about the opcode under `SCRIPT_VERIFY_MINIMALDATA` or `SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS`. Those flags are outside `supportedFlags`, and `ConnectBlock` at the pin sets neither.
-- That the revision is a soft fork of the network. `cutoff_softFork` and `opcode_softFork` cover one block on a supplied coin set and view, for mainnet rules. It says nothing about a chain, fork choice, convergence or liveness.
+- That the revision is a soft fork of the network. `relativeLockTime_softFork` covers one block on a supplied coin set and view, for mainnet rules, and `relativeLockTime_chain` covers the connection of a supplied list of blocks. Neither says anything about fork choice, reorganization, convergence or liveness.
 - That the rule is right for Dogecoin, or that any network activates it. The revision has no default activation.
 - Anything about a signalling mechanism. The activation is one height on mainnet (design record 0012, section 5).
 - Anything about a block that an empty candidate list leaves out. The list is the output of a script, and it is a trusted premise of a count.

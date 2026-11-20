@@ -33,13 +33,13 @@ The block record gains the object `revised`:
 | --- | --- |
 | `active` | Whether the revision is active at the height of the block. |
 | `verdict` | `accepted`, `rejected` or `unsupported`. |
-| `step` | For a rejection or an unsupported result, the name of the check: one of the five steps of `validateBlock`. |
-| `reject_reason` | For a rejection, Core's reject reason. For a script failure, the bracket holds the text of the revision's error. |
+| `step` | For a rejection or an unsupported result, the name of the check: one of the five steps of `validateBlock`. A result of the transaction test of a revision has the step `ConnectBlock`. |
+| `reject_reason` | For a rejection, Core's reject reason. For a script failure, the bracket holds the text of the revision's error. A transaction that fails the sequence locks of `RelativeLockTime` has `bad-txns-nonfinal`. |
 | `dos`, `reject_code` | For a rejection, the denial-of-service score and the reject code. A script failure that is not mandatory has the score 0 and the code `0x40`, as in the baseline. |
-| `tx`, `input` | For a rejection that names them, the position of the transaction in the block and of the input in the transaction. |
+| `tx`, `input` | For a rejection that names them, the position of the transaction in the block and of the input in the transaction. A failure of the sequence locks names the transaction. |
 | `script_error` | For a script failure, the text of the error of the first script run. |
 | `mandatory` | For a script failure, false when the second run, without the flags that are not mandatory, accepts. |
-| `reason` | For an unsupported result, a text for the missing capability or the result outside the model. |
+| `reason` | For an unsupported result, a text for the missing capability or the result outside the model. The three reasons of the sequence locks of `RelativeLockTime` are `RelativeLockTime: ancestorOutsideView`, `RelativeLockTime: coinAboveBlock` and `RelativeLockTime: heightOutOfDomain`. |
 | `changes_digest_hex` | For an acceptance, the digest of the coin changes of the revision's result. |
 
 A field that does not apply is null.
@@ -70,8 +70,13 @@ So a revision that reads the median time past of the view needs a view with that
 ## The revisions
 
 `ExampleFaultyLocktime` and `ExampleVersionVerify` are the two examples of the `Proposals` library. Neither is a proposal for Dogecoin.
-`RelativeLockTime` is the revision of design record 0012. It is partial: it has the rules of BIP 113 and BIP 112, so its `revised` objects are not the results of the three rules together.
-For `block.contextual_check_body`, its `revised` object holds the result of the lock-time cutoff alone, because that operation runs no script.
+`RelativeLockTime` is the revision of design record 0012, with its three rules: BIP 113, BIP 112 and BIP 68.
+For `block.validate`, the transaction test of the revision reads the view `chain` of the block.
+A `revised` object names the rule of a rejection through its step and its reason.
+The cutoff of BIP 113 has the step `ContextualCheckBlock` and the reason `bad-txns-nonfinal`.
+A sequence lock of BIP 68 has the step `ConnectBlock`, the reason `bad-txns-nonfinal` and the transaction.
+The opcode of BIP 112 has a script failure with its `script_error`.
+For `block.contextual_check_body`, the `revised` object holds the result of the lock-time cutoff alone, because that operation runs no script and connects no transaction.
 -/
 
 @[expose] public section
@@ -140,16 +145,15 @@ def validateFields :
   connectUnsupported := id
 
 /--
-The hook of a revision: `validateBlockWith` on the block, as a `revised` object.
-`describe` and `describeU` give the texts of the revision's script errors and unsupported script reasons.
+The hook of a revision that can read the context of the block: `validateBlockWith` on the block, as a `revised` object.
+`rev` gives the revision for the context, `E` maps the results of `ConnectBlock` into the outcome types of the revision, and `V` maps every result into failure fields.
 -/
-def revisedHook {ε υ : Type} (rev : BlockRevision ε υ (List (String × Json)) (List (String × Json)))
-    (describe : ε → String) (describeU : υ → String)
+def revisedHookWith {ε υ ρ μ : Type} (rev : ValidateContext → BlockRevision ε υ ρ μ)
+    (V : ValidateEmbedding ρ μ (List (String × Json)) (List (String × Json))) (E : ConnectEmbedding ε υ ρ μ)
     (activation : Activation) : BlockHook :=
   fun options ctx s b =>
     let active := Json.bool (activation.isActive .mainnet ctx.height)
-    match validateBlockWith validateFields (connectFields describe describeU) rev activation options.checkPow
-        options.checkMerkle ctx s b with
+    match validateBlockWith V E (rev ctx) activation options.checkPow options.checkMerkle ctx s b with
     | .ok result =>
       Json.mkObj ([("active", active), ("verdict", "accepted"),
         ("changes_digest_hex", .str (hexOf (changesDigest result.changes).toList))] ++
@@ -158,6 +162,14 @@ def revisedHook {ε υ : Type} (rev : BlockRevision ε υ (List (String × Json)
       Json.mkObj ([("active", active), ("verdict", "rejected"), ("changes_digest_hex", .null)] ++ fields)
     | .unsupported fields =>
       Json.mkObj ([("active", active), ("verdict", "unsupported"), ("changes_digest_hex", .null)] ++ fields)
+
+/--
+The hook of a revision that does not read the context: `revisedHookWith` with the failure fields as the outcome types.
+`describe` and `describeU` give the texts of the revision's script errors and unsupported script reasons.
+-/
+def revisedHook {ε υ : Type} (rev : BlockRevision ε υ (List (String × Json)) (List (String × Json)))
+    (describe : ε → String) (describeU : υ → String) (activation : Activation) : BlockHook :=
+  revisedHookWith (fun _ => rev) validateFields (connectFields describe describeU) activation
 
 /-- The `revised` object of `block.contextual_check_body`, from the context of the request and the block. -/
 abbrev BodyHook : Type := ValidateContext → Block → Json
@@ -235,15 +247,49 @@ def versionVerifyRevision :
     BlockRevision ExampleVersionVerify.ExampleScriptError ExampleVersionVerify.ExampleScriptUnsupported Fields Fields :=
   ExampleVersionVerify.blockRevision coreVerifier
 
-/-- `RelativeLockTime` as a revision of the executable. It has the rules of BIP 113 and BIP 112. -/
-def relativeLockTimeRevision : BlockRevision ScriptError Unsupported Fields Fields :=
-  RelativeLockTime.blockRevision coreVerifier
+/--
+`RelativeLockTime` as a revision of the executable, for the context of a block.
+Its transaction test reads the view of the context.
+-/
+def relativeLockTimeRevision (ctx : ValidateContext) :
+    BlockRevision ScriptError Unsupported RelativeLockTime.ConnectRejection RelativeLockTime.ConnectReason :=
+  RelativeLockTime.blockRevision coreVerifier ctx.view
+
+/-- The text of a result outside the model of the sequence locks of `RelativeLockTime`. -/
+def describeRelativeLockTimeReason : RelativeLockTime.Reason → String
+  | .ancestorOutsideView => "RelativeLockTime: ancestorOutsideView"
+  | .coinAboveBlock => "RelativeLockTime: coinAboveBlock"
+  | .heightOutOfDomain => "RelativeLockTime: heightOutOfDomain"
+
+/--
+The embedding of the results of `RelativeLockTime` into the failure fields of a `revised` object.
+A baseline result has the fields of `validateFields` and `connectFields`.
+A transaction that fails the sequence locks has Core's `bad-txns-nonfinal` of `ConnectBlock`, with the score 100 and the code `REJECT_INVALID` (SOURCES.md, D114, lines 1955 to 1958).
+A reason of the sequence locks is an unsupported result of `ConnectBlock`.
+-/
+def relativeLockTimeFields :
+    ValidateEmbedding RelativeLockTime.ConnectRejection RelativeLockTime.ConnectReason Fields Fields where
+  rejected := validateFields.rejected
+  unsupported := validateFields.unsupported
+  connect
+    | .inl (.script tx input mandatory e) =>
+      (connectFields ScriptError.description (reprStr : Unsupported → String)).script tx input mandatory e
+    | .inl e => (connectFields ScriptError.description (reprStr : Unsupported → String)).rejected e
+    | .inr (.sequenceLocks index) =>
+      failureFields (some "ConnectBlock") (some "bad-txns-nonfinal") (some (100, 0x10)) (some index) none none none
+        none
+  connectUnsupported
+    | .inl (.scriptUnsupported u) =>
+      (connectFields ScriptError.description (reprStr : Unsupported → String)).scriptUnsupported u
+    | .inl e => (connectFields ScriptError.description (reprStr : Unsupported → String)).unsupported e
+    | .inr reason =>
+      failureFields (some "ConnectBlock") none none none none none none (some (describeRelativeLockTimeReason reason))
 
 /--
 The revisions that a request can name, with `coreVerifier`.
 `ExampleFaultyLocktime` has the variants `corrected` and `faulty`. `ExampleVersionVerify` has no variant.
 Neither example is a proposal for Dogecoin.
-`RelativeLockTime` is the revision of design record 0012, with the rules of BIP 113 and BIP 112. It has no variant.
+`RelativeLockTime` is the revision of design record 0012, with the rules of BIP 113, BIP 112 and BIP 68. It has no variant.
 -/
 def revisions : List NamedRevision :=
   [⟨"ExampleFaultyLocktime", some "corrected",
@@ -256,8 +302,8 @@ def revisions : List NamedRevision :=
       revisedHook versionVerifyRevision describeExampleError describeExampleUnsupported,
       revisedBody versionVerifyRevision noGuard⟩,
     ⟨"RelativeLockTime", none,
-      revisedHook relativeLockTimeRevision ScriptError.description reprStr,
-      revisedBody relativeLockTimeRevision relativeLockTimeGuard⟩]
+      revisedHookWith relativeLockTimeRevision relativeLockTimeFields RelativeLockTime.connectEmbedding,
+      fun activation ctx b => revisedBody (relativeLockTimeRevision ctx) relativeLockTimeGuard activation ctx b⟩]
 
 /-- The activation with the height `height` on mainnet, and no activation on any other network. -/
 def mainnetActivation (height : Option Nat) : Activation :=

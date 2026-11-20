@@ -25,6 +25,9 @@ It needs no Dogecoin Core. The checks:
    script holds the rule, as section 10.3, case 3, describes. Each expected `revised` object is
    written here by hand from the text of the rule in the module documentation of the example and
    from the flags of the height. No program supplies one.
+   Three more blocks are for the sequence locks of `RelativeLockTime` (BIP 68): a lock that is met,
+   a lock that is one block short, and a time lock on a coin above the block, which is outside the
+   model of the revision.
 
 7. `block.contextual_check_body`. Without `revision`, the proposal executable writes the bytes of
    `dogelib-oracle` on the requests of the comparison (`contextual_body_sets` of
@@ -46,7 +49,7 @@ import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
-from oracle_block_check import txout
+from oracle_block_check import transaction, txin, txout
 from oracle_contextual_body import contextual_body_sets
 from oracle_block_validate import (EVAL_FALSE, Base, Coins, block_validate_sets, coin_id, file_twins,
                                    mainnet_validate_sets, script_reason, spend)
@@ -172,6 +175,28 @@ def made_blocks() -> list[tuple[str, dict, tuple, dict, bool]]:
          lock=2, sequence=0)
     case("locktime counterexample, faulty", 1034382, counterexample, faulty, revised_fields(True, "accepted"), False,
          lock=2, sequence=0)
+
+    # The sequence locks of `RelativeLockTime` (BIP 68). The spending transaction has version 2 and
+    # one input, and the coin has the script OP_1. The baseline has no sequence lock, so it accepts
+    # each block. The block is at height 1,034,382.
+    def lock_case(name, coin_height, sequence, expected):
+        base, coins = Base(1034382), Coins()
+        point = coins.add(coin_id(1), 0, 1000, bytes([OP_1]), height=coin_height)
+        tx = transaction([txin(point, b"", sequence)], [txout(1)], version=2)
+        cases.append((name, base.request([base.block([base.coinbase(), tx])], coins), ("RelativeLockTime", None),
+                      expected, True))
+
+    # Sequence 1: a height lock of one block on the coin of the predecessor. 1,034,381 + 1 is the
+    # height of the block, so the lock is met.
+    lock_case("sequence lock met", 1034381, 1, revised_fields(True, "accepted"))
+    # Sequence 2: the lock is one block short. Core's reason is bad-txns-nonfinal of ConnectBlock,
+    # with the score 100 and the code REJECT_INVALID, for the transaction at 1.
+    lock_case("sequence lock one block short", 1034381, 2,
+              {**revised_fields(True, "rejected", "bad-txns-nonfinal", 1), "dos": 100, "reject_code": 0x10})
+    # Sequence 0x00400000: a time lock of 0 units on a coin above the block. The revision gives no
+    # verdict (`coinAboveBlock`), and the result is not a rejection.
+    lock_case("sequence lock on a coin above the block", 1034383, 0x00400000,
+              {**revised_fields(True, "unsupported"), "reason": "RelativeLockTime: coinAboveBlock"})
     return cases
 
 
@@ -317,8 +342,9 @@ def main() -> int:
                 ok = check((digest is None) == (expected["verdict"] != "accepted"),
                            f"made block {name}: changes_digest_hex is {digest}") and ok
             if ok:
-                direction = "unchanged" if (expected["verdict"] == "accepted") == baseline_valid else (
-                    "accepted to rejected" if baseline_valid else "rejected to accepted")
+                direction = "outside the model" if expected["verdict"] == "unsupported" else (
+                    "unchanged" if (expected["verdict"] == "accepted") == baseline_valid else (
+                        "accepted to rejected" if baseline_valid else "rejected to accepted"))
                 print(f"ok:   made block {name}: {direction}")
 
     # 7. `block.contextual_check_body`.

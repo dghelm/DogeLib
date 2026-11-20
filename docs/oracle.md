@@ -1134,7 +1134,11 @@ It adds one argument to `block.validate`, with `blocks_hex` and with `blocks_fil
 The three fields are required, and any other field is a request error.
 `ExampleFaultyLocktime` and `ExampleVersionVerify` are the examples of the `Proposals` library. Neither is a proposal for Dogecoin.
 `RelativeLockTime` is the proposed revision of [design record 0012](design/0012-relative-lock-time.md).
-It is partial: it has the rules of BIP 113 and BIP 112, so its `revised` objects are not the results of BIP 68, BIP 112 and BIP 113 together.
+It has the rules of BIP 113, BIP 112 and BIP 68.
+For `block.validate`, its transaction test reads the view `chain` of each block.
+A transaction that fails the sequence locks of BIP 68 has the step `ConnectBlock`, the reason `bad-txns-nonfinal`, the score 100, the code `0x10` and its position in `tx`.
+The test has three results outside the model, with the verdict `unsupported` and one of the texts `RelativeLockTime: ancestorOutsideView`, `RelativeLockTime: coinAboveBlock` and `RelativeLockTime: heightOutOfDomain` in `reason`.
+A time lock on a coin needs the entries of `chain` down to ten below the block before the coin's block, or down to the genesis block.
 
 `dogelib-oracle` has no such argument and returns a request error for it.
 Without the argument, the proposal executable writes the response of `dogelib-oracle`, byte for byte.
@@ -1198,7 +1202,7 @@ python3 -I scripts/test_proposal_oracle.py .lake/build/bin/dogelib-oracle .lake/
 - With no activation height, each `revised` object has the verdict, the reject reason and the changes digest of its baseline record. The check covers the 119 block records of those 42 requests, for each revision.
 - From height 0 on the same requests, the response without the `revised` objects is the baseline response. No block goes from rejected to accepted under the two revisions with a restriction theorem.
 - One request of the comparison has five blocks that fail the five checks in Core's order. Each `revised` object names the check in `step`, and the transaction at 1 in `tx` for the duplicate inputs and for the missing coin.
-- Eight made blocks give `revised` objects that the test states by hand from the text of each rule. Each block stands on a committed rule-change block and spends a supplied coin whose script holds the rule. A negative operand of each rule changes an accepted block to rejected. The counterexample of the faulty variant changes a rejected block to accepted.
+- Eleven made blocks give `revised` objects that the test states by hand from the text of each rule. Each block stands on a committed rule-change block and spends a supplied coin. For eight of them the script of the coin holds the rule of an example. A negative operand of each rule changes an accepted block to rejected. The counterexample of the faulty variant changes a rejected block to accepted. Three blocks are for the sequence locks of `RelativeLockTime`, with a transaction of version 2. A height lock that is met leaves the block accepted. A height lock that is one block short gives the reason `bad-txns-nonfinal`. A time lock on a coin above the block gives `unsupported` with the reason `RelativeLockTime: coinAboveBlock`.
 
 The test does not run a revision on the mainnet ranges of design record 0011. Those runs are conditions 4 and 5 of its stage 6.
 
@@ -1263,8 +1267,8 @@ A block that is not applicable gets no seed, and its `forced` object is the resu
 The comparison reads `forced` against the `revised` object of the proposal executable: verdict, reject reason, score, reject code and the digest of the changes.
 The 36 made blocks reach `non-mandatory-script-verify-flag` through the opcode 20 times, and `mandatory-script-verify-flag-failed` twice, for a script that also fails without the flag.
 
-With the forced state, Core's `ConnectBlock` also runs `SequenceLocks` of BIP 68 (D114, lines 1948 to 1959), which the revision does not have yet.
-Each made block passes that test: its coin is far below the block, or its lock is 0.
+With the forced state, Core's `ConnectBlock` also runs `SequenceLocks` of BIP 68 (D114, lines 1948 to 1959), which the revision has as `sequenceLocks`.
+Each made block passes that test, in Core and in the revision: its coin is far below the block, or its lock is 0.
 For a time lock, Core reads the median time past of an ancestor at the height of the spent coin.
 The harness refuses a forced request when that ancestor or one of its ten predecessors is outside the supplied chain.
 For a height lock, Core adds up to 65,534 to the height of the coin in `int`. The harness refuses a forced request with a coin height from 2^31 - 65535.
@@ -1273,7 +1277,7 @@ The test reads the block and the carried set alone, and it does not follow the e
 Agreement shows that the Lean rule equals Core's dormant code on these requests.
 It does not show that the rule is right for Dogecoin, and a count says nothing about other heights or about unconfirmed transactions.
 The comparison covers the rule of BIP 113 through `ContextualCheckBlock`, and the rule of BIP 112 through `block.validate` on made blocks.
-No forced run of `block.validate` covers a mainnet block yet, and none covers a rejection through a sequence lock.
+No forced run of `block.validate` covers a mainnet block yet. None covers a rejection through a sequence lock or one of its results outside the model.
 This state does not occur on mainnet (`csv_never_lockedIn`).
 
 ### Block validation in the harness

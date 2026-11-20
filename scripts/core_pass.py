@@ -542,10 +542,12 @@ def core_pass(harness: str, state_dir: Path, last: int, local_fixtures: list[str
             # Only the newest restart snapshot that is not a range start stays.
             restarts = sorted(int(h) for h, s in state["snapshots"].items()
                               if int(h) not in plan["range_starts"] and s.get("kept", True))
+            # The state names the newest snapshot, and no longer the older ones, before their files go.
             for old in restarts[:-1]:
-                (plan["snapshot_dir"] / state["snapshots"][str(old)]["file"]).unlink(missing_ok=True)
                 state["snapshots"][str(old)]["kept"] = False
             save_state(state_path, state)
+            for old in restarts[:-1]:
+                (plan["snapshot_dir"] / state["snapshots"][str(old)]["file"]).unlink(missing_ok=True)
             response.unlink()
             shutil.rmtree(directory)
             log(f"segment {first} to {end} accepted in {seconds:.0f} seconds: {ok['set_coins']} coins, "

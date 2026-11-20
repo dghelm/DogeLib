@@ -68,7 +68,8 @@ lean_lib «Proposals» where
 lean_lib «ProposalProofs» where
   requiresModuleSystem := true
   roots := #[`DogeLib.Proposals.Proofs, `DogeLib.Proposals.Framework.Proofs,
-    `DogeLib.Proposals.ExampleFaultyLocktime.Proofs, `DogeLib.Proposals.ExampleVersionVerify.Proofs]
+    `DogeLib.Proposals.ExampleFaultyLocktime.Proofs, `DogeLib.Proposals.ExampleVersionVerify.Proofs,
+    `DogeLib.Proposals.RelativeLockTime.Proofs]
   precompileModules := false
 
 /-- The operations of the proposal executable, rooted at

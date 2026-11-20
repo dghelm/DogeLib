@@ -232,6 +232,8 @@ class Reports(unittest.TestCase):
             'version-bits-walk': 'python3 -I scripts/compare_version_bits_walk.py .lake/build/bin/dogelib-oracle build/core-harness/core-oracle',
             'version-bits-walk-self-test': 'python3 -I scripts/compare_version_bits_walk.py --self-test .lake/build/bin/dogelib-oracle build/core-harness/core-oracle',
             'core-harness-state': 'python3 -I scripts/test_core_harness.py .lake/build/bin/dogelib-oracle build/core-harness/core-oracle',
+            'csv-forced-active': 'python3 -I scripts/compare_csv_forced.py .lake/build/bin/dogelib-oracle .lake/build/bin/dogelib-proposal-oracle build/core-harness/core-oracle',
+            'cutoff-candidates': 'python3 -I scripts/relative_lock_time_candidates.py --check',
             'comparator-self-test': 'python3 -I scripts/test_compare_core.py .lake/build/bin/dogelib-oracle',
             'writing-checker-tests': 'uv run --no-project --python 3.12 python -m unittest scripts/test_check_writing.py',
             'script-corpus-freshness': 'python3 -I scripts/convert_script_tests.py --check',

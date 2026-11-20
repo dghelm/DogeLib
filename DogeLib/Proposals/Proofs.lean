@@ -3,6 +3,7 @@ module
 public import DogeLib.Proposals.ExampleFaultyLocktime.Proofs
 public import DogeLib.Proposals.ExampleVersionVerify.Proofs
 public import DogeLib.Proposals.Framework.Proofs
+public import DogeLib.Proposals.RelativeLockTime.Proofs
 
 /-!
 # `DogeLib.Proposals.Proofs`

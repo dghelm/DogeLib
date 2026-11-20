@@ -3238,35 +3238,64 @@ By `#print axioms` with Lean `v4.35.0`:
 
 ### Proposed revisions: the block level
 
-`Framework.Block` holds the block level of a proposed revision of Script ([design record 0011](docs/design/0011-mainnet-ranges.md), section 10.1).
+`Framework.Block` holds the block level of a proposed revision ([design record 0011](docs/design/0011-mainnet-ranges.md), section 10.1).
 `connectBlockWith` and `validateBlockWith` are copies of `connectBlock` and `validateBlock`.
-Each takes the spend check of a `BlockRevision` in place of `verifyLegacySpend`, and a value of `active`.
-`connectBlockWith` takes `active` as an argument. `validateBlockWith` takes an `Activation` and reads it at the height of the block.
-The revision changes the spend check and nothing else.
-The flags of a height, the count of signature operations, the amounts, the coin set and the four checks before `ConnectBlock` are the baseline's.
+Each takes a `BlockRevision` and a value of `active`.
+`connectBlockWith` and `validateBlockWithActive` take `active` as an argument. `validateBlockWith` takes an `Activation` and reads it at the height of the block.
+
+A `BlockRevision` has four parts, and each takes `active` ([design record 0012](docs/design/0012-relative-lock-time.md), section 6.3):
+
+| Part | Baseline value |
+| --- | --- |
+| `spend`, the spend check of one input | `verifyLegacySpend` |
+| `scriptFlags`, the script flags of a block at a height (extension E1) | `connectScriptFlags` |
+| `txTest`, a test of one transaction that is not a coinbase, after the lookup of its inputs (extension E2) | Accepts every transaction |
+| `lockTimeArgs`, the two lock-time arguments of `contextualCheckBlockBody` (extension E3) | `csvActive` and the median time past of the context |
+
+A revision of Script sets `spend` alone, and the three other parts have their baseline values.
+The count of signature operations, the amounts, the coin set and the header checks are the baseline's.
+`connectBlockWith` keeps the result `csvActive` of `connectBlock` for a context whose `csvActive` is true.
+That field is the version-bits state of the pin, and no revision reads it as its activation.
 
 A result is a `BlockOutcome`: an acceptance with the coin set and the changes, a rejection, or an unsupported result.
 An embedding gives the maps of the baseline errors and of the script results into the types of the outcome.
 A baseline error that `isRejection` marks as a rejection of Core becomes a rejection, and a result outside the model becomes an unsupported result.
 *The embedded result* of a baseline call is its result through those maps.
+The transaction test returns an outcome of the same types, so a revision can add its own rejections and unsupported reasons (extension E4).
 
 Every theorem is block-level: it is about one block on a supplied coin set and chain view.
 Each holds for every verifier, embedding, context, coin set and block, and none assumes a property of the verifier.
 
-- `connectBlockWith_baseline` and `validateBlockWith_baseline`: with the baseline spend check and the baseline error types, each definition equals `connectBlock` or `validateBlock`.
+- `connectBlockWith_baseline` and `validateBlockWith_baseline`: with the baseline revision and the baseline error types, each definition equals `connectBlock` or `validateBlock`.
   `connectBlockWith_ofBaseline` and `validateBlockWith_ofBaseline` state the same agreement as the embedded result, for every embedding.
-  So the comparisons of `block.validate` with Core apply to the copies with the baseline spend check.
+  So the comparisons of `block.validate` with Core apply to the copies with the baseline revision.
   A change to the baseline that a copy does not follow fails the build.
-- `validateBlockWith_inactive`: take a revision whose spend check with `active` false equals the embedded result of `verifyLegacySpend`.
+- `validateBlockWith_inactive`: take a revision with `BlockRevision.InactiveBaseline`.
+  With `active` false, its spend check equals the embedded result of `verifyLegacySpend`, and its three other parts have their baseline values.
   At a height where the activation is inactive, `validateBlockWith` equals the embedded result of `validateBlock`: each acceptance, each rejection and each result outside the model.
   `validateBlockWith_inactive_of_lt` and `validateBlockWith_inactive_of_none` give the cases of a height below the activation height, and of no activation height.
-- `connectBlockWith_restricts` and `validateBlockWith_restricts`: take a revision whose spend check accepts only inputs that `verifyLegacySpend` accepts, for every `active`, input, script and flag set.
-  If the revised definition accepts a block on a coin set, the baseline accepts it on that set, with the same coin set and the same changes.
-  The hypothesis reads the first run of each script check, and the theorem says nothing about the reason of a rejection.
+- `connectBlockWith_restricts`: take a revision, a value of `active` and a context, with the script flags `f` of the revision at the height.
+  Let the spend check under `f` accept only inputs that `verifyLegacySpend` accepts under `connectScriptFlags`.
+  Let `f` and `connectScriptFlags` agree on `SCRIPT_VERIFY_P2SH`, which the count of signature operations reads.
+  If `connectBlockWith` accepts a block on a coin set, `connectBlock` accepts it on that set, with the same coin set and the same changes.
+  The baseline has no transaction test, so the theorem has no condition on `txTest`.
+- `validateBlockWith_restricts`: the same for `validateBlock`, with a condition on the lock-time cutoff.
+  When the contextual header check of the block passes, the cutoff of the revision is at most the cutoff of the baseline.
+  The cutoff is `lockTimeCutoff`: the median time past with `csvActive` true, and the time of the block otherwise.
+  The hypotheses read the first run of each script check, and the theorem says nothing about the reason of a rejection.
 - `validateBlockWith_congr`: take a revision whose spend check is `verifyScriptWith` with a step that equals the baseline step on every instruction with an opcode outside a set `O`.
+  Let its script flags, its transaction test and its lock-time arguments agree with the baseline on the block.
   Take a block with `BlockUntouched O`: no `scriptSig`, no spent `scriptPubKey` and no P2SH redeem script of a spend holds an instruction with an opcode in `O`.
   Then `validateBlockWith` equals the embedded result of `validateBlock`, for every value of `active`.
   The equality covers both runs of each script check.
+
+`Framework.Proofs.LockTime` has the rule-level facts behind the cutoff condition.
+`isFinalTx_mono` shows that a transaction that is final at a cutoff is final at every later cutoff.
+`contextualCheckBlockBody_csv_restricts` takes a median time past that is at most the time of the block. A body that accepts with `csvActive` true then accepts with `csvActive` false.
+
+Core enforces that hypothesis in `ContextualCheckBlockHeader`, with the reason `time-too-old` (D33, line 3104).
+`validateBlock` runs that check before the body check, so `validateBlockWith_restricts` can use its result and assumes nothing about the times.
+A header with the genesis hash skips that check.
 
 `BlockUntouched` states three conditions for each input of a transaction that is not a coinbase.
 The spent `scriptPubKey` belongs to the coin of the outpoint in the coin set just before the transaction.
@@ -3284,8 +3313,9 @@ The faulty variant has no restriction theorem, because its spend check accepts a
 The theorems do not say:
 
 - That a revision is a soft fork of the network. A restriction theorem covers one block on one coin set. The statement for a chain needs an induction, and the full claim needs a legacy projection (design record 0007, section 8.3).
-- Anything about a rule outside Script. A revision that changes the flags of a block, the count of signature operations or a check before `ConnectBlock` is outside these definitions.
-- Anything about Core. No Core behaviour exists for a revision, so no comparison supports a revised verdict.
+- Anything about a list of blocks. `connectChainWith_restricts` of design record 0012, section 9.1, is not stated.
+- Anything about a revision of the count of signature operations, of the amounts or of a header check. Those parts are the baseline's.
+- Anything about Core. No Core behaviour exists for an example, so no comparison supports its revised verdict. [The lock-time cutoff of `RelativeLockTime`](#proposed-revisions-relativelocktime-the-lock-time-cutoff) has a comparison with Core's dormant code, under its own label.
 - That the proposal executable computes these definitions correctly beyond its test. The agreement theorems are about the Lean definitions, and `dogelib-proposal-oracle` is compiled code ([docs/oracle.md](docs/oracle.md#the-proposal-executable)).
 
 The proof of `validateBlockWith_ofBaseline` does not unfold `validateBlock` with the `unfold` tactic.
@@ -3377,6 +3407,63 @@ It has these boundaries:
 
 By `#print axioms` with Lean `v4.35.0`, every theorem of the example depends on `propext` and `Quot.sound` only.
 The theorems are `lockStep_false`, `lockCheck_corrected_next`, `correctedStep_restricts`, `revisedVerifyScript_inactive_eq`, `revisedSpend_inactive_eq`, `inactiveEq`, `corrected_verifyScript_soft_fork_local`, `corrected_soft_fork_local`, `corrected_restrictsAcceptance`, `faultyStep_pops`, `faultyStep_not_restricts`, `faulty_counterexample`, `faulty_counterexample_short`, `faulty_not_restrictsAcceptance`, `faulty_not_softFork`, `faulty_strict`, `faulty_incompatible`, `corrected_counterexample`, `corrected_strict`, `corrected_use` and `corrected_softFork`.
+
+### Proposed revisions: `RelativeLockTime`, the lock-time cutoff
+
+`DogeLib.Proposals.RelativeLockTime` is a proposed revision with a public proposal for Dogecoin ([design record 0012](docs/design/0012-relative-lock-time.md)).
+Design record 0012 covers the rules of BIP 68, BIP 112 and BIP 113, which discussion 3509 of `dogecoin/dogecoin` proposed to activate (SOURCES.md, P1 to P4).
+**The revision is partial: it has the rule of BIP 113 alone.**
+Every statement below is about that rule, and none is about the three rules together.
+DogeLib takes no position on the activation of these rules.
+
+The rule replaces the lock-time cutoff of `IsFinalTx` in `ContextualCheckBlock` (D110, lines 3127 to 3140).
+The baseline cutoff is the time of the block, and the revised cutoff is the median time past of the predecessor.
+The revision defines no second body check.
+Its `lockTimeArgs` pass `csvActive` true and `Work.medianTimePast` of the view to the baseline `contextualCheckBlockBody`, which holds Core's branch for an active CSV state.
+The revised rule applies when `active` is true and the block is *applicable*.
+An applicable block has a view that is not empty, and a header without the hash of the mainnet genesis block.
+For every other block the arguments are those of the baseline.
+
+- `relativeLockTime_inactive_eq`: with `active` false, the revision equals the embedded result of `validateBlock`, for every context.
+  `relativeLockTime_activation` gives the same equality for `validateBlockWith` where an activation is inactive at the height of the block.
+- `relativeLockTime_restricts`: if the revision accepts a block, `validateBlock` accepts it, with the same coin set and the same changes.
+  The theorem holds for every `active` and every context, on an applicable block or not.
+- `relativeLockTime_eq_of_cutoff_untouched`: take a context with `csvActive` false, and a block without a cutoff transaction.
+  Then the revision equals the embedded result of `validateBlock`.
+  A cutoff transaction has a time lock time from the median cutoff to below the block time, and an input whose sequence is not `SEQUENCE_FINAL`.
+- `cutoff_strict` and `cutoff_use`: two made blocks at height 145,000 on a made view.
+  `validateBlock` accepts the first, and the active revision rejects it with `bad-txns-nonfinal`.
+  The active revision accepts the second, whose coinbase has a time lock time below the median cutoff and a sequence that is not final.
+- `cutoff_softFork`: the framework's `SoftFork` for the revision and `validateBlock`, from the statements above. It is block-level.
+
+| Hypothesis | Used by | Where Core enforces it |
+| --- | --- | --- |
+| The median time past of the predecessor is below the time of the block. | `lockTimeCutoff_le` | `ContextualCheckBlockHeader`, `time-too-old` (D33, line 3104). `validateBlock` runs it first, so `relativeLockTime_restricts` does not assume it. |
+| The block is applicable. | The revised rule | It is part of the definition, and no theorem assumes it. Core reads the median only with a predecessor (D110, line 3135). |
+| `csvActive` of the context is false. | `relativeLockTime_eq_of_cutoff_untouched` | The field is the version-bits state of the pin. `csv_never_lockedIn` shows that it is never active on a mainnet header chain whose headers passed `checkBlockHeader`. No theorem shows that the real chain meets that hypothesis. |
+
+`Work.medianTimePast` returns an adapter error for a view that is invalid or too short, and `lockTimeArgs` then gives the arguments of the baseline.
+No result of `validateBlockWithActive` reads that case: `contextualCheckBlockHeader` computes the same median first, and returns the adapter error (`lockTimeArgs_of_headerPassed`).
+`block.contextual_check_body` of the proposal executable runs the body check alone, and it returns `unsupported` for such a view.
+
+The witnesses are computed by the kernel with `decide +kernel`, one check of `validateBlock` at a time.
+Two computations use a proof in the place of an evaluation.
+Each uses a definition of Lean core by well-founded recursion, which the kernel does not unfold across a module boundary.
+`witness_medianTimePast` uses `medianTimePast_mem`, because the median sorts with `List.mergeSort`. Every entry of the made view has one time.
+The witness blocks are at height 145,000, where the subsidy is a fixed amount. Below that height the subsidy runs a Mersenne Twister on a `Vector`.
+
+The theorems do not say:
+
+- Anything about `OP_CHECKSEQUENCEVERIFY` or about sequence locks. Those rules are not in the revision.
+- That the revision is a soft fork of the network. `cutoff_softFork` covers one block on a supplied coin set and view, for mainnet rules. It says nothing about a chain, fork choice, convergence or liveness.
+- That the rule is right for Dogecoin, or that any network activates it. The revision has no default activation.
+- Anything about a signalling mechanism. The activation is one height on mainnet (design record 0012, section 5).
+- Anything about a block that an empty candidate list leaves out. The list is the output of a script, and it is a trusted premise of a count.
+
+The revision adds no axiom and no trust assumption.
+By `#print axioms` with Lean `v4.35.0`, each theorem named in this subsection depends on `propext`, `Classical.choice` and `Quot.sound` alone.
+
+The comparison of the rule with Core's own code uses a harness input that no theorem supports ([the forced CSV state](#b4-the-oracle-and-foreign-boundaries)).
 
 ### What cannot be proved yet
 
@@ -3749,6 +3836,18 @@ The seed is `THRESHOLD_FAILED` for CSV and SegWit.
 If that median time is at or after the CSV start 1462060800 and before the timeout, the harness refuses the request.
 The harness clears `versionbitscache` before and after each request.
 The comparison trusts this seed ([the contextual block body](#the-contextual-block-body)).
+
+`block.contextual_check_body` of the harness also takes the argument `force_csv_active` ([design record 0012](docs/design/0012-relative-lock-time.md), section 10.2).
+With the value true, the harness seeds `THRESHOLD_ACTIVE` for CSV at the boundary that the block reads, or at the null key below the first period.
+Core's own `ContextualCheckBlock` then takes the median-time cutoff of lines 3134 and 3135, and no line of Core's source changes.
+The harness seeds nothing for a block without a predecessor, or for a block whose header has the genesis hash.
+
+The two seeds differ in kind.
+`csv_never_lockedIn` supports `THRESHOLD_FAILED` as Core's own result on a mainnet chain, under its hypothesis.
+No theorem supports `THRESHOLD_ACTIVE`, and no mainnet chain reaches it.
+So the seed is a harness input, and the run shows what Core's code does in a state that Core never enters.
+The result is evidence about the proposed revision `RelativeLockTime` alone ([COVERAGE.md](COVERAGE.md#proposed-revisions)). It is not evidence about mainnet, and it is not a Core comparison of the baseline.
+`scripts/test_core_harness.py` checks that a request without the argument, after a request with it, gets the baseline result.
 
 The oracle computes the candidate height and the two states from the same chain:
 

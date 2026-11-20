@@ -213,10 +213,22 @@ A proposed revision can have an external document, such as a Dogecoin improvemen
 This table records each document that a proposal cites, with identifiers `P1`, `P2` and so on.
 A row gives the repository or URL, an exact revision or a content digest, and the date.
 The Lean definition of the proposal, not the document, is the object of every DogeLib claim.
-No proposal cites a document yet.
+
+A document in a git repository has the commit that last changed its file.
+A discussion has no commit, so P4 has the SHA-256 of the UTF-8 text of its first post ([design record 0012](docs/design/0012-relative-lock-time.md), decision 4).
+That digest does not cover the replies.
 
 | ID | Document | Revision or digest | Date | Proposal |
 | --- | --- | --- | --- | --- |
+| P1 | BIP 68, [`bip-0068.mediawiki`](https://github.com/bitcoin/bips/blob/6ac8c268704a479bdf65fad642c46d43cf19677e/bip-0068.mediawiki) in `bitcoin/bips` | Commit `6ac8c268704a479bdf65fad642c46d43cf19677e`, the last change of the file | 2026-05-28 | `RelativeLockTime` |
+| P2 | BIP 112, [`bip-0112.mediawiki`](https://github.com/bitcoin/bips/blob/24e96e870fffaa257b465ce1f0370c14aac588e8/bip-0112.mediawiki) in `bitcoin/bips` | Commit `24e96e870fffaa257b465ce1f0370c14aac588e8`, the last change of the file | 2026-01-12 | `RelativeLockTime` |
+| P3 | BIP 113, [`bip-0113.mediawiki`](https://github.com/bitcoin/bips/blob/24e96e870fffaa257b465ce1f0370c14aac588e8/bip-0113.mediawiki) in `bitcoin/bips` | The same commit as P2, which is also the last change of this file | 2026-01-12 | `RelativeLockTime` |
+| P4 | [Discussion 3509 of `dogecoin/dogecoin`](https://github.com/dogecoin/dogecoin/discussions/3509), "Proposal: activate CSV with 1.15", by `patricklodder` | SHA-256 `f991a5409472fd30c565fc9a99b9974e638e39335918e51344ce78b553d79200` of the first post. The GitHub API returned that text on 2026-11-20, with no edit time | 2024-04-04 | `RelativeLockTime` |
+
+`RelativeLockTime` is partial: it has the rule of BIP 113 alone, and the rules of BIP 112 and BIP 68 are stages 2 and 3 of design record 0012.
+Its Lean definitions follow Core's code of the rule at the Dogecoin pin, which is Core's own implementation of the BIP (design record 0012, decision 3).
+The rule of BIP 113 is in D110 (`src/validation.cpp`, `IsFinalTx` at lines 258 to 269 and `ContextualCheckBlock` at lines 3127 to 3140) and in D18 (`GetMedianTimePast`).
+The BIPs explain the rules, and the module documentation of `DogeLib.Proposals.RelativeLockTime` lists each difference between a BIP and the pinned code.
 
 ## Historical header fixture
 

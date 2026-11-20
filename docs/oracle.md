@@ -938,7 +938,7 @@ These pinned sources supply the work functions and parameter constructors:
 | --- | --- |
 | `block.header_sequence` | `AcceptBlockHeader` once for each header, which calls `CheckBlockHeader`, `ContextualCheckBlockHeader` and `AddToBlockIndex`, on an index that the harness builds from the request |
 | `block.contextual_check` | `ContextualCheckBlockHeader` on index entries that the harness builds from the request |
-| `block.contextual_check_body` | `SelectParams` for mainnet, then `ContextualCheckBlock` on a `CBlock` that Core's stream code reads, with a predecessor that the harness builds from the chain. `VersionBitsState` reads the aligned boundary's median time, and the harness seeds `THRESHOLD_FAILED` at a boundary at or after the CSV timeout |
+| `block.contextual_check_body` | `SelectParams` for mainnet, then `ContextualCheckBlock` on a `CBlock` that Core's stream code reads, with a predecessor that the harness builds from the chain. `VersionBitsState` reads the aligned boundary's median time, and the harness seeds `THRESHOLD_FAILED` at a boundary at or after the CSV timeout. With `force_csv_active`, the harness seeds `THRESHOLD_ACTIVE` for CSV, a state that no mainnet chain reaches ([the forced CSV state](#core-with-the-csv-state-forced-to-active)) |
 | `block.check` | `SelectParams` for mainnet, then `CheckBlock` on a `CBlock` that Core's stream code reads from the request, with the two flags of the request. Then `GetLegacySigOpCount` for each transaction, `GetSerializeSize` in base mode and `GetHash` |
 | `block.validate` | `SelectParams` for mainnet. Then, for each block that Core's stream code reads: `CheckBlockHeader` when `check_pow` is true, `ContextualCheckBlockHeader`, `CheckBlock`, `ContextualCheckBlock`, and `ConnectBlock` with `fJustCheck` true on a new `CCoinsViewCache` over the carried set. The first two do not run for the genesis hash. `UpdateCoins` on a second cache gives the changes of an accepted block ([choices](#block-validation-in-the-harness)) |
 | `block.subsidy` | `SelectParams` for mainnet, then `GetDogecoinBlockSubsidy` with `Params().GetConsensus(height)` for each case, as `ConnectBlock` calls it (D101, line 1996) |
@@ -1030,7 +1030,7 @@ Other argument checks have oracle fixtures but no Core comparison.
 
 `dogelib-proposal-oracle` is a second executable, built from the `ProposalExports` library ([design record 0011](design/0011-mainnet-ranges.md), section 10.2 and decision 10).
 It answers every operation of `dogelib-oracle` with the code of `dogelib-oracle`.
-It adds one argument to `block.validate`, with `blocks_hex` and with `blocks_file`:
+It adds one argument to `block.validate`, with `blocks_hex` and with `blocks_file`, and to `block.contextual_check_body`:
 
 ```text
 "revision": {"name": "ExampleVersionVerify", "variant": null, "activation_height": 0}
@@ -1038,12 +1038,14 @@ It adds one argument to `block.validate`, with `blocks_hex` and with `blocks_fil
 
 | Field | Value |
 | --- | --- |
-| `name` | The name of a revision: `ExampleFaultyLocktime` or `ExampleVersionVerify`. |
-| `variant` | `corrected` or `faulty` for `ExampleFaultyLocktime`, and null for `ExampleVersionVerify`. |
+| `name` | The name of a revision: `ExampleFaultyLocktime`, `ExampleVersionVerify` or `RelativeLockTime`. |
+| `variant` | `corrected` or `faulty` for `ExampleFaultyLocktime`, and null for the two other revisions. |
 | `activation_height` | A mainnet height from 0 to 2,147,483,646, or null for no activation. |
 
 The three fields are required, and any other field is a request error.
-The two revisions are the examples of the `Proposals` library. Neither is a proposal for Dogecoin.
+`ExampleFaultyLocktime` and `ExampleVersionVerify` are the examples of the `Proposals` library. Neither is a proposal for Dogecoin.
+`RelativeLockTime` is the proposed revision of [design record 0012](design/0012-relative-lock-time.md).
+It is partial: it has the rule of BIP 113 alone, so its `revised` objects are not the results of BIP 68, BIP 112 and BIP 113 together.
 
 `dogelib-oracle` has no such argument and returns a request error for it.
 Without the argument, the proposal executable writes the response of `dogelib-oracle`, byte for byte.
@@ -1072,8 +1074,26 @@ An unsupported result is not a rejection, and its block is not a changed block.
 
 The run answers one question for each block: what does the revision say about this block on the baseline chain below it?
 It does not build the chain that revised nodes would build after a changed block.
-No Core behaviour exists for a revision, so no comparison supports a `revised` object.
+No Core behaviour exists for an example, so no comparison supports its `revised` objects.
 The theorems of `DogeLib.Proposals.Framework.Proofs.Block` relate the two verdicts ([SOUNDNESS.md](../SOUNDNESS.md#proposed-revisions-the-block-level)).
+
+With the argument, `block.contextual_check_body` returns the response of the baseline operation with one more object, `revised`.
+The object is the result of `Proposals.Framework.contextualBodyWith`: `ContextualCheckBlock` with the lock-time arguments of the revision.
+The context has the view `chain`, and the version-bits states that the baseline operation computes.
+
+| Field | Value |
+| --- | --- |
+| `active` | Whether the revision is active at the height of the block. |
+| `verdict` | `accepted`, `rejected` or `unsupported`. |
+| `reject_reason`, `dos`, `reject_code` | For a rejection, Core's reject reason, score and reject code. Null otherwise. |
+| `reason` | For an unsupported result, a text for the input outside the model. Null otherwise. |
+| `lock_time_cutoff` | The lock-time cutoff that the revision gives the check: the median time past, or the time of the block. |
+
+The operation runs no header check before the body check.
+`RelativeLockTime` reads the median time past of the view when it is active on an applicable block.
+A `chain` without that median gives `unsupported`: an invalid view, or a view with fewer entries than Core's median walk reads.
+So a request for this revision supplies the eleven predecessors, or every predecessor below height 11, as well as the entries that the baseline operation needs.
+A request on which the baseline operation returns an error returns that error.
 
 The executable has one test, which needs no Dogecoin Core:
 
@@ -1083,6 +1103,7 @@ python3 -I scripts/test_proposal_oracle.py .lake/build/bin/dogelib-oracle .lake/
 ```
 
 - Without `revision`, the two programs write the same bytes on the 42 `block.validate` requests of the full comparison and on 34 requests with `blocks_file`. With `--mainnet-blocks build/mainnet-blocks`, the test adds the replay of mainnet heights 0 to 10,000.
+- Without `revision`, the two programs also write the same bytes on the 22 `block.contextual_check_body` requests of the comparison. With a revision and no activation height, each `revised` object has `active` false and the baseline verdict. The examples change no lock-time argument, so the same holds for them from height 0.
 - `dogelib-oracle` refuses `revision`, and the proposal executable refuses 18 malformed values of it.
 - With no activation height, each `revised` object has the verdict, the reject reason and the changes digest of its baseline record. The check covers the 119 block records of those 42 requests, for each revision.
 - From height 0 on the same requests, the response without the `revised` objects is the baseline response. No block goes from rejected to accepted under the two revisions with a restriction theorem.
@@ -1090,6 +1111,54 @@ python3 -I scripts/test_proposal_oracle.py .lake/build/bin/dogelib-oracle .lake/
 - Eight made blocks give `revised` objects that the test states by hand from the text of each rule. Each block stands on a committed rule-change block and spends a supplied coin whose script holds the rule. A negative operand of each rule changes an accepted block to rejected. The counterexample of the faulty variant changes a rejected block to accepted.
 
 The test does not run a revision on the mainnet ranges of design record 0011. Those runs are conditions 4 and 5 of its stage 6.
+
+#### Core with the CSV state forced to `ACTIVE`
+
+This evidence has its own label: Core at `e0a1c15` with the CSV state forced to `ACTIVE`.
+It is about the proposed revision `RelativeLockTime` alone. It is not a Core comparison of the baseline, and it is not evidence about mainnet.
+
+Dogecoin Core 1.14.9 holds the code of BIP 113, and its version-bits state for CSV never becomes `ACTIVE` on mainnet (`csv_never_lockedIn`).
+`block.contextual_check_body` of the Core harness takes one more argument, the Boolean `force_csv_active` ([design record 0012](design/0012-relative-lock-time.md), section 10.2 and decision 12).
+With the value true, the harness seeds `THRESHOLD_ACTIVE` for CSV in Core's version-bits cache, at the boundary that the block reads.
+Core's own `ContextualCheckBlock` then takes the median time past of the predecessor as the lock-time cutoff (D110, lines 3134 and 3135).
+No line of Core's source changes.
+
+The harness seeds nothing for a block that is not applicable: one without a predecessor, or one whose header has the hash of the genesis block.
+Below height 10,080 the aligned boundary is null, which is also the cache key of a block without a predecessor.
+The harness clears the cache before and after each request.
+With the argument, the `chain` must hold the eleven predecessors, or every predecessor below height 11, and the harness refuses a shorter chain.
+`dogelib-oracle` and `dogelib-proposal-oracle` refuse the argument, and the harness and `dogelib-oracle` refuse `revision`.
+
+```bash
+python3 -I scripts/fetch_release_blocks.py
+python3 -I scripts/relative_lock_time_candidates.py --check
+python3 -I scripts/compare_csv_forced.py .lake/build/bin/dogelib-oracle .lake/build/bin/dogelib-proposal-oracle build/core-harness/core-oracle
+```
+
+`scripts/compare_csv_forced.py` sends each block to the harness with `force_csv_active`, and to the proposal executable with `RelativeLockTime` from activation height 1.
+It compares the forced result of Core with the `revised` object: verdict, reject reason, score and reject code.
+
+| Part | Requests | Contents |
+| --- | ---: | --- |
+| Refusals | 5 | Each program refuses the argument that it does not have, and the harness refuses a value that is not a Boolean |
+| Made blocks | 37 | A lock time on each side of the median cutoff and of the block time. Final and other sequences, a height lock time and a locked coinbase. Unsorted times, and heights 1, 2, 3, 11 and 12. A period boundary before the CSV start and after the CSV timeout. Three blocks that are not applicable. Each verdict is derived by hand from `IsFinalTx` and from lines 3127 to 3140 |
+| Harness state | 74 | After each made block with the argument, the same request without it and with the value false. Each gets the hand-derived baseline verdict |
+| Mainnet blocks | 11,018 | Heights 0 to 10,000, heights 6,455,302 to 6,456,301 and the 17 rule-change blocks, each with the argument |
+| Self-test | 32 | For 16 made blocks with two verdicts, the comparison fails with the revision inactive, and fails against a harness run without the seed |
+
+Every forced result agrees with its `revised` object.
+The made blocks reach `bad-txns-nonfinal` from the cutoff 20 times.
+One made block has a time below the median, which `ContextualCheckBlockHeader` rejects. This operation runs no header check, and both programs then accept a lock time that the baseline rejects.
+
+The forced run accepts each of the 11,018 mainnet blocks, so no block is changed.
+That count equals the committed candidate list, [`tests/proposals/relative-lock-time/cutoff-candidates.json`](../tests/proposals/relative-lock-time/README.md), which has no candidate block.
+One recorded run on a development machine takes about one minute.
+
+Agreement shows that the Lean rule equals Core's dormant code on these requests.
+It does not show that the rule is right for Dogecoin, and a count says nothing about other heights or about unconfirmed transactions.
+The comparison covers the rule of BIP 113 through `ContextualCheckBlock` alone.
+`block.validate` has no forced-active argument, so no comparison covers `OP_CHECKSEQUENCEVERIFY` or sequence locks in a block.
+This state does not occur on mainnet (`csv_never_lockedIn`).
 
 ### Block validation in the harness
 

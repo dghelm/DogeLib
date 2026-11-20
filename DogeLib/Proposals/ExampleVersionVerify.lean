@@ -174,8 +174,9 @@ def exampleVerifyLegacySpend (active : Bool) (ctx : InputContext) (prevScriptPub
     ctx.input.scriptSig.bytes.val prevScriptPubKey.bytes.val
 
 /-- The example at the block level: the spend check `exampleVerifyLegacySpend` with the verifier `verify`. -/
-def blockRevision (verify : SignatureVerifier) : BlockRevision ExampleScriptError ExampleScriptUnsupported :=
-  ⟨fun active ctx prevScriptPubKey flags => exampleVerifyLegacySpend active ctx prevScriptPubKey flags verify⟩
+def blockRevision {ρ μ : Type} (verify : SignatureVerifier) :
+    BlockRevision ExampleScriptError ExampleScriptUnsupported ρ μ where
+  spend := fun active ctx prevScriptPubKey flags => exampleVerifyLegacySpend active ctx prevScriptPubKey flags verify
 
 /-- The arguments of one spend check, other than `active`: the input, the previous `scriptPubKey`, the flags and the verifier. -/
 structure SpendArgs where

@@ -119,6 +119,18 @@ jobs:
           time python3 -I scripts/fetch_release_blocks.py
           time python3 -I scripts/compare_core.py --mainnet-blocks build/mainnet-blocks .lake/build/bin/dogelib-oracle build/core-harness/core-oracle
 
+      # Design record 0012, stage 1: the proposed revision RelativeLockTime against
+      # Core's own dormant code. The harness seeds THRESHOLD_ACTIVE for CSV, a state
+      # that no mainnet chain reaches (csv_never_lockedIn), so this step is not a
+      # Core comparison of the baseline. The first command checks the committed
+      # candidate list of the cutoff count.
+      - name: CSV forced active, against the proposed revision
+        if: ${{ !cancelled() }}
+        run: |
+          lake build dogelib-proposal-oracle
+          python3 -I scripts/relative_lock_time_candidates.py --check
+          time python3 -I scripts/compare_csv_forced.py .lake/build/bin/dogelib-oracle .lake/build/bin/dogelib-proposal-oracle build/core-harness/core-oracle
+
       # The replay to height 145,000 is outside CI. Its tool runs here on
       # heights 0 to 200 of the downloaded range, with planted faults, and
       # both programs read small files through blocks_file.

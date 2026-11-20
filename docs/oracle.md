@@ -1655,7 +1655,7 @@ The fixture has 179,503,696 bytes of blocks, and its `blocks.bin` has the SHA-25
 Of the blocks, 147 are `pinned` and 6,319 are `linked`.
 The fixture is not committed.
 
-`scripts/count_blocks.py --estimate --last 6465793` scales each stratum to its 1,000 heights.
+`scripts/count_blocks.py --estimate --last 6465793` scales each stratum to the number of its heights: 1,000, or 794 for the last.
 The standard error comes from collapsed strata, so it is itself an estimate.
 
 | Quantity, heights 0 to 6,465,793 | Estimate | Standard error |

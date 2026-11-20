@@ -188,6 +188,12 @@ class Sample(unittest.TestCase):
             result = cb.estimate(str(fixture), last=1, stride=1)
             self.assertEqual(result["estimate"]["transactions"], 4)
             self.assertEqual(result["standard_error"]["transactions"], 0)
+            # A full stratum {0, 1} and a partial stratum {2}: the partial one has no partner
+            # in the error, so the error is 0.
+            partial = write_fixture(pathlib.Path(tmp) / "p", [(0, one), (2, three)])
+            result = cb.estimate(str(partial), last=2, stride=2)
+            self.assertEqual(result["estimate"]["transactions"], 2 + 3)
+            self.assertEqual(result["standard_error"]["transactions"], 0)
             # A stride of 3 does not divide 500,000, so a stratum would cross a band.
             with self.assertRaisesRegex(fb.FetchError, "does not divide"):
                 cb.estimate(str(fixture), last=1, stride=3)

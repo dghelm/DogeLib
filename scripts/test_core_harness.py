@@ -14,6 +14,12 @@ State: after a success, a consensus rejection, a request error and a decoding
 error, the harness-internal operation harness.time_state must report mock time
 0 and time offset 0. Adjusted time 0 uses offset -1, so the test covers each
 kind of exit at adjusted time 0 and at another value.
+
+Forced CSV state: block.contextual_check_body with force_csv_active seeds
+THRESHOLD_ACTIVE for CSV in Core's version-bits cache (design record 0012,
+section 10.2). A request without the argument, after a request with it, must
+get the baseline result, which the oracle also gives. Below height 10,080 the
+seed has the null cache key, which a block without a predecessor also reads.
 """
 
 import copy
@@ -25,6 +31,8 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / 'scripts'))
 from oracle_header_sequence import regtest_cases, EXPECTATIONS, key
+from oracle_block_check import block, coinbase
+from oracle_contextual_body import body_request, chain_entry, nonfinal_tx
 
 INT64_MIN = -2**63
 ADJUSTED_MAX = 2**63 - 1 - 7200
@@ -129,7 +137,32 @@ def main():
         check(kind(answer) == expected, f'exit {i}: {answer}, expected {expected}')
         check({k: v for k, v in after.items() if k != 'id'} == clean,
               f'exit {i} ({expected}, adjusted time {req["adjusted_time"]}) left {after}')
-    print(f'{len(cases)} verdict cases and {len(exits)} state checks, 0 failures')
+    # The forced CSV seed. Eleven predecessors at heights 4999 down to 4989 with the times
+    # T, T - 60, ..., T - 600: the median time past is T - 300. A lock time at that median, with
+    # a sequence that is not final, is final at the block time T + 60 and not final at the median
+    # (validation.cpp:258-269 and 3127-3140).
+    newest = 1400000000
+    view = [chain_entry(4999 - i, newest - 60 * i) for i in range(11)]
+    locked = body_request(block([coinbase(), nonfinal_tx(newest - 300)], time=newest + 60), view)
+    orphan = body_request(block([coinbase(), nonfinal_tx(newest - 300)], time=newest + 60), [])
+    forced = dict(locked, force_csv_active=True)
+    accepted_body = dict(valid=True, reject_reason=None, dos=None, reject_code=None)
+    nonfinal = dict(valid=False, reject_reason='bad-txns-nonfinal', dos=10, reject_code=16)
+    seeded = [(locked, accepted_body), (forced, nonfinal), (locked, accepted_body), (forced, nonfinal),
+              (orphan, accepted_body), (dict(orphan, force_csv_active=True), accepted_body), (locked, accepted_body),
+              # A refused request after a seed: the chain is too short for the median time past.
+              (dict(locked, chain=view[:3], force_csv_active=True), None), (locked, accepted_body)]
+    answers = run(harness, [req for req, _ in seeded])
+    for i, ((req, expected), answer) in enumerate(zip(seeded, answers)):
+        if expected is None:
+            check(answer.get('error', {}).get('kind') == 'request', f'forced CSV case {i}: {answer}, expected a request error')
+            continue
+        check(answer.get('ok') == expected, f'forced CSV case {i}: harness {answer}, expected {expected}')
+        if 'force_csv_active' not in req:
+            lean = run(oracle, [req])[0]
+            check({k: v for k, v in lean.get('ok', {}).items() if k != 'diagnostic'} == expected,
+                  f'forced CSV case {i}: oracle {lean}, expected {expected}')
+    print(f'{len(cases)} verdict cases, {len(exits)} state checks and {len(seeded)} forced CSV state checks, 0 failures')
 
 
 if __name__ == '__main__':

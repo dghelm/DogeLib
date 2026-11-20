@@ -1058,7 +1058,17 @@ UniValue run(const UniValue& req)
         // THRESHOLD_FAILED, as design record 0010, decision 3, justifies with
         // csv_never_lockedIn and versionBits_shortcut. On mainnet neither state
         // is ever ACTIVE, so the lock-time cutoff is always the block time.
-        checkArgs(req, op, {"block_hex", "mode", "chain"});
+        //
+        // force_csv_active (design record 0012, section 10.2 and decision 12):
+        // with the value true, the harness seeds THRESHOLD_ACTIVE for CSV at the
+        // boundary that the block reads. Core's own ContextualCheckBlock then
+        // takes the median-time branch of lines 3134 and 3135, and no line of
+        // Core's source changes. No mainnet chain reaches that state
+        // (csv_never_lockedIn). The response shows what Core's code does in a
+        // state that Core never enters. It is not mainnet behavior, and it is
+        // not a Core comparison of the baseline.
+        checkArgs(req, op, {"block_hex", "mode", "chain", "force_csv_active"});
+        const bool forceCsvActive = req.exists("force_csv_active") && argBool(req, "force_csv_active");
         SelectParams(CBaseChainParams::MAIN);
         const int version = headerStreamVersion(req);
         const auto bytes = argHex(req, "block_hex");
@@ -1093,6 +1103,8 @@ UniValue run(const UniValue& req)
             }
         }
         CBlockIndex* pindexPrev = chain.empty() ? nullptr : &chain.front();
+        // The aligned boundary of the block, which is null below the first period.
+        CBlockIndex* boundary = nullptr;
         if (pindexPrev) {
             const int64_t period = 10080;
             const int64_t prevHeight = pindexPrev->nHeight;
@@ -1101,7 +1113,7 @@ UniValue run(const UniValue& req)
                 const size_t drop = static_cast<size_t>(prevHeight - aligned);
                 if (drop >= chain.size() || chain[drop].nHeight != aligned)
                     throw RequestError{"chain does not reach the aligned boundary"};
-                CBlockIndex* boundary = &chain[drop];
+                boundary = &chain[drop];
                 const int64_t boundaryMtp = boundary->GetMedianTimePast();
                 // Case 2: seed FAILED at the aligned boundary for both deployments,
                 // justified by csv_never_lockedIn and versionBits_shortcut.
@@ -1115,6 +1127,19 @@ UniValue run(const UniValue& req)
                     throw RequestError{"version-bits gap is outside the comparison domain"};
                 }
             }
+        }
+        // The forced seed. A block that is not applicable gets none (design record
+        // 0012, section 5): one without a predecessor, or one whose header has the
+        // hash of the genesis block. Below height 10,080 the boundary is null, which
+        // is also the cache key of a block without a predecessor, so a seed there
+        // would make Core read the median time of a null predecessor at line 3135.
+        // The guard above clears the cache on every exit from this request.
+        if (forceCsvActive && pindexPrev && block.GetHash() != Params().GetConsensus(0).hashGenesisBlock) {
+            // Core's GetMedianTimePast stops at the end of the supplied chain. The
+            // chain must hold every entry that the walk reads on a full chain.
+            const size_t span = static_cast<size_t>(std::min<int64_t>(11, static_cast<int64_t>(pindexPrev->nHeight) + 1));
+            if (chain.size() < span) throw RequestError{"chain does not hold the median time past of the predecessor"};
+            versionbitscache.caches[Consensus::DEPLOYMENT_CSV][boundary] = THRESHOLD_ACTIVE;
         }
         CValidationState state;
         const bool valid = ContextualCheckBlock(block, state, pindexPrev);

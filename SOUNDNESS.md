@@ -3939,18 +3939,21 @@ The read is in `Block.Exports.blockValidateFile`, an `IO` function outside the s
 The comparison trusts that the file holds the intended blocks.
 `scripts/replay_blocks.py` checks each block against a pinned hash before a replay.
 That check shows the intended transactions only if SHA-256 is collision resistant, which DogeLib does not model (A4).
+
 A request with `coins_file` also opens a coin-set snapshot that the caller names, and the oracle reads it twice.
 The reads, the choice of the coins that the blocks name and the merge of the last digest are in `Block.Exports.blockValidateSnapshot`, an `IO` function outside the specification.
 The blocks again go through `validateStep`.
 The oracle with `coins_in_memory` runs the same request without the choice and the merge, and `scripts/snapshot_range.py` requires equal results of the two forms on its ranges.
 A snapshot is a supplied state.
 A comparison from it shows agreement on the blocks of the range only if the snapshot is Core's coin set at its height ([design record 0011](docs/design/0011-mainnet-ranges.md), section 3.4).
+
 The harness wrote each snapshot of the recorded runs, with its own map and its own writer, which are harness code and not Core's.
 The snapshot at height 145,000 has the digest that the oracle reached from the empty set in the recorded replay from the genesis block.
 For the snapshot at height 9,000, the replay of heights 0 to 10,000 in CI compares the same digest between the oracle and the harness.
 The recorded replay also compared the digest at height 100,000 between the two programs, with an earlier build of the harness.
 Its record does not state the value.
 Neither program checks that a snapshot file stays the same during a request, except that the oracle requires one number of records in both reads.
+
 The request of 10,001 real blocks has about 88 MB of JSON.
 
 Any later foreign boundary, such as a C or Rust binding, is listed here with its size and its error handling.

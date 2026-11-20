@@ -3181,16 +3181,18 @@ No proposal exists yet, so these theorems state no property of any proposed revi
 `Framework.Script` copies `evalLoop`, `evalScript` and `verifyScript` as `evalLoopWith`, `evalScriptWith` and `verifyScriptWith`.
 Each copy takes an instruction step `step` in place of `evalInstruction`.
 It also takes an error map `embed : ScriptError → ε` for the errors that the loop and `VerifyScript` produce themselves.
-`baselineStep embed checker flags` is `evalInstruction checker script flags` with its errors mapped by `embed`.
+`evalScriptWith` and `verifyScriptWith` also take a map of unsupported reasons `embedU : Unsupported → υ` for the reason `Unsupported.flags` that they produce themselves.
+`baselineStep embed embedU checker flags` is `evalInstruction checker script flags` with its errors mapped by `embed` and its unsupported reasons mapped by `embedU`.
+A proposal with its own unsupported reasons `U` uses `υ = Unsupported ⊕ U` and `embedU = Sum.inl`, as it uses `ScriptError ⊕ E` for its errors.
 
-The agreement theorems hold for every error map, checker, flag set, script, state and stack:
+The agreement theorems hold for every error map, map of unsupported reasons, checker, flag set, script, state and stack:
 
-- `evalLoopWith_baseline`: `evalLoopWith embed (baselineStep embed checker flags)` equals `evalLoop checker flags`, with the error mapped by `embed`.
+- `evalLoopWith_baseline`: `evalLoopWith embed (baselineStep embed embedU checker flags)` equals `evalLoop checker flags`, with the error mapped by `embed` and the unsupported reason mapped by `embedU`.
 - `evalScriptWith_baseline`: the same for `evalScript`.
-- `verifyScriptWith_baseline`: `verifyScriptWith embed (baselineStep embed (some c) flags) flags` equals `verifyScript c flags`, with the error mapped by `embed`.
+- `verifyScriptWith_baseline`: `verifyScriptWith embed embedU (baselineStep embed embedU (some c) flags) flags` equals `verifyScript c flags`, with the error mapped by `embed` and the unsupported reason mapped by `embedU`.
 
 `Restricts step₁ step₀` holds when every successful step of `step₁` is a successful step of `step₀` with the same state.
-For all steps with `Restricts step₁ step₀`, and all error maps of the two steps:
+For all steps with `Restricts step₁ step₀`, and all error maps and maps of unsupported reasons of the two steps:
 
 - `evalLoopWith_restricts` and `evalScriptWith_restricts`: if the loop or the evaluation with `step₁` succeeds with the final state `t`, then the one with `step₀` succeeds with `t`.
 - `verifyScriptWith_restricts`: if `verifyScriptWith` with `step₁` accepts, then `verifyScriptWith` with `step₀` accepts, for the same flags and scripts. The P2SH evaluation is included.
@@ -3246,8 +3248,8 @@ It never pops the operand, and it returns the state that it receives or fails.
 
 What the proofs say. Every theorem is Script-local: it is about one call of `evalScript`, `verifyScript` or `verifyLegacySpend`, not about a block or a chain.
 
-- `exampleStep_restricts`: for every `active`, context, checker, flag set and baseline error map, the example step restricts the baseline step.
-- `example_inactive_eq`, `example_evalScript_inactive_eq`, `example_spend_inactive_eq`: with `active` false, each revised definition equals the baseline result with the error under `Sum.inl`. This holds for every other argument. Every result agrees, including each rejection and each unsupported capability.
+- `exampleStep_restricts`: for every `active`, context, checker, flag set, baseline error map and baseline map of unsupported reasons, the example step restricts the baseline step.
+- `example_inactive_eq`, `example_evalScript_inactive_eq`, `example_spend_inactive_eq`: with `active` false, each revised definition equals the baseline result with the error and the unsupported reason under `Sum.inl`. This holds for every other argument. Every result agrees, including each rejection and each unsupported capability.
 - `example_soft_fork_local`: for every `active`, input, previous `scriptPubKey`, flag set and verifier, if the revised spend predicate accepts, `verifyLegacySpend` accepts. `example_verifyScript_soft_fork_local` states the same for `verifyScript`, including P2SH.
 - `example_eq_of_no_nop10`: for every `active` and context, the revision equals the baseline on scripts without an instruction `0xb9`. The condition covers `scriptSig`, `scriptPubKey` and every redeem script that the P2SH evaluation can take. So a baseline comparison also applies to the revision on those scripts.
 - `example_strict`: a concrete spend with version 1 and the previous `scriptPubKey` `01 02 b9`, which `verifyLegacySpend` accepts and the active revision rejects with `versionTooLow`.
@@ -3260,7 +3262,7 @@ The example adds no axiom and no trust assumption.
 It inherits the gaps of the baseline definitions that it reuses: the `SignatureVerifier` hypothesis of `transactionChecker` and the unsupported flag set of `verifyScript`.
 It has these boundaries:
 
-- **Unsupported reason.** The framework's unsupported reasons are the baseline type `Unsupported`, which the example cannot extend. A missing context reports `noContext`, which is `Unsupported.signatureOpcode 0xb9`. That constructor's documentation describes an unavailable signature check, so the label is a stand-in. The baseline reports `signatureOpcode op` only for `0xac` to `0xaf`, but no theorem states that, so a consumer that reads the reason relies on the documentation. A missing context stays unsupported, never a rejection. Issue #122 proposes a framework type of unsupported reasons that a proposal can extend.
+- **Unsupported reason.** The unsupported reasons of the example are `Unsupported ⊕ ExampleUnsupported`, with the baseline reasons under `Sum.inl`. A missing context reports `Sum.inr ExampleUnsupported.missingContext`. By the definition of `exampleStep` and of the framework, no baseline reason maps to `Sum.inr`, but no theorem states that. A missing context stays unsupported, never a rejection.
 - **Order of the context check.** Section 10.1 lists the missing context fifth. The definition checks it after the negative operand and before the version comparison, which reads the context. That order matches `checkLockTimeStep` with a checker whose `checkLockTime` returns `none`. The baseline `OP_CHECKLOCKTIMEVERIFY` without a checker differs: it reports unsupported before it reads the stack.
 - **Error order.** The baseline step checks the stack size before `versionCheck` runs. A caller's initial stack of more than 1,000 items gives `STACK_SIZE` before the example's own error (section 10.2). A known answer checks that case. The order changes an error, never acceptance.
 - **Characterization domain.** `example_accepted_iff` covers an operand pushed by `OP_0` or a direct push of one to five bytes. It does not cover `OP_1NEGATE`, `OP_1` to `OP_16`, the `OP_PUSHDATA` forms or a longer operand. It also excludes a second `OP_NOP10`, even in a branch that does not execute.
@@ -3295,7 +3297,7 @@ What the proofs say. Every theorem is Script-local: it is about one call of `ver
 - `faulty_counterexample_short`: the same results for `OP_1 OP_0 OP_NOP4` (`51 00 b3`) in the same context. The faulty rule reads the empty operand as 0 and pops it, so the final stack is `[1]`. The baseline leaves `[1, ""]`. The planted-fault search of design record 0009, section 8.1, finds this script among its shortest violations.
 - `faulty_not_restrictsAcceptance`, `faulty_not_softFork`: the faulty spend predicate does not restrict acceptance, so it is not a `SoftFork` for any use predicate.
 - `faulty_strict`, `faulty_incompatible`: the faulty spend predicate also rejects a spend that the baseline accepts, so it is `Incompatible`.
-- `correctedStep_restricts`: for every `active`, checker, flag set and baseline error map, the corrected step restricts the baseline step.
+- `correctedStep_restricts`: for every `active`, checker, flag set, baseline error map and baseline map of unsupported reasons, the corrected step restricts the baseline step.
 - `corrected_soft_fork_local`, `corrected_verifyScript_soft_fork_local`, `corrected_restrictsAcceptance`: if the corrected revision accepts, the baseline accepts, for every `active` and other argument. The P2SH evaluation is included.
 - `corrected_counterexample`, `corrected_strict`, `corrected_use`, `corrected_softFork`: the corrected revision rejects the counterexample as the baseline does. The witnesses and the four results above give the framework's `SoftFork`, with the use predicate `RunsRule`.
 
@@ -3303,7 +3305,7 @@ The example adds no axiom and no trust assumption.
 It inherits the gaps of the baseline definitions that it reuses, as the worked example does.
 It has these boundaries:
 
-- **Unsupported reason.** Without a checker, an executed `OP_NOP4` with `active` true reports `Unsupported.checkLockTimeVerify`. That constructor's documentation describes `OP_CHECKLOCKTIMEVERIFY`, so the label is a stand-in. A spend always has a checker.
+- **Unsupported reason.** Without a checker, an executed `OP_NOP4` with `active` true reports `Unsupported.checkLockTimeVerify`. That constructor's documentation describes `OP_CHECKLOCKTIMEVERIFY`, so the label is a stand-in. A spend always has a checker. The example keeps the baseline type of unsupported reasons with the map `id`. The proposal replay maps each revised result back to a baseline result.
 - **Flags.** `DISCOURAGE_UPGRADABLE_NOPS` lies outside the supported flags, so every call with it is unsupported in both variants and in the baseline.
 - **Witnesses.** The kernel evaluates every concrete spend and step with `decide +kernel`. The spends contain no signature opcode, so no digest is computed.
 - **Evidence.** The known answers in `tests/KnownAnswers/Proposals/ExampleFaultyLocktime.lean` have results derived by hand. No implementation of the rule exists, so there is no comparison of the rule. The baseline verdicts of the counterexample and of the lock-time spend `01 02 b3 75 51` agree with the Core harness, by the commands in docs/in-practice.md.

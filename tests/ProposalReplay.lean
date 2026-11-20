@@ -14,7 +14,7 @@ open DogeLib.Exports DogeLib.Script
 open DogeLib.Proposals.ExampleFaultyLocktime DogeLib.Proposals.Framework
 
 /-- Encode the proposal outcome with the baseline oracle's Script response fields. -/
-def baselineResult : VerifyOutcome ScriptError → VerifyResult
+def baselineResult : VerifyOutcome ScriptError Unsupported → VerifyResult
   | .accepted => .accepted
   | .rejected e => .rejected e
   | .unsupported u => .unsupported u

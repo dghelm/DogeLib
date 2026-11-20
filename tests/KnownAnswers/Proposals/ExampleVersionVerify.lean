@@ -12,11 +12,11 @@ Each expected result is derived by hand from the rule of section 10.1, never com
 1. An empty stack gives `INVALID_STACK_OPERATION`.
 2. The operand is the top item as a five-byte `CScriptNum` without the minimal requirement. A longer item gives `UNKNOWN_ERROR`.
 3. A negative operand gives `negativeOperand`.
-4. Without a transaction context the result is unsupported, with the reason `noContext`.
+4. Without a transaction context the result is unsupported, with the reason `Sum.inr ExampleUnsupported.missingContext`.
 5. The version, read as an unsigned 32-bit value, below the operand gives `versionTooLow`.
 
 The inactive result of each case is also derived by hand: `OP_NOP10` is a NOP, and Core's `EvalScript` and `VerifyScript` (D3) give the rest.
-Every case also checks that the revision with `active` false gives the baseline `verifyScript` result, with the error under `Sum.inl`.
+Every case also checks that the revision with `active` false gives the baseline `verifyScript` result, with the error and the unsupported reason under `Sum.inl`.
 
 The cases cover each step of the rule and both sides of the version comparison.
 They also cover a negative operand, negative zero, a six-byte operand and an unsigned version above 2^31.
@@ -45,8 +45,8 @@ structure Case where
   flags : UInt32 := 0
   scriptSig : List UInt8 := []
   scriptPubKey : List UInt8
-  active : VerifyOutcome ExampleScriptError
-  inactive : VerifyOutcome ExampleScriptError
+  active : VerifyOutcome ExampleScriptError ExampleScriptUnsupported
+  inactive : VerifyOutcome ExampleScriptError ExampleScriptUnsupported
 
 /-- The redeem script of the P2SH cases: a push of the operand 3, then `OP_NOP10`. -/
 def redeem : List UInt8 := [0x01, 0x03, 0xb9]
@@ -95,7 +95,7 @@ def cases : List Case := [
     active := .rejected (.inr .versionTooLow), inactive := .accepted },
   -- Step 4: no context. The rule reaches the context only after a decoded, nonnegative operand.
   { label := "no context", version := 2, context := false, scriptPubKey := [0x01, 0x02, 0xb9],
-    active := .unsupported noContext, inactive := .accepted },
+    active := .unsupported (.inr .missingContext), inactive := .accepted },
   { label := "no context, negative operand", version := 2, context := false, scriptPubKey := [0x01, 0x81, 0xb9],
     active := .rejected (.inr .negativeOperand), inactive := .accepted },
   { label := "no context, empty stack", version := 2, context := false, scriptPubKey := [0xb9],
@@ -124,7 +124,7 @@ def check : IO Nat := do
     let checker := checkerOf c.version
     let active := exampleVerifyScript true ctx checker c.flags c.scriptSig c.scriptPubKey
     let inactive := exampleVerifyScript false ctx checker c.flags c.scriptSig c.scriptPubKey
-    let baseline := VerifyOutcome.ofBaseline Sum.inl (verifyScript checker c.flags c.scriptSig c.scriptPubKey)
+    let baseline := VerifyOutcome.ofBaseline Sum.inl Sum.inl (verifyScript checker c.flags c.scriptSig c.scriptPubKey)
     failures := failures + (← require s!"{c.label}, active: got {repr active}" (decide (active = c.active)))
     failures := failures + (← require s!"{c.label}, inactive: got {repr inactive}" (decide (inactive = c.inactive)))
     failures := failures + (← require s!"{c.label}, inactive against the baseline: got {repr baseline}"
@@ -144,7 +144,7 @@ def check : IO Nat := do
   let spend (version : UInt32) : InputContext := ⟨mkTx version 0 0, 0, by simp [mkTx], by simp [mkTx], by simp [mkTx]⟩
   let prev : DogeLib.Transaction.Script := ⟨⟨[0x01, 0x02, 0xb9], by decide⟩⟩
   for (version, expected) in [((1 : UInt32), (VerifyOutcome.rejected (.inr .versionTooLow) :
-      VerifyOutcome ExampleScriptError)), (2, .accepted)] do
+      VerifyOutcome ExampleScriptError ExampleScriptUnsupported)), (2, .accepted)] do
     let got := exampleVerifyLegacySpend true (spend version) prev 0 fun _ _ _ => none
     failures := failures + (← require s!"spend, version {version}: got {repr got}" (decide (got = expected)))
     let base := verifyLegacySpend (spend version) prev 0 fun _ _ _ => none

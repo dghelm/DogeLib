@@ -138,7 +138,7 @@ Two checks enforce this direction:
 
 `DogeLib.Proposals.Framework` holds three parts:
 
-- `Framework.Script`: copies of `evalLoop`, `evalScript` and `verifyScript` that take the instruction step as a parameter and an error type of the proposal. Agreement theorems in `ProposalProofs` prove that each copy, with the baseline step, equals its baseline definition. A change to the baseline loop that the copy does not follow fails the build.
+- `Framework.Script`: copies of `evalLoop`, `evalScript` and `verifyScript` that take the instruction step as a parameter. They also take the proposal's error type and type of unsupported reasons. Agreement theorems in `ProposalProofs` prove that each copy, with the baseline step, equals its baseline definition. A change to the baseline loop that the copy does not follow fails the build.
 - `Framework.Activation`: the activation model. A revised definition takes `active : Bool`, and a block-level `Activation` gives each network one activation height or none.
 - `Framework.Compatibility`: the compatibility classes of design record 0007, section 8, and the legacy projection.
 

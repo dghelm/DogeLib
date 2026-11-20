@@ -97,7 +97,7 @@ The baseline step succeeds with the stack `[1, 2]`. Both steps count the opcode.
 theorem faultyStep_pops :
     lockStep .faulty true (some counterexampleChecker) 0 counterexampleBytes beforeNop4 nop4Instruction =
         .next { beforeNop4 with stack := [[1]], opCount := 1 } ∧
-      baselineStep id (some counterexampleChecker) 0 counterexampleBytes beforeNop4 nop4Instruction =
+      baselineStep id id (some counterexampleChecker) 0 counterexampleBytes beforeNop4 nop4Instruction =
         .next { beforeNop4 with opCount := 1 } := by
   decide +kernel
 
@@ -106,7 +106,7 @@ The active faulty step does not restrict the baseline step, for the checker of l
 `faultyStep_pops` gives the instruction: the faulty step succeeds with a state that the baseline step does not give.
 -/
 theorem faultyStep_not_restricts :
-    ¬ Restricts (lockStep .faulty true (some counterexampleChecker) 0) (baselineStep id (some counterexampleChecker) 0) := by
+    ¬ Restricts (lockStep .faulty true (some counterexampleChecker) 0) (baselineStep id id (some counterexampleChecker) 0) := by
   intro h
   have := h counterexampleBytes beforeNop4 nop4Instruction _ faultyStep_pops.1
   rw [faultyStep_pops.2] at this
@@ -150,7 +150,7 @@ theorem faulty_not_restrictsAcceptance :
 
 /-- The faulty spend predicate is not a `SoftFork` of `verifyLegacySpend`, for any use predicate. Script-local. -/
 theorem faulty_not_softFork (runs : SpendArgs → Prop) :
-    ¬ SoftFork (VerifyOutcome.ofBaseline id) baselineVerdict VerifyOutcome.verdict runs baselineSpend
+    ¬ SoftFork (VerifyOutcome.ofBaseline id id) baselineVerdict VerifyOutcome.verdict runs baselineSpend
       (revisedSpend .faulty) :=
   fun h => faulty_not_restrictsAcceptance h.restricts
 
@@ -168,7 +168,7 @@ The faulty spend predicate is an `Incompatible` change of `verifyLegacySpend`: t
 Script-local.
 -/
 theorem faulty_incompatible :
-    Incompatible (VerifyOutcome.ofBaseline id) baselineVerdict VerifyOutcome.verdict baselineSpend
+    Incompatible (VerifyOutcome.ofBaseline id id) baselineVerdict VerifyOutcome.verdict baselineSpend
       (revisedSpend .faulty) where
   inactive_eq := inactiveEq .faulty
   strict := ⟨spendArgs 1 useScript, by rw [faulty_strict.1]; rfl, by rw [faulty_strict.2]; rfl⟩
@@ -202,11 +202,11 @@ theorem corrected_use :
 
 /--
 The corrected spend predicate is a soft fork of `verifyLegacySpend` at the level of one input, in the sense of the framework's `SoftFork`.
-The embedding is `VerifyOutcome.ofBaseline id`, and the use predicate is `RunsRule`.
+The embedding is `VerifyOutcome.ofBaseline id id`, and the use predicate is `RunsRule`.
 Script-local: it is not a soft-fork claim about the network, which also needs block validity (design record 0007, section 8.3).
 -/
 theorem corrected_softFork :
-    SoftFork (VerifyOutcome.ofBaseline id) baselineVerdict VerifyOutcome.verdict RunsRule baselineSpend
+    SoftFork (VerifyOutcome.ofBaseline id id) baselineVerdict VerifyOutcome.verdict RunsRule baselineSpend
       (revisedSpend .corrected) where
   inactive_eq := inactiveEq .corrected
   restricts := corrected_restrictsAcceptance

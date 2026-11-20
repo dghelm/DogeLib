@@ -38,12 +38,14 @@ The two variants differ only after a successful check:
 
 With `active` false, or in a branch that does not execute, `OP_NOP4` stays a NOP in both variants.
 Without a checker, an executed `OP_NOP4` with `active` true reports the baseline reason `Unsupported.checkLockTimeVerify`.
-That constructor's documentation describes `OP_CHECKLOCKTIMEVERIFY`, so the label is a stand-in, as in `ExampleVersionVerify`.
+That constructor's documentation describes `OP_CHECKLOCKTIMEVERIFY`, so the label is a stand-in.
 A spend always has a checker, so no spend reaches that case.
 
-## Errors
+## Errors and unsupported reasons
 
 Every error of the rule is a baseline `ScriptError`, so the revised definitions use `ScriptError` with the error map `id`.
+Every unsupported reason is a baseline `Unsupported`, so they use `Unsupported` with the map `id`.
+The proposal replay of the campaign maps each revised result back to a baseline result, and the baseline types keep that map total.
 
 ## Results
 
@@ -89,7 +91,7 @@ The lock-time check of variant `v` with the checker `c`, on the state `t` after 
 It runs `checkLockTimeStep c t`.
 On success, `Variant.faulty` removes the top item of the stack, and `Variant.corrected` keeps the state.
 -/
-def lockCheck (v : Variant) (c : SignatureChecker) (t : ExecState) : StepOutcome ScriptError :=
+def lockCheck (v : Variant) (c : SignatureChecker) (t : ExecState) : StepOutcome ScriptError Unsupported :=
   match checkLockTimeStep c t with
   | .next t' =>
     match v with
@@ -106,7 +108,7 @@ Without a checker, that case is unsupported with the stand-in reason `checkLockT
 Every other result passes unchanged.
 -/
 def lockStep (v : Variant) (active : Bool) (checker : Option SignatureChecker) (flags : UInt32) :
-    Step ScriptError :=
+    Step ScriptError Unsupported :=
   fun script s i =>
     match evalInstruction checker script flags s i with
     | .next t =>
@@ -120,18 +122,18 @@ def lockStep (v : Variant) (active : Bool) (checker : Option SignatureChecker) (
 
 /-- The revised `evalScript` of variant `v`: `evalScriptWith` with `lockStep v`. -/
 def revisedEvalScript (v : Variant) (active : Bool) (checker : Option SignatureChecker) (flags : UInt32)
-    (script : List UInt8) (stack : List (List UInt8)) : EvalOutcome ScriptError :=
-  evalScriptWith id (lockStep v active checker flags) flags script stack
+    (script : List UInt8) (stack : List (List UInt8)) : EvalOutcome ScriptError Unsupported :=
+  evalScriptWith id id (lockStep v active checker flags) flags script stack
 
 /-- The revised `verifyScript` of variant `v`: `verifyScriptWith` with `lockStep v`, for the checker `c`. -/
 def revisedVerifyScript (v : Variant) (active : Bool) (c : SignatureChecker) (flags : UInt32)
-    (scriptSig scriptPubKey : List UInt8) : VerifyOutcome ScriptError :=
-  verifyScriptWith id (lockStep v active (some c) flags) flags scriptSig scriptPubKey
+    (scriptSig scriptPubKey : List UInt8) : VerifyOutcome ScriptError Unsupported :=
+  verifyScriptWith id id (lockStep v active (some c) flags) flags scriptSig scriptPubKey
 
 /-- The revised spend predicate of one legacy input: `revisedVerifyScript` with the checker of `verifyLegacySpend`. -/
 def revisedVerifyLegacySpend (v : Variant) (active : Bool) (ctx : InputContext)
     (prevScriptPubKey : Transaction.Script) (flags : UInt32) (verify : SignatureVerifier) :
-    VerifyOutcome ScriptError :=
+    VerifyOutcome ScriptError Unsupported :=
   revisedVerifyScript v active (transactionChecker ctx.tx ctx.index verify) flags ctx.input.scriptSig.bytes.val
     prevScriptPubKey.bytes.val
 
@@ -151,7 +153,7 @@ def baselineSpend (a : SpendArgs) : VerifyResult :=
   verifyLegacySpend a.ctx a.prevScriptPubKey a.flags a.verify
 
 /-- `revisedVerifyLegacySpend v` on spend arguments. -/
-def revisedSpend (v : Variant) (active : Bool) (a : SpendArgs) : VerifyOutcome ScriptError :=
+def revisedSpend (v : Variant) (active : Bool) (a : SpendArgs) : VerifyOutcome ScriptError Unsupported :=
   revisedVerifyLegacySpend v active a.ctx a.prevScriptPubKey a.flags a.verify
 
 /--

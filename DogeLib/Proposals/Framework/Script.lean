@@ -6,7 +6,7 @@ public import DogeLib.Script.Verify
 # `Proposals.Framework.Script`
 
 The Script loop with the instruction step as a parameter, for proposed revisions of Script.
-Design record 0007, section 6 and decisions 3 and 10, sets the contract.
+Design record 0007, section 6 and decisions 3 and 10, sets the contract. Issue #122 adds the parameter of unsupported reasons.
 
 A proposed revision of Script changes the step of one instruction.
 It does not change `evalLoop`, `evalScript` or `verifyScript` in the baseline.
@@ -30,10 +30,23 @@ The loop and `VerifyScript` produce baseline errors of their own, such as `BAD_O
 Each framework definition takes a map `embed : ScriptError → ε` for those errors.
 A proposal with its own errors `E` uses `ε = ScriptError ⊕ E` and `embed = Sum.inl`.
 
+## Unsupported reasons
+
+The baseline result types carry an `Unsupported` reason, and a proposal cannot add a constructor to that type either.
+So the framework result types also take the type of unsupported reasons `υ` as a parameter.
+
+`evalScriptWith` and `verifyScriptWith` produce one baseline reason of their own: `Unsupported.flags` for a flag outside `supportedFlags`.
+`evalScriptWith`, `verifyScriptWith`, `baselineStep` and the `ofBaseline` maps take a map `embedU : Unsupported → υ` for the baseline reasons.
+`evalLoopWith` produces no reason of its own, so it needs no such map.
+A proposal with its own reasons `U` uses `υ = Unsupported ⊕ U` and `embedU = Sum.inl`.
+A proposal without its own reasons uses `υ = Unsupported` and `embedU = id`.
+
+An unsupported result of a proposal is never a rejection. It says that the specification lacks a capability, and nothing about Core's verdict.
+
 ## Restriction
 
 `Restricts step₁ step₀` says that every successful step of `step₁` is a successful step of `step₀` with the same state.
-It reads only the successful results, so the two steps can have different error types.
+It reads only the successful results, so the two steps can have different error types and different types of unsupported reasons.
 `DogeLib.Proposals.Framework.Proofs.Script` proves that restriction lifts through the loop and through `VerifyScript`, including the P2SH evaluation.
 
 ## Opcode sets
@@ -49,64 +62,71 @@ namespace DogeLib.Proposals.Framework
 
 open DogeLib.Script
 
-/-- The outcome of one instruction, with the error type `ε`. The constructors are those of `DogeLib.Script.StepResult`. -/
-inductive StepOutcome (ε : Type) where
+/-- The outcome of one instruction, with the error type `ε` and the type of unsupported reasons `υ`. The constructors are those of `DogeLib.Script.StepResult`. -/
+inductive StepOutcome (ε υ : Type) where
   /-- The instruction succeeded, with this state. The cursor stays at the start of the instruction. -/
   | next (s : ExecState)
   /-- The instruction failed with this error. -/
   | rejected (error : ε)
   /-- The instruction needs a capability that the specification lacks. -/
-  | unsupported (reason : Unsupported)
+  | unsupported (reason : υ)
   deriving DecidableEq, Repr
 
-/-- The outcome of one evaluation, with the error type `ε`. The constructors are those of `DogeLib.Script.EvalResult`. -/
-inductive EvalOutcome (ε : Type) where
+/-- The outcome of one evaluation, with the error type `ε` and the type of unsupported reasons `υ`. The constructors are those of `DogeLib.Script.EvalResult`. -/
+inductive EvalOutcome (ε υ : Type) where
   /-- The evaluation succeeded. The state is its final state. -/
   | ok (s : ExecState)
   /-- The evaluation failed with this error. -/
   | rejected (error : ε)
   /-- The evaluation needs a capability that the specification lacks. -/
-  | unsupported (reason : Unsupported)
+  | unsupported (reason : υ)
   deriving DecidableEq, Repr
 
-/-- The outcome of one `VerifyScript` call, with the error type `ε`. The constructors are those of `DogeLib.Script.VerifyResult`. -/
-inductive VerifyOutcome (ε : Type) where
+/-- The outcome of one `VerifyScript` call, with the error type `ε` and the type of unsupported reasons `υ`. The constructors are those of `DogeLib.Script.VerifyResult`. -/
+inductive VerifyOutcome (ε υ : Type) where
   /-- The call accepted. -/
   | accepted
   /-- The call failed with this error. -/
   | rejected (error : ε)
   /-- The call needs a capability that the specification lacks. -/
-  | unsupported (reason : Unsupported)
+  | unsupported (reason : υ)
   deriving DecidableEq, Repr
 
-/-- A baseline step result, with its error mapped by `embed`. -/
-def StepOutcome.ofBaseline {ε : Type} (embed : ScriptError → ε) : StepResult → StepOutcome ε
+/-- A baseline step result, with its error mapped by `embed` and its unsupported reason mapped by `embedU`. -/
+def StepOutcome.ofBaseline {ε υ : Type} (embed : ScriptError → ε) (embedU : Unsupported → υ) :
+    StepResult → StepOutcome ε υ
   | .next s => .next s
   | .rejected e => .rejected (embed e)
-  | .unsupported u => .unsupported u
+  | .unsupported u => .unsupported (embedU u)
 
-/-- A baseline evaluation result, with its error mapped by `embed`. -/
-def EvalOutcome.ofBaseline {ε : Type} (embed : ScriptError → ε) : EvalResult → EvalOutcome ε
+/-- A baseline evaluation result, with its error mapped by `embed` and its unsupported reason mapped by `embedU`. -/
+def EvalOutcome.ofBaseline {ε υ : Type} (embed : ScriptError → ε) (embedU : Unsupported → υ) :
+    EvalResult → EvalOutcome ε υ
   | .ok s => .ok s
   | .rejected e => .rejected (embed e)
-  | .unsupported u => .unsupported u
+  | .unsupported u => .unsupported (embedU u)
 
-/-- A baseline `VerifyScript` result, with its error mapped by `embed`. -/
-def VerifyOutcome.ofBaseline {ε : Type} (embed : ScriptError → ε) : VerifyResult → VerifyOutcome ε
+/-- A baseline `VerifyScript` result, with its error mapped by `embed` and its unsupported reason mapped by `embedU`. -/
+def VerifyOutcome.ofBaseline {ε υ : Type} (embed : ScriptError → ε) (embedU : Unsupported → υ) :
+    VerifyResult → VerifyOutcome ε υ
   | .accepted => .accepted
   | .rejected e => .rejected (embed e)
-  | .unsupported u => .unsupported u
+  | .unsupported u => .unsupported (embedU u)
 
 /--
 An instruction step: the script, the state before the instruction, and the instruction that `readInstruction` read at the cursor of the state.
 The step takes the script because the signature opcodes read it.
 A step captures its checker, its flags and any context of a proposal.
 -/
-abbrev Step (ε : Type) : Type := List UInt8 → ExecState → Instruction → StepOutcome ε
+abbrev Step (ε υ : Type) : Type := List UInt8 → ExecState → Instruction → StepOutcome ε υ
 
-/-- The baseline step: `evalInstruction` with the checker `checker` and the flags `flags`, with its errors mapped by `embed`. -/
-def baselineStep {ε : Type} (embed : ScriptError → ε) (checker : Option SignatureChecker) (flags : UInt32) : Step ε :=
-  fun script s i => StepOutcome.ofBaseline embed (evalInstruction checker script flags s i)
+/--
+The baseline step: `evalInstruction` with the checker `checker` and the flags `flags`.
+Its errors are mapped by `embed`, and its unsupported reasons by `embedU`.
+-/
+def baselineStep {ε υ : Type} (embed : ScriptError → ε) (embedU : Unsupported → υ) (checker : Option SignatureChecker)
+    (flags : UInt32) : Step ε υ :=
+  fun script s i => StepOutcome.ofBaseline embed embedU (evalInstruction checker script flags s i)
 
 /--
 `step₁` restricts `step₀` when every successful step of `step₁` is a successful step of `step₀` with the same state.
@@ -114,7 +134,7 @@ Design record 0007, section 6.1.
 A restricting step can reject, or report an unsupported capability, where `step₀` succeeds.
 It cannot succeed where `step₀` does not succeed, and it cannot change the state of a success.
 -/
-def Restricts {ε₁ ε₀ : Type} (step₁ : Step ε₁) (step₀ : Step ε₀) : Prop :=
+def Restricts {ε₁ υ₁ ε₀ υ₀ : Type} (step₁ : Step ε₁ υ₁) (step₀ : Step ε₀ υ₀) : Prop :=
   ∀ script s i t, step₁ script s i = .next t → step₀ script s i = .next t
 
 /--
@@ -122,8 +142,8 @@ The loop of `evalLoop`, with the instruction step `step` in place of `evalInstru
 At the end of the script, a nonempty `vfExec` gives `embed UNBALANCED_CONDITIONAL`.
 A short push gives `embed BAD_OPCODE`.
 -/
-def evalLoopWith {ε : Type} (embed : ScriptError → ε) (step : Step ε) (script : List UInt8) (s : ExecState) :
-    EvalOutcome ε :=
+def evalLoopWith {ε υ : Type} (embed : ScriptError → ε) (step : Step ε υ) (script : List UInt8) (s : ExecState) :
+    EvalOutcome ε υ :=
   match hr : readInstruction script s.pc with
   | .atEnd => if s.vfExec.isEmpty then .ok s else .rejected (embed .unbalancedConditional)
   | .truncated .. => .rejected (embed .badOpcode)
@@ -138,34 +158,34 @@ decreasing_by omega
 
 /--
 `evalScript` with the instruction step `step`, on the caller's main stack `stack`.
-A flag outside `supportedFlags` is unsupported, before any other check.
+A flag outside `supportedFlags` is unsupported with the reason `embedU (.flags _)`, before any other check.
 A script above 10,000 bytes gives `embed SCRIPT_SIZE`.
 -/
-def evalScriptWith {ε : Type} (embed : ScriptError → ε) (step : Step ε) (flags : UInt32) (script : List UInt8)
-    (stack : List (List UInt8)) : EvalOutcome ε :=
-  if unsupportedFlagBits flags ≠ 0 then .unsupported (.flags (unsupportedFlagBits flags))
+def evalScriptWith {ε υ : Type} (embed : ScriptError → ε) (embedU : Unsupported → υ) (step : Step ε υ)
+    (flags : UInt32) (script : List UInt8) (stack : List (List UInt8)) : EvalOutcome ε υ :=
+  if unsupportedFlagBits flags ≠ 0 then .unsupported (embedU (.flags (unsupportedFlagBits flags)))
   else if maxScriptSize < script.length then .rejected (embed .scriptSize)
   else evalLoopWith embed step script (ExecState.init stack)
 
 /-- `finishEval` for the framework: `embed EVAL_FALSE` unless the top item of the final stack is true. -/
-def finishEvalWith {ε : Type} (embed : ScriptError → ε) : EvalOutcome ε → VerifyOutcome ε
+def finishEvalWith {ε υ : Type} (embed : ScriptError → ε) : EvalOutcome ε υ → VerifyOutcome ε υ
   | .ok s => if trueTop s.stack then .accepted else .rejected (embed .evalFalse)
   | .rejected e => .rejected e
   | .unsupported u => .unsupported u
 
 /--
 `verifyScript` with the instruction step `step`, for `scriptSig` and `scriptPubKey`.
-`flags` selects the P2SH evaluation, and its unsupported bits give `unsupported` before any evaluation.
+`flags` selects the P2SH evaluation, and its unsupported bits give the reason `embedU (.flags _)` before any evaluation.
 The step uses its own flags. `baselineStep` with the same `flags` gives `verifyScript`.
 -/
-def verifyScriptWith {ε : Type} (embed : ScriptError → ε) (step : Step ε) (flags : UInt32)
-    (scriptSig scriptPubKey : List UInt8) : VerifyOutcome ε :=
-  if unsupportedFlagBits flags ≠ 0 then .unsupported (.flags (unsupportedFlagBits flags))
-  else match evalScriptWith embed step flags scriptSig [] with
+def verifyScriptWith {ε υ : Type} (embed : ScriptError → ε) (embedU : Unsupported → υ) (step : Step ε υ)
+    (flags : UInt32) (scriptSig scriptPubKey : List UInt8) : VerifyOutcome ε υ :=
+  if unsupportedFlagBits flags ≠ 0 then .unsupported (embedU (.flags (unsupportedFlagBits flags)))
+  else match evalScriptWith embed embedU step flags scriptSig [] with
   | .rejected e => .rejected e
   | .unsupported u => .unsupported u
   | .ok s =>
-    match evalScriptWith embed step flags scriptPubKey s.stack with
+    match evalScriptWith embed embedU step flags scriptPubKey s.stack with
     | .rejected e => .rejected e
     | .unsupported u => .unsupported u
     | .ok t =>
@@ -175,7 +195,7 @@ def verifyScriptWith {ε : Type} (embed : ScriptError → ε) (step : Step ε) (
         else match s.stack.reverse with
           -- `verifyScript` has the same unreachable value. `verifyScript_p2sh_saved_ne_nil` proves that the case is unreachable there.
           | [] => .rejected (embed .unknownError)
-          | redeem :: rest => finishEvalWith embed (evalScriptWith embed step flags redeem rest.reverse)
+          | redeem :: rest => finishEvalWith embed (evalScriptWith embed embedU step flags redeem rest.reverse)
       else .accepted
 
 /--

@@ -9,7 +9,7 @@ public import DogeLib.Proposals.Framework.Proofs.Script
 ## Verdicts
 
 - `baselineVerdict_eq_accepted`, `VerifyOutcome.verdict_eq_accepted`: a result has the verdict `accepted` exactly when it is `accepted`.
-- `VerifyOutcome.verdict_ofBaseline`: mapping the error of a baseline result does not change its verdict.
+- `VerifyOutcome.verdict_ofBaseline`: mapping the error and the unsupported reason of a baseline result does not change its verdict.
 
 ## Shapes from the step
 
@@ -30,52 +30,58 @@ namespace DogeLib.Proposals.Framework
 
 open DogeLib.Script
 
-variable {ε ε₀ κ : Type}
+variable {ε ε₀ υ υ₀ κ : Type}
 
 /-- For every baseline `VerifyScript` result `r`: its verdict is `accepted` exactly when `r` is `accepted`. -/
 theorem baselineVerdict_eq_accepted {r : VerifyResult} : baselineVerdict r = .accepted ↔ r = .accepted := by
   cases r <;> simp [baselineVerdict]
 
 /-- For every framework `VerifyScript` result `r`: its verdict is `accepted` exactly when `r` is `accepted`. -/
-theorem VerifyOutcome.verdict_eq_accepted {r : VerifyOutcome ε} : r.verdict = .accepted ↔ r = .accepted := by
+theorem VerifyOutcome.verdict_eq_accepted {r : VerifyOutcome ε υ} : r.verdict = .accepted ↔ r = .accepted := by
   cases r <;> simp [VerifyOutcome.verdict]
 
-/-- For every error map `embed` and baseline `VerifyScript` result `r`: the mapped result has the verdict of `r`. -/
-theorem VerifyOutcome.verdict_ofBaseline (embed : ScriptError → ε) (r : VerifyResult) :
-    (VerifyOutcome.ofBaseline embed r).verdict = baselineVerdict r := by
+/-- For every error map `embed`, map of unsupported reasons `embedU` and baseline `VerifyScript` result `r`: the mapped result has the verdict of `r`. -/
+theorem VerifyOutcome.verdict_ofBaseline (embed : ScriptError → ε) (embedU : Unsupported → υ) (r : VerifyResult) :
+    (VerifyOutcome.ofBaseline embed embedU r).verdict = baselineVerdict r := by
   cases r <;> rfl
 
 /--
-This holds for every context type `κ`, every map from a context to a checker, flags, `scriptSig` and `scriptPubKey`, and every error map `embed`.
+This holds for every context type `κ`, and every map from a context to a checker, flags, `scriptSig` and `scriptPubKey`.
+It holds for every error map `embed` and every map of unsupported reasons `embedU`.
 Let the revised step `step false ctx` be the baseline step for the context's checker and flags.
-Then the revision `verifyScriptWith embed (step active ctx)` has the inactive equality with `verifyScript`.
-The embedding is `VerifyOutcome.ofBaseline embed`.
+Then the revision `verifyScriptWith embed embedU (step active ctx)` has the inactive equality with `verifyScript`.
+The embedding is `VerifyOutcome.ofBaseline embed embedU`.
 -/
 theorem inactiveEq_verifyScriptWith (checker : κ → SignatureChecker) (flags : κ → UInt32)
-    (scriptSig scriptPubKey : κ → List UInt8) (embed : ScriptError → ε) (step : Bool → κ → Step ε)
-    (hstep : ∀ ctx, step false ctx = baselineStep embed (some (checker ctx)) (flags ctx)) :
-    InactiveEq (VerifyOutcome.ofBaseline embed)
+    (scriptSig scriptPubKey : κ → List UInt8) (embed : ScriptError → ε) (embedU : Unsupported → υ)
+    (step : Bool → κ → Step ε υ)
+    (hstep : ∀ ctx, step false ctx = baselineStep embed embedU (some (checker ctx)) (flags ctx)) :
+    InactiveEq (VerifyOutcome.ofBaseline embed embedU)
       (fun ctx => verifyScript (checker ctx) (flags ctx) (scriptSig ctx) (scriptPubKey ctx))
-      (fun active ctx => verifyScriptWith embed (step active ctx) (flags ctx) (scriptSig ctx) (scriptPubKey ctx)) := by
+      (fun active ctx =>
+        verifyScriptWith embed embedU (step active ctx) (flags ctx) (scriptSig ctx) (scriptPubKey ctx)) := by
   intro ctx
   simp only [hstep]
-  exact verifyScriptWith_baseline embed (checker ctx) (flags ctx) (scriptSig ctx) (scriptPubKey ctx)
+  exact verifyScriptWith_baseline embed embedU (checker ctx) (flags ctx) (scriptSig ctx) (scriptPubKey ctx)
 
 /--
-This holds for every context type `κ`, every map from a context to a checker, flags and scripts, and all error maps `embed` and `embed₀`.
+This holds for every context type `κ`, and every map from a context to a checker, flags and scripts.
+It holds for all error maps `embed` and `embed₀`, and all maps of unsupported reasons `embedU` and `embedU₀`.
 Let the revised step `step active ctx` restrict the baseline step for the context's checker and flags, for every `active` and context.
-Then the revision `verifyScriptWith embed (step active ctx)` restricts the acceptance of `verifyScript`.
+Then the revision `verifyScriptWith embed embedU (step active ctx)` restricts the acceptance of `verifyScript`.
 -/
 theorem restrictsAcceptance_verifyScriptWith (checker : κ → SignatureChecker) (flags : κ → UInt32)
-    (scriptSig scriptPubKey : κ → List UInt8) (embed : ScriptError → ε) (embed₀ : ScriptError → ε₀)
-    (step : Bool → κ → Step ε)
-    (hres : ∀ active ctx, Restricts (step active ctx) (baselineStep embed₀ (some (checker ctx)) (flags ctx))) :
+    (scriptSig scriptPubKey : κ → List UInt8) (embed : ScriptError → ε) (embedU : Unsupported → υ)
+    (embed₀ : ScriptError → ε₀) (embedU₀ : Unsupported → υ₀) (step : Bool → κ → Step ε υ)
+    (hres : ∀ active ctx,
+      Restricts (step active ctx) (baselineStep embed₀ embedU₀ (some (checker ctx)) (flags ctx))) :
     RestrictsAcceptance baselineVerdict VerifyOutcome.verdict
       (fun ctx => verifyScript (checker ctx) (flags ctx) (scriptSig ctx) (scriptPubKey ctx))
-      (fun active ctx => verifyScriptWith embed (step active ctx) (flags ctx) (scriptSig ctx) (scriptPubKey ctx)) := by
+      (fun active ctx =>
+        verifyScriptWith embed embedU (step active ctx) (flags ctx) (scriptSig ctx) (scriptPubKey ctx)) := by
   intro active ctx hacc
   rw [VerifyOutcome.verdict_eq_accepted] at hacc
   rw [baselineVerdict_eq_accepted]
-  exact verifyScript_of_restricts embed₀ (hres active ctx) (scriptSig ctx) (scriptPubKey ctx) hacc
+  exact verifyScript_of_restricts embed₀ embedU₀ (hres active ctx) (scriptSig ctx) (scriptPubKey ctx) hacc
 
 end DogeLib.Proposals.Framework

@@ -37,13 +37,13 @@ namespace DogeLib.Proposals.ExampleFaultyLocktime
 
 open DogeLib.Script DogeLib.Transaction DogeLib.Proposals.Framework
 
-variable {ε₀ : Type}
+variable {ε₀ υ₀ : Type}
 
 /-! ## The step -/
 
-/-- For every variant, checker and flag set: the step with `active` false is the baseline step, with the error map `id`. -/
+/-- For every variant, checker and flag set: the step with `active` false is the baseline step, with the error map `id` and the map of unsupported reasons `id`. -/
 theorem lockStep_false (v : Variant) (checker : Option SignatureChecker) (flags : UInt32) :
-    lockStep v false checker flags = baselineStep id checker flags := by
+    lockStep v false checker flags = baselineStep id id checker flags := by
   funext script s i
   simp only [lockStep, baselineStep, Bool.false_and, Bool.false_eq_true, ↓reduceIte]
   cases evalInstruction checker script flags s i <;> rfl
@@ -61,11 +61,12 @@ theorem lockCheck_corrected_next {c : SignatureChecker} {t t' : ExecState}
   | unsupported u => rw [hc] at h; cases h
 
 /--
-For every `active`, checker, flag set and error map `embed₀`: the corrected step restricts the baseline step.
+For every `active`, checker, flag set, error map `embed₀` and map of unsupported reasons `embedU₀`: the corrected step restricts the baseline step.
 Every successful corrected step is a successful baseline step with the same state.
 -/
-theorem correctedStep_restricts (embed₀ : ScriptError → ε₀) (active : Bool) (checker : Option SignatureChecker)
-    (flags : UInt32) : Restricts (lockStep .corrected active checker flags) (baselineStep embed₀ checker flags) := by
+theorem correctedStep_restricts (embed₀ : ScriptError → ε₀) (embedU₀ : Unsupported → υ₀) (active : Bool)
+    (checker : Option SignatureChecker) (flags : UInt32) :
+    Restricts (lockStep .corrected active checker flags) (baselineStep embed₀ embedU₀ checker flags) := by
   intro script s i t h
   simp only [lockStep] at h
   simp only [baselineStep]
@@ -90,17 +91,17 @@ The P2SH evaluation is included. Script-local.
 theorem revisedVerifyScript_inactive_eq (v : Variant) (c : SignatureChecker) (flags : UInt32)
     (scriptSig scriptPubKey : List UInt8) :
     revisedVerifyScript v false c flags scriptSig scriptPubKey =
-      .ofBaseline id (verifyScript c flags scriptSig scriptPubKey) := by
+      .ofBaseline id id (verifyScript c flags scriptSig scriptPubKey) := by
   simp only [revisedVerifyScript, lockStep_false]
-  exact verifyScriptWith_baseline id c flags scriptSig scriptPubKey
+  exact verifyScriptWith_baseline id id c flags scriptSig scriptPubKey
 
 /-- For every variant and spend arguments: with `active` false, the revised spend predicate equals `verifyLegacySpend`. Script-local. -/
 theorem revisedSpend_inactive_eq (v : Variant) (a : SpendArgs) :
-    revisedSpend v false a = .ofBaseline id (baselineSpend a) :=
+    revisedSpend v false a = .ofBaseline id id (baselineSpend a) :=
   revisedVerifyScript_inactive_eq v _ _ _ _
 
 /-- For every variant, the spend predicate has the framework's inactive equality, over `SpendArgs`. Script-local. -/
-theorem inactiveEq (v : Variant) : InactiveEq (VerifyOutcome.ofBaseline id) baselineSpend (revisedSpend v) :=
+theorem inactiveEq (v : Variant) : InactiveEq (VerifyOutcome.ofBaseline id id) baselineSpend (revisedSpend v) :=
   revisedSpend_inactive_eq v
 
 /-! ## Restriction of acceptance -/
@@ -114,7 +115,7 @@ theorem corrected_verifyScript_soft_fork_local {active : Bool} {c : SignatureChe
     {scriptSig scriptPubKey : List UInt8}
     (h : revisedVerifyScript .corrected active c flags scriptSig scriptPubKey = .accepted) :
     verifyScript c flags scriptSig scriptPubKey = .accepted :=
-  verifyScript_of_restricts id (correctedStep_restricts id active (some c) flags) scriptSig scriptPubKey h
+  verifyScript_of_restricts id id (correctedStep_restricts id id active (some c) flags) scriptSig scriptPubKey h
 
 /--
 For every `active` and spend arguments: if the corrected spend predicate accepts the input, `verifyLegacySpend` accepts it with the same flags and verifier.

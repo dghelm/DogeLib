@@ -19,7 +19,7 @@ Every theorem here is Script-local: it is about one call of `evalScript`, `verif
 
 ## Inactive equality
 
-- `example_evalScript_inactive_eq`, `example_inactive_eq`, `example_spend_inactive_eq`: with `active` false, the revised `evalScript`, `verifyScript` and spend predicate equal the baseline results, with the errors under `Sum.inl`.
+- `example_evalScript_inactive_eq`, `example_inactive_eq`, `example_spend_inactive_eq`: with `active` false, the revised `evalScript`, `verifyScript` and spend predicate equal the baseline results, with the errors and the unsupported reasons under `Sum.inl`.
   The equality covers every result: acceptance, each rejection and each unsupported capability.
 
 ## Restriction of acceptance
@@ -45,7 +45,7 @@ namespace DogeLib.Proposals.ExampleVersionVerify
 
 open DogeLib.Script DogeLib.Transaction DogeLib.Proposals.Framework
 
-variable {ε₀ : Type}
+variable {ε₀ υ₀ : Type}
 
 /-! ## The step -/
 
@@ -65,20 +65,20 @@ theorem versionCheck_next {ctx : Option ExampleContext} {t t' : ExecState}
           · cases h; rfl
           · cases h
 
-/-- For every context, checker and flag set: the example step with `active` false is the baseline step, with the errors under `Sum.inl`. -/
+/-- For every context, checker and flag set: the example step with `active` false is the baseline step, with the errors and the unsupported reasons under `Sum.inl`. -/
 theorem exampleStep_false (ctx : Option ExampleContext) (checker : Option SignatureChecker) (flags : UInt32) :
-    exampleStep false ctx checker flags = baselineStep Sum.inl checker flags := by
+    exampleStep false ctx checker flags = baselineStep Sum.inl Sum.inl checker flags := by
   funext script s i
   simp only [exampleStep, baselineStep]
   cases evalInstruction checker script flags s i <;> rfl
 
 /--
-For every `active`, context, checker, flag set and error map `embed₀`: the example step restricts the baseline step.
+For every `active`, context, checker, flag set, error map `embed₀` and map of unsupported reasons `embedU₀`: the example step restricts the baseline step.
 Every successful example step is a successful baseline step with the same state.
 -/
-theorem exampleStep_restricts (embed₀ : ScriptError → ε₀) (active : Bool) (ctx : Option ExampleContext)
-    (checker : Option SignatureChecker) (flags : UInt32) :
-    Restricts (exampleStep active ctx checker flags) (baselineStep embed₀ checker flags) := by
+theorem exampleStep_restricts (embed₀ : ScriptError → ε₀) (embedU₀ : Unsupported → υ₀) (active : Bool)
+    (ctx : Option ExampleContext) (checker : Option SignatureChecker) (flags : UInt32) :
+    Restricts (exampleStep active ctx checker flags) (baselineStep embed₀ embedU₀ checker flags) := by
   intro script s i t h
   simp only [exampleStep] at h
   simp only [baselineStep]
@@ -95,47 +95,47 @@ theorem exampleStep_restricts (embed₀ : ScriptError → ε₀) (active : Bool)
 /-- For every `active`, context, checker, flag set, script and state: at an instruction whose opcode is not `0xb9`, the example step is the baseline step. -/
 theorem exampleStep_eq_of_not_nop10 (active : Bool) (ctx : Option ExampleContext) (checker : Option SignatureChecker)
     (flags : UInt32) (script : List UInt8) (s : ExecState) (i : Instruction) (hi : isNop10 i.opcode = false) :
-    exampleStep active ctx checker flags script s i = baselineStep Sum.inl checker flags script s i := by
+    exampleStep active ctx checker flags script s i = baselineStep Sum.inl Sum.inl checker flags script s i := by
   simp only [exampleStep, baselineStep, hi, Bool.and_false, Bool.false_and]
   cases evalInstruction checker script flags s i <;> rfl
 
 /-! ## Inactive equality -/
 
 /--
-For every context, checker, flag set, script and stack: with `active` false, the revised `evalScript` equals `evalScript`, with the error under `Sum.inl`.
+For every context, checker, flag set, script and stack: with `active` false, the revised `evalScript` equals `evalScript`, with the error and the unsupported reason under `Sum.inl`.
 Script-local.
 -/
 theorem example_evalScript_inactive_eq (ctx : Option ExampleContext) (checker : Option SignatureChecker)
     (flags : UInt32) (script : List UInt8) (stack : List (List UInt8)) :
     exampleEvalScript false ctx checker flags script stack =
-      .ofBaseline Sum.inl (evalScript checker flags script stack) := by
+      .ofBaseline Sum.inl Sum.inl (evalScript checker flags script stack) := by
   simp only [exampleEvalScript, exampleStep_false]
-  exact evalScriptWith_baseline Sum.inl checker flags script stack
+  exact evalScriptWith_baseline Sum.inl Sum.inl checker flags script stack
 
 /--
 `example_inactive_eq`, design record 0007, section 10.3.
-For every context, checker `c`, flag set, `scriptSig` and `scriptPubKey`: with `active` false, the revised `verifyScript` equals `verifyScript`, with the error under `Sum.inl`.
+For every context, checker `c`, flag set, `scriptSig` and `scriptPubKey`: with `active` false, the revised `verifyScript` equals `verifyScript`, with the error and the unsupported reason under `Sum.inl`.
 The P2SH evaluation is included. Script-local.
 -/
 theorem example_inactive_eq (ctx : Option ExampleContext) (c : SignatureChecker) (flags : UInt32)
     (scriptSig scriptPubKey : List UInt8) :
     exampleVerifyScript false ctx c flags scriptSig scriptPubKey =
-      .ofBaseline Sum.inl (verifyScript c flags scriptSig scriptPubKey) := by
+      .ofBaseline Sum.inl Sum.inl (verifyScript c flags scriptSig scriptPubKey) := by
   simp only [exampleVerifyScript, exampleStep_false]
-  exact verifyScriptWith_baseline Sum.inl c flags scriptSig scriptPubKey
+  exact verifyScriptWith_baseline Sum.inl Sum.inl c flags scriptSig scriptPubKey
 
 /--
-For every input, previous `scriptPubKey`, flag set and verifier: with `active` false, the revised spend predicate equals `verifyLegacySpend`, with the error under `Sum.inl`.
+For every input, previous `scriptPubKey`, flag set and verifier: with `active` false, the revised spend predicate equals `verifyLegacySpend`, with the error and the unsupported reason under `Sum.inl`.
 Script-local.
 -/
 theorem example_spend_inactive_eq (ctx : InputContext) (prevScriptPubKey : Transaction.Script) (flags : UInt32)
     (verify : SignatureVerifier) :
     exampleVerifyLegacySpend false ctx prevScriptPubKey flags verify =
-      .ofBaseline Sum.inl (verifyLegacySpend ctx prevScriptPubKey flags verify) :=
+      .ofBaseline Sum.inl Sum.inl (verifyLegacySpend ctx prevScriptPubKey flags verify) :=
   example_inactive_eq _ _ _ _ _
 
 /-- The spend predicate has the framework's inactive equality, over `SpendArgs`. Script-local. -/
-theorem example_inactiveEq : InactiveEq (VerifyOutcome.ofBaseline Sum.inl) baselineSpend revisedSpend :=
+theorem example_inactiveEq : InactiveEq (VerifyOutcome.ofBaseline Sum.inl Sum.inl) baselineSpend revisedSpend :=
   fun a => example_spend_inactive_eq a.ctx a.prevScriptPubKey a.flags a.verify
 
 /-! ## Restriction of acceptance -/
@@ -149,7 +149,7 @@ theorem example_verifyScript_soft_fork_local {active : Bool} {ctx : Option Examp
     {flags : UInt32} {scriptSig scriptPubKey : List UInt8}
     (h : exampleVerifyScript active ctx c flags scriptSig scriptPubKey = .accepted) :
     verifyScript c flags scriptSig scriptPubKey = .accepted :=
-  verifyScript_of_restricts id (exampleStep_restricts id active ctx (some c) flags) scriptSig scriptPubKey h
+  verifyScript_of_restricts id id (exampleStep_restricts id id active ctx (some c) flags) scriptSig scriptPubKey h
 
 /--
 `example_soft_fork_local`, design record 0007, section 10.3.
@@ -175,25 +175,25 @@ theorem example_restrictsAcceptance :
 
 /--
 This holds for every `active`, context, checker, flag set and stack.
-On a script with no instruction `0xb9`, the revised `evalScript` equals `evalScript`, with the error under `Sum.inl`.
+On a script with no instruction `0xb9`, the revised `evalScript` equals `evalScript`, with the error and the unsupported reason under `Sum.inl`.
 Every instruction counts, also one in a branch that does not execute. Script-local.
 -/
 theorem example_evalScript_eq_of_no_nop10 (active : Bool) (ctx : Option ExampleContext)
     (checker : Option SignatureChecker) (flags : UInt32) {script : List UInt8} (stack : List (List UInt8))
     (hfree : opcodeFree isNop10 script = true) :
     exampleEvalScript active ctx checker flags script stack =
-      .ofBaseline Sum.inl (evalScript checker flags script stack) := by
+      .ofBaseline Sum.inl Sum.inl (evalScript checker flags script stack) := by
   unfold exampleEvalScript
-  rw [evalScriptWith_congr (step₂ := baselineStep Sum.inl checker flags)
+  rw [evalScriptWith_congr (step₂ := baselineStep Sum.inl Sum.inl checker flags)
     (fun s i hi => exampleStep_eq_of_not_nop10 active ctx checker flags script s i hi) flags stack hfree]
-  exact evalScriptWith_baseline Sum.inl checker flags script stack
+  exact evalScriptWith_baseline Sum.inl Sum.inl checker flags script stack
 
 /--
 `example_eq_of_no_nop10`, design record 0007, section 10.3. Script-local.
 This holds for every `active`, context, checker `c` and flag set.
 Let `scriptSig` and `scriptPubKey` have no instruction `0xb9`, also in a branch that does not execute.
 Let every redeem script that the P2SH evaluation can take have none either: the top item of each final stack of `scriptSig` under `evalScript`.
-Then the revised `verifyScript` equals `verifyScript`, with the error under `Sum.inl`.
+Then the revised `verifyScript` equals `verifyScript`, with the error and the unsupported reason under `Sum.inl`.
 -/
 theorem example_eq_of_no_nop10 (active : Bool) (ctx : Option ExampleContext) (c : SignatureChecker) (flags : UInt32)
     {scriptSig scriptPubKey : List UInt8} (hsig : opcodeFree isNop10 scriptSig = true)
@@ -201,13 +201,13 @@ theorem example_eq_of_no_nop10 (active : Bool) (ctx : Option ExampleContext) (c 
     (hredeem : ∀ s redeem rest, evalScript (some c) flags scriptSig [] = .ok s →
       s.stack.reverse = redeem :: rest → opcodeFree isNop10 redeem = true) :
     exampleVerifyScript active ctx c flags scriptSig scriptPubKey =
-      .ofBaseline Sum.inl (verifyScript c flags scriptSig scriptPubKey) := by
+      .ofBaseline Sum.inl Sum.inl (verifyScript c flags scriptSig scriptPubKey) := by
   unfold exampleVerifyScript
   have hstep : ∀ script s i, isNop10 i.opcode = false →
-      exampleStep active ctx (some c) flags script s i = baselineStep Sum.inl (some c) flags script s i :=
+      exampleStep active ctx (some c) flags script s i = baselineStep Sum.inl Sum.inl (some c) flags script s i :=
     fun script s i hi => exampleStep_eq_of_not_nop10 active ctx (some c) flags script s i hi
-  rw [verifyScriptWith_congr (step₂ := baselineStep Sum.inl (some c) flags) hstep flags hsig hpub ?_]
-  · exact verifyScriptWith_baseline Sum.inl c flags scriptSig scriptPubKey
+  rw [verifyScriptWith_congr (step₂ := baselineStep Sum.inl Sum.inl (some c) flags) hstep flags hsig hpub ?_]
+  · exact verifyScriptWith_baseline Sum.inl Sum.inl c flags scriptSig scriptPubKey
   · intro s redeem rest hs hsr
     have h := example_evalScript_eq_of_no_nop10 active ctx (some c) flags [] hsig
     unfold exampleEvalScript at h
@@ -229,7 +229,7 @@ theorem example_step_state {active : Bool} {ctx : Option ExampleContext} {checke
     {flags : UInt32} {script : List UInt8} {s t : ExecState} {i : Instruction}
     (h : exampleStep active ctx checker flags script s i = .next t) :
     evalInstruction checker script flags s i = .next (projection.state t) := by
-  have := exampleStep_restricts id active ctx checker flags script s i t h
+  have := exampleStep_restricts id id active ctx checker flags script s i t h
   simp only [baselineStep] at this
   cases he : evalInstruction checker script flags s i <;> rw [he] at this <;> cases this
   rfl
@@ -243,8 +243,8 @@ theorem example_evalScript_state {active : Bool} {ctx : Option ExampleContext} {
     {flags : UInt32} {script : List UInt8} {stack : List (List UInt8)} {t : ExecState}
     (h : exampleEvalScript active ctx checker flags script stack = .ok t) :
     evalScript checker flags script stack = .ok (projection.state t) := by
-  have := evalScriptWith_restricts (embed₀ := id) (exampleStep_restricts id active ctx checker flags) flags script
-    stack t h
+  have := evalScriptWith_restricts (embed₀ := id) (embedU₀ := id) (exampleStep_restricts id id active ctx checker flags)
+    flags script stack t h
   rw [evalScriptWith_baseline] at this
   cases he : evalScript checker flags script stack <;> rw [he] at this <;> cases this
   rfl

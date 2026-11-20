@@ -1,0 +1,11 @@
+{
+  "format": "dogelib-coins/1",
+  "height": 9000,
+  "block_hash_hex": "63c51ed0c08966b28d0b26cab3aebe13e9f4cd8062ade1e03d1cea28a978bbfa",
+  "block_hash_display": "fabb78a928ea1c3de0e1ad6280cdf4e913beaeb3ca260b8db26689c0d01ec563",
+  "coins": 114056,
+  "set_digest_hex": "cae9ac7b730a8fc0918e058aacb08bf7c82e293b602f9d302c1945dbf8c1c8e6",
+  "set_value": "445398215900000000",
+  "bytes": 8719196,
+  "sha256": "228467f7f09de6d3e5e5c377c477f1ce4d39656f48ca021ee8382a83449e084f"
+}

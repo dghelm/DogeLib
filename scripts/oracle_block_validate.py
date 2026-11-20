@@ -68,6 +68,8 @@ OP_RETURN_TEXT = "OP_RETURN was encountered"
 BLOCK_FIELDS = {"height", "hash_hex", "hash_display", "valid", "reject_reason", "dos", "reject_code",
                 "changes_digest_hex", "spent", "created", "set_digest_hex", "set_value"}
 OK_FIELDS = {"blocks", "out_of_domain_at", "set_digest_hex", "set_coins", "set_value"}
+# A request with `coins_file` also reports the digest and the number of the coins of its snapshot.
+START_FIELDS = {"start_set_digest_hex", "start_set_coins"}
 
 EXPECTATIONS = {}
 
@@ -919,6 +921,250 @@ def file_faults(directory) -> list[tuple[dict, dict]]:
 
 
 # ---------------------------------------------------------------------------
+# Coin-set snapshots
+
+
+def read_script_size(data: bytes, pos: int) -> tuple[int, int]:
+    """The CompactSize value at `pos` in its shortest form, and the position after it."""
+    first = data[pos]
+    if first < 253:
+        return first, pos + 1
+    width = {253: 2, 254: 4, 255: 8}[first]
+    value = int.from_bytes(data[pos + 1:pos + 1 + width], "little")
+    if len(data) < pos + 1 + width or compact_size(value) != data[pos:pos + 1 + width]:
+        raise ValueError("a script length is not a shortest CompactSize value")
+    return value, pos + 1 + width
+
+
+def snapshot_offsets(data: bytes) -> list[int]:
+    """The start of each coin record of a well-formed snapshot, and the length of the file as the last entry.
+
+    The function follows the framing of `dogelib-coins/1` alone: the 50 bytes before the script
+    length, the length and the script. It raises `ValueError` when the file ends inside a record."""
+    offsets, pos = [], 0
+    while pos < len(data):
+        offsets.append(pos)
+        if len(data) < pos + 51:
+            raise ValueError("the snapshot ends inside a record")
+        length, pos = read_script_size(data, pos + 50)
+        pos += length
+        if pos > len(data):
+            raise ValueError("the snapshot ends inside a script")
+    return offsets + [len(data)]
+
+
+def record_fields(raw: bytes) -> tuple[bytes, int, int, int, bytes]:
+    """The outpoint, the height, the coinbase byte, the amount and the script of one coin record."""
+    length, pos = read_script_size(raw, 50)
+    return raw[1:37], int.from_bytes(raw[37:41], "little"), raw[41], int.from_bytes(raw[42:50], "little"), raw[pos:pos + length]
+
+
+def snapshot_summary(data: bytes) -> tuple[str, int, str]:
+    """The digest, the number of coins and the total value of a well-formed snapshot, from the definition of the format.
+
+    The function requires the order of the set, so its digest is the digest of a coin set."""
+    offsets = snapshot_offsets(data)
+    digest, value, last = bytes(32), 0, None
+    for start, end in zip(offsets, offsets[1:]):
+        raw = data[start:end]
+        point = (raw[1:33], int.from_bytes(raw[33:37], "little"))
+        if raw[0] != 2 or (last is not None and point <= last):
+            raise ValueError("the snapshot is not the records of a set in order")
+        last = point
+        value += int.from_bytes(raw[42:50], "little")
+        digest = sha256d(digest + raw)
+    return digest.hex(), len(offsets) - 1, str(value)
+
+
+def snapshot_of(coins: list[dict]) -> bytes:
+    """The snapshot of the coin set of a `coins` argument."""
+    records = []
+    for entry in coins:
+        for output in entry["outputs"]:
+            point = bytes.fromhex(entry["txid_hex"]) + le(output["n"], 4)
+            records.append(((point[:32], output["n"]),
+                            coin_record(2, point, entry["height"], entry["coinbase"], int(output["value"]),
+                                        bytes.fromhex(output["script_hex"]))))
+    return b"".join(raw for _, raw in sorted(records))
+
+
+def snapshot_request(req: dict, blocks, coins, in_memory: bool = False) -> dict:
+    """The request `req` with `blocks_file` and `coins_file` in the place of `blocks_hex` and `coins`.
+
+    `in_memory` adds the oracle's argument `coins_in_memory`, which the harness does not take."""
+    out = {k: v for k, v in req.items() if k not in ("blocks_hex", "blocks_file", "coins")}
+    out.update({"blocks_file": str(blocks), "coins_file": str(coins)})
+    if in_memory:
+        out["coins_in_memory"] = True
+    return out
+
+
+def without_set_digests(ok: dict) -> dict:
+    """An `ok` object without the digest and the total value of the whole set in its block records."""
+    return {**ok, "blocks": [{**record, "set_digest_hex": None, "set_value": None} for record in ok["blocks"]]}
+
+
+def snapshot_twins(requests: list[dict], responses: list[dict], directory) -> list[tuple[dict, dict]]:
+    """For each request with one record for each block: the same request with its coins in a snapshot, and the `ok` object to expect.
+
+    The blocks go to a file, as in `file_twins`. The expected object is the response to `req`
+    without the digests of the whole set in its block records, and with the digest and the number
+    of the supplied coins. `Model` computes that digest from the definition, so no program
+    supplies it. Each twin must give that object with and without `coins_in_memory`."""
+    twins = []
+    for number, (req, response) in enumerate(zip(requests, responses)):
+        ok = response.get("ok")
+        if not isinstance(ok, dict) or ok.get("out_of_domain_at") is not None or len(ok["blocks"]) != len(req["blocks_hex"]):
+            continue
+        blocks = pathlib.Path(directory) / f"snapshot-twin-{number}.bin"
+        blocks.write_bytes(b"".join(file_record(record["height"], bytes.fromhex(raw))
+                                    for record, raw in zip(ok["blocks"], req["blocks_hex"])))
+        coins = pathlib.Path(directory) / f"snapshot-twin-{number}.coins"
+        coins.write_bytes(snapshot_of(req["coins"]))
+        digest, count = Model(req).set_digest()
+        twins.append((snapshot_request(req, blocks, coins),
+                      {**without_set_digests(ok), "start_set_digest_hex": digest.hex(), "start_set_coins": count}))
+    return twins
+
+
+def snapshot_failure(reason: str, record: int | None = None) -> dict:
+    return {"kind": "block_validate", "reason": reason, **({} if record is None else {"record": record})}
+
+
+def snapshot_mutations(data: bytes, offsets: list[int], single: int, pair: int,
+                       removed: tuple[int, ...] = ()) -> list[tuple[str, bytes, dict | None]]:
+    """Changed copies of the well-formed snapshot `data`, each with a name and the error to expect.
+
+    `offsets` are those of `snapshot_offsets`. `single` is the position of a record whose
+    transaction ID has no other record, and it is not the last record. `pair` is the position of a
+    record whose transaction ID is also that of the record after it. The expected error is None
+    for a copy that is again the records of a coin set in order: a reader accepts it, and only its
+    digest differs. `removed` names more records to remove, each in a copy of its own.
+
+    The cases are those of design record 0011, stage 1, exit condition 2: one for each field,
+    a removed and an added record, a wrong order, a truncated file, and each fault of its
+    section 3.1."""
+    count = len(offsets) - 1
+
+    def raw(i: int) -> bytes:
+        return data[offsets[i]:offsets[i + 1]]
+
+    def replaced(i: int, record: bytes) -> bytes:
+        return data[:offsets[i]] + record + data[offsets[i + 1]:]
+
+    def changed(i: int, height=None, coinbase=None, value=None, script=None, point=None, size=None) -> bytes:
+        """The copy with other fields in record `i`. `value` is 8 bytes, and `size` replaces the length of the script."""
+        old_point, old_height, old_coinbase, old_value, old_script = record_fields(raw(i))
+        script = old_script if script is None else script
+        record = (b"\x02" + (old_point if point is None else point) + le(old_height if height is None else height, 4)
+                  + bytes([old_coinbase if coinbase is None else coinbase])
+                  + (le(old_value, 8) if value is None else value)
+                  + (compact_size(len(script)) if size is None else size) + script)
+        return replaced(i, record)
+
+    point, height, coinbase, value, script = record_fields(raw(single))
+    pair_point, pair_height, pair_coinbase, _, _ = record_fields(raw(pair))
+    last_point, last_height, last_coinbase, _, _ = record_fields(raw(count - 1))
+    added = coin_record(2, last_point[:32] + le(int.from_bytes(last_point[32:], "little") + 1, 4), last_height,
+                        bool(last_coinbase), 1, bytes([0x51]))
+    short = len(script) < 253
+    cases = [
+        # The file is again a coin set, so only the digest finds the change.
+        ("amount", changed(single, value=le(value + 1 if value < MAX_MONEY else value - 1, 8)), None),
+        ("script", changed(single, script=script + b"\x51"), None),
+        ("height", changed(single, height=height + 1 if height < 2147483646 else height - 1), None),
+        ("coinbase-byte", changed(single, coinbase=1 - coinbase), None),
+        ("removed", replaced(single, b""), None),
+        ("added", data + added, None),
+        # The order of the set.
+        ("order", data[:offsets[single]] + raw(single + 1) + raw(single) + data[offsets[single + 2]:],
+         snapshot_failure("coins_file_order", single + 1)),
+        ("twice", data[:offsets[single + 1]] + raw(single) + data[offsets[single + 1]:],
+         snapshot_failure("coins_file_order", single + 1)),
+        # The end of the file.
+        ("truncated", data[:-1], snapshot_failure("coins_file_truncated", count - 1)),
+        ("truncated-head", data[:offsets[count - 1] + 20], snapshot_failure("coins_file_truncated", count - 1)),
+        ("trailing-byte", data + b"\x02", snapshot_failure("coins_file_truncated", count)),
+        ("empty-record", data[:offsets[single] + 50], snapshot_failure("coins_file_truncated", single)),
+        # The fields of one record.
+        ("tag", replaced(single, b"\x01" + raw(single)[1:]), snapshot_failure("coins_file_tag", single)),
+        ("tag-after-end", data + bytes(60), snapshot_failure("coins_file_tag", count)),
+        ("entry-height", changed(pair + 1, height=pair_height + 1 if pair_height < 2147483646 else pair_height - 1),
+         snapshot_failure("coins_file_entry", pair + 1)),
+        ("entry-coinbase", changed(pair + 1, coinbase=1 - pair_coinbase), snapshot_failure("coins_file_entry", pair + 1)),
+        ("amount-above-max", changed(single, value=le(MAX_MONEY + 1, 8)), snapshot_failure("coins_file_value", single)),
+        ("amount-minus-one", changed(single, value=b"\xff" * 8), snapshot_failure("coins_file_value", single)),
+        ("amount-negative", changed(single, value=le(2 ** 63 + 1, 8)), snapshot_failure("coins_file_value", single)),
+        ("index", changed(single, point=point[:32] + le(1048576, 4)), snapshot_failure("coins_file_index", single)),
+        ("op-return", changed(single, script=b"\x6a" + script), snapshot_failure("coins_file_script", single)),
+        ("script-too-long", changed(single, script=bytes([0x51]) * 10001), snapshot_failure("coins_file_script", single)),
+        ("height-above-max", changed(single, height=2147483647), snapshot_failure("coins_file_height", single)),
+        ("coinbase-two", changed(single, coinbase=2), snapshot_failure("coins_file_coinbase", single)),
+        ("length-8-bytes", changed(single, size=b"\xff" + le(len(script), 8)),
+         snapshot_failure("coins_file_script_length", single)),
+        ("length-4-bytes", changed(single, size=b"\xfe" + le(len(script), 4)),
+         snapshot_failure("coins_file_script_length", single)),
+    ]
+    if short:
+        cases.append(("length-2-bytes", changed(single, size=b"\xfd" + le(len(script), 2)),
+                      snapshot_failure("coins_file_script_length", single)))
+    cases += [(f"removed-{i}", replaced(i, b""), None) for i in removed]
+    return cases
+
+
+def snapshot_positions(data: bytes, offsets: list[int]) -> tuple[int, int]:
+    """Positions for `snapshot_mutations`: a record with a transaction ID of its own that is not the last record, and a record that shares its ID with the next one."""
+    ids = [data[start + 1:start + 33] for start in offsets[:-1]]
+    single = next(i for i in range(1, len(ids) - 1) if ids[i - 1] != ids[i] != ids[i + 1])
+    pair = next(i for i in range(len(ids) - 1) if ids[i] == ids[i + 1])
+    return single, pair
+
+
+def synthetic_snapshot() -> bytes:
+    """A small coin set as a snapshot, for the cases of `snapshot_faults`."""
+    coins = Coins()
+    for tag in (1, 2, 3, 4):
+        coins.add(coin_id(tag), 0, COIN)
+    coins.add(coin_id(5), 0, COIN, coinbase=True)
+    coins.add(coin_id(5), 3, 2 * COIN, coinbase=True)
+    return snapshot_of(coins.json())
+
+
+def snapshot_faults(directory) -> list[tuple[dict, dict | None, str | None]]:
+    """Requests with a faulty snapshot or faulty arguments, each with the expected error.
+
+    The second member is the error, where `{"kind": "request"}` stands for any request error.
+    It is None for a snapshot that a reader accepts, and the third member is then the digest of
+    that snapshot from the definition, which the response must report as `start_set_digest_hex`."""
+    directory = pathlib.Path(directory)
+    blocks = directory / "snapshot-fault-blocks.bin"
+    blocks.write_bytes(b"")
+    example = request([])
+    data = synthetic_snapshot()
+    offsets = snapshot_offsets(data)
+    cases = []
+    for name, content, error in snapshot_mutations(data, offsets, *snapshot_positions(data, offsets)):
+        path = directory / f"snapshot-fault-{name}.coins"
+        path.write_bytes(content)
+        cases.append((snapshot_request(example, blocks, path), error,
+                      None if error is not None else snapshot_summary(content)[0]))
+    good = directory / "snapshot-fault-good.coins"
+    good.write_bytes(data)
+    base = snapshot_request(example, blocks, good)
+    cases += [
+        (snapshot_request(example, blocks, directory / "snapshot-fault-missing.coins"),
+         snapshot_failure("coins_file_unreadable"), None),
+        # A directory opens on Linux, and its first read fails.
+        (snapshot_request(example, blocks, directory), snapshot_failure("coins_file_unreadable"), None),
+        ({**base, "coins": []}, {"kind": "request"}, None),
+        ({**base, "coins_file": 1}, {"kind": "request"}, None),
+        ({**{k: v for k, v in base.items() if k != "blocks_file"}, "blocks_hex": []}, {"kind": "request"}, None),
+        ({k: v for k, v in base.items() if k != "mode"}, {"kind": "request"}, None),
+    ]
+    return cases
+
+
+# ---------------------------------------------------------------------------
 # Comparison
 
 
@@ -949,8 +1195,13 @@ def is_value(value) -> bool:
 
 def malformed(req: dict, ok, oracle: bool) -> str | None:
     """A fault in the form of an `ok` object, or None. The oracle alone has `diagnostic` in each block."""
-    if not isinstance(ok, dict) or set(ok) != OK_FIELDS or not isinstance(ok["blocks"], list):
-        return "must return exactly the fields " + ", ".join(sorted(OK_FIELDS))
+    from_snapshot = "coins_file" in req
+    ok_fields = OK_FIELDS | (START_FIELDS if from_snapshot else set())
+    if not isinstance(ok, dict) or set(ok) != ok_fields or not isinstance(ok["blocks"], list):
+        return "must return exactly the fields " + ", ".join(sorted(ok_fields))
+    if from_snapshot and (not is_digest(ok["start_set_digest_hex"]) or type(ok["start_set_coins"]) is not int
+                          or ok["start_set_coins"] < 0):
+        return "has a malformed digest of the snapshot"
     if not is_digest(ok["set_digest_hex"]) or type(ok["set_coins"]) is not int or ok["set_coins"] < 0:
         return "has a malformed digest of the set"
     if not is_value(ok["set_value"]):
@@ -974,7 +1225,8 @@ def malformed(req: dict, ok, oracle: bool) -> str | None:
                 return "has a rejection field in an accepted block"
             if not is_digest(record["changes_digest_hex"]) or type(record["spent"]) is not int or type(record["created"]) is not int:
                 return "has an accepted block without its changes"
-            if (record["set_digest_hex"] is not None) != (record["height"] % SET_DIGEST_INTERVAL == 0):
+            # A request with `coins_file` has no digest of the whole set in a block record.
+            if (record["set_digest_hex"] is not None) != (not from_snapshot and record["height"] % SET_DIGEST_INTERVAL == 0):
                 return f"has the digest of the set at the wrong heights (height {record['height']})"
             if record["set_digest_hex"] is not None and not is_digest(record["set_digest_hex"]):
                 return f"has a malformed digest of the set (height {record['height']})"
@@ -1056,7 +1308,7 @@ def compare(req: dict, ours: dict, core: dict, peer: str = "core") -> tuple[str,
                     return LABEL, f"block {index} (height {x['height']}), {field}: oracle {x[field]!r}, {peer} {y[field]!r}"
         if len(a["blocks"]) != len(b["blocks"]):
             return LABEL, f"oracle has {len(a['blocks'])} block records, {peer} has {len(b['blocks'])}"
-        for field in ("set_digest_hex", "set_coins", "set_value"):
+        for field in ("set_digest_hex", "set_coins", "set_value") + (tuple(sorted(START_FIELDS)) if "coins_file" in req else ()):
             if not same(a[field], b[field]):
                 return LABEL, f"{field}: oracle {a[field]!r}, {peer} {b[field]!r}"
     elif not same(ours["error"], core["error"]):

@@ -123,7 +123,7 @@ It needs the blocks from height 10,001 to 145,000, about 3 GB, which `scripts/fe
 
 ```bash
 python3 -I scripts/fetch_blocks.py --range 10001 145000 --output build/mainnet-blocks/range-10001-145000
-taskset -c 0 nice -n 19 python3 -I scripts/replay_blocks.py --output build/replay-145000 .lake/build/bin/dogelib-oracle build/core-harness/core-oracle build/mainnet-blocks/genesis-10000 build/mainnet-blocks/range-10001-145000
+taskset -c 0 nice -n 19 python3 -I scripts/replay_blocks.py --last 145000 --output build/replay-145000 .lake/build/bin/dogelib-oracle build/core-harness/core-oracle build/mainnet-blocks/genesis-10000 build/mainnet-blocks/range-10001-145000
 ```
 
 The replay writes a second file of 3 GB below `build/replay-145000`.

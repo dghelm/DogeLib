@@ -872,6 +872,11 @@ def file_twins(requests: list[dict], responses: list[dict], directory) -> list[t
         path.write_bytes(b"".join(file_record(record["height"], bytes.fromhex(raw))
                                   for record, raw in zip(ok["blocks"], req["blocks_hex"])))
         twins.append((file_request(req, path), ok))
+    # An empty file gives no block record, and the digest of the empty set.
+    path = pathlib.Path(directory) / "twin-empty.bin"
+    path.write_bytes(b"")
+    twins.append((file_request(request([]), path),
+                  {"blocks": [], "out_of_domain_at": None, "set_digest_hex": "00" * 32, "set_coins": 0}))
     return twins
 
 
@@ -893,6 +898,8 @@ def file_faults(directory) -> list[tuple[dict, dict]]:
     good = file_record(0, genesis)
     return [
         (case("missing", None), failure("file_unreadable")),
+        # A directory opens on Linux, and its first read fails.
+        (file_request(example, directory), failure("file_unreadable")),
         (case("short-head", good + b"\x00" * 5), failure("file_truncated", 1)),
         (case("short-block", good[:-1]), failure("file_truncated", 0)),
         (case("too-long", (0).to_bytes(4, "little") + (0x02000001).to_bytes(4, "little")), failure("file_record_too_long", 0)),

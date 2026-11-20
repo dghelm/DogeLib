@@ -239,6 +239,8 @@ UniValue blockValidate(const UniValue& req)
         if (fromFile) {
             unsigned char head[8];
             file.read(reinterpret_cast<char*>(head), 8);
+            // A read that fails is not the end of the file.
+            if (file.bad()) throw SpecError{validateFailure("file_unreadable")};
             if (file.gcount() == 0) break;
             if (file.gcount() != 8) throw SpecError{validateFailure("file_truncated", index)};
             fileHeight = littleEndian(head);
@@ -246,6 +248,7 @@ UniValue blockValidate(const UniValue& req)
             if (length > MAX_SIZE) throw SpecError{validateFailure("file_record_too_long", index)};
             bytes.resize(length);
             file.read(reinterpret_cast<char*>(bytes.data()), length);
+            if (file.bad()) throw SpecError{validateFailure("file_unreadable")};
             if (static_cast<uint64_t>(file.gcount()) != length) throw SpecError{validateFailure("file_truncated", index)};
         } else {
             if (index >= raws.size()) break;

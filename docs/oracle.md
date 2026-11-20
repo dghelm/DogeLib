@@ -818,7 +818,7 @@ The other errors have the kind `block_validate`, a `reason`, and `index` when a 
 | `genesis_after_start` | The genesis block is not the first block of an empty chain |
 | `no_predecessor` | A block that is not the genesis block has an empty chain |
 | `not_linked` | A block does not extend the last accepted block |
-| `file_unreadable` | The file of `blocks_file` does not open |
+| `file_unreadable` | The file of `blocks_file` does not open, or a read of it fails |
 | `file_truncated` | The file ends inside the 8 bytes before a block, or inside a block |
 | `file_record_too_long` | A record of the file gives a length above 33,554,432 bytes |
 | `file_height` | A record of the file gives a height that is not the height of its candidate |
@@ -1588,6 +1588,8 @@ So each block passes its real proof of work, and each program builds the whole c
 | Core harness | Built from the harness sources of the same commit, with Core at `e0a1c157` |
 | Heights 0 to 10,000 | The release asset of the [fixtures](../tests/block/mainnet-blocks/README.md), 10,001 blocks |
 | Heights 10,001 to 145,000 | `scripts/fetch_blocks.py --range 10001 145000` from a node `/Shibetoshi:1.14.9/` on 2026-11-18: 135,000 blocks, 2,979,346,409 bytes, SHA-256 `b3354074540c702ffa8f958a1276c4fb8c911a9be461d6f89e8980ef2c0c7f14`. The file is not committed and is not a release asset |
+
+Later commits of the pull request change the answer to a failed read of the file alone, and no read failed in this run.
 
 Both programs accept every block, and all 145,001 block records agree, each with the digest of its coin changes.
 So do the 147 digests of the whole set, at each multiple of 1,000 and at the end.

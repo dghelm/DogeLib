@@ -276,12 +276,14 @@ def blockValidateFile (fields : Args) : IO (Except Failure Json) := do
   let mut run := start
   repeat
     let index := run.records.size
-    let head ← readUpTo handle 8
+    let head ← try readUpTo handle 8
+      catch _ => return .error (validateFailure "file_unreadable")
     if head.isEmpty then break
     if head.size != 8 then return .error (validateFailure "file_truncated" [("index", natJson index)])
     let length := fileU32 head 4
     if length > maxFileBlockSize then return .error (validateFailure "file_record_too_long" [("index", natJson index)])
-    let raw ← readUpTo handle length
+    let raw ← try readUpTo handle length
+      catch _ => return .error (validateFailure "file_unreadable")
     if raw.size != length then return .error (validateFailure "file_truncated" [("index", natJson index)])
     -- The step is the last use of `run`, so that it can change the records and the coin set in place.
     let before := run.view.head?.map (·.nHeight)

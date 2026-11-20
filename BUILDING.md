@@ -118,6 +118,19 @@ The first command writes the fixtures to `build/mainnet-blocks` and checks them 
 The second takes about 9 minutes, of which the oracle's replay of the 10,001 blocks is about 8.
 The replay runs in its own oracle process, at the same time as the other requests.
 
+The replay from the genesis block to height 145,000 is a separate gate outside CI.
+It needs the blocks from height 10,001 to 145,000, about 3 GB, which `scripts/fetch_blocks.py` reads from a node:
+
+```bash
+python3 -I scripts/fetch_blocks.py --range 10001 145000 --output build/mainnet-blocks/range-10001-145000
+taskset -c 0 nice -n 19 python3 -I scripts/replay_blocks.py --output build/replay-145000 .lake/build/bin/dogelib-oracle build/core-harness/core-oracle build/mainnet-blocks/genesis-10000 build/mainnet-blocks/range-10001-145000
+```
+
+The replay writes a second file of 3 GB below `build/replay-145000`.
+The oracle takes about 17 hours on one core and about 8 GB of memory.
+It writes each thousandth height to standard error.
+[docs/oracle.md](docs/oracle.md#replay-of-mainnet-to-height-145000) records one run.
+
 ### Compiled Rust CompactSize comparison
 
 Build the Rust adapter, then compare only CompactSize reader requests through the oracle, Core and compiled Rust:

@@ -20,7 +20,7 @@ test has five parts:
    cache of 1 MB, so that the harness writes the database after every block. Its digest at
    10,000 must equal the digest of the harness with the set in memory. A pass that starts again
    from its newest restart snapshot, at height 9,000, must reach the same digest, and the older one
-   at 3,000 is deleted. A segment request whose first
+   at 3,000 is deleted. A restart from a changed snapshot fails. A segment request whose first
    block does not name the database's best block is the error `coins_db_best_block`.
 4. `hash_serialized`. At height 9,000 the harness's `hash_serialized` and `transactions` must
    equal the values that this script computes from the snapshot file by the definition of Core's
@@ -217,6 +217,19 @@ def test_pass(harness: str, trap: str, fixture: str) -> None:
         check(any("restart from the snapshot at height 9000" in line for line in restarted), "the pass did not restart")
         check(state["digests"]["10000"]["set_digest_hex"] == expected[10000]["set_digest_hex"],
               "the restarted pass reaches another digest")
+        # A restart from a changed snapshot fails before the harness runs.
+        path = state_dir / "snapshots" / "coins-9000.bin"
+        changed = bytearray(path.read_bytes())
+        changed[45] ^= 1  # A byte of the first record's amount.
+        path.write_bytes(changed)
+        data = json.loads((state_dir / "state.json").read_text())
+        data["db_height"] = None
+        (state_dir / "state.json").write_text(json.dumps(data))
+        try:
+            core_pass.core_pass(stop_after=None, **args)
+            check(False, "a restart from a changed snapshot did not fail")
+        except core_pass.PassError as error:
+            check("differs from its manifest" in str(error), f"a changed snapshot gave {error}")
         # A first block that does not name the database's best block.
         wrong = core_pass.segment_request(core_pass.Headers(state_dir / "headers.bin", 10001), 9000, blocks,
                                           state_dir / "coins-db", 1, core_pass.plan_of(state_dir, 10000), 9000, None)

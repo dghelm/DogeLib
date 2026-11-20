@@ -345,6 +345,12 @@ def check_response(answer: dict, info: dict, headers: list[bytes], request: dict
         raise PassError(f"segment {info['first']}: the database starts at {ok['coins_db_start_display']}, not {start}")
     if ok["coins_db_best_display"] != info["last_hash_display"]:
         raise PassError(f"segment {info['first']}: the database ends at {ok['coins_db_best_display']}")
+    if "coins_file" in request:
+        # A restart: the harness's digest of the loaded snapshot must be the manifest's.
+        manifest = state["snapshots"][str(info["first"] - 1)]
+        if (ok.get("start_set_digest_hex"), ok.get("start_set_coins")) != (manifest["set_digest_hex"], manifest["coins"]):
+            raise PassError(f"segment {info['first']}: the loaded snapshot has the start "
+                            f"{ok.get('start_set_digest_hex')} with {ok.get('start_set_coins')} coins, not the manifest's")
     if [s["height"] for s in ok["snapshots"]] != request["snapshot_heights"]:
         raise PassError(f"segment {info['first']}: the harness did not write every snapshot")
     if [d["height"] for d in ok["set_digests"]] != request["digest_heights"]:
@@ -352,6 +358,14 @@ def check_response(answer: dict, info: dict, headers: list[bytes], request: dict
     if [v["height"] for v in ok["version_bits_states"]] != request["version_bits_heights"]:
         raise PassError(f"segment {info['first']}: the harness did not report every version-bits state")
     return ok
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as stream:
+        for chunk in iter(lambda: stream.read(1 << 22), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def write_manifest(snapshot: dict, directory: Path) -> dict:
@@ -435,6 +449,10 @@ def core_pass(harness: str, state_dir: Path, last: int, local_fixtures: list[str
         if point is None:
             raise PassError("the database is not at the state's height, and no snapshot is below it")
         height, name = point
+        recorded = state["snapshots"][str(height)]
+        path = plan["snapshot_dir"] / name
+        if not path.exists() or (file_sha256(path), path.stat().st_size) != (recorded["sha256"], recorded["bytes"]):
+            raise PassError(f"the snapshot at height {height} differs from its manifest")
         log(f"restart from the snapshot at height {height}")
         for key in ("digests", "version_bits"):
             state[key] = {h: v for h, v in state[key].items() if int(h) <= height}
@@ -442,8 +460,10 @@ def core_pass(harness: str, state_dir: Path, last: int, local_fixtures: list[str
         state["segments"] = [s for s in state["segments"] if s["last"] <= height]
         state["height"], state["hash_display"] = height, display(headers.hash(height))
         state["set_digest_hex"] = state["snapshots"][str(height)]["set_digest_hex"]
-        headers.truncate(height + 1)
+        state["restart_from"] = height
+        # The state first: a later run truncates a longer header file itself.
         save_state(state_path, state)
+        headers.truncate(height + 1)
         fresh_coins = str(plan["snapshot_dir"] / name)
 
     fetched = queue.Queue(maxsize=1)
@@ -476,7 +496,8 @@ def core_pass(harness: str, state_dir: Path, last: int, local_fixtures: list[str
             if free_gb(state_dir) < min_free:
                 raise DiskLow(f"{free_gb(state_dir):.0f} GB free before the segment from {info['first']}")
             first, end = info["first"], info["last"]
-            segment_headers = [(directory / "headers.bin").read_bytes()[i:i + 80] for i in range(0, 80 * info["blocks"], 80)]
+            header_bytes = (directory / "headers.bin").read_bytes()
+            segment_headers = [header_bytes[i:i + 80] for i in range(0, 80 * info["blocks"], 80)]
             request = segment_request(headers, first, directory / "blocks.bin", db, cache_mb, plan, end, fresh_coins)
             response = state_dir / "responses" / f"from-{first}.json"
             state["db_height"] = None
@@ -509,6 +530,11 @@ def core_pass(harness: str, state_dir: Path, last: int, local_fixtures: list[str
                                       "created": sum(r["created"] for r in ok["blocks"]),
                                       "set_digest_hex": ok["set_digest_hex"], "set_coins": ok["set_coins"],
                                       "set_value": ok["set_value"], "end_display": ok["coins_db_best_display"]})
+            # The records of the segment, compressed, for the range comparisons, before the state names the segment.
+            archive = Path(str(response) + ".gz")
+            with open(response, "rb") as source, gzip.open(str(archive) + ".tmp", "wb") as target:
+                shutil.copyfileobj(source, target)
+            os.replace(str(archive) + ".tmp", archive)
             state.update(height=end, hash_display=ok["coins_db_best_display"], set_digest_hex=ok["set_digest_hex"],
                          db_height=end)
             # Only the newest restart snapshot that is not a range start stays.
@@ -518,9 +544,6 @@ def core_pass(harness: str, state_dir: Path, last: int, local_fixtures: list[str
                 (plan["snapshot_dir"] / state["snapshots"][str(old)]["file"]).unlink(missing_ok=True)
                 state["snapshots"][str(old)]["kept"] = False
             save_state(state_path, state)
-            # The records of the segment, compressed, for the range comparisons.
-            with open(response, "rb") as source, gzip.open(str(response) + ".gz", "wb") as target:
-                shutil.copyfileobj(source, target)
             response.unlink()
             shutil.rmtree(directory)
             log(f"segment {first} to {end} accepted in {seconds:.0f} seconds: {ok['set_coins']} coins, "

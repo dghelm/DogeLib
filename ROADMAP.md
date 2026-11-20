@@ -157,6 +157,19 @@ Its section 11 gives the stages and their exit conditions:
 Adoption of the record establishes no result.
 Each stage reports its evidence in COVERAGE.md and SOUNDNESS.md when it merges.
 
+### Relative lock time as a proposed revision
+
+`RelativeLockTime` is the first proposed revision that has a public proposal for Dogecoin: BIP 68, BIP 112 and BIP 113 at a fixed activation height.
+[Design record 0012](docs/design/0012-relative-lock-time.md) defines the milestone. The maintainer adopted it on 2026-11-20.
+The revision is not part of the baseline, and DogeLib takes no position on its activation.
+
+| Stage | Deliverable | Status |
+| --- | --- | --- |
+| 1 | The extensions E1 to E4 of the block-level layer of design record 0011, and BIP 113, the median-time cutoff. The cutoff has its restriction theorem, known answers and the cutoff count. A comparison runs Core's code with the CSV state forced to `ACTIVE` | Not started. The stage waits for the definitions of stage 6 of design record 0011 (decision 7) |
+| 2 | BIP 112: the CSV flag of a block, the Script-local theorems for `OP_CHECKSEQUENCEVERIFY` and the corpus records | Not started |
+| 3 | BIP 68: sequence locks with the ancestor median times, the block-level `SoftFork` with its witnesses, and `relativeLock_enforced` | Not started |
+| 4 | The historical counts on heights 0 to 10,000 and 0 to 145,000, with a committed candidate list | Not started |
+
 One other candidate is unscheduled, and it needs an approved scope before work starts:
 
 - **Arithmetic agreement with Core's verifier.** A Lean proof that `Point.mulAdd` computes Core's `secp256k1_ecmult` result ([design record 0005](docs/design/0005-signature-verifier.md), section 4.3).

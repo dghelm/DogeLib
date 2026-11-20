@@ -70,6 +70,7 @@
 #include <functional>
 #include <iostream>
 #include <limits>
+#include <set>
 #include <map>
 #include <memory>
 #include <stdexcept>

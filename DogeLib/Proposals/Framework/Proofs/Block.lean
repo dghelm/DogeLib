@@ -53,7 +53,9 @@ Condition 4 can use the result of the contextual header check (`contextualHeader
 ## Congruence
 
 - `connectBlockWith_congr_revision`: two revisions whose spend checks, script flags and transaction tests agree on a block give one `connectBlockWith` outcome.
+- `connectBlockWith_congr_scripts`: the same from agreement of the script loops, for two revisions whose script flags can differ.
 - `validateBlockWithActive_congr`: `validateBlockWithActive` reads a revision through `contextualBodyWith` and `connectBlockWith` alone.
+- `validateBlockWithActive_congr_of_passed`: the same, where both hypotheses can use the result of the contextual header check.
 - `SpendUntouched O` and `BlockUntouched O`: no `scriptSig`, no spent `scriptPubKey` and no P2SH redeem script of the block holds an instruction with an opcode in `O`.
 - `verifyScriptWith_congr_p2sh`: `verifyScriptWith_congr` with the redeem-script hypothesis only for a pay-to-script-hash `scriptPubKey` and a push-only `scriptSig`.
 - `connectBlockWith_congr` and `validateBlockWith_congr`: take a revision whose spend check is `verifyScriptWith` with a step that equals the baseline step outside `O`, and whose other parts agree with the baseline on the block. On a block with `BlockUntouched O`, the outcome equals the embedded result of the baseline. The equality holds for both runs of each script check.
@@ -602,18 +604,21 @@ theorem checkInputScriptsWith_congr {flags : UInt32} {txIndex : Nat} {tx : Trans
       (fun j c hj ictx hic f => h (j + 1) c (by simpa using hj) ictx (by rw [← hic]; congr 1; omega) f)]
 
 /--
-Let the script loops of two spend checks, and two transaction tests, agree on the coins that `lookupInputs` finds for the transaction.
+Let the script loops of two spend checks, each with its flag set, and two transaction tests, agree on the coins that `lookupInputs` finds for the transaction.
+Let the two flag sets agree on `SCRIPT_VERIFY_P2SH`, which the count of signature operations reads.
 Then `connectTransactionWith` gives the same outcome for both.
 -/
-theorem connectTransactionWith_congr {test₁ test₂ : TxTest ρ μ} {ctx : ConnectContext} {flags : UInt32} {index : Nat}
-    {st : ConnectState} {tx : Transaction}
+theorem connectTransactionWith_congr {test₁ test₂ : TxTest ρ μ} {ctx : ConnectContext} {flags₁ flags₂ : UInt32}
+    {index : Nat} {st : ConnectState} {tx : Transaction}
+    (hp2sh : hasFlag flags₁ ScriptFlags.p2sh = hasFlag flags₂ ScriptFlags.p2sh)
     (h : tx.isCoinBase = false → ∀ coins, lookupInputs st.coins tx.inputs.val = some coins →
-      checkInputScriptsWith E spend₁ flags index tx 0 coins = checkInputScriptsWith E spend₂ flags index tx 0 coins)
+      checkInputScriptsWith E spend₁ flags₁ index tx 0 coins = checkInputScriptsWith E spend₂ flags₂ index tx 0 coins)
     (htest : tx.isCoinBase = false → ∀ coins, lookupInputs st.coins tx.inputs.val = some coins →
       test₁ index tx coins = test₂ index tx coins) :
-    connectTransactionWith E spend₁ test₁ ctx flags index st tx =
-      connectTransactionWith E spend₂ test₂ ctx flags index st tx := by
+    connectTransactionWith E spend₁ test₁ ctx flags₁ index st tx =
+      connectTransactionWith E spend₂ test₂ ctx flags₂ index st tx := by
   unfold connectTransactionWith connectFoundWith
+  rw [hp2sh]
   cases hcb : tx.isCoinBase with
   | true => rfl
   | false =>
@@ -657,34 +662,36 @@ theorem connectTransactionWith_ok_coins {spend : SpendCheck ε υ} {test : TxTes
           rfl
 
 /--
-Let the script loops of two spend checks, and two transaction tests, agree on each transaction of the list with the coins of its inputs in `coinsBefore` at its index.
+Let the script loops of two spend checks, each with its flag set, and two transaction tests, agree on each transaction of the list with the coins of its inputs in `coinsBefore` at its index.
+Let the two flag sets agree on `SCRIPT_VERIFY_P2SH`.
 Then `connectTransactionsWith` gives the same outcome for both.
 -/
-theorem connectTransactionsWith_congr {test₁ test₂ : TxTest ρ μ} {ctx : ConnectContext} {flags : UInt32} :
+theorem connectTransactionsWith_congr {test₁ test₂ : TxTest ρ μ} {ctx : ConnectContext} {flags₁ flags₂ : UInt32}
+    (hp2sh : hasFlag flags₁ ScriptFlags.p2sh = hasFlag flags₂ ScriptFlags.p2sh) :
     ∀ {txs : List Transaction} {index : Nat} {st : ConnectState},
       (∀ i tx, txs[i]? = some tx → tx.isCoinBase = false → ∀ coins,
         lookupInputs (coinsBefore st.coins ctx.height txs i) tx.inputs.val = some coins →
-          checkInputScriptsWith E spend₁ flags (index + i) tx 0 coins =
-            checkInputScriptsWith E spend₂ flags (index + i) tx 0 coins) →
+          checkInputScriptsWith E spend₁ flags₁ (index + i) tx 0 coins =
+            checkInputScriptsWith E spend₂ flags₂ (index + i) tx 0 coins) →
       (∀ i tx, txs[i]? = some tx → tx.isCoinBase = false → ∀ coins,
         lookupInputs (coinsBefore st.coins ctx.height txs i) tx.inputs.val = some coins →
           test₁ (index + i) tx coins = test₂ (index + i) tx coins) →
-      connectTransactionsWith E spend₁ test₁ ctx flags index st txs =
-        connectTransactionsWith E spend₂ test₂ ctx flags index st txs
+      connectTransactionsWith E spend₁ test₁ ctx flags₁ index st txs =
+        connectTransactionsWith E spend₂ test₂ ctx flags₂ index st txs
   | [], _, _, _, _ => rfl
   | tx :: rest, index, st, h, htest => by
     unfold connectTransactionsWith
     rw [← connectTransactionWith_congr (E := E) (spend₁ := spend₁) (spend₂ := spend₂) (test₁ := test₁)
-      (test₂ := test₂)
+      (test₂ := test₂) hp2sh
       (fun hcb coins hl => by simpa using h 0 tx rfl hcb coins (by simpa [coinsBefore] using hl))
       (fun hcb coins hl => by simpa using htest 0 tx rfl hcb coins (by simpa [coinsBefore] using hl))]
-    cases h1 : connectTransactionWith E spend₁ test₁ ctx flags index st tx with
+    cases h1 : connectTransactionWith E spend₁ test₁ ctx flags₁ index st tx with
     | rejected e => rfl
     | unsupported u => rfl
     | ok st1 =>
       simp only
       have hidx : ∀ i, index + 1 + i = index + (i + 1) := fun i => by omega
-      apply connectTransactionsWith_congr
+      apply connectTransactionsWith_congr hp2sh
       · intro i t hi hcb coins hl
         rw [hidx]
         exact h (i + 1) t (by simpa using hi) hcb coins
@@ -695,6 +702,42 @@ theorem connectTransactionsWith_congr {test₁ test₂ : TxTest ρ μ} {ctx : Co
           (by simpa [coinsBefore, connectTransactionWith_ok_coins h1] using hl)
 
 end Congruence
+
+/--
+Congruence in the script loops.
+Take two revisions with one error type, a value of `active`, and a block on a coin set.
+Let three conditions hold:
+
+1. The two script loops agree on every transaction of the block that is not a coinbase, with the coins of its inputs. Each loop runs the spend check of its revision under the script flags of its revision.
+2. The two flag sets agree on `SCRIPT_VERIFY_P2SH`.
+3. The two transaction tests agree on every such transaction.
+
+The coins of a transaction are those of its inputs in the set just before it (`coinsBefore`).
+Then `connectBlockWith` gives the same outcome for both revisions.
+The two revisions can have different script flags, as a revision that adds a flag does.
+-/
+theorem connectBlockWith_congr_scripts (E : ConnectEmbedding ε υ ρ μ) {rev₁ rev₂ : BlockRevision ε υ ρ μ}
+    {active : Bool} (fJustCheck : Bool) {ctx : ConnectContext} {s : CoinSet} {b : Block}
+    (hscripts : ∀ i tx, b.transactions[i]? = some tx → tx.isCoinBase = false → ∀ coins,
+      lookupInputs (coinsBefore s ctx.height b.transactions i) tx.inputs.val = some coins →
+        checkInputScriptsWith E (rev₁.spend active) (rev₁.scriptFlags active ctx.height) i tx 0 coins =
+          checkInputScriptsWith E (rev₂.spend active) (rev₂.scriptFlags active ctx.height) i tx 0 coins)
+    (hp2sh : hasFlag (rev₁.scriptFlags active ctx.height) ScriptFlags.p2sh =
+      hasFlag (rev₂.scriptFlags active ctx.height) ScriptFlags.p2sh)
+    (htest : ∀ i tx, b.transactions[i]? = some tx → tx.isCoinBase = false → ∀ coins,
+      lookupInputs (coinsBefore s ctx.height b.transactions i) tx.inputs.val = some coins →
+        rev₁.txTest active ctx.height i tx coins = rev₂.txTest active ctx.height i tx coins) :
+    connectBlockWith E rev₁ active fJustCheck ctx s b = connectBlockWith E rev₂ active fJustCheck ctx s b := by
+  have key : connectTransactionsWith E (rev₁.spend active) (rev₁.txTest active ctx.height) ctx
+      (rev₁.scriptFlags active ctx.height) 0 ⟨s, 0, 0, []⟩ b.transactions =
+        connectTransactionsWith E (rev₂.spend active) (rev₂.txTest active ctx.height) ctx
+          (rev₂.scriptFlags active ctx.height) 0 ⟨s, 0, 0, []⟩ b.transactions := by
+    apply connectTransactionsWith_congr hp2sh
+    · intro i tx hi hcb coins hl
+      simpa using hscripts i tx hi hcb coins hl
+    · intro i tx hi hcb coins hl
+      simpa using htest i tx hi hcb coins hl
+  simp only [connectBlockWith, key]
 
 /--
 Congruence in the revision.
@@ -723,7 +766,7 @@ theorem connectBlockWith_congr_revision (E : ConnectEmbedding ε υ ρ μ) {rev�
         connectTransactionsWith E (rev₂.spend active) (rev₂.txTest active ctx.height) ctx
           (rev₂.scriptFlags active ctx.height) 0 ⟨s, 0, 0, []⟩ b.transactions := by
     rw [← hflags]
-    apply connectTransactionsWith_congr
+    apply connectTransactionsWith_congr rfl
     · intro i tx hi hcb coins hl
       apply checkInputScriptsWith_congr
       intro j coin hj ictx hic f
@@ -965,6 +1008,58 @@ theorem validateBlockWithActive_congr (V : ValidateEmbedding ρ μ ρ' μ') (E :
       validateBlockWithActive V E rev₂ act₂ fCheckPOW fCheckMerkleRoot ctx s b := by
   unfold validateBlockWithActive
   rw [h, checksBeforeConnect_congr_body hbody]
+
+/-- If `checksBeforeConnect` accepts a block, its contextual header check passed (`contextualHeaderPassed`). -/
+theorem contextualHeaderPassed_of_checks_ok {fCheckPOW fCheckMerkleRoot : Bool} {ctx : ValidateContext}
+    {args : Bool × Int} {b : Block} (h : checksBeforeConnect fCheckPOW fCheckMerkleRoot ctx args b = .ok ()) :
+    contextualHeaderPassed ctx b := by
+  unfold contextualHeaderPassed
+  unfold checksBeforeConnect at h
+  simp only at h
+  generalize (if (some b.header.pure.getHash == genesisHash? WorkNetwork.mainnet || !fCheckPOW) = true
+    then Except.ok () else checkBlockHeader WorkNetwork.mainnet b.header) = x1 at h
+  generalize (if (some b.header.pure.getHash == genesisHash? WorkNetwork.mainnet) = true then Except.ok ()
+    else contextualCheckBlockHeader WorkNetwork.mainnet b.header.pure ctx.view ctx.adjustedTime
+      ctx.lastCheckpointHeight) = x2 at h ⊢
+  rcases x1 with e | ⟨⟩
+  · cases h
+  rcases x2 with e | ⟨⟩
+  · cases h
+  rfl
+
+/--
+`validateBlockWithActive_congr`, where both hypotheses can use the result of the contextual header check.
+Take two revisions and two values of `active`.
+Whenever that check passes (`contextualHeaderPassed`), let `contextualBodyWith` give one result for both, and let `connectBlockWith` give one result for both.
+Then `validateBlockWithActive` gives one result for both.
+`connectBlockWith` runs only after the four checks pass.
+-/
+theorem validateBlockWithActive_congr_of_passed (V : ValidateEmbedding ρ μ ρ' μ') (E : ConnectEmbedding ε υ ρ μ)
+    {rev₁ rev₂ : BlockRevision ε υ ρ μ} {act₁ act₂ : Bool} (fCheckPOW fCheckMerkleRoot : Bool)
+    {ctx : ValidateContext} {s : CoinSet} {b : Block}
+    (hbody : contextualHeaderPassed ctx b → contextualBodyWith rev₁ act₁ ctx b = contextualBodyWith rev₂ act₂ ctx b)
+    (h : contextualHeaderPassed ctx b → connectBlockWith E rev₁ act₁ true (connectContextOf ctx b) s b =
+      connectBlockWith E rev₂ act₂ true (connectContextOf ctx b) s b) :
+    validateBlockWithActive V E rev₁ act₁ fCheckPOW fCheckMerkleRoot ctx s b =
+      validateBlockWithActive V E rev₂ act₂ fCheckPOW fCheckMerkleRoot ctx s b := by
+  unfold validateBlockWithActive
+  rw [checksBeforeConnect_congr_body hbody]
+  generalize hc : checksBeforeConnect fCheckPOW fCheckMerkleRoot ctx (rev₂.lockTimeArgs act₂ ctx b) b = c
+  cases c with
+  | error e => simp only [ValidateEmbedding.afterChecks]
+  | ok u =>
+    cases u
+    simp only [ValidateEmbedding.afterChecks, h (contextualHeaderPassed_of_checks_ok hc)]
+
+/--
+On a block whose header has the hash of the mainnet genesis block, `connectBlockWith` does not read the revision.
+It connects no transaction of such a block, so two revisions and two values of `active` give one outcome.
+-/
+theorem connectBlockWith_genesis (E : ConnectEmbedding ε υ ρ μ) (rev₁ rev₂ : BlockRevision ε υ ρ μ)
+    (act₁ act₂ fJustCheck : Bool) (ctx : ConnectContext) (s : CoinSet) {b : Block}
+    (hg : (some b.header.pure.getHash == genesisHash? WorkNetwork.mainnet) = true) :
+    connectBlockWith E rev₁ act₁ fJustCheck ctx s b = connectBlockWith E rev₂ act₂ fJustCheck ctx s b := by
+  simp only [connectBlockWith, hg, ↓reduceIte]
 
 /--
 For every pair of embeddings, error map, map of unsupported reasons, verifier, value of `active`, pair of flags, context, coin set and block:

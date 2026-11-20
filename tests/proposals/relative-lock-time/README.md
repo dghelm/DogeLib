@@ -45,4 +45,5 @@ The second command fails when the committed file differs from the list that the 
 The list is a statement about these 11,018 blocks.
 It says nothing about other heights, and nothing about unconfirmed transactions, such as a signed transaction that waits for its lock time.
 An empty list is not a compatibility proof.
-`relativeLockTime_eq_of_cutoff_untouched` shows that a block without a cutoff transaction has one result under the baseline and under the revision with the rule of BIP 113.
+`contextualBody_eq_of_cutoff_untouched` shows that the body check of a block without a cutoff transaction has one result under the baseline and under the revision.
+The list is about that check alone, which runs no script. For the whole of `validateBlock`, `relativeLockTime_eq_of_cutoff_opcode_untouched` also needs a block without an instruction `0xb2` in a script of a spend.

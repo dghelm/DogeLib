@@ -25,7 +25,7 @@ No module of the `DogeLib`, `Proofs` or `Exports` libraries imports this library
 - `DogeLib.Proposals.ExampleFaultyLocktime` is an invented proposal with a deliberate fault, and its corrected variant. It is a teaching example and a test of the framework, not a proposal for Dogecoin.
 - `DogeLib.Proposals.ExampleVersionVerify` is the worked example of design record 0007, section 10. It is not a proposal for Dogecoin.
 
-- `DogeLib.Proposals.RelativeLockTime` is the revision of design record 0012: the rules of BIP 68, BIP 112 and BIP 113, which discussion 3509 of `dogecoin/dogecoin` proposed for Dogecoin. It is partial: it has the rule of BIP 113 alone.
+- `DogeLib.Proposals.RelativeLockTime` is the revision of design record 0012: the rules of BIP 68, BIP 112 and BIP 113, which discussion 3509 of `dogecoin/dogecoin` proposed for Dogecoin. It is partial: it has the rules of BIP 113 and BIP 112.
 
 A proposal lives under `DogeLib.Proposals.<Name>`, and this root imports it.
 The library states a proposal. It does not argue for or against its activation.

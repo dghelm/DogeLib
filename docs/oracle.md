@@ -1706,10 +1706,11 @@ The machine has 125 GiB of memory, and `free` reported 46 GiB available, with ot
 
 **The decision: `CCoinsViewDB`.**
 The map does not fit reliably at the tip.
-So the Core pass carries the set in Core's `CCoinsViewDB` on a scratch directory, with a `CCoinsViewCache` of bounded size over it.
-The node's `bytes_serialized` of 11.5 GB measures the keys and values of that database at the tip.
-The harness then uses Core's own database of coins, as a node does.
-Its memory is the cache, and the records of one segment.
+So stage 0 selects Core's `CCoinsViewDB` on a scratch directory for the Core pass, with a `CCoinsViewCache` of bounded size over it.
+The harness still uses the map, and a later stage of the design record makes the change.
+
+The harness will then use Core's own database of coins, as a node does.
+Its memory will be the cache, and the records of one segment.
 
 **The disk.**
 `df` reported 909 GB available on 2026-11-20, after this stage's measurements.
@@ -1719,15 +1720,20 @@ The pass needs this space at one time:
 | Item | Size |
 | --- | ---: |
 | One segment of blocks, which the pass deletes when the harness accepts it | At most 4 GB. Above height 4,500,000 a fetch then holds about 30,000 blocks |
-| The `CCoinsViewDB` directory | About 12 GB at the tip, from `bytes_serialized` |
+| The `CCoinsViewDB` directory | At most about 35 GB: twice the keys and values of a set with 1.5 times the coins of the tip |
 | The start snapshots of the eight ranges and two segment snapshots | At most about 231 GB, if no set has more than 1.5 times the coins of the tip |
+
+The node's `bytes_serialized` of 11.5 GB is the sum of the keys and values of its database at the tip.
+It does not count the other files of LevelDB or the space that a compaction needs, and no measurement here covers them.
+So the table allows twice that size.
 
 A record of a snapshot has 51 bytes and the script.
 The coins at height 145,000 have 25.0 bytes of script on average, which gives 76 bytes for each record.
 With the same average, a snapshot of the set at the tip has about 15.4 GB.
 The coins at heights between 145,000 and the tip are not measured, and the pass reports them.
 
-The sum is at most about 250 GB, so the pass fits the 909 GB available.
+Under these assumptions the sum is at most about 270 GB, so the pass fits the 909 GB available.
+The assumptions are the number of coins of each set, the average script length and the overhead of the database.
 With 122 GB it fits only if the pass deletes each start snapshot after the oracle runs its range.
 
 ### Block subsidy comparison evidence

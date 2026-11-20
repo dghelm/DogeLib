@@ -48,11 +48,14 @@ takes one height from each, chosen by a generator seeded with S (default 2026112
 `--estimate` reads one fixture of such a sample. For each stratum it multiplies the counts of
 its sampled blocks by the number of heights of the stratum over the number of sampled blocks.
 It prints the sums: an estimate of the bytes, transactions, inputs and outputs of the chain
-from height 0 to HEIGHT, and the estimate for each band of 500,000 heights. `standard_error` is
-the estimate of collapsed strata: it pairs the strata in height order, and takes the square root
-of the sum of the squared differences of the two scaled values of each pair. A last stratum
-without a partner adds nothing. The estimate assumes that the two strata of a pair have the same
-mean, so it can be larger or smaller than the true error.
+from height 0 to HEIGHT, and the estimate for each band of 500,000 heights. N must divide
+500,000, so that no stratum crosses a band.
+
+`standard_error` is the estimate of collapsed strata. It pairs the full strata of N heights in
+height order. Each pair adds the squared difference of its two scaled values, times the share
+of the pair's heights that the sample left out. The result is the square root of the sum. A partial last stratum, and a full stratum without a partner, add nothing. The estimate
+assumes that the two strata of a pair have the same mean, so it can be larger or smaller than
+the true error.
 """
 
 import argparse
@@ -224,28 +227,34 @@ def estimate(fixture: str, last: int, stride: int) -> dict:
             row["outputs"] += len(scripts)
             if height != 0:
                 row["outputs_entering_set"] += sum(not unspendable(script) for script in scripts)
+    if BAND % stride:
+        raise FetchError(f"the stride {stride} does not divide the band of {BAND} heights")
     expected = last // stride + 1
     if len(strata) != expected:
         raise FetchError(f"the fixture samples {len(strata)} of the {expected} strata")
     total = dict.fromkeys(keys, 0.0)
     bands: dict = {}
-    scaled: dict = {}
+    full: list = []
     for index, row in sorted(strata.items()):
         size = min((index + 1) * stride, last + 1) - index * stride
         start = index * stride
         band = bands.setdefault(start // BAND, dict.fromkeys(keys, 0.0))
         for key in keys:
             value = row[key] * size / row["sampled"]
-            scaled.setdefault(key, []).append(row[key] * stride / row["sampled"])
             total[key] += value
             band[key] += value
+        if size == stride:
+            full.append(({key: row[key] * size / row["sampled"] for key in keys}, row["sampled"]))
+    variance = dict.fromkeys(keys, 0.0)
+    for (a, sampled_a), (b, sampled_b) in zip(full[0::2], full[1::2]):
+        unsampled = 1 - (sampled_a + sampled_b) / (2 * stride)
+        for key in keys:
+            variance[key] += unsampled * (a[key] - b[key]) ** 2
     rounded = lambda row: {key: round(value) for key, value in row.items()}
     return {
         "first": 0, "last": last, "stride": stride, "sampled_blocks": sum(row["sampled"] for row in strata.values()),
         "estimate": rounded(total),
-        "standard_error": {key: round(sum((values[i] - values[i + 1]) ** 2
-                                          for i in range(0, len(values) - 1, 2)) ** 0.5)
-                           for key, values in scaled.items()},
+        "standard_error": {key: round(value ** 0.5) for key, value in variance.items()},
         "bands": [{"first": index * BAND, "last": min((index + 1) * BAND - 1, last), **rounded(band)}
                   for index, band in sorted(bands.items())],
     }

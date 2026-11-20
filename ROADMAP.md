@@ -146,7 +146,7 @@ Its section 11 gives the stages and their exit conditions:
 
 | Stage | Deliverable | Status |
 | --- | --- | --- |
-| 0 | Measurements: the size of the chain, the coins at the tip, and whether the Core pass fits the machine | Done. The tip has 202,470,869 coins, and the chain has about 179.5 GB of blocks and 0.76 billion inputs. The pass fits the disk, and the harness carries the set in `CCoinsViewDB` ([measurements](docs/oracle.md#measurements-for-the-core-pass)) |
+| 0 | Measurements: the size of the chain, the coins at the tip, and whether the Core pass fits the machine | Done. The tip has 202,470,869 coins, and the chain has about 179.5 GB of blocks and 0.76 billion inputs. The pass fits the disk. The stage selects `CCoinsViewDB` in the place of the harness's map for the pass ([measurements](docs/oracle.md#measurements-for-the-core-pass)) |
 | 1 | The snapshot format `dogelib-coins/1`, `coins_file` in both programs, the theorem target `validateBlock_restrict`, and the self-test range below height 145,000 | Not started |
 | 2 | The Core pass to height 5,050,000, with the version-bits walk in the harness, and the ranges A, B, C, D, F and H | Not started |
 | 3 | The recent range from the snapshot at 6,455,301, and its run in CI with restricted coins. It closes stage 0010b | Not started |

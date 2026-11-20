@@ -171,11 +171,26 @@ class Sample(unittest.TestCase):
             self.assertEqual(result["estimate"], dict(
                 bytes=2 * len(one) + 2 * len(three) + len(three),
                 transactions=2 + 6 + 3, inputs=0 + 6 + 3, outputs=4 + 12 + 6, outputs_entering_set=2 + 10 + 5))
-            # One pair, strata 0 and 1; stratum 2 has no partner. Scaled by the stride 2.
-            self.assertEqual(result["standard_error"]["transactions"], 4)
+            # One pair, strata 0 and 1, scaled to 2 and 6 transactions. The sample left out 2 of
+            # their 4 heights. The partial stratum 2 adds nothing: sqrt(0.5 * 4 ** 2) = 2.83.
+            self.assertEqual(result["standard_error"]["transactions"], 3)
             self.assertEqual([band["transactions"] for band in result["bands"]], [11])
             with self.assertRaisesRegex(fb.FetchError, "2 of the 3 strata"):
                 cb.estimate(str(write_fixture(pathlib.Path(tmp) / "t", [(1, one), (2, three)])), last=4, stride=2)
+
+    def test_census_and_stride(self):
+        _, txs = chain()
+        one = block([txs["cb1"]])
+        three = block([txs["cb1"], txs["a"], txs["b"]])
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = write_fixture(pathlib.Path(tmp) / "s", [(0, one), (1, three)])
+            # Every height is sampled, so the estimate is exact and has no error.
+            result = cb.estimate(str(fixture), last=1, stride=1)
+            self.assertEqual(result["estimate"]["transactions"], 4)
+            self.assertEqual(result["standard_error"]["transactions"], 0)
+            # A stride of 3 does not divide 500,000, so a stratum would cross a band.
+            with self.assertRaisesRegex(fb.FetchError, "does not divide"):
+                cb.estimate(str(fixture), last=1, stride=3)
 
     def test_command_line(self):
         out = io.StringIO()

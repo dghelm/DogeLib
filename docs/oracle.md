@@ -1895,7 +1895,7 @@ The script also runs 29 changed copies of the snapshot, each with the first 10 b
 
 | Change | Cases | Required result |
 | --- | ---: | --- |
-| Another amount, script, height or coinbase byte in one record. A removed record and an added record | 6 | Both programs report a start digest that is not the manifest's. It is the digest that the script computes from the changed file |
+| Another amount, script, height or coinbase byte in one record. A removed record and an added record | 6 | Both programs report a start digest that is not the manifest's. It is the digest that the script computes from the changed file. The script also accepts the error `not_linked` from both programs, after a block that the changed coin makes both reject. In the two recorded runs, all six gave a changed start digest |
 | Two records in the wrong order, and one record twice | 2 | `coins_file_order` |
 | A file that ends inside a record, and a byte after the last record | 4 | `coins_file_truncated` |
 | Each other fault of the [checks](#coin-set-snapshots): the tag, the entry, the amount with the values `MAX_MONEY` + 1, -1 and another negative number, the index, the script, the height, the coinbase byte and the length of the script | 15 | The error of the fault, with the position of the record |

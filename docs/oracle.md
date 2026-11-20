@@ -1626,6 +1626,116 @@ A node supplied the blocks above height 10,000.
 Each has a pinned hash, and the [fixtures](../tests/block/mainnet-blocks/README.md) state what a pinned hash commits to.
 Blocks above height 145,000 are not replayed.
 
+#### Measurements for the Core pass
+
+Stage 0 of [design record 0011](design/0011-mainnet-ranges.md) measures the chain, the coin set at the tip, and the memory of the harness.
+The stage decides whether the Core pass fits the development machine, and whether the harness carries the set in its map or in Core's `CCoinsViewDB`.
+The measurements were made on 2026-11-20.
+
+**The node.**
+The node is `/Shibetoshi:1.14.9/`, and the measurements read it over read-only RPC.
+At height 6,465,793, with the block hash `9ebb986b0b16a65680c5f3447baca7154e2999680c76c97f24c4441897bc7385`, the node reported these values:
+
+| RPC value | Value |
+| --- | ---: |
+| `getblockchaininfo` `size_on_disk`: the block files and the undo files (`CalculateCurrentUsage`, `validation.cpp`, lines 3440 to 3449) | 204,053,139,409 bytes |
+| `gettxoutsetinfo` `transactions`: the transaction IDs with an unspent output | 181,209,861 |
+| `gettxoutsetinfo` `txouts`: the coins | 202,470,869 |
+| `gettxoutsetinfo` `bytes_serialized`: 32 bytes and the stored value of each transaction ID (`rpc/blockchain.cpp`, lines 874 to 905) | 11,466,045,328 |
+| `gettxoutsetinfo` `hash_serialized` | `a053d324494c91478b7e8525f52b062b56e976c61ef856509d59d33360048680` |
+| `gettxoutsetinfo` `total_amount` | 156,830,432,860.16806 DOGE |
+
+`gettxoutsetinfo` ran once and took 198 seconds.
+The block files alone have no RPC value, so the sample below estimates them.
+
+**The chain.**
+`scripts/count_blocks.py --sample-heights --last 6465793` splits the heights from 0 to 6,465,793 into strata of 1,000 heights, and draws one height from each with the seed 20261120.
+`scripts/fetch_blocks.py --heights` fetched the 6,466 sampled blocks from the node and checked them.
+The fixture has 179,503,696 bytes of blocks, and its `blocks.bin` has the SHA-256 value `d3e682e3d48541cf71e71d7d869f4e72d1b964eceb2fc14f1eeb26d1f3fdcbb2`.
+Of the blocks, 147 are `pinned` and 6,319 are `linked`.
+The fixture is not committed.
+
+`scripts/count_blocks.py --estimate --last 6465793` scales each stratum to the number of its heights: 1,000, or 794 for the last.
+The standard error comes from collapsed strata, so it is itself an estimate.
+
+| Quantity, heights 0 to 6,465,793 | Estimate | Standard error |
+| --- | ---: | ---: |
+| Bytes of the blocks | 179.5 GB | 6.4 GB |
+| Transactions | 400.2 million | 18.0 million |
+| Inputs | 763.8 million | 27.6 million |
+| Outputs that enter the coin set | 936.4 million | 42.3 million |
+
+The heights from 4,500,000 to 5,499,999 hold about 103 GB of the bytes and 271 million of the transactions.
+There, 100,000 blocks have up to about 13 GB.
+
+Two checks support the estimate.
+The same sampled blocks give 217.3 million transactions up to height 5,050,000, and Core's `chainTxData` gives 226,128,837 (`chainparams.cpp`, lines 207 to 215).
+The estimate of 179.5 GB is below the 204.1 GB of `size_on_disk`, which also counts the undo files.
+
+Section 2 of the design record estimated 0.47 to 0.56 billion inputs.
+The sample gives 0.76 billion, about 1.4 to 1.6 times as many.
+Core took 89 µs for each input in the recorded run.
+At that rate the pass needs about 19 hours on one core, without the cost of `CCoinsViewDB`.
+At the 4.1 ms of the oracle, a replay of every block would need about 36 days on one core.
+Design record 0011 does not propose that replay.
+
+**The count script.**
+`scripts/count_blocks.py` without a mode counts the transactions, inputs and outputs of a fixture.
+On the recent range it gives every value of the second column of section 2 of the design record.
+On the fixtures of heights 0 to 145,000, with `--coin-set`, it gives the 15,048,625 inputs and the 20,143,296 created coins of the recorded replay.
+The set after height 145,000 has the 5,094,671 coins of that replay, under 2,675,914 transaction IDs.
+
+**The memory of the harness.**
+The harness carries the set as a `std::map` from the transaction ID to Core's `CCoins` (`harness/core/core_block_validate.inc`).
+Two runs measured it with `/usr/bin/time -v`, each with one `block.validate` request from the empty set, as in the replay above.
+The harness was built from commit `18310a8`, whose harness sources and build script equal those of `main` at `ae66db4`, with Core at `e0a1c157`.
+
+| Run | Coins after the last block | Transaction IDs | Peak resident memory | Memory per coin | Memory per ID | Time |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Heights 0 to 72,500 | 4,222,230 | 2,857,327 | 1,004.8 MB | 238 bytes | 352 bytes | 448 seconds |
+| Heights 0 to 145,000 | 5,094,671 | 2,675,914 | 1,545.4 MB | 303 bytes | 578 bytes | 1,166 seconds |
+
+The second run reports the set digest `b28411dc46135fd0f85c954a664866d4f610803f7d667c9d2032ddfd6c58716d` of the recorded replay.
+The peak includes the response, which holds one record for each block.
+It is 28 MB and 57 MB of JSON in the two runs.
+
+Suppose that the lower ratios of the first run hold at the tip.
+Then the map needs about 48 GB for 202.5 million coins, or about 64 GB for 181.2 million transaction IDs.
+No run measured a set of that size.
+The machine has 125 GiB of memory, and `free` reported 46 GiB available, with other work running.
+
+**The decision: `CCoinsViewDB`.**
+The map does not fit reliably at the tip.
+So stage 0 selects Core's `CCoinsViewDB` on a scratch directory for the Core pass, with a `CCoinsViewCache` of bounded size over it.
+The harness still uses the map, and a later stage of the design record makes the change.
+
+The harness will then use Core's own database of coins, as a node does.
+Its memory will be the cache, and the records of one segment.
+
+**The disk.**
+`df` reported 909 GB available on 2026-11-20, after this stage's measurements.
+Design record 0011 recorded 122 GB earlier that day.
+The pass needs this space at one time:
+
+| Item | Size |
+| --- | ---: |
+| One segment of blocks, which the pass deletes when the harness accepts it | At most 4 GB. Above height 4,500,000 a fetch then holds about 30,000 blocks |
+| The `CCoinsViewDB` directory | At most about 35 GB: twice the keys and values of a set with 1.5 times the coins of the tip |
+| The start snapshots of the eight ranges and two segment snapshots | At most about 231 GB, if no set has more than 1.5 times the coins of the tip |
+
+The node's `bytes_serialized` of 11.5 GB is the sum of the keys and values of its database at the tip.
+It does not count the other files of LevelDB or the space that a compaction needs, and no measurement here covers them.
+So the table allows twice that size.
+
+A record of a snapshot has 51 bytes and the script.
+The coins at height 145,000 have 25.0 bytes of script on average, which gives 76 bytes for each record.
+With the same average, a snapshot of the set at the tip has about 15.4 GB.
+The coins at heights between 145,000 and the tip are not measured, and the pass reports them.
+
+Under these assumptions the sum is at most about 270 GB, so the pass fits the 909 GB available.
+The assumptions are the number of coins of each set, the average script length and the overhead of the database.
+With 122 GB it fits only if the pass deletes each start snapshot after the oracle runs its range.
+
 ### Block subsidy comparison evidence
 
 The harness calls Core's own `GetDogecoinBlockSubsidy` (D104), so the comparison tests Core's code and the Boost release of the harness build.

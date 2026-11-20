@@ -1582,7 +1582,7 @@ The comparator runs the request in a second oracle process, at the same time as 
 The default timeout of that mode is 3,600 seconds.
 
 This closes the first part of exit condition 1 of stage 0010b: agreement on the genesis-to-10,000 range, digests included.
-The recent range needs supplied coins.
+The recent range needs supplied coins, which design record 0011 takes from a coin-set snapshot.
 The range to height 145,000 is a gate outside CI, and the next section records its one run.
 Neither is in this comparison.
 

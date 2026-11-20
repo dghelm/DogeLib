@@ -1100,7 +1100,7 @@ The definitions differ from the C++ in these places:
 - `CheckBlock` returns true at once when the memory-only member `fChecked` is set. `checkBlock` has no such state. It is the check of a block with `fChecked` false. A block that Core reads into a new `CBlock` has that state. The reader does not clear the member, so a read into an object with `fChecked` set is outside the definition.
 - `checkOutputs` adds the output amounts in the integers. Core adds in `int64_t`, and the sum there is at most `2 * MAX_MONEY`, below `2^63`. That bound is an argument in the module documentation, not a theorem.
 - The counts of signature operations are natural numbers. Core counts in `unsigned int`. `checkBlock` reduces the product with `WITNESS_SCALE_FACTOR` modulo `2^32` before the comparison, so the two agree for every count.
-- `hasDuplicate` compares outpoints pair by pair, where Core inserts them into a `std::set`.
+- `hasDuplicate` inserts a numeric key of each outpoint into a `Std.TreeSet`, where Core inserts the outpoints into a `std::set`. The order of the keys is not Core's order of outpoints, and the test does not depend on the order. `hasDuplicate_eq_hasDuplicateScan` proves it equal to `hasDuplicateScan`, which compares every pair, and `hasDuplicate_eq_not_nodup` proves that it is true exactly when two inputs have the same outpoint.
 - The instruction reader of the sigop count covers a script of fewer than `2^31` bytes, the domain of `readOp`. The count reads with `nextOp`, and `nextOp_view` proves that `nextOp` reads the instructions that `readOp` reads.
 - `checkBlock` takes the network of its header check as a parameter. The oracle and the comparison use mainnet, and testnet and regtest have no comparison evidence here.
 
@@ -1146,6 +1146,8 @@ It also states what the comparison shows for a block with no pinned hash.
 
 By `#print axioms`, `MerkleDuplication.root_eq_and_mutated` and `Script.getSigOpCount_le` depend on `propext` and `Quot.sound`.
 `Script.getSigOpCount_eq_scanOps`, `nextOp_view` and `foldOps_eq` depend on `propext` and `Quot.sound`.
+`OutPoint.key_inj` depends on `propext` and `Quot.sound`, and `hasDuplicateScan_eq_not_nodup` on `propext` only.
+`hasDuplicateFrom_iff`, `hasDuplicate_eq_not_nodup` and `hasDuplicate_eq_hasDuplicateScan` depend on `propext`, `Classical.choice` and `Quot.sound`.
 `checkBlock_rejects_merkleDuplication`, `Block.read_encode_allowWitness` and `Block.read_encode_base` depend on `propext`, `Classical.choice` and `Quot.sound`.
 
 ### Version bits

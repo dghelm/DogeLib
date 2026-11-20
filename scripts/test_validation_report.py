@@ -238,6 +238,7 @@ class Reports(unittest.TestCase):
             'header-sequence-regeneration': 'python3 -I scripts/generate_header_sequences.py --check',
             'validation-report-tests': 'python3 -I scripts/test_validation_report.py',
             'block-fetch-tool-tests': 'python3 -I scripts/test_fetch_blocks.py',
+            'block-count-tool-tests': 'python3 -I scripts/test_count_blocks.py',
             'rule-change-block-fixture': 'python3 -I scripts/fetch_blocks.py --check tests/block/mainnet-blocks/rule-changes',
             'release-block-fetch-tests': 'python3 -I scripts/test_fetch_release_blocks.py',
             'mainnet-block-ranges': 'python3 -I scripts/fetch_release_blocks.py && '

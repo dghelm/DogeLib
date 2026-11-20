@@ -111,82 +111,191 @@ def blockRecord (height : Nat) (hash : Hash256) (rejection : Option (String × N
 /-- The interval of the whole-set digest: after each accepted block whose height is a multiple of it (design record 0010, section 5). -/
 def setDigestInterval : Nat := 1000
 
+/-- The fixed arguments of a `block.validate` request: the read mode, the two flags and the adjusted time. -/
+structure ValidateOptions where
+  /-- The read mode of each block. -/
+  mode : TxReadMode
+  /-- Core's `fCheckPOW`. -/
+  checkPow : Bool
+  /-- Core's `fCheckMerkleRoot`. -/
+  checkMerkle : Bool
+  /-- The adjusted time of the header check. -/
+  time : Int64
+
+/-- The state that `block.validate` carries from one block of a request to the next. -/
+structure ValidateRun where
+  /-- The chain view from the last accepted block, newest first. -/
+  view : List Work.BlockIndex
+  /-- The hash of the ancestor at `BIP34Height`, when the view reaches that height. -/
+  ancestor : Option Hash256
+  /-- The coin set after the last accepted block. -/
+  coins : CoinSet
+  /-- The hash that the next block must name as its predecessor, once a block has fixed it. -/
+  tip : Option Hash256
+  /-- The records of the blocks so far. -/
+  records : Array Json
+  /-- The position of the block that left the `int64_t` range, which ends the range. -/
+  outOfDomain : Option Nat
+
+/-- The options and the first state of a `block.validate` request, from every argument except the blocks. -/
+def validateStart (fields : Args) : Except Failure (ValidateOptions × ValidateRun) := do
+  let mode ← argMode fields
+  let checkPow ← Work.Exports.argBool fields "check_pow"
+  let checkMerkle ← Work.Exports.argBool fields "check_merkle_root"
+  let time := Int64.ofInt (← argInt fields "adjusted_time" (-9223372036854775808) maxAdjustedTime)
+  let view ← Work.Exports.argView fields
+  let ancestor ← match ← arg fields "bip34_ancestor_hex" with
+    | .null => pure none
+    | _ => some <$> argHash fields "bip34_ancestor_hex"
+  let aboveBip34 := match view with
+    | [] => false
+    | prev :: _ => bip34Height ≤ prev.nHeight
+  unless ancestor.isSome == aboveBip34 do
+    throw (.request "bip34_ancestor_hex must be a hash exactly when the predecessor is at or above height 1034383")
+  let coins ← argCoins fields
+  return (⟨mode, checkPow, checkMerkle, time⟩, ⟨view, ancestor, coins, none, #[], none⟩)
+
+/--
+One block of a `block.validate` request: the bytes `bs` at the position `run.records.size`.
+`fileHeight` is the height that a record of `blocks_file` gives, which must be the candidate height.
+The result is the next state, in which `outOfDomain` is set when the block ends the range.
+-/
+def validateStep (options : ValidateOptions) (run : ValidateRun) (bs : List UInt8) (fileHeight : Option Nat := none) :
+    Except Failure ValidateRun := do
+  let index := run.records.size
+  let b ← match Block.decodeComplete options.mode bs with
+    | .error (.read e) => throw (.spec ((Transaction.Exports.witnessReadErrorJson e).setObjVal! "index" (natJson index)))
+    | .error (.trailingBytes n) =>
+      throw (.spec (Json.mkObj [("kind", "trailing_bytes"), ("count", natJson n), ("index", natJson index)]))
+    | .ok b => pure b
+  let hash := b.header.pure.getHash
+  let genesis := some hash == genesisHash? .mainnet
+  let mut tip := run.tip
+  -- A block extends the last accepted block. The first block names the supplied predecessor.
+  if genesis then
+    unless run.view.isEmpty do throw (validateFailure "genesis_after_start" [("index", natJson index)])
+  else
+    if run.view.isEmpty then throw (validateFailure "no_predecessor" [("index", natJson index)])
+    match tip with
+    | none =>
+      -- At height 1034383 the predecessor is its own ancestor at that height.
+      if run.view.head?.map (·.nHeight) == some bip34Height && run.ancestor != some b.header.pure.hashPrevBlock then
+        throw (.request "bip34_ancestor_hex must be the predecessor's hash at height 1034383")
+      tip := some b.header.pure.hashPrevBlock
+    | some t =>
+      unless t == b.header.pure.hashPrevBlock do
+        throw (validateFailure "not_linked" [("index", natJson index)])
+  let (height, csvActive, segwitActive, prevMtp) ← bodyStates run.view
+  if let some h := fileHeight then
+    unless h == height do throw (validateFailure "file_height" [("index", natJson index)])
+  let ctx : ValidateContext := ⟨run.view, options.time, none, csvActive, segwitActive, prevMtp, run.ancestor⟩
+  match validateBlock Script.coreVerifier options.checkPow options.checkMerkle ctx run.coins b with
+  | .ok result =>
+    let set := if height % setDigestInterval == 0 then some (setDigest result.coins).1 else none
+    return { run with
+      coins := result.coins
+      view := ⟨height, b.header.pure.nTime, b.header.pure.nBits⟩ :: run.view
+      tip := some hash
+      ancestor := if height == bip34Height then some hash else run.ancestor
+      records := run.records.push (blockRecord height hash none (some result.changes) set .null) }
+  | .error e =>
+    match e.rejectReason with
+    | some reason =>
+      return { run with
+        tip := tip
+        records := run.records.push (blockRecord height hash (some (reason, e.dosScore, e.rejectCode)) none none
+          (.str s!"{e.step}: {reprStr e}")) }
+    | none =>
+      if e == .connect .outOfDomain then return { run with tip := tip, outOfDomain := some index }
+      else throw (validateFailure "outside_model" [("index", natJson index), ("detail", .str (reprStr e))])
+
+/-- The `ok` object of a `block.validate` request after its last block. -/
+def validateResult (run : ValidateRun) : Json :=
+  let (digest, count) := setDigest run.coins
+  Json.mkObj [("blocks", .arr run.records), ("out_of_domain_at", (run.outOfDomain.map natJson).getD .null),
+    ("set_digest_hex", .str (hexOf digest.toList)), ("set_coins", natJson count)]
+
+/-- The arguments of `block.validate` that give the state before the first block. -/
+def validateStateArgs : List String :=
+  ["mode", "check_pow", "check_merkle_root", "adjusted_time", "chain", "bip34_ancestor_hex", "coins"]
+
 /--
 `block.validate`: `validateBlock` with `coreVerifier` on each block of `blocks_hex`, in order.
 The module documentation and `docs/oracle.md` give the state, the digests and the errors.
 Checkpoints are disabled.
 A block whose sums leave the `int64_t` range ends the range: the response holds the blocks before it, and `out_of_domain_at` is its position.
+A request with `blocks_file` in the place of `blocks_hex` reads a file, so `blockValidateFile` answers it.
 -/
 def blockValidate : Operation where
   name := "block.validate"
-  args := ["mode", "check_pow", "check_merkle_root", "adjusted_time", "chain", "bip34_ancestor_hex", "coins",
-    "blocks_hex"]
+  args := validateStateArgs ++ ["blocks_hex"]
   run fields := do
-    let mode ← argMode fields
-    let checkPow ← Work.Exports.argBool fields "check_pow"
-    let checkMerkle ← Work.Exports.argBool fields "check_merkle_root"
-    let time := Int64.ofInt (← argInt fields "adjusted_time" (-9223372036854775808) maxAdjustedTime)
-    let mut view ← Work.Exports.argView fields
-    let mut ancestor ← match ← arg fields "bip34_ancestor_hex" with
-      | .null => pure none
-      | _ => some <$> argHash fields "bip34_ancestor_hex"
-    let aboveBip34 := match view with
-      | [] => false
-      | prev :: _ => bip34Height ≤ prev.nHeight
-    unless ancestor.isSome == aboveBip34 do
-      throw (.request "bip34_ancestor_hex must be a hash exactly when the predecessor is at or above height 1034383")
-    let mut coins ← argCoins fields
+    let (options, start) ← validateStart fields
     let .arr raws ← arg fields "blocks_hex" | throw (.request "blocks_hex must be an array")
-    let mut tip : Option Hash256 := none
-    let mut records := #[]
-    let mut outOfDomain := Json.null
+    let mut run := start
     for raw in raws do
-      let index := records.size
       let bs ← argHex (Std.TreeMap.Raw.ofList [("blocks_hex", raw)]) "blocks_hex"
-      let b ← match Block.decodeComplete mode bs with
-        | .error (.read e) => throw (.spec ((Transaction.Exports.witnessReadErrorJson e).setObjVal! "index" (natJson index)))
-        | .error (.trailingBytes n) =>
-          throw (.spec (Json.mkObj [("kind", "trailing_bytes"), ("count", natJson n), ("index", natJson index)]))
-        | .ok b => pure b
-      let hash := b.header.pure.getHash
-      let genesis := some hash == genesisHash? .mainnet
-      -- A block extends the last accepted block. The first block names the supplied predecessor.
-      if genesis then
-        unless view.isEmpty do throw (validateFailure "genesis_after_start" [("index", natJson index)])
-      else
-        if view.isEmpty then throw (validateFailure "no_predecessor" [("index", natJson index)])
-        match tip with
-        | none =>
-          -- At height 1034383 the predecessor is its own ancestor at that height.
-          if view.head?.map (·.nHeight) == some bip34Height && ancestor != some b.header.pure.hashPrevBlock then
-            throw (.request "bip34_ancestor_hex must be the predecessor's hash at height 1034383")
-          tip := some b.header.pure.hashPrevBlock
-        | some t =>
-          unless t == b.header.pure.hashPrevBlock do
-            throw (validateFailure "not_linked" [("index", natJson index)])
-      let (height, csvActive, segwitActive, prevMtp) ← bodyStates view
-      let ctx : ValidateContext := ⟨view, time, none, csvActive, segwitActive, prevMtp, ancestor⟩
-      match validateBlock Script.coreVerifier checkPow checkMerkle ctx coins b with
-      | .ok result =>
-        coins := result.coins
-        view := ⟨height, b.header.pure.nTime, b.header.pure.nBits⟩ :: view
-        tip := some hash
-        if height == bip34Height then ancestor := some hash
-        let set := if height % setDigestInterval == 0 then some (setDigest coins).1 else none
-        records := records.push (blockRecord height hash none (some result.changes) set .null)
-      | .error e =>
-        match e.rejectReason with
-        | some reason =>
-          records := records.push (blockRecord height hash (some (reason, e.dosScore, e.rejectCode)) none none
-            (.str s!"{e.step}: {reprStr e}"))
-        | none =>
-          if e == .connect .outOfDomain then
-            outOfDomain := natJson index
-            break
-          else
-            throw (validateFailure "outside_model" [("index", natJson index), ("detail", .str (reprStr e))])
-    let (digest, count) := setDigest coins
-    return Json.mkObj [("blocks", .arr records), ("out_of_domain_at", outOfDomain),
-      ("set_digest_hex", .str (hexOf digest.toList)), ("set_coins", natJson count)]
+      run ← validateStep options run bs
+      if run.outOfDomain.isSome then break
+    return validateResult run
+
+/-- The greatest length of a block record in a `blocks.bin` file: Core's `MAX_SIZE`. -/
+def maxFileBlockSize : Nat := 0x02000000
+
+/-- Up to `count` bytes of a file. The result is shorter only at the end of the file. -/
+def readUpTo (handle : IO.FS.Handle) (count : Nat) : IO ByteArray := do
+  let mut bytes := ByteArray.empty
+  while bytes.size < count do
+    let chunk ← handle.read (count - bytes.size).toUSize
+    if chunk.isEmpty then break
+    bytes := bytes ++ chunk
+  return bytes
+
+/-- A little-endian number of four bytes at `offset`. -/
+def fileU32 (bytes : ByteArray) (offset : Nat) : Nat :=
+  (List.range 4).foldr (fun i acc => acc * 256 + (bytes.get! (offset + i)).toNat) 0
+
+/--
+`block.validate` on the blocks of the file `blocks_file`, in the place of `blocks_hex`.
+The file has the format of `blocks.bin` of `scripts/fetch_blocks.py`: for each block the height and the length as 4-byte little-endian integers, then the block.
+The function reads one block at a time, so the file can be larger than memory.
+Each record's height must be the candidate height.
+The other arguments, the state and the response are those of `blockValidate`.
+After each accepted block whose height is a multiple of `setDigestInterval`, it writes the height to standard error.
+-/
+def blockValidateFile (fields : Args) : IO (Except Failure Json) := do
+  for (key, _) in fields do
+    unless key == "id" || key == "op" || key == "blocks_file" || validateStateArgs.contains key do
+      return .error (.request s!"unknown argument {key} for operation block.validate with blocks_file")
+  let .ok (.str path) := arg fields "blocks_file" | return .error (.request "blocks_file must be a string")
+  let (options, start) ← match validateStart fields with
+    | .ok r => pure r
+    | .error f => return .error f
+  let handle ← try IO.FS.Handle.mk path .read
+    catch _ => return .error (validateFailure "file_unreadable")
+  let mut run := start
+  repeat
+    let index := run.records.size
+    let head ← try readUpTo handle 8
+      catch _ => return .error (validateFailure "file_unreadable")
+    if head.isEmpty then break
+    if head.size != 8 then return .error (validateFailure "file_truncated" [("index", natJson index)])
+    let length := fileU32 head 4
+    if length > maxFileBlockSize then return .error (validateFailure "file_record_too_long" [("index", natJson index)])
+    let raw ← try readUpTo handle length
+      catch _ => return .error (validateFailure "file_unreadable")
+    if raw.size != length then return .error (validateFailure "file_truncated" [("index", natJson index)])
+    -- The step is the last use of `run`, so that it can change the records and the coin set in place.
+    let before := run.view.head?.map (·.nHeight)
+    match validateStep options run raw.toList (some (fileU32 head 0)) with
+    | .error f => return .error f
+    | .ok next =>
+      -- An accepted block puts its own height, which is new, at the head of the view.
+      if let some entry := next.view.head? then
+        if some entry.nHeight != before && entry.nHeight % setDigestInterval == 0 then
+          IO.eprintln s!"block.validate: accepted height {entry.nHeight}"
+      run := next
+    if run.outOfDomain.isSome then break
+  return .ok (validateResult run)
 
 end DogeLib.Block.Exports

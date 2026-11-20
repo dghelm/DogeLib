@@ -11,6 +11,7 @@ It reads requests from standard input, one per line, and writes each response as
 It flushes each response before it reads the next line, so a caller can keep the process open and send one request at a time.
 It stops at the end of input. A final line without a newline is still answered.
 `dogelib-oracle --version` prints the `ok` object of `oracle.version` and exits.
+A `block.validate` request with `blocks_file` reads that file, and writes the height of each thousandth accepted block to standard error.
 -/
 
 public section
@@ -29,7 +30,7 @@ def main (argv : List String) : IO UInt32 := do
     repeat
       let line ← stdin.getLine
       if line.isEmpty then break
-      if let some response := respond line then
+      if let some response ← respondIO line then
         stdout.putStrLn response.compress
         stdout.flush
     return 0

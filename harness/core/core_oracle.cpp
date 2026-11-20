@@ -65,6 +65,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <deque>
+#include <fstream>
 #include <iostream>
 #include <limits>
 #include <map>

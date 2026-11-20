@@ -844,6 +844,74 @@ def mainnet_validate_counts() -> dict[str, int]:
 
 
 # ---------------------------------------------------------------------------
+# Requests that name a file
+
+
+def file_record(height: int, raw: bytes) -> bytes:
+    """One record of a `blocks.bin` file: the height and the length as 4-byte little-endian integers, then the block."""
+    return height.to_bytes(4, "little") + len(raw).to_bytes(4, "little") + raw
+
+
+def file_request(req: dict, path) -> dict:
+    """The request `req` with `blocks_file` in the place of `blocks_hex`."""
+    return {**{k: v for k, v in req.items() if k != "blocks_hex"}, "blocks_file": str(path)}
+
+
+def file_twins(requests: list[dict], responses: list[dict], directory) -> list[tuple[dict, dict]]:
+    """For each request with one record for each block: the same request with its blocks in a file, and the `ok` object to expect.
+
+    The heights of the records come from the response to `req`, so a rejected candidate and the
+    block after it have one height. The expected object is that response's, so the two ways to
+    supply the blocks must give one result."""
+    twins = []
+    for number, (req, response) in enumerate(zip(requests, responses)):
+        ok = response.get("ok")
+        if not isinstance(ok, dict) or ok.get("out_of_domain_at") is not None or len(ok["blocks"]) != len(req["blocks_hex"]):
+            continue
+        path = pathlib.Path(directory) / f"twin-{number}.bin"
+        path.write_bytes(b"".join(file_record(record["height"], bytes.fromhex(raw))
+                                  for record, raw in zip(ok["blocks"], req["blocks_hex"])))
+        twins.append((file_request(req, path), ok))
+    # An empty file gives no block record, and the digest of the empty set.
+    path = pathlib.Path(directory) / "twin-empty.bin"
+    path.write_bytes(b"")
+    twins.append((file_request(request([]), path),
+                  {"blocks": [], "out_of_domain_at": None, "set_digest_hex": "00" * 32, "set_coins": 0}))
+    return twins
+
+
+def file_faults(directory) -> list[tuple[dict, dict]]:
+    """Requests whose file or arguments are faulty, each with the expected error. `{"kind": "request"}` stands for any request error."""
+    directory = pathlib.Path(directory)
+    genesis = genesis_block()
+    example = request([])
+
+    def case(name: str, content: bytes | None) -> dict:
+        path = directory / f"fault-{name}.bin"
+        if content is not None:
+            path.write_bytes(content)
+        return file_request(example, path)
+
+    def failure(reason: str, index: int | None = None) -> dict:
+        return {"kind": "block_validate", "reason": reason, **({} if index is None else {"index": index})}
+
+    good = file_record(0, genesis)
+    return [
+        (case("missing", None), failure("file_unreadable")),
+        # A directory opens on Linux, and its first read fails.
+        (file_request(example, directory), failure("file_unreadable")),
+        (case("short-head", good + b"\x00" * 5), failure("file_truncated", 1)),
+        (case("short-block", good[:-1]), failure("file_truncated", 0)),
+        (case("too-long", (0).to_bytes(4, "little") + (0x02000001).to_bytes(4, "little")), failure("file_record_too_long", 0)),
+        (case("height", file_record(1, genesis)), failure("file_height", 0)),
+        (case("twice", good + file_record(1, genesis)), failure("genesis_after_start", 1)),
+        ({**case("both", good), "blocks_hex": []}, {"kind": "request"}),
+        ({**file_request(example, ""), "blocks_file": 1}, {"kind": "request"}),
+        ({k: v for k, v in case("no-mode", good).items() if k != "mode"}, {"kind": "request"}),
+    ]
+
+
+# ---------------------------------------------------------------------------
 # Comparison
 
 
@@ -856,7 +924,8 @@ def harness_request(req: dict, ours: dict) -> dict:
     if req["op"] != "block.validate" or not isinstance(ok, dict):
         return req
     end = ok.get("out_of_domain_at")
-    if type(end) is not int or not 0 <= end < len(req["blocks_hex"]):
+    # A request with `blocks_file` has no list to shorten. `compare` fails it when the oracle ends the range.
+    if "blocks_hex" not in req or type(end) is not int or not 0 <= end < len(req["blocks_hex"]):
         return req
     return {**req, "blocks_hex": req["blocks_hex"][:end]}
 
@@ -875,8 +944,10 @@ def malformed(req: dict, ok, oracle: bool) -> str | None:
     if oracle:
         if end is not None and (type(end) is not int or end != len(ok["blocks"])):
             return "has an out_of_domain_at that is not the number of its blocks"
-        if end is None and len(ok["blocks"]) != len(req["blocks_hex"]):
+        if end is None and "blocks_hex" in req and len(ok["blocks"]) != len(req["blocks_hex"]):
             return "does not have one record for each block"
+        if end is not None and "blocks_file" in req:
+            return "reports a block of a file outside the domain, and the harness cannot stop before it"
     elif end is not None:
         return "is the harness and reports a block outside the domain"
     fields = BLOCK_FIELDS | ({"diagnostic"} if oracle else set())

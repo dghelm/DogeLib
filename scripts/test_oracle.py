@@ -622,6 +622,36 @@ def check_block_validate(oracle):
             failures += 1
             print(f"FAIL block validate {i}: {fault}")
     print(f"block validate oracle: {known} known answers and {len(requests) - known} argument cases, {failures} failures")
+    return failures + check_block_validate_file(oracle, requests[:known], got[:known])
+
+
+def check_block_validate_file(oracle, requests, responses):
+    """`block.validate` with `blocks_file`: the same result as with `blocks_hex`, and the errors of a faulty file.
+
+    Each known answer with one record for each block runs again with its blocks in a file, and the
+    `ok` object must be the one that `check_block_validate` checked against its expectation."""
+    import tempfile
+    from oracle_block_validate import file_twins, file_faults
+    failures = 0
+    with tempfile.TemporaryDirectory() as directory:
+        twins = file_twins(requests, responses, directory)
+        faults = file_faults(directory)
+        if len(twins) < 30:
+            failures += 1
+            print(f"FAIL block validate file: only {len(twins)} known answers have a file twin")
+        sent = [req for req, _ in twins] + [req for req, _ in faults]
+        got = run_requests(oracle, "block validate file", [{**req, "id": i} for i, req in enumerate(sent)])
+    if got is None:
+        return failures + 1
+    for i, (response, (_, ok)) in enumerate(zip(got, twins)):
+        if response.get("ok") != ok:
+            failures += 1
+            print(f"FAIL block validate file twin {i}: the file gives {json.dumps(response)[:300]}")
+    for i, (response, (_, error)) in enumerate(zip(got[len(twins):], faults)):
+        if not matches({k: v for k, v in response.items() if k != "id"}, {"error": error}):
+            failures += 1
+            print(f"FAIL block validate file fault {i}: expected {json.dumps(error)}, got {json.dumps(response)[:300]}")
+    print(f"block validate file oracle: {len(twins)} file twins and {len(faults)} faulty requests, {failures} failures")
     return failures
 
 

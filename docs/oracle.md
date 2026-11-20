@@ -720,6 +720,8 @@ The request supplies the state before the first block, and the operation carries
   A transaction ID occurs once, and each entry has at least one output.
   A script that Core's `IsUnspendable` rejects is a request error, because such an output never enters Core's set.
 - `blocks_hex`: the blocks, each one all of its bytes.
+- `blocks_file`: in the place of `blocks_hex`, the path of a file that holds the blocks (see *Blocks from a file* below).
+  A request has exactly one of the two.
 
 A block must extend the state.
 The genesis block is valid only as the first block of an empty `chain`.
@@ -786,6 +788,25 @@ The comparator sends the harness the request without that block and the blocks a
 
 A supplied `value` above `MAX_MONEY` is the error `{"kind": "block_validate", "reason": "coin_value_out_of_range"}`.
 
+#### Blocks from a file
+
+A request with `blocks_file` names a file in the format of `blocks.bin` of `scripts/fetch_blocks.py`.
+For each block the file has the height and the length as 4-byte little-endian integers, and then the bytes of the block.
+A relative path starts at the working directory of the program.
+Both programs read one record at a time, so the file can be larger than memory.
+The state, the checks, the result and the errors are those of a request with `blocks_hex`, and `index` is the position of the record.
+
+The height of each record must be the height of its candidate.
+A rejected block changes nothing, so the record after it has the same height.
+A length above Core's `MAX_SIZE`, 33,554,432 bytes, is an error.
+An empty file gives no block record.
+
+The `dogelib-oracle` executable alone answers such a request, through `Exports.respondIO`.
+The function `Exports.respond` reads no file, and returns a request error for the argument.
+The executable writes one line to standard error after each accepted block whose height is a multiple of 1,000.
+A file request has no `blocks_hex` list to shorten.
+So the comparison fails if the oracle ends the range of a file at a block outside the arithmetic domain.
+
 #### Errors
 
 A block that does not read gives the `read` or `trailing_bytes` error of `block.check`, with the position of the block as `index`.
@@ -797,6 +818,10 @@ The other errors have the kind `block_validate`, a `reason`, and `index` when a 
 | `genesis_after_start` | The genesis block is not the first block of an empty chain |
 | `no_predecessor` | A block that is not the genesis block has an empty chain |
 | `not_linked` | A block does not extend the last accepted block |
+| `file_unreadable` | The file of `blocks_file` does not open, or a read of it fails |
+| `file_truncated` | The file ends inside the 8 bytes before a block, or inside a block |
+| `file_record_too_long` | A record of the file gives a length above 33,554,432 bytes |
+| `file_height` | A record of the file gives a height that is not the height of its candidate |
 | `outside_model` | `validateBlock` returned a result that is not Core's, and `detail` holds the Lean error. The cases are an adapter error of an earlier step, an active CSV state, an unsupported script capability, a subsidy without fuel, and a repeated transaction ID outside a coinbase |
 
 ### Block subsidy
@@ -1543,8 +1568,48 @@ The default timeout of that mode is 3,600 seconds.
 
 This closes the first part of exit condition 1 of stage 0010b: agreement on the genesis-to-10,000 range, digests included.
 The recent range needs supplied coins.
-The range to height 145,000 is a gate outside CI, which has not run, and [issue 162](https://github.com/dghelm/DogeLib/issues/162) tracks it.
+The range to height 145,000 is a gate outside CI, and the next section records its one run.
 Neither is in this comparison.
+
+#### Replay of mainnet to height 145,000
+
+`scripts/replay_blocks.py` replays mainnet from the genesis block to height 145,000, the whole random-reward era.
+It is the gate *Mainnet replay to 145,000* of [AGENTS.md](../AGENTS.md#checks), and it is not in CI.
+This section records one run, which started on 2026-11-19 and ended on 2026-11-20.
+
+The script checks the two fixtures against their manifests and requires a pinned hash for every block.
+It writes all 145,001 blocks to one file of 3,024,443,782 bytes, with the SHA-256 value `5295801124f275bd7b6aad9f60bc734631e8157d99a07d8a9c66ee8f2bd034e3`.
+Each program gets one request that names the file through `blocks_file`, with the empty chain, the empty coin set and both flags true.
+So each block passes its real proof of work, and each program builds the whole coin set.
+
+| Input | Value |
+| --- | --- |
+| Oracle | Built from commit `873f0da` of pull request 170, which is `main` at `f7aeb10` with the file argument |
+| Core harness | Built from the harness sources of the same commit, with Core at `e0a1c157` |
+| Heights 0 to 10,000 | The release asset of the [fixtures](../tests/block/mainnet-blocks/README.md), 10,001 blocks |
+| Heights 10,001 to 145,000 | `scripts/fetch_blocks.py --range 10001 145000` from a node `/Shibetoshi:1.14.9/` on 2026-11-18: 135,000 blocks, 2,979,346,409 bytes, SHA-256 `b3354074540c702ffa8f958a1276c4fb8c911a9be461d6f89e8980ef2c0c7f14`. The file is not committed and is not a release asset |
+
+Later commits of the pull request change the answer to a failed read of the file alone, and no read failed in this run.
+
+Both programs accept every block, and all 145,001 block records agree, each with the digest of its coin changes.
+So do the 147 digests of the whole set, at each multiple of 1,000 and at the end.
+The blocks spend 15,048,625 coins and create 20,143,296.
+The set after height 145,000 has 5,094,671 coins, and its digest is `b28411dc46135fd0f85c954a664866d4f610803f7d667c9d2032ddfd6c58716d`.
+The last block has the hash `cc47cae70d7c5c92828d3214a266331dde59087d4a39071fa76ddfff9b7bde72`.
+No block leaves the arithmetic domain: `out_of_domain_at` is null.
+
+The oracle took 61,365 seconds, about 17 hours, on one core at low priority, on a machine that ran other work.
+Its resident memory was 7.6 GB when it passed height 112,000.
+Core took 1,340 seconds.
+
+An earlier run used an oracle from before pull request 173, which made block reads and signature hashes faster and changed no result.
+That run took 149,428 seconds for the oracle.
+Its response is byte for byte the response of the run above, so two builds of the oracle agree with Core on this range.
+
+The run is evidence for these blocks alone, and it is one run.
+A node supplied the blocks above height 10,000.
+Each has a pinned hash, and the [fixtures](../tests/block/mainnet-blocks/README.md) state what a pinned hash commits to.
+Blocks above height 145,000 are not replayed.
 
 ### Block subsidy comparison evidence
 

@@ -4,8 +4,9 @@ import Lean
 Check the import boundaries of the root package.
 
 The baseline libraries, `DogeLib`, `Proofs` and `Exports`, must not import the refinement dependencies or a proposed revision under `DogeLib.Proposals`.
-The proposal libraries, `Proposals` and `ProposalProofs`, must not import the refinement dependencies.
-Design record 0007, section 4, sets the boundary for proposals.
+The proposal libraries, `Proposals`, `ProposalProofs` and `ProposalExports`, must not import the refinement dependencies.
+`ProposalExports` is under `DogeLib.Proposals`, so a baseline library that imports it fails the first rule.
+Design record 0007, section 4, sets the boundary for proposals, and design record 0011, decision 10, adds `ProposalExports`.
 
 With module names as arguments, the check loads those modules as baseline roots instead of the default ones, and skips the proposal roots.
 `scripts/test_import_boundaries.sh` uses that form to plant a forbidden import.
@@ -20,7 +21,7 @@ def refinementPrefixes : List Name := [`Aeneas, `AeneasMeta, `Mathlib, `Refineme
 def baselineRoots : List Name := [`DogeLib, `DogeLib.Proofs, `DogeLib.Exports]
 
 /-- The roots of the proposal libraries. -/
-def proposalRoots : List Name := [`DogeLib.Proposals, `DogeLib.Proposals.Proofs]
+def proposalRoots : List Name := [`DogeLib.Proposals, `DogeLib.Proposals.Proofs, `DogeLib.Proposals.Exports]
 
 /-- The modules that `roots` import, directly or transitively, and the roots themselves. -/
 partial def closure (env : Environment) (roots : List Name) : NameSet := Id.run do
@@ -70,5 +71,5 @@ unsafe def main (args : List String) : IO UInt32 := do
   if custom then
     IO.println s!"import boundaries: {roots} import neither refinement dependencies nor DogeLib.Proposals"
   else
-    IO.println "import boundaries: the root package has no dependencies; DogeLib, Proofs and Exports import neither refinement dependencies nor DogeLib.Proposals; Proposals and ProposalProofs do not import refinement dependencies"
+    IO.println "import boundaries: the root package has no dependencies; DogeLib, Proofs and Exports import neither refinement dependencies nor DogeLib.Proposals; Proposals, ProposalProofs and ProposalExports do not import refinement dependencies"
   return 0

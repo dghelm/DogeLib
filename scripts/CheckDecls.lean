@@ -305,7 +305,8 @@ def check (env : Environment) (scope : Name) : Array Finding := Id.run do
 /-- The roots that load every production module.
 The specification libraries, the proposal libraries and the Rust refinement library belong to the production check. -/
 def defaultModules : List Name :=
-  [`DogeLib, `DogeLib.Proofs, `DogeLib.Exports, `DogeLib.Proposals, `DogeLib.Proposals.Proofs, `Refinement]
+  [`DogeLib, `DogeLib.Proofs, `DogeLib.Exports, `DogeLib.Proposals, `DogeLib.Proposals.Proofs,
+    `DogeLib.Proposals.Exports, `Refinement]
 
 /-- The production module namespaces, excluding dependency libraries. -/
 def defaultScopes : List Name := [`DogeLib, `Refinement]

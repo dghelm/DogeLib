@@ -1,6 +1,7 @@
 module
 
 public import DogeLib.Proposals.Framework.Proofs.Activation
+public import DogeLib.Proposals.Framework.Proofs.Block
 public import DogeLib.Proposals.Framework.Proofs.Compatibility
 public import DogeLib.Proposals.Framework.Proofs.Script
 

@@ -3220,8 +3220,9 @@ A strictness witness and a relaxation witness need a rejection, so a change to a
 `inactiveEq_verifyScriptWith` and `restrictsAcceptance_verifyScriptWith` derive the inactive equality and restriction of acceptance of a `VerifyScript` revision from properties of its step.
 `LegacyProjection.identity` is the projection of a revision that keeps encodings and state effects.
 
-No block-level or chain-level theorem uses a projection yet, because DogeLib has no block validity.
+No block-level or chain-level theorem uses a projection yet.
 The worked example states Script-local theorems with the identity projection.
+[The block level](#proposed-revisions-the-block-level) states the block-level theorems, which keep the coin set and the changes of an accepted block.
 
 The framework adds no axiom, hypothesis or trust assumption.
 A proposal's theorems are about DogeLib's definitions, and they inherit the gaps of the baseline definitions that they reuse.
@@ -3232,6 +3233,68 @@ By `#print axioms` with Lean `v4.35.0`:
 | None | `VerifyOutcome.verdict_ofBaseline` |
 | `propext` | `Activation.none_inactive`, `Activation.isActive_lt`, `Activation.isActive_of_le`, `baselineVerdict_eq_accepted`, `VerifyOutcome.verdict_eq_accepted` |
 | `propext`, `Quot.sound` | `evalLoopWith_baseline`, `evalScriptWith_baseline`, `verifyScriptWith_baseline`, `evalLoopWith_restricts`, `evalScriptWith_restricts`, `verifyScriptWith_restricts`, `verifyScript_of_restricts`, `evalLoopWith_congr`, `evalScriptWith_congr`, `verifyScriptWith_congr`, `Activation.isActive_iff`, `Activation.isActive_mono`, `inactiveEq_verifyScriptWith`, `restrictsAcceptance_verifyScriptWith` |
+
+### Proposed revisions: the block level
+
+`Framework.Block` holds the block level of a proposed revision of Script ([design record 0011](docs/design/0011-mainnet-ranges.md), section 10.1).
+`connectBlockWith` and `validateBlockWith` are copies of `connectBlock` and `validateBlock`.
+Each takes the spend check of a `BlockRevision` in place of `verifyLegacySpend`, and a value of `active`.
+`connectBlockWith` takes `active` as an argument. `validateBlockWith` takes an `Activation` and reads it at the height of the block.
+The revision changes the spend check and nothing else.
+The flags of a height, the count of signature operations, the amounts, the coin set and the four checks before `ConnectBlock` are the baseline's.
+
+A result is a `BlockOutcome`: an acceptance with the coin set and the changes, a rejection, or an unsupported result.
+An embedding gives the maps of the baseline errors and of the script results into the types of the outcome.
+A baseline error that `isRejection` marks as a rejection of Core becomes a rejection, and a result outside the model becomes an unsupported result.
+*The embedded result* of a baseline call is its result through those maps.
+
+Every theorem is block-level: it is about one block on a supplied coin set and chain view.
+Each holds for every verifier, embedding, context, coin set and block, and none assumes a property of the verifier.
+
+- `connectBlockWith_baseline` and `validateBlockWith_baseline`: with the baseline spend check and the baseline error types, each definition equals `connectBlock` or `validateBlock`.
+  `connectBlockWith_ofBaseline` and `validateBlockWith_ofBaseline` state the same agreement as the embedded result, for every embedding.
+  So the comparisons of `block.validate` with Core apply to the copies with the baseline spend check.
+  A change to the baseline that a copy does not follow fails the build.
+- `validateBlockWith_inactive`: take a revision whose spend check with `active` false equals the embedded result of `verifyLegacySpend`.
+  At a height where the activation is inactive, `validateBlockWith` equals the embedded result of `validateBlock`: each acceptance, each rejection and each result outside the model.
+  `validateBlockWith_inactive_of_lt` and `validateBlockWith_inactive_of_none` give the cases of a height below the activation height, and of no activation height.
+- `connectBlockWith_restricts` and `validateBlockWith_restricts`: take a revision whose spend check accepts only inputs that `verifyLegacySpend` accepts, for every `active`, input, script and flag set.
+  If the revised definition accepts a block on a coin set, the baseline accepts it on that set, with the same coin set and the same changes.
+  The hypothesis reads the first run of each script check, and the theorem says nothing about the reason of a rejection.
+- `validateBlockWith_congr`: take a revision whose spend check is `verifyScriptWith` with a step that equals the baseline step on every instruction with an opcode outside a set `O`.
+  Take a block with `BlockUntouched O`: no `scriptSig`, no spent `scriptPubKey` and no P2SH redeem script of a spend holds an instruction with an opcode in `O`.
+  Then `validateBlockWith` equals the embedded result of `validateBlock`, for every value of `active`.
+  The equality covers both runs of each script check.
+
+`BlockUntouched` states three conditions for each input of a transaction that is not a coinbase.
+The spent `scriptPubKey` belongs to the coin of the outpoint in the coin set just before the transaction.
+So an earlier transaction of the block can have created that coin.
+The redeem-script condition applies to a pay-to-script-hash `scriptPubKey` with a push-only `scriptSig`.
+It covers the top item of the stack that the baseline evaluation of `scriptSig` leaves, under every flag set.
+An instruction in a branch that does not execute counts, as in `opcodeFree`.
+A list of candidate blocks from another program is a trusted premise: the theorem says nothing about a block that the program wrongly leaves out.
+
+The examples have block-level instances for their `blockRevision`.
+`example_block_inactive`, `example_block_restricts` and `example_block_congr` are the three theorems for `ExampleVersionVerify`, with the opcode `0xb9`.
+`block_inactive` and `block_congr` hold for both variants of `ExampleFaultyLocktime`, with the opcode `0xb3`, and `corrected_block_restricts` holds for the corrected variant.
+The faulty variant has no restriction theorem, because its spend check accepts a spend that `verifyLegacySpend` rejects.
+
+The theorems do not say:
+
+- That a revision is a soft fork of the network. A restriction theorem covers one block on one coin set. The statement for a chain needs an induction, and the full claim needs a legacy projection (design record 0007, section 8.3).
+- Anything about a rule outside Script. A revision that changes the flags of a block, the count of signature operations or a check before `ConnectBlock` is outside these definitions.
+- Anything about Core. No Core behaviour exists for a revision, so no comparison supports a revised verdict.
+- That the proposal executable computes these definitions correctly beyond its test. The agreement theorems are about the Lean definitions, and `dogelib-proposal-oracle` is compiled code ([docs/oracle.md](docs/oracle.md#the-proposal-executable)).
+
+The proof of `validateBlockWith_ofBaseline` does not unfold `validateBlock` with the `unfold` tactic.
+The kernel compares a definition with its unfolded body by reduction.
+For `validateBlock` it then reduces the test of the genesis hash, which does not end in practical time.
+`validateBlock_value` states that `validateBlock` equals its stored value, which the term elaborator `definition_value%` reads from the environment.
+The kernel checks `validateBlock_value` as it checks every theorem, and the two sides are one term.
+The elaborator is not trusted: a wrong value would fail that check.
+
+The block level adds no axiom, hypothesis or trust assumption.
+By `#print axioms` with Lean `v4.35.0`, each theorem named in this subsection depends on `propext`, `Classical.choice` and `Quot.sound` alone.
 
 ### Proposed revisions: the worked example
 

@@ -1,6 +1,6 @@
 module
 
-public import DogeLib.Proposals.Framework.Compatibility
+public import DogeLib.Proposals.Framework.Block
 
 /-!
 # `Proposals.ExampleFaultyLocktime`
@@ -57,9 +57,15 @@ The proposal replay of the campaign maps each revised result back to a baseline 
   So the faulty variant is not a `SoftFork`. It is `Incompatible`.
 - The corrected step restricts the baseline step, and the corrected spend predicate is a `SoftFork` with a strictness witness and a use witness.
 
+## Block level
+
+`blockRevision v verify` is variant `v` as a `BlockRevision` of `DogeLib.Proposals.Framework.Block`: its spend check is `revisedVerifyLegacySpend v` with the verifier `verify`.
+`connectBlockWith` and `validateBlockWith` run it on a block (design record 0011, section 10.1).
+`DogeLib.Proposals.ExampleFaultyLocktime.Proofs.Block` has the block-level theorems.
+
 ## Labels
 
-Every theorem about the example is Script-local, as design record 0007, section 8.3, defines the label.
+Every other theorem about the example is Script-local, as design record 0007, section 8.3, defines the label.
 None of them is a soft-fork claim about the network.
 The legacy projection is the identity, because the rule changes no encoding.
 
@@ -136,6 +142,10 @@ def revisedVerifyLegacySpend (v : Variant) (active : Bool) (ctx : InputContext)
     VerifyOutcome ScriptError Unsupported :=
   revisedVerifyScript v active (transactionChecker ctx.tx ctx.index verify) flags ctx.input.scriptSig.bytes.val
     prevScriptPubKey.bytes.val
+
+/-- Variant `v` at the block level: the spend check `revisedVerifyLegacySpend v` with the verifier `verify`. -/
+def blockRevision (v : Variant) (verify : SignatureVerifier) : BlockRevision ScriptError Unsupported :=
+  ⟨fun active ctx prevScriptPubKey flags => revisedVerifyLegacySpend v active ctx prevScriptPubKey flags verify⟩
 
 /-- The arguments of one spend check, other than the variant and `active`: the input, the previous `scriptPubKey`, the flags and the verifier. -/
 structure SpendArgs where

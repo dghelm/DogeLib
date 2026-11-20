@@ -50,7 +50,7 @@ The other maps the chain state of a revised node to that of a baseline node.
 A revision that changes no encoding and no state effect has `LegacyProjection.identity`.
 A non-identity projection waits for the first proposal that needs one, and that proposal's design record defines it.
 
-DogeLib has no block validity yet, so no block-level or chain-level theorem uses a projection.
+No block-level or chain-level theorem uses a projection yet. `DogeLib.Proposals.Framework.Block` holds the block level of a revision of Script.
 The worked example `ExampleVersionVerify` states Script-local theorems with the identity projection.
 -/
 

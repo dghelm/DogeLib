@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # The import check must pass on the libraries as they are, and fail when a
 # module under DogeLib imports DogeLib.Proposals (design record 0007,
-# section 12, stage 1). Run from anywhere, after `lake build`.
+# section 12, stage 1), or the proposal exports (design record 0011,
+# stage 6, condition 3). Run from anywhere, after `lake build`.
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 FAIL=0
@@ -44,6 +45,23 @@ elif grep -qx 'forbidden import in a baseline library: DogeLib.Proposals' "$WORK
   echo "ok:   a baseline module that imports DogeLib.Proposals fails, and the check names the proposal modules"
 else
   echo "FAIL: the planted proposal import was not named"; cat "$WORK/planted"; FAIL=1
+fi
+
+# The same for the proposal exports, which design record 0011, decision 10, adds.
+cat >"$PLANTED" <<'EOF'
+module
+public import DogeLib.Proposals.Exports
+EOF
+if ! lake env lean -o "$OUT.olean" "$PLANTED" >"$WORK/build-exports" 2>&1; then
+  echo "FAIL: the planted module with the proposal exports does not compile"; cat "$WORK/build-exports"; exit 1
+fi
+if check DogeLib.ImportBoundaryPlanted >"$WORK/planted-exports" 2>&1; then
+  echo "FAIL: a baseline module that imports DogeLib.Proposals.Exports passed"; cat "$WORK/planted-exports"; FAIL=1
+elif grep -qx 'forbidden import in a baseline library: DogeLib.Proposals.Exports' "$WORK/planted-exports" \
+    && grep -qx 'forbidden import in a baseline library: DogeLib.Proposals.Framework.Block' "$WORK/planted-exports"; then
+  echo "ok:   a baseline module that imports DogeLib.Proposals.Exports fails, and the check names the proposal modules"
+else
+  echo "FAIL: the planted import of the proposal exports was not named"; cat "$WORK/planted-exports"; FAIL=1
 fi
 
 exit "$FAIL"

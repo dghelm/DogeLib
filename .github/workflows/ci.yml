@@ -89,6 +89,12 @@ jobs:
         if: ${{ !cancelled() }}
         run: bash scripts/test_oracle.sh
 
+      # The proposal executable: the bytes of dogelib-oracle without a revision,
+      # and the revised verdicts of the two examples on made blocks.
+      - name: proposal oracle
+        if: ${{ !cancelled() }}
+        run: lake build dogelib-oracle dogelib-proposal-oracle && python3 -I scripts/test_proposal_oracle.py .lake/build/bin/dogelib-oracle .lake/build/bin/dogelib-proposal-oracle
+
   rust:
     runs-on: ubuntu-24.04
     timeout-minutes: 30

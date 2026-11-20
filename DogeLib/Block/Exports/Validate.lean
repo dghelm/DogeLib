@@ -25,6 +25,16 @@ The tag is 0 for a spent coin, 1 for a created coin, and 2 for a member of the w
 - The digest of a block's changes visits `ConnectResult.changes` in order.
 - The digest of the whole set visits the entries in the order of their transaction IDs as byte strings, and the outputs of an entry by index.
 
+## A second check of each block
+
+`validateStep` takes an optional `BlockHook`.
+A hook is a function of the options, the context, the coin set before the block and the block, and it returns a JSON value.
+With a hook, each block record gains the field `revised` with that value.
+The hook changes no state of the run and no other field.
+`blockValidate` and `blockValidateFile` use no hook, so `dogelib-oracle` writes no such field.
+`blockValidateWith` and `blockValidateFileWith` take the names of added arguments and a function that reads the hook from the request.
+This library defines no hook.
+
 ## Total value
 
 Wherever the operation reports the digest of the whole set, it also reports `CoinSet.totalValue` of that set.
@@ -166,12 +176,26 @@ def validateStart (fields : Args) : Except Failure (ValidateOptions × ValidateR
   return (⟨mode, checkPow, checkMerkle, time⟩, ⟨view, ancestor, coins, none, #[], none⟩)
 
 /--
+A second check of one block, for a caller outside this library.
+It reads the options of the request, the context that `validateBlock` gets, the coin set before the block, and the block.
+Its value becomes the field `revised` of the block record.
+-/
+abbrev BlockHook : Type := ValidateOptions → ValidateContext → CoinSet → Block → Json
+
+/-- The function that reads the hook of a request from its arguments. `noHook` is the one of `block.validate` in this library. -/
+abbrev HookReader : Type := Args → Except Failure (Option BlockHook)
+
+/-- The reader that gives no hook for every request. -/
+def noHook : HookReader := fun _ => pure none
+
+/--
 One block of a `block.validate` request: the bytes `bs` at the position `run.records.size`.
 `fileHeight` is the height that a record of `blocks_file` gives, which must be the candidate height.
 The result is the next state, in which `outOfDomain` is set when the block ends the range.
+With a `hook`, the record of the block gains the field `revised`, and nothing else changes.
 -/
-def validateStep (options : ValidateOptions) (run : ValidateRun) (bs : List UInt8) (fileHeight : Option Nat := none) :
-    Except Failure ValidateRun := do
+def validateStep (options : ValidateOptions) (run : ValidateRun) (bs : List UInt8) (fileHeight : Option Nat := none)
+    (hook : Option BlockHook := none) : Except Failure ValidateRun := do
   let index := run.records.size
   let b ← match Block.decodeComplete options.mode bs with
     | .error (.read e) => throw (.spec ((Transaction.Exports.witnessReadErrorJson e).setObjVal! "index" (natJson index)))
@@ -199,6 +223,11 @@ def validateStep (options : ValidateOptions) (run : ValidateRun) (bs : List UInt
   if let some h := fileHeight then
     unless h == height do throw (validateFailure "file_height" [("index", natJson index)])
   let ctx : ValidateContext := ⟨run.view, options.time, none, csvActive, segwitActive, prevMtp, run.ancestor⟩
+  -- The hook runs before the baseline check, so that it holds no reference to the coin set afterwards.
+  let revised := hook.map fun h => h options ctx run.coins b
+  let withRevised := fun (record : Json) => match revised with
+    | none => record
+    | some value => record.setObjVal! "revised" value
   match validateBlock Script.coreVerifier options.checkPow options.checkMerkle ctx run.coins b with
   | .ok result =>
     let set := if height % setDigestInterval == 0 then
@@ -208,14 +237,14 @@ def validateStep (options : ValidateOptions) (run : ValidateRun) (bs : List UInt
       view := ⟨height, b.header.pure.nTime, b.header.pure.nBits⟩ :: run.view
       tip := some hash
       ancestor := if height == bip34Height then some hash else run.ancestor
-      records := run.records.push (blockRecord height hash none (some result.changes) set .null) }
+      records := run.records.push (withRevised (blockRecord height hash none (some result.changes) set .null)) }
   | .error e =>
     match e.rejectReason with
     | some reason =>
       return { run with
         tip := tip
-        records := run.records.push (blockRecord height hash (some (reason, e.dosScore, e.rejectCode)) none none
-          (.str s!"{e.step}: {reprStr e}")) }
+        records := run.records.push (withRevised (blockRecord height hash (some (reason, e.dosScore, e.rejectCode))
+          none none (.str s!"{e.step}: {reprStr e}"))) }
     | none =>
       if e == .connect .outOfDomain then return { run with tip := tip, outOfDomain := some index }
       else throw (validateFailure "outside_model" [("index", natJson index), ("detail", .str (reprStr e))])
@@ -232,24 +261,29 @@ def validateStateArgs : List String :=
   ["mode", "check_pow", "check_merkle_root", "adjusted_time", "chain", "bip34_ancestor_hex", "coins"]
 
 /--
-`block.validate`: `validateBlock` with `coreVerifier` on each block of `blocks_hex`, in order.
+`block.validate` with the added arguments `extraArgs` and the hook that `hookOf` reads from the request.
+`validateBlock` runs with `coreVerifier` on each block of `blocks_hex`, in order.
 The module documentation and `docs/oracle.md` give the state, the digests and the errors.
 Checkpoints are disabled.
 A block whose sums leave the `int64_t` range ends the range: the response holds the blocks before it, and `out_of_domain_at` is its position.
-A request with `blocks_file` in the place of `blocks_hex` reads a file, so `blockValidateFile` answers it.
+A request with `blocks_file` in the place of `blocks_hex` reads a file, so `blockValidateFileWith` answers it.
 -/
-def blockValidate : Operation where
+def blockValidateWith (extraArgs : List String) (hookOf : HookReader) : Operation where
   name := "block.validate"
-  args := validateStateArgs ++ ["blocks_hex"]
+  args := validateStateArgs ++ ["blocks_hex"] ++ extraArgs
   run fields := do
+    let hook ← hookOf fields
     let (options, start) ← validateStart fields
     let .arr raws ← arg fields "blocks_hex" | throw (.request "blocks_hex must be an array")
     let mut run := start
     for raw in raws do
       let bs ← argHex (Std.TreeMap.Raw.ofList [("blocks_hex", raw)]) "blocks_hex"
-      run ← validateStep options run bs
+      run ← validateStep options run bs none hook
       if run.outOfDomain.isSome then break
     return validateResult run
+
+/-- `block.validate` of `dogelib-oracle`: `blockValidateWith` with no added argument and no hook. -/
+def blockValidate : Operation := blockValidateWith [] noHook
 
 /-- The greatest length of a block record in a `blocks.bin` file: Core's `MAX_SIZE`. -/
 def maxFileBlockSize : Nat := 0x02000000
@@ -268,17 +302,22 @@ def fileU32 (bytes : ByteArray) (offset : Nat) : Nat :=
   (List.range 4).foldr (fun i acc => acc * 256 + (bytes.get! (offset + i)).toNat) 0
 
 /--
-`block.validate` on the blocks of the file `blocks_file`, in the place of `blocks_hex`.
+`block.validate` on the blocks of the file `blocks_file`, in the place of `blocks_hex`, with the added arguments `extraArgs` and the hook that `hookOf` reads from the request.
 The file has the format of `blocks.bin` of `scripts/fetch_blocks.py`: for each block the height and the length as 4-byte little-endian integers, then the block.
 The function reads one block at a time, so the file can be larger than memory.
 Each record's height must be the candidate height.
 The other arguments, the state and the response are those of `blockValidate`.
 After each accepted block whose height is a multiple of `setDigestInterval`, it writes the height to standard error.
 -/
-def blockValidateFile (fields : Args) : IO (Except Failure Json) := do
+def blockValidateFileWith (extraArgs : List String) (hookOf : HookReader) (fields : Args) :
+    IO (Except Failure Json) := do
   for (key, _) in fields do
-    unless key == "id" || key == "op" || key == "blocks_file" || validateStateArgs.contains key do
+    unless key == "id" || key == "op" || key == "blocks_file" || validateStateArgs.contains key ||
+        extraArgs.contains key do
       return .error (.request s!"unknown argument {key} for operation block.validate with blocks_file")
+  let hook ← match hookOf fields with
+    | .ok hook => pure hook
+    | .error f => return .error f
   let .ok (.str path) := arg fields "blocks_file" | return .error (.request "blocks_file must be a string")
   let (options, start) ← match validateStart fields with
     | .ok r => pure r
@@ -299,7 +338,7 @@ def blockValidateFile (fields : Args) : IO (Except Failure Json) := do
     if raw.size != length then return .error (validateFailure "file_truncated" [("index", natJson index)])
     -- The step is the last use of `run`, so that it can change the records and the coin set in place.
     let before := run.view.head?.map (·.nHeight)
-    match validateStep options run raw.toList (some (fileU32 head 0)) with
+    match validateStep options run raw.toList (some (fileU32 head 0)) hook with
     | .error f => return .error f
     | .ok next =>
       -- An accepted block puts its own height, which is new, at the head of the view.
@@ -309,5 +348,8 @@ def blockValidateFile (fields : Args) : IO (Except Failure Json) := do
       run := next
     if run.outOfDomain.isSome then break
   return .ok (validateResult run)
+
+/-- `block.validate` with `blocks_file` of `dogelib-oracle`: `blockValidateFileWith` with no added argument and no hook. -/
+def blockValidateFile (fields : Args) : IO (Except Failure Json) := blockValidateFileWith [] noHook fields
 
 end DogeLib.Block.Exports

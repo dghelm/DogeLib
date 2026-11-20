@@ -178,7 +178,7 @@ def validateStart (fields : Args) : Except Failure (ValidateOptions × ValidateR
   unless ancestor.isSome == aboveBip34 do
     throw (.request "bip34_ancestor_hex must be a hash exactly when the predecessor is at or above height 1034383")
   let coins ← argCoins fields
-  return (⟨mode, checkPow, checkMerkle, time⟩, ⟨view, ancestor, coins, none, #[], none⟩)
+  return ({ mode, checkPow, checkMerkle, time }, ⟨view, ancestor, coins, none, #[], none⟩)
 
 /--
 A second check of one block, for a caller outside this library.

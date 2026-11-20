@@ -5,6 +5,7 @@ public import DogeLib.Transaction.Exports.Oracle
 public import DogeLib.Work.Exports.Oracle
 public import DogeLib.Block.Exports.Oracle
 public import DogeLib.Block.Exports.Validate
+public import DogeLib.Block.Exports.Snapshot
 public import DogeLib.Cryptography.Exports.Oracle
 public import DogeLib.Script.Exports.Oracle
 
@@ -94,10 +95,13 @@ def runRequestIOWith (ops : List Operation) (validateFile : Args → IO (Except 
 /--
 Run a request in `IO`.
 A `block.validate` request with the argument `blocks_file` reads that file through `Block.Exports.blockValidateFile`.
+When it also has `coins_file`, it reads a coin-set snapshot through `Block.Exports.blockValidateSnapshot`.
 Every other request has the result of `runRequest`.
 -/
 def runRequestIO (fields : Args) : IO (Except Failure Json) :=
-  runRequestIOWith operations Block.Exports.blockValidateFile fields
+  runRequestIOWith operations (fun fields =>
+    if fields.contains "coins_file" then Block.Exports.blockValidateSnapshot fields
+    else Block.Exports.blockValidateFile fields) fields
 
 /-- Answer a line in `IO`, with `runRequestIO`. This is the response of the `dogelib-oracle` executable. -/
 def respondIO (line : String) : IO (Option Json) := respondM runRequestIO line

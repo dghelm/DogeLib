@@ -20,9 +20,11 @@ snapshot at A (docs/oracle.md, "Coin-set snapshots"). The script works in seven 
    the whole set at B. Every block must be accepted.
 3. The script reads each snapshot again and computes its SHA-256, its digest, its number of
    coins and its total value from the definition of the format. All must equal the values of the
-   harness. The script writes a manifest for each snapshot, and requires that it equals the
-   committed manifest of `--manifests` (default tests/block/mainnet-blocks/snapshots).
-   `--write-manifests` writes the committed manifests in the place of that comparison.
+   harness. The snapshot at height 145,000 must have the number of coins and the digest of the
+   recorded replay to that height, which the script holds as constants. The script writes a
+   manifest for each snapshot, and requires that it equals the committed manifest of
+   `--manifests` (default tests/block/mainnet-blocks/snapshots). `--write-manifests` writes the
+   committed manifests in the place of that comparison.
 4. The range. The oracle and the harness get one request with `coins_file` and the blocks of the
    range. The first block must name the block hash of the manifest. The range agrees when both
    programs report the digest and the number of coins of the manifest as the start, accept every
@@ -80,6 +82,10 @@ from replay_blocks import ReplayError
 
 FORMAT = "dogelib-coins/1"
 MANIFESTS = Path(__file__).resolve().parent.parent / "tests" / "block" / "mainnet-blocks" / "snapshots"
+# The number of coins and the digest of the whole set at a height, from a source other than this
+# script: the recorded replay of mainnet to height 145,000, in which the oracle reached the set
+# from the empty set (docs/oracle.md, "Replay of mainnet to height 145,000").
+ANCHORS = {145000: (5094671, "b28411dc46135fd0f85c954a664866d4f610803f7d667c9d2032ddfd6c58716d")}
 
 
 def base_request(blocks: Path) -> dict:
@@ -154,6 +160,9 @@ def check_snapshot(output: Path, snapshot: dict, hashes: list[str], manifests: P
     for field, got in computed.items():
         if manifest[field] != got:
             raise ReplayError(f"snapshot {height}: the harness reports {field} {manifest[field]!r}, and the file gives {got!r}")
+    if height in ANCHORS and (coins, digest) != ANCHORS[height]:
+        raise ReplayError(f"snapshot {height}: {coins} coins and the digest {digest}, and the recorded replay has "
+                          f"{ANCHORS[height][0]} coins and the digest {ANCHORS[height][1]}")
     text = json.dumps(manifest, indent=2) + "\n"
     (output / f"coins-{height}.json").write_text(text)
     committed = manifests / f"coins-{height}.json"
@@ -228,7 +237,8 @@ def run_faults(oracle: str, harness: str, request: dict, manifest: dict, data: b
             raise ReplayError(f"fault {name}: {failure[1]}")
         if "ok" not in ours:
             # A block that the changed coins reject changes nothing, so the block after it is not linked.
-            if content == data or ours["error"].get("reason") != "not_linked":
+            # A coin that no block names cannot make a block fail, so that case needs verdicts.
+            if content == data or name == f"removed-{outside}" or ours["error"].get("reason") != "not_linked":
                 raise ReplayError(f"fault {name}: both programs returned {json.dumps(ours['error'])}")
             return name, None
         ok = ours["ok"]

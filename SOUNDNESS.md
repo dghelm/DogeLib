@@ -1416,6 +1416,13 @@ The fields `bip34Ancestor` and `csvActive` of each context are free.
 
 `lake test` pins `CoinSet.totalValue` and `chainSubsidy` on a chain of the genesis block and one block at height 1 ([COVERAGE.md](COVERAGE.md#operations)).
 
+The comparison with Core on real blocks checks the bound by execution, not by proof.
+On a replay from the genesis block, `block.validate` reports `CoinSet.totalValue` at each multiple of 1,000 and at the end.
+Core's harness reports the sum of its own coin view at the same points, and the two must be equal.
+Each total must also be at most the sum of the subsidies from height 1 to its height ([oracle](docs/oracle.md#total-value)).
+The comparator computes that sum from `block.subsidy`, so it checks the statement of `chain_issuance_bound` on these blocks with `getDogecoinBlockSubsidy` in the place of `subsidyValue`.
+The two are equal whenever the subsidy has fuel, and a subsidy without fuel is a request error of `block.subsidy`.
+
 By `#print axioms`, `connect_spends_available`, `connect_valuesInRange`, `connect_value_bound`, `connectChain_issuance_bound` and `chain_issuance_bound` depend on `propext`, `Classical.choice` and `Quot.sound`.
 
 ### RIPEMD-160 and Hash160

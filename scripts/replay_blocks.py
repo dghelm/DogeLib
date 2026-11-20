@@ -11,10 +11,12 @@ hold the consecutive heights from 0. With `--last HEIGHT` the replay stops after
 
 This is the gate outside CI of design record 0010, section 5, exit condition 1: the replay from
 the genesis block to height 145,000, the whole random-reward era. The two programs must accept
-every block and agree on each block record, on the digest of each block's coin changes and on
-each digest of the whole coin set (docs/oracle.md, "Block validation").
+every block and agree on each block record, on the digest of each block's coin changes, and on
+each digest and each total value of the whole coin set (docs/oracle.md, "Block validation").
+Each total value must also be at most the sum of the subsidies of the heights from 1 to its
+height, the bound of `chain_issuance_bound`.
 
-The script works in four steps:
+The script works in five steps:
 
 1. It checks each fixture as `scripts/fetch_blocks.py --check` does, without a network
    connection. It then requires that every block has the label `pinned`: the block hash equals a
@@ -27,6 +29,9 @@ The script works in four steps:
    block at a time. The oracle writes each thousandth accepted height to standard error.
 4. It compares the two responses with the comparison of scripts/compare_core.py, and requires
    that the accepted hashes are the hashes of the fixtures, at the heights from 0.
+5. It sends both programs `block.subsidy` requests for each height from 1, on the hash of the
+   block before it, and requires equal subsidies. Each total value of the oracle's response
+   must be at most the sum of the subsidies up to its height.
 
 It writes the two responses and `summary.json` to DIR. The exit status is 0 only when the two
 programs agree and accept every block.
@@ -112,9 +117,30 @@ def run(program: str, request: dict, response: Path, timeout: float | None) -> t
     return answer, seconds
 
 
+def run_stream(program: str, requests: list[dict], timeout: float | None) -> list[dict]:
+    """Send `requests` to one process of `program`, one per line, and return the responses in order."""
+    data = "".join(json.dumps({**req, "id": f"s{i}"}, sort_keys=True) + "\n" for i, req in enumerate(requests))
+    try:
+        done = subprocess.run([program], input=data.encode(), capture_output=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        raise ReplayError(f"{program} did not finish within {timeout} seconds") from None
+    except OSError as error:
+        raise ReplayError(f"{program}: {type(error).__name__}") from None
+    lines = done.stdout.decode().splitlines()
+    if done.returncode != 0 or len(lines) != len(requests):
+        raise ReplayError(f"{program}: status {done.returncode}, {len(lines)} responses to {len(requests)} requests")
+    try:
+        answers = [json.loads(line) for line in lines]
+    except ValueError:
+        raise ReplayError(f"{program}: a response is not JSON") from None
+    if any(not isinstance(a, dict) or a.get("id") != f"s{i}" for i, a in enumerate(answers)):
+        raise ReplayError(f"{program}: the responses do not have the ids of the requests")
+    return answers
+
+
 def replay(oracle: str, harness: str, fixtures: list[str], output: Path, last: int | None = None,
            timeout: float | None = None, pins=None, log=lambda text: print(text, flush=True)) -> dict:
-    """Run the four steps, and return the summary. Raise `ReplayError` on any failure."""
+    """Run the five steps, and return the summary. Raise `ReplayError` on any failure."""
     output.mkdir(parents=True, exist_ok=True)
     blocks = output / fetch_blocks.BLOCKS_FILE
     hashes, sha256 = gather(fixtures, last, blocks, pins)
@@ -132,6 +158,12 @@ def replay(oracle: str, harness: str, fixtures: list[str], output: Path, last: i
     records = ours["ok"]["blocks"]
     if len(records) != len(hashes):
         raise ReplayError(f"{len(records)} block records for {len(hashes)} blocks")
+    subsidy_requests = validate.issuance_requests(request, ours["ok"])
+    failure, issuance = validate.issuance_bound(request, ours["ok"], subsidy_requests,
+                                                run_stream(oracle, subsidy_requests, timeout),
+                                                run_stream(harness, subsidy_requests, timeout))
+    if failure:
+        raise ReplayError(f"{failure[0]}: {failure[1]}")
     summary = {
         "first": 0, "last": len(hashes) - 1, "blocks": len(records),
         "blocks_sha256": sha256,
@@ -141,6 +173,10 @@ def replay(oracle: str, harness: str, fixtures: list[str], output: Path, last: i
         "set_digests": sum(record["set_digest_hex"] is not None for record in records) + 1,
         "set_coins": ours["ok"]["set_coins"],
         "set_digest_hex": ours["ok"]["set_digest_hex"],
+        "set_value": issuance["set_value"],
+        "subsidy_sum": issuance["subsidy_sum"],
+        "subsidy_sum_minus_set_value": issuance["difference"],
+        "bound_points": issuance["bound_points"],
         "oracle_seconds": round(oracle_seconds), "core_seconds": round(core_seconds),
     }
     (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
@@ -165,8 +201,10 @@ def main(argv=None) -> int:
         return 1
     print(f"block.validate replay: heights 0 to {summary['last']}, {summary['blocks']} blocks accepted by both programs")
     print(f"coin changes: {summary['spent']} spent, {summary['created']} created; "
-          f"{summary['set_digests']} digests of the whole set agree")
+          f"{summary['set_digests']} digests and total values of the whole set agree")
     print(f"coin set after height {summary['last']}: {summary['set_coins']} coins, digest {summary['set_digest_hex']}")
+    print(f"total value {summary['set_value']} koinu, at most the sum of the subsidies of heights 1 to "
+          f"{summary['last']}, {summary['subsidy_sum']} koinu, at {summary['bound_points']} points")
     print(f"oracle {summary['oracle_seconds']} seconds, Core {summary['core_seconds']} seconds, 0 failures")
     return 0
 

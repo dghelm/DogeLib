@@ -2,6 +2,7 @@ module
 
 public import DogeLib.Block.Exports.Oracle
 public import DogeLib.Block.Validate
+public import DogeLib.Block.Proofs.ConnectProperties
 public import DogeLib.Script.CoreVerifier
 
 /-!
@@ -23,6 +24,11 @@ The tag is 0 for a spent coin, 1 for a created coin, and 2 for a member of the w
 
 - The digest of a block's changes visits `ConnectResult.changes` in order.
 - The digest of the whole set visits the entries in the order of their transaction IDs as byte strings, and the outputs of an entry by index.
+
+## Total value
+
+Wherever the operation reports the digest of the whole set, it also reports `CoinSet.totalValue` of that set.
+That is the sum of the amounts of its coins, the quantity of `chain_issuance_bound`.
 -/
 
 @[expose] public section
@@ -98,14 +104,18 @@ def argCoins (fields : Args) : Except Failure CoinSet := do
     set := ⟨set.entries.insert (txidKey coins.txid) coins⟩
   return set
 
-/-- The verdict of one block, with nulls where a field does not apply. -/
+/-- A total value as a string of decimal digits. The total can exceed `2^63`, so it is not a JSON number. -/
+def valueJson (value : Int) : Json := .str (toString value)
+
+/-- The verdict of one block, with nulls where a field does not apply. `set` is the digest and the total value of the whole set. -/
 def blockRecord (height : Nat) (hash : Hash256) (rejection : Option (String × Nat × Nat))
-    (changes : Option (List CoinChange)) (set : Option ByteArray) (diagnostic : Json) : Json :=
+    (changes : Option (List CoinChange)) (set : Option (ByteArray × Int)) (diagnostic : Json) : Json :=
   Json.mkObj ([("height", natJson height)] ++ hashFields "hash" hash ++ rejectionFields rejection ++
     [("changes_digest_hex", changes.map (fun c => Json.str (hexOf (changesDigest c).toList)) |>.getD .null),
       ("spent", changes.map (fun c => natJson (c.filter (· matches .spent ..)).length) |>.getD .null),
       ("created", changes.map (fun c => natJson (c.filter (· matches .created ..)).length) |>.getD .null),
-      ("set_digest_hex", set.map (fun d => Json.str (hexOf d.toList)) |>.getD .null),
+      ("set_digest_hex", set.map (fun d => Json.str (hexOf d.1.toList)) |>.getD .null),
+      ("set_value", set.map (fun d => valueJson d.2) |>.getD .null),
       ("diagnostic", diagnostic)])
 
 /-- The interval of the whole-set digest: after each accepted block whose height is a multiple of it (design record 0010, section 5). -/
@@ -191,7 +201,8 @@ def validateStep (options : ValidateOptions) (run : ValidateRun) (bs : List UInt
   let ctx : ValidateContext := ⟨run.view, options.time, none, csvActive, segwitActive, prevMtp, run.ancestor⟩
   match validateBlock Script.coreVerifier options.checkPow options.checkMerkle ctx run.coins b with
   | .ok result =>
-    let set := if height % setDigestInterval == 0 then some (setDigest result.coins).1 else none
+    let set := if height % setDigestInterval == 0 then
+      some ((setDigest result.coins).1, result.coins.totalValue) else none
     return { run with
       coins := result.coins
       view := ⟨height, b.header.pure.nTime, b.header.pure.nBits⟩ :: run.view
@@ -213,7 +224,8 @@ def validateStep (options : ValidateOptions) (run : ValidateRun) (bs : List UInt
 def validateResult (run : ValidateRun) : Json :=
   let (digest, count) := setDigest run.coins
   Json.mkObj [("blocks", .arr run.records), ("out_of_domain_at", (run.outOfDomain.map natJson).getD .null),
-    ("set_digest_hex", .str (hexOf digest.toList)), ("set_coins", natJson count)]
+    ("set_digest_hex", .str (hexOf digest.toList)), ("set_coins", natJson count),
+    ("set_value", valueJson run.coins.totalValue)]
 
 /-- The arguments of `block.validate` that give the state before the first block. -/
 def validateStateArgs : List String :=

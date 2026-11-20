@@ -64,20 +64,45 @@ void digestCoin(uint256& digest, unsigned char tag, const COutPoint& outpoint, c
     hasher.Finalize(digest.begin());
 }
 
-// The digest of the whole set and the number of its coins. std::map visits the
-// transaction IDs in the order of uint256::Compare, which compares the bytes.
-std::pair<uint256, uint64_t> setDigest(const MemoryCoinsView& store)
-{
+// The whole set: its digest, the number of its coins, and the sum of their
+// amounts as a string of decimal digits.
+struct SetSummary {
     uint256 digest;
     uint64_t count = 0;
+    std::string value;
+};
+
+// The decimal digits of an unsigned 128-bit number.
+std::string decimal(unsigned __int128 n)
+{
+    std::string digits;
+    do {
+        digits.insert(digits.begin(), static_cast<char>('0' + static_cast<int>(n % 10)));
+        n /= 10;
+    } while (n != 0);
+    return digits;
+}
+
+// The summary of the whole set. std::map visits the transaction IDs in the
+// order of uint256::Compare, which compares the bytes. The sum of the amounts
+// can exceed the int64_t range of CAmount, so it is a 128-bit sum: each amount
+// is at most MAX_MONEY, so no sum of fewer than 2^64 coins overflows it.
+SetSummary setDigest(const MemoryCoinsView& store)
+{
+    SetSummary summary;
+    unsigned __int128 value = 0;
     for (const auto& item : store.coins) {
         for (size_t n = 0; n < item.second.vout.size(); ++n) {
-            if (item.second.vout[n].IsNull()) continue;
-            digestCoin(digest, 2, COutPoint(item.first, static_cast<uint32_t>(n)), item.second, item.second.vout[n]);
-            ++count;
+            const CTxOut& out = item.second.vout[n];
+            if (out.IsNull()) continue;
+            digestCoin(summary.digest, 2, COutPoint(item.first, static_cast<uint32_t>(n)), item.second, out);
+            ++summary.count;
+            if (!MoneyRange(out.nValue)) throw UnmappedCoreError{"a coin of the set has an amount outside MoneyRange"};
+            value += static_cast<unsigned __int128>(out.nValue);
         }
     }
-    return std::make_pair(digest, count);
+    summary.value = decimal(value);
+    return summary;
 }
 
 UniValue validateFailure(const std::string& reason, int64_t index = -1)
@@ -406,7 +431,7 @@ UniValue blockValidate(const UniValue& req)
         record.pushKV("changes_digest_hex", valid ? UniValue(hex(changes.begin(), changes.end())) : UniValue());
         record.pushKV("spent", valid ? UniValue(spent) : UniValue());
         record.pushKV("created", valid ? UniValue(created) : UniValue());
-        UniValue digest;
+        UniValue digest, value;
         if (valid) {
             // The accepted block becomes the tip, and the only entry of mapBlockIndex.
             hashes.push_back(hash);
@@ -421,11 +446,13 @@ UniValue blockValidate(const UniValue& req)
             mapBlockIndex.clear();
             mapBlockIndex[hash] = tip;
             if (height % 1000 == 0) {
-                const uint256 whole = setDigest(store).first;
-                digest = UniValue(hex(whole.begin(), whole.end()));
+                const SetSummary whole = setDigest(store);
+                digest = UniValue(hex(whole.digest.begin(), whole.digest.end()));
+                value = UniValue(whole.value);
             }
         }
         record.pushKV("set_digest_hex", digest);
+        record.pushKV("set_value", value);
         records.push_back(record);
     }
 
@@ -435,7 +462,8 @@ UniValue blockValidate(const UniValue& req)
     // The harness cannot observe an overflow. The comparator sends it no block
     // that the oracle reports as outside the int64 range.
     ok.pushKV("out_of_domain_at", UniValue());
-    ok.pushKV("set_digest_hex", hex(whole.first.begin(), whole.first.end()));
-    ok.pushKV("set_coins", whole.second);
+    ok.pushKV("set_digest_hex", hex(whole.digest.begin(), whole.digest.end()));
+    ok.pushKV("set_coins", whole.count);
+    ok.pushKV("set_value", whole.value);
     return ok;
 }

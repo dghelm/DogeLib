@@ -732,12 +732,13 @@ An accepted block becomes the new predecessor, and its changes enter the coin se
 A rejected block changes nothing.
 So a request can hold several candidates for one height: the rejected ones, and then one accepted block.
 
-The result has four fields:
+The result has five fields:
 
 - `blocks`: one record for each block, in order.
 - `out_of_domain_at`: null, or the position of the block that ended the range (see *The arithmetic domain* below).
 - `set_digest_hex`: the digest of the coin set after the last record.
 - `set_coins`: the number of coins in that set.
+- `set_value`: the total value of that set (see *Total value* below).
 
 Each record has these fields:
 
@@ -747,6 +748,7 @@ Each record has these fields:
 | `valid`, `reject_reason`, `dos`, `reject_code` | The verdict of the first failing step, as for `block.check` |
 | `changes_digest_hex`, `spent`, `created` | For an accepted block: the digest of its changes, and the numbers of spent and created coins. Null for a rejected block |
 | `set_digest_hex` | The digest of the coin set after an accepted block whose height is a multiple of 1,000. Null otherwise |
+| `set_value` | The total value of the same set, exactly where `set_digest_hex` is not null. Null otherwise |
 | `diagnostic` | Lean only: the name of the failing step and the Lean error, or null |
 
 `ConnectBlock` adds these reject reasons to those of the four earlier steps: `bad-txns-BIP30`, `bad-txns-inputs-missingorspent`, `bad-txns-premature-spend-of-coinbase`, `bad-txns-inputvalues-outofrange`, `bad-txns-in-belowout`, `bad-blk-sigops`, `bad-cb-amount`, and the two script reasons.
@@ -777,6 +779,19 @@ Each record replaces the digest `d` with the double SHA-256 of `d` followed by t
   The genesis block has no change, so its digest is 32 zero bytes.
 - `set_digest_hex` visits every coin of the set (tag 2).
   The transaction IDs are in the order of their 32 bytes as byte strings, and the outputs of one ID are in index order.
+
+#### Total value
+
+`set_value` is the sum of the amounts of the coins of the set, in koinu, as a string of decimal digits.
+The sum can exceed `2^63`, so it is not a JSON number.
+The oracle reports `CoinSet.totalValue` of `Block.Proofs.ConnectProperties`, the quantity of `chain_issuance_bound`.
+The harness adds the amounts of the coins of its own `CCoins` entries, in 128-bit arithmetic.
+
+For a request that starts at the genesis block, with the empty chain and no coins, the comparators also check the bound of `chain_issuance_bound`.
+Both programs answer `block.subsidy` for each accepted height from 1, with the hash of the accepted block before it, and the subsidies must agree.
+Each `set_value` must be at most the sum of the subsidies of the heights from 1 to its height.
+The genesis block adds no coin, so its term is 0.
+`scripts/compare_core.py --mainnet-blocks` reports a failure of this check as `ISSUANCE`, and `scripts/replay_blocks.py` checks it as its fifth step.
 
 #### The arithmetic domain
 

@@ -1872,6 +1872,87 @@ A node supplied the blocks above height 10,000.
 Each has a pinned hash, and the [fixtures](../tests/block/mainnet-blocks/README.md) state what a pinned hash commits to.
 Blocks above height 145,000 are not replayed.
 
+#### Ranges from a snapshot
+
+`scripts/snapshot_range.py` runs a range of mainnet blocks from a [coin-set snapshot](#coin-set-snapshots) in both programs.
+It is the gate of [design record 0011](design/0011-mainnet-ranges.md), stage 1, which tests the snapshot path on blocks that the replay from the genesis block covers.
+A range from the height `a + 1` to the height `b` starts from the snapshot at `a`.
+
+The script first lets the harness replay the blocks from the genesis block, from the empty coin set.
+In that *pass* the harness writes each snapshot and reports the digest of the whole set at `b`.
+The script computes the SHA-256, the digest, the number of coins and the total value of each snapshot again from the file.
+It requires the values of the harness and the committed [manifest](../tests/block/mainnet-blocks/README.md#coin-set-snapshots).
+Both programs then get one request with `coins_file` and the blocks of the range.
+A range agrees when all of these hold:
+
+- Both programs report the digest and the number of coins of the manifest as the start.
+- Both programs accept every block, with equal block records.
+- Both programs report the digest of the pass at `b` as the end.
+- The block records equal those of the same heights in the pass, without the digests of the whole set.
+- The oracle with `coins_in_memory` returns the same `ok` object.
+
+The script also runs 29 changed copies of the snapshot, each with the first 10 blocks of the range, in both programs:
+
+| Change | Cases | Required result |
+| --- | ---: | --- |
+| Another amount, script, height or coinbase byte in one record. A removed record and an added record | 6 | Both programs report a start digest that is not the manifest's. It is the digest that the script computes from the changed file |
+| Two records in the wrong order, and one record twice | 2 | `coins_file_order` |
+| A file that ends inside a record, and a byte after the last record | 4 | `coins_file_truncated` |
+| Each other fault of the [checks](#coin-set-snapshots): the tag, the entry, the amount with the values `MAX_MONEY` + 1, -1 and another negative number, the index, the script, the height, the coinbase byte and the length of the script | 15 | The error of the fault, with the position of the record |
+| A removed record whose transaction ID a block of the request names | 1 | A changed start digest, or the error `not_linked` after a block that both programs reject |
+| A removed record whose transaction ID no block of the request names | 1 | Both programs return the block records of the unchanged snapshot. The start digest and the end digest differ from those of the unchanged snapshot |
+
+The last step runs the 33 small requests of the [full comparison](#block-validation-comparison-evidence) that have one record for each block, with their coins in a snapshot.
+Both programs must return the result of the request with `coins`, without the digests of the whole set in the block records.
+The start digest must be the one that `Model` of `scripts/oracle_block_validate.py` computes.
+These requests hold rejected blocks, the BIP30 cases and the script failures.
+`scripts/test_oracle.py` runs the same requests and 33 changed synthetic snapshots or requests in the oracle alone.
+
+**The short form.**
+CI runs the script on the released blocks of heights 0 to 10,000, with the snapshot at height 9,000.
+The snapshot has 114,056 coins and 8,719,196 bytes.
+Heights 9,001 to 10,000 agree: the blocks spend 47,185 coins and create 76,506, and the set after height 10,000 has the 143,377 coins of the replay.
+On a development machine the run takes about 160 seconds on two cores, of which each oracle run of the range is about 106 seconds.
+
+**Range S.**
+This part records one run of range S of the design record, heights 100,001 to 101,000, on 2026-11-20.
+It is the gate *Snapshot range S* of [AGENTS.md](../AGENTS.md#checks), and it is not in CI.
+
+| Input | Value |
+| --- | --- |
+| Oracle and Core harness | Built from commit `f42b049` of the pull request, with Core at `e0a1c157` |
+| Blocks | The fixtures of the [replay to height 145,000](#replay-of-mainnet-to-height-145000). The file of all 145,001 blocks has the SHA-256 value `5295801124f275bd7b6aad9f60bc734631e8157d99a07d8a9c66ee8f2bd034e3` of that replay |
+| Command | The gate command, with `--write-manifests`, because the run wrote the two committed manifests |
+
+The pass took 1,524 seconds, and the harness accepted every block.
+
+| Snapshot | Coins | Bytes | Digest of the set | SHA-256 of the file |
+| --- | ---: | ---: | --- | --- |
+| Height 100,000 | 5,556,212 | 422,359,596 | `dda64f97c6bc79ee64954d5e95ba26fb207c15b5255ffd041be333d6cbe4e817` | `fc9a4ebf7a2ef72a555aa1caf06583160d1e5785d18738cca729d3cd3783bca9` |
+| Height 145,000 | 5,094,671 | 387,316,918 | `b28411dc46135fd0f85c954a664866d4f610803f7d667c9d2032ddfd6c58716d` | `0fa2f2a1e1aa43c54bf877e5aed1884cb9731412c45a06c9b8a9c84ad0b32012` |
+
+The snapshot at height 145,000 has the number of coins and the digest of the recorded replay.
+The script holds both values as constants and requires them in every run.
+So the harness's snapshot at that height is the set that the oracle reached from the empty set, if double SHA-256 is collision resistant.
+
+Range S agrees.
+Both programs start from 5,556,212 coins with the digest of the manifest, and accept all 1,000 blocks with equal block records.
+The blocks spend 121,665 coins and create 151,427.
+Both programs end with 5,585,974 coins and the digest `e6aeca49614547750a803c3d4dd85f6986f69f819a207531f896e1aa7840aa1b`, which the pass reports at height 101,000.
+The block records equal those of the pass at the same heights.
+The oracle with `coins_in_memory` returns the same `ok` object.
+All 29 changed snapshots give their required results.
+
+Core took 18 seconds for the range.
+The oracle took 682 seconds on the coins that the blocks name, with its two reads of the snapshot, and 728 seconds with `coins_in_memory`.
+A separate run of the first form alone had a peak resident memory of 317 MB.
+The whole run took about 60 minutes on four cores at low priority, on a machine that ran other work.
+
+The run is evidence for these blocks, and it is one run.
+It tests the snapshot path: every block of the range is also in the replay from the genesis block, so the range adds no agreement on a new block.
+The oracle did not check the blocks between heights 101,001 and 145,000 in this run.
+The hypothesis of section 3.4 of the design record applies to every later range from a snapshot: the comparison does not show that the snapshot is Core's coin set.
+
 #### Measurements for the Core pass
 
 Stage 0 of [design record 0011](design/0011-mainnet-ranges.md) measures the chain, the coin set at the tip, and the memory of the harness.

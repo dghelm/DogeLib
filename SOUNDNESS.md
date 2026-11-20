@@ -3409,7 +3409,7 @@ The theorems are `lockStep_false`, `lockCheck_corrected_next`, `correctedStep_re
 ### Proposed revisions: `RelativeLockTime`, the lock-time cutoff
 
 `DogeLib.Proposals.RelativeLockTime` is a proposed revision with a public proposal for Dogecoin ([design record 0012](docs/design/0012-relative-lock-time.md)).
-It states the rules of BIP 68, BIP 112 and BIP 113, which discussion 3509 of `dogecoin/dogecoin` proposed to activate (SOURCES.md, P1 to P4).
+Design record 0012 covers the rules of BIP 68, BIP 112 and BIP 113, which discussion 3509 of `dogecoin/dogecoin` proposed to activate (SOURCES.md, P1 to P4).
 **The revision is partial: it has the rule of BIP 113 alone.**
 Every statement below is about that rule, and none is about the three rules together.
 DogeLib takes no position on the activation of these rules.

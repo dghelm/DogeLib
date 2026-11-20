@@ -28,7 +28,7 @@ A revision has four parts: its spend check, its script flags (E1), its transacti
 - `validateBlockWithActive_ofBaseline`, `validateBlockWith_ofBaseline` and `validateBlockWith_baseline`: the same for `validateBlock`.
 
 So a change to `connectBlock` or `validateBlock` that the copies do not follow fails the build.
-These theorems hold for every context. With `csvActive` true in the context, both sides are the result `csvActive`.
+These theorems hold for every context. With `csvActive` true in the context, both sides give the result `csvActive` when they reach the test of that field.
 
 ## Inactive equality
 
@@ -1084,7 +1084,7 @@ For every verifier, value of `active`, flag `fJustCheck`, context, coin set and 
 The baseline revision has the baseline spend check, the baseline script flags and the transaction test that accepts everything.
 The baseline error type is `ConnectEmbedding.baseline`, and `toExcept` only changes the name of the result type.
 `connectBlockWith_ofBaseline` is the same agreement for every embedding.
-The statement holds for a context with `csvActive` true too, where both sides are the result `csvActive`.
+The statement holds for a context with `csvActive` true too. Both sides then give the result `csvActive` when they reach the test of that field.
 -/
 theorem connectBlockWith_baseline (verify : SignatureVerifier) (active fJustCheck : Bool) (ctx : ConnectContext)
     (s : CoinSet) (b : Block) :

@@ -152,7 +152,7 @@ Its section 11 gives the stages and their exit conditions:
 | 3 | The recent range from the snapshot at 6,455,301, and its run in CI with restricted coins. It closes stage 0010b | Not started |
 | 4 | The CSV window in the oracle: a version in each `chain` entry, and the ranges E1 and E2 | Not started |
 | 5 | The conformance corpus: the format document, the range requests, the expected results and the checker | Not started |
-| 6 | The historical impact of a proposed revision: `connectBlockWith`, the `ProposalExports` executable, and the self-test with the two examples | Not started |
+| 6 | The historical impact of a proposed revision: `connectBlockWith`, the `ProposalExports` executable, and the self-test with the two examples | Part 1 implemented: exit conditions 1 to 3. `connectBlockWith` and `validateBlockWith` are in `DogeLib.Proposals.Framework.Block`, with the four theorem targets of section 10.1 proved. `dogelib-proposal-oracle` answers `block.validate` with `revision`, and without it writes the bytes of `dogelib-oracle` on the requests of the full comparison. The import check covers `ProposalExports`. [Evidence](COVERAGE.md#proposed-revisions). Open: conditions 4 and 5, the runs on the ranges and their records, which follow stage 2 |
 
 Adoption of the record establishes no result.
 Each stage reports its evidence in COVERAGE.md and SOUNDNESS.md when it merges.
@@ -165,7 +165,7 @@ The revision is not part of the baseline, and DogeLib takes no position on its a
 
 | Stage | Deliverable | Status |
 | --- | --- | --- |
-| 1 | The extensions E1 to E4 of the block-level layer of design record 0011, and BIP 113, the median-time cutoff. The cutoff has its restriction theorem, known answers and the cutoff count. A comparison runs Core's code with the CSV state forced to `ACTIVE` | Not started. The stage waits for the definitions of stage 6 of design record 0011 (decision 7) |
+| 1 | The extensions E1 to E4 of the block-level layer of design record 0011, and BIP 113, the median-time cutoff. The cutoff has its restriction theorem, known answers and the cutoff count. A comparison runs Core's code with the CSV state forced to `ACTIVE` | Not started. The definitions of stage 6 of design record 0011 are implemented (decision 7) |
 | 2 | BIP 112: the CSV flag of a block, the Script-local theorems for `OP_CHECKSEQUENCEVERIFY` and the corpus records | Not started |
 | 3 | BIP 68: sequence locks with the ancestor median times, the block-level `SoftFork` with its witnesses, and `relativeLock_enforced` | Not started |
 | 4 | The historical counts on heights 0 to 10,000 and 0 to 145,000, with a committed candidate list | Not started |

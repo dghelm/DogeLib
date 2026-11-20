@@ -213,6 +213,8 @@ class Reports(unittest.TestCase):
             'soundness-review': None,
             'writing': 'uv run --no-project --python 3.12 python scripts/check_writing.py --base main',
             'oracle': 'bash scripts/test_oracle.sh',
+            'proposal-oracle': 'lake build dogelib-oracle dogelib-proposal-oracle && '
+                               'python3 -I scripts/test_proposal_oracle.py .lake/build/bin/dogelib-oracle .lake/build/bin/dogelib-proposal-oracle',
             'core-comparison': 'scripts/build_core_harness.sh <dogecoin-git-clone> build/core-harness && '
                                'python3 -I scripts/compare_core.py .lake/build/bin/dogelib-oracle build/core-harness/core-oracle',
             'rust-compactsize-comparison': 'cargo +nightly-2026-09-17 build --locked --manifest-path Refinement/Rust/Cargo.toml --example compactsize_oracle --jobs 4 && '

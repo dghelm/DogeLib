@@ -1,6 +1,6 @@
 module
 
-public import DogeLib.Proposals.Framework.Compatibility
+public import DogeLib.Proposals.Framework.Block
 
 /-!
 # `Proposals.ExampleVersionVerify`
@@ -63,10 +63,16 @@ The rule reads the transaction through `ExampleContext`, not through `SignatureC
 Each revised definition takes `active : Bool` (decision 4).
 No network has an activation height for the example, and the module defines no `Activation` value.
 
+## Block level
+
+`blockRevision verify` is the example as a `BlockRevision` of `DogeLib.Proposals.Framework.Block`: its spend check is `exampleVerifyLegacySpend` with the verifier `verify`.
+`connectBlockWith` and `validateBlockWith` run it on a block (design record 0011, section 10.1).
+
 ## Labels
 
-Every compatibility theorem in `DogeLib.Proposals.ExampleVersionVerify.Proofs` is Script-local: it is about one call of `evalScript`, `verifyScript` or `verifyLegacySpend`.
-None of them is a soft-fork claim about the network, which also needs block validity (design record 0007, section 8.3).
+Every compatibility theorem in `DogeLib.Proposals.ExampleVersionVerify.Proofs` is Script-local, except those of `Proofs.Block`, which are block-level.
+A Script-local theorem is about one call of `evalScript`, `verifyScript` or `verifyLegacySpend`.
+No theorem of the example is a soft-fork claim about the network, which also needs the statement for chains (design record 0007, section 8.3).
 The legacy projection of the example is the identity, because the rule changes no encoding and a successful step leaves the baseline state.
 
 There is no external document, so the example has no identifier in SOURCES.md.
@@ -166,6 +172,10 @@ def exampleVerifyLegacySpend (active : Bool) (ctx : InputContext) (prevScriptPub
     (flags : UInt32) (verify : SignatureVerifier) : VerifyOutcome ExampleScriptError ExampleScriptUnsupported :=
   exampleVerifyScript active (some (.ofInput ctx)) (transactionChecker ctx.tx ctx.index verify) flags
     ctx.input.scriptSig.bytes.val prevScriptPubKey.bytes.val
+
+/-- The example at the block level: the spend check `exampleVerifyLegacySpend` with the verifier `verify`. -/
+def blockRevision (verify : SignatureVerifier) : BlockRevision ExampleScriptError ExampleScriptUnsupported :=
+  ⟨fun active ctx prevScriptPubKey flags => exampleVerifyLegacySpend active ctx prevScriptPubKey flags verify⟩
 
 /-- The arguments of one spend check, other than `active`: the input, the previous `scriptPubKey`, the flags and the verifier. -/
 structure SpendArgs where

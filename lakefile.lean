@@ -71,10 +71,29 @@ lean_lib «ProposalProofs» where
     `DogeLib.Proposals.ExampleFaultyLocktime.Proofs, `DogeLib.Proposals.ExampleVersionVerify.Proofs]
   precompileModules := false
 
+/-- The operations of the proposal executable, rooted at
+`DogeLib/Proposals/Exports.lean` (design record 0011, decision 10).
+It may import `Proposals`, `Exports` and `DogeLib`. No baseline library
+imports it. `precompileModules` is off, as for `Exports`. -/
+@[default_target]
+lean_lib «ProposalExports» where
+  requiresModuleSystem := true
+  roots := #[`DogeLib.Proposals.Exports]
+  precompileModules := false
+
 /-- The oracle: answers requests in the record format of `docs/oracle.md`,
 one JSON object per line on standard input and output. -/
 lean_exe «dogelib-oracle» where
   root := `DogeLib.Exports.Main
+
+/-- The proposal executable: every operation of `dogelib-oracle`, and
+`block.validate` with the argument `revision` (design record 0011,
+section 10.2). Its entry point is `scripts/ProposalOracle.lean`, and every
+other definition is in the `ProposalExports` library. -/
+@[default_target]
+lean_exe «dogelib-proposal-oracle» where
+  srcDir := "scripts"
+  root := `ProposalOracle
 
 /-- Checks the compiled declarations of every library: their axioms, and any
 construct the kernel cannot unfold or the compiler runs differently. Run it

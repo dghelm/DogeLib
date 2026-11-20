@@ -1022,6 +1022,71 @@ The harness checks request arguments by the rules of this document.
 Twenty-two adapter-limit boundary requests check both programs against the documented expectations, including `adapter/resource_limit` errors.
 Other argument checks have oracle fixtures but no Core comparison.
 
+### The proposal executable
+
+`dogelib-proposal-oracle` is a second executable, built from the `ProposalExports` library ([design record 0011](design/0011-mainnet-ranges.md), section 10.2 and decision 10).
+It answers every operation of `dogelib-oracle` with the code of `dogelib-oracle`.
+It adds one argument to `block.validate`, with `blocks_hex` and with `blocks_file`:
+
+```text
+"revision": {"name": "ExampleVersionVerify", "variant": null, "activation_height": 0}
+```
+
+| Field | Value |
+| --- | --- |
+| `name` | The name of a revision: `ExampleFaultyLocktime` or `ExampleVersionVerify`. |
+| `variant` | `corrected` or `faulty` for `ExampleFaultyLocktime`, and null for `ExampleVersionVerify`. |
+| `activation_height` | A mainnet height from 0 to 2,147,483,646, or null for no activation. |
+
+The three fields are required, and any other field is a request error.
+The two revisions are the examples of the `Proposals` library. Neither is a proposal for Dogecoin.
+
+`dogelib-oracle` has no such argument and returns a request error for it.
+Without the argument, the proposal executable writes the response of `dogelib-oracle`, byte for byte.
+`dogelib-proposal-oracle --version` prints the format with `"program": "dogelib-proposal-oracle"`.
+
+With the argument, the request runs as before: the baseline `validateBlock` decides each block and carries the coin set and the chain view.
+For each block, `Proposals.Framework.validateBlockWith` also runs the revision on the state before the block.
+The revision is active from `activation_height`.
+Each block record gains the object `revised`, and no other field of the response changes:
+
+| Field | Value |
+| --- | --- |
+| `active` | Whether the revision is active at the height of the block. |
+| `verdict` | `accepted`, `rejected` or `unsupported`. |
+| `step` | For a rejection or an unsupported result, the check that gave it: `CheckBlockHeader`, `ContextualCheckBlockHeader`, `CheckBlock`, `ContextualCheckBlock` or `ConnectBlock`. |
+| `reject_reason` | For a rejection, Core's reject reason. For a script failure, the bracket holds the text of the revision's error. |
+| `tx`, `input` | For a rejection that names them, the position of the transaction in the block and of the input in the transaction. `tx` is set for a `CheckTransaction` failure, a missing coin, a `CheckTxInputs` failure and a script failure. `input` is set for a script failure. |
+| `script_error` | For a script failure, the text of the error of the first script run. A baseline error has Core's text. An error of the revision has a text that starts with the name of the revision. |
+| `mandatory` | For a script failure, false when the second run accepts. The second run uses the flags without `STANDARD_NOT_MANDATORY_VERIFY_FLAGS` and the same activation. |
+| `reason` | For an unsupported result, a text for the missing capability or the result outside the model. |
+| `changes_digest_hex` | For an acceptance, the digest of the coin changes of the revision's result. |
+
+A field that does not apply is null.
+A *changed block* is a block whose record has `valid` true and a `revised.verdict` of `rejected`, or `valid` false and a `revised.verdict` of `accepted`.
+An unsupported result is not a rejection, and its block is not a changed block.
+
+The run answers one question for each block: what does the revision say about this block on the baseline chain below it?
+It does not build the chain that revised nodes would build after a changed block.
+No Core behaviour exists for a revision, so no comparison supports a `revised` object.
+The theorems of `DogeLib.Proposals.Framework.Proofs.Block` relate the two verdicts ([SOUNDNESS.md](../SOUNDNESS.md#proposed-revisions-the-block-level)).
+
+The executable has one test, which needs no Dogecoin Core:
+
+```bash
+lake build dogelib-oracle dogelib-proposal-oracle
+python3 -I scripts/test_proposal_oracle.py .lake/build/bin/dogelib-oracle .lake/build/bin/dogelib-proposal-oracle
+```
+
+- Without `revision`, the two programs write the same bytes on the 42 `block.validate` requests of the full comparison and on 34 requests with `blocks_file`. With `--mainnet-blocks build/mainnet-blocks`, the test adds the replay of mainnet heights 0 to 10,000.
+- `dogelib-oracle` refuses `revision`, and the proposal executable refuses 18 malformed values of it.
+- With no activation height, each `revised` object has the verdict, the reject reason and the changes digest of its baseline record. The check covers the 119 block records of those 42 requests, for each revision.
+- From height 0 on the same requests, the response without the `revised` objects is the baseline response. No block goes from rejected to accepted under the two revisions with a restriction theorem.
+- One request of the comparison has five blocks that fail the five checks in Core's order. Each `revised` object names the check in `step`, and the transaction at 1 in `tx` for the duplicate inputs and for the missing coin.
+- Eight made blocks give `revised` objects that the test states by hand from the text of each rule. Each block stands on a committed rule-change block and spends a supplied coin whose script holds the rule. A negative operand of each rule changes an accepted block to rejected. The counterexample of the faulty variant changes a rejected block to accepted.
+
+The test does not run a revision on the mainnet ranges of design record 0011. Those runs are conditions 4 and 5 of its stage 6.
+
 ### Block validation in the harness
 
 `block.validate` keeps state in the harness for the length of one request: a block index, a coin set, and Core's version-bits cache.

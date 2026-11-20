@@ -175,14 +175,25 @@ lake env lean --run scripts/CheckRefinementImports.lean
 ```
 
 The last command rejects Aeneas, Mathlib or `Refinement` in the specification, proof and oracle libraries' transitive imports.
-It also rejects `DogeLib.Proposals` in those imports, and the refinement dependencies in the imports of the `Proposals` and `ProposalProofs` libraries.
+It also rejects `DogeLib.Proposals` in those imports, and the refinement dependencies in the imports of the `Proposals`, `ProposalProofs` and `ProposalExports` libraries.
 After a change to the check, run its self-test:
 
 ```bash
 bash scripts/test_import_boundaries.sh
 ```
 
-The self-test plants a module under `DogeLib/` that imports `DogeLib.Proposals`, and requires a failure that names the proposal modules.
+The self-test plants a module under `DogeLib/` that imports `DogeLib.Proposals`, and then one that imports `DogeLib.Proposals.Exports`. It requires a failure that names the proposal modules each time.
+
+The proposal executable has its own test, which needs no Dogecoin Core:
+
+```bash
+lake build dogelib-oracle dogelib-proposal-oracle
+python3 -I scripts/test_proposal_oracle.py .lake/build/bin/dogelib-oracle .lake/build/bin/dogelib-proposal-oracle
+```
+
+It requires the bytes of `dogelib-oracle` on every `block.validate` request of the full comparison when the request has no `revision` argument.
+[docs/oracle.md](docs/oracle.md#the-proposal-executable) lists its other checks.
+
 [Refinement/Rust/README.md](Refinement/Rust/README.md) records the contract, fixtures, pins and regeneration steps.
 
 ## Module boundaries

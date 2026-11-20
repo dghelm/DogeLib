@@ -80,15 +80,24 @@ def runRequest (fields : Args) : Except Failure Json := runRequestWith operation
 def respond (line : String) : Option Json := respondWith operations line
 
 /--
+Run a request in `IO` with the operations `ops`.
+A `block.validate` request with the argument `blocks_file` reads that file through `validateFile`.
+Every other request has the result of `runRequestWith ops`.
+-/
+def runRequestIOWith (ops : List Operation) (validateFile : Args → IO (Except Failure Json)) (fields : Args) :
+    IO (Except Failure Json) :=
+  if fields.get? "op" == some (.str Block.Exports.blockValidate.name) && fields.contains "blocks_file" then
+    validateFile fields
+  else
+    pure (runRequestWith ops fields)
+
+/--
 Run a request in `IO`.
 A `block.validate` request with the argument `blocks_file` reads that file through `Block.Exports.blockValidateFile`.
 Every other request has the result of `runRequest`.
 -/
 def runRequestIO (fields : Args) : IO (Except Failure Json) :=
-  if fields.get? "op" == some (.str Block.Exports.blockValidate.name) && fields.contains "blocks_file" then
-    Block.Exports.blockValidateFile fields
-  else
-    pure (runRequest fields)
+  runRequestIOWith operations Block.Exports.blockValidateFile fields
 
 /-- Answer a line in `IO`, with `runRequestIO`. This is the response of the `dogelib-oracle` executable. -/
 def respondIO (line : String) : IO (Option Json) := respondM runRequestIO line

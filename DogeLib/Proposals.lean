@@ -3,6 +3,7 @@ module
 public import DogeLib.Proposals.ExampleFaultyLocktime
 public import DogeLib.Proposals.ExampleVersionVerify
 public import DogeLib.Proposals.Framework.Activation
+public import DogeLib.Proposals.Framework.Block
 public import DogeLib.Proposals.Framework.Compatibility
 public import DogeLib.Proposals.Framework.Script
 
@@ -18,6 +19,7 @@ No module of the `DogeLib`, `Proofs` or `Exports` libraries imports this library
 
 - `DogeLib.Proposals.Framework.Script` holds the Script loop with the instruction step as a parameter, and the restriction relation.
 - `DogeLib.Proposals.Framework.Activation` holds the activation model.
+- `DogeLib.Proposals.Framework.Block` holds `connectBlockWith` and `validateBlockWith`: block connection and block validation with the spend check of a revision (design record 0011, section 10.1).
 - `DogeLib.Proposals.Framework.Compatibility` holds the compatibility classes and the legacy projection.
 - `DogeLib.Proposals.ExampleFaultyLocktime` is an invented proposal with a deliberate fault, and its corrected variant. It is a teaching example and a test of the framework, not a proposal for Dogecoin.
 - `DogeLib.Proposals.ExampleVersionVerify` is the worked example of design record 0007, section 10. It is not a proposal for Dogecoin.

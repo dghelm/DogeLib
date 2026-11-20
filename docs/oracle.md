@@ -1056,7 +1056,7 @@ Each block record gains the object `revised`, and no other field of the response
 | `verdict` | `accepted`, `rejected` or `unsupported`. |
 | `step` | For a rejection or an unsupported result, the check that gave it: `CheckBlockHeader`, `ContextualCheckBlockHeader`, `CheckBlock`, `ContextualCheckBlock` or `ConnectBlock`. |
 | `reject_reason` | For a rejection, Core's reject reason. For a script failure, the bracket holds the text of the revision's error. |
-| `tx`, `input` | For a rejection that names them, the position of the transaction in the block and of the input in the transaction. |
+| `tx`, `input` | For a rejection that names them, the position of the transaction in the block and of the input in the transaction. `tx` is set for a `CheckTransaction` failure, a missing coin, a `CheckTxInputs` failure and a script failure. `input` is set for a script failure. |
 | `script_error` | For a script failure, the text of the error of the first script run. A baseline error has Core's text. An error of the revision has a text that starts with the name of the revision. |
 | `mandatory` | For a script failure, false when the second run accepts. The second run uses the flags without `STANDARD_NOT_MANDATORY_VERIFY_FLAGS` and the same activation. |
 | `reason` | For an unsupported result, a text for the missing capability or the result outside the model. |
@@ -1082,6 +1082,7 @@ python3 -I scripts/test_proposal_oracle.py .lake/build/bin/dogelib-oracle .lake/
 - `dogelib-oracle` refuses `revision`, and the proposal executable refuses 18 malformed values of it.
 - With no activation height, each `revised` object has the verdict, the reject reason and the changes digest of its baseline record. The check covers the 119 block records of those 42 requests, for each revision.
 - From height 0 on the same requests, the response without the `revised` objects is the baseline response. No block goes from rejected to accepted under the two revisions with a restriction theorem.
+- One request of the comparison has five blocks that fail the five checks in Core's order. Each `revised` object names the check in `step`, and the transaction at 1 in `tx` for the duplicate inputs and for the missing coin.
 - Eight made blocks give `revised` objects that the test states by hand from the text of each rule. Each block stands on a committed rule-change block and spends a supplied coin whose script holds the rule. A negative operand of each rule changes an accepted block to rejected. The counterexample of the faulty variant changes a rejected block to accepted.
 
 The test does not run a revision on the mainnet ranges of design record 0011. Those runs are conditions 4 and 5 of its stage 6.

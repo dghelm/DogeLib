@@ -19,6 +19,8 @@ It needs no Dogecoin Core. The checks:
    `revised` objects, so the revision changes no state. For the two soft forks, no block goes from
    rejected to accepted. This check is a property test on the comparison requests. It is not the
    range run of section 10.3, case 2.
+   The request whose five blocks fail the five checks in Core's order gives the step and the
+   transaction of each rejection, with and without an activation height.
 6. Made blocks. Each block stands on a committed rule-change block, with a synthetic coin whose
    script holds the rule, as section 10.3, case 3, describes. Each expected `revised` object is
    written here by hand from the text of the rule in the module documentation of the example and
@@ -262,6 +264,23 @@ def main() -> int:
                 if active and not ((name, variant) in SOFT_FORKS and relaxed):
                     print(f"ok:   {where}: {len(records)} block records, {len(changed)} changed, "
                           f"{len(relaxed)} from rejected to accepted")
+
+    # The step and the transaction of a rejection, on the request of the comparison whose five blocks
+    # fail the checks in Core's order (`order_cases`). The expectations follow the comments of that
+    # request: the second CheckBlock failure and the ConnectBlock failure are in the transaction at 1.
+    order_reasons = ["bad-diffbits", "bad-txnmrklroot", "bad-txns-inputs-duplicate", "bad-txns-nonfinal",
+                     "bad-txns-inputs-missingorspent"]
+    order_steps = [("ContextualCheckBlockHeader", None), ("CheckBlock", None), ("CheckBlock", 1),
+                   ("ContextualCheckBlock", None), ("ConnectBlock", 1)]
+    order = [r for r, b in zip(requests, baseline) if [x["reject_reason"] for x in block_records(b)] == order_reasons]
+    if check(len(order) == 1, f"{len(order)} requests with the reject reasons of the order case"):
+        for height in (None, 0):
+            answer = responses(proposal, [{**order[0], "revision": revision("ExampleVersionVerify", None, height)}], timeout)[0]
+            got = [(b["revised"]["step"], b["revised"]["tx"]) for b in block_records(answer)]
+            reasons = [b["revised"]["reject_reason"] for b in block_records(answer)]
+            if check(got == order_steps and reasons == order_reasons,
+                     f"order case, activation_height {json.dumps(height)}: steps {got}, reasons {reasons}"):
+                print(f"ok:   order case, activation_height {json.dumps(height)}: the step and the transaction of each rejection")
 
     # 6. Made blocks.
     for name, req, rev, expected, baseline_valid in made_blocks():

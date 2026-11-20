@@ -63,9 +63,20 @@ def failureFields (step : Option String) (rejectReason : Option String) (tx inpu
     ("script_error", (scriptError.map Json.str).getD .null), ("mandatory", (mandatory.map Json.bool).getD .null),
     ("reason", (reason.map Json.str).getD .null)]
 
+/-- The transaction that a `CheckBlock` rejection names: the position of the transaction that `CheckTransaction` rejects. -/
+def checkBlockTx : CheckBlockError → Option Nat
+  | .transaction index _ => some index
+  | _ => none
+
 /-- The transaction that a baseline `ConnectBlock` rejection names, when it names one. -/
 def rejectionTx : ConnectBlockError → Option Nat
   | .inputsMissingOrSpent tx | .txInputs tx _ | .script tx _ _ _ => some tx
+  | .checkBlock e => checkBlockTx e
+  | _ => none
+
+/-- The transaction that a rejection of one of the four checks before `ConnectBlock` names, when it names one. -/
+def validateRejectionTx : ValidateError → Option Nat
+  | .checkBlock e => checkBlockTx e
   | _ => none
 
 /--
@@ -85,7 +96,7 @@ def connectFields {ε υ : Type} (describe : ε → String) (describeU : υ → 
 /-- The embedding of `validateBlock` results into the failure fields of a `revised` object. The fields of a `ConnectBlock` result pass unchanged. -/
 def validateFields :
     ValidateEmbedding (List (String × Json)) (List (String × Json)) (List (String × Json)) (List (String × Json)) where
-  rejected e := failureFields (some e.step) e.rejectReason none none none none none
+  rejected e := failureFields (some e.step) e.rejectReason (validateRejectionTx e) none none none none
   unsupported e := failureFields (some e.step) none none none none none (some (reprStr e))
   connect := id
   connectUnsupported := id

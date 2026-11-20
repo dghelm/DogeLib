@@ -255,6 +255,10 @@ class Reports(unittest.TestCase):
             'snapshot-range-s': 'python3 -I scripts/snapshot_range.py --start 100000 --end 101000 --snapshot 145000 --jobs 3 --output build/snapshot-range/s '
                                 '.lake/build/bin/dogelib-oracle build/core-harness/core-oracle '
                                 'build/mainnet-blocks/genesis-10000 build/mainnet-blocks/range-10001-145000',
+            'core-pass-self-test': 'python3 -I scripts/test_core_pass.py .lake/build/bin/dogelib-oracle build/core-harness/core-oracle '
+                                   'build/core-harness/core-oracle-trap build/mainnet-blocks/genesis-10000',
+            'core-pass': 'python3 -I scripts/core_pass.py --state build/core-pass --local build/mainnet-blocks/genesis-10000 '
+                         '--local build/mainnet-blocks/range-10001-145000 build/core-harness/core-oracle-trap',
             'lane-tool': 'bash scripts/test_lane.sh',
         }
         self.assertEqual({g['slug']: g['command'] for g in gates}, expected)

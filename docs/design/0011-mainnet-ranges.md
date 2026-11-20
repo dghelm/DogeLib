@@ -145,6 +145,7 @@ So the pass needs a change of the harness first.
 Each entry of `chain` gains the version of its header, and the harness removes the refusal.
 
 Core's own `VersionBitsState` then walks the supplied entries and the accepted blocks.
+
 A segment that starts inside the window gets a dense chain back to the last boundary below the CSV start.
 The chain also holds the ten real headers below that boundary.
 Core reads the median time of that boundary from them (`versionbits.cpp`, line 44, and `chain.h`, line 286).
@@ -157,6 +158,7 @@ In a comparison, the oracle's `out_of_domain_at` keeps such a block from the har
 The pass runs blocks that the oracle never reads, so it has no such guard.
 
 The proposal builds the harness of the pass with `-fsanitize=signed-integer-overflow` and `-fno-sanitize-recover`.
+The flags apply to the compilation of Core's `validation.cpp` and `coins.cpp`, which hold the sums.
 An overflow then ends the pass with an error, and the lane stops and reports the block.
 The record does not claim that any block of mainnet overflows.
 
@@ -343,7 +345,7 @@ Stage 0010b is open in one part: the recent range, range G here.
 Design record 0010, section 5, planned a fetch tool that takes each spent coin from its funding transaction.
 Without `-txindex`, `getrawtransaction` finds a confirmed transaction only through a coin entry of its ID.
 `GetTransaction` takes the height from that entry and reads the block (lines 1108 to 1125).
-A funding transaction whose outputs are all spent has no entry in the database, and at most a pruned entry in the cache.
+After the node flushes the last spend of a funding transaction, the database has no entry for it (`txdb.cpp`, lines 53 to 54).
 So the node does not reliably supply every funding transaction.
 
 A change of `-txindex` needs `-reindex-chainstate` (`init.cpp`, lines 1515 to 1517).

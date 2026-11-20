@@ -1101,7 +1101,7 @@ The definitions differ from the C++ in these places:
 - `checkOutputs` adds the output amounts in the integers. Core adds in `int64_t`, and the sum there is at most `2 * MAX_MONEY`, below `2^63`. That bound is an argument in the module documentation, not a theorem.
 - The counts of signature operations are natural numbers. Core counts in `unsigned int`. `checkBlock` reduces the product with `WITNESS_SCALE_FACTOR` modulo `2^32` before the comparison, so the two agree for every count.
 - `hasDuplicate` compares outpoints pair by pair, where Core inserts them into a `std::set`.
-- The instruction reader of the sigop count covers a script of fewer than `2^31` bytes, the domain of `readOp`.
+- The instruction reader of the sigop count covers a script of fewer than `2^31` bytes, the domain of `readOp`. The count reads with `nextOp`, and `nextOp_view` proves that `nextOp` reads the instructions that `readOp` reads.
 - `checkBlock` takes the network of its header check as a parameter. The oracle and the comparison use mainnet, and testnet and regtest have no comparison evidence here.
 
 No statement of `CheckTransaction` or `CheckBlock` reads a witness stack, so the definitions take the base fields of each transaction.
@@ -1145,6 +1145,7 @@ It also states what the comparison shows for a block with no pinned hash.
 [docs/reviews/blockcheck.md](docs/reviews/blockcheck.md) records a model read of the definitions against Core.
 
 By `#print axioms`, `MerkleDuplication.root_eq_and_mutated` and `Script.getSigOpCount_le` depend on `propext` and `Quot.sound`.
+`Script.getSigOpCount_eq_scanOps`, `nextOp_view` and `foldOps_eq` depend on `propext` and `Quot.sound`.
 `checkBlock_rejects_merkleDuplication`, `Block.read_encode_allowWitness` and `Block.read_encode_base` depend on `propext`, `Classical.choice` and `Quot.sound`.
 
 ### Version bits
@@ -1306,6 +1307,13 @@ The definition describes Core with no script-check threads and no assumed-valid 
 With check threads, the reject reason is that of the first failing check that a thread reports.
 With an assumed-valid block, Core skips the scripts.
 Neither configuration is modelled.
+
+**The readers of the signature-operation cost.**
+`getSigOpCountAccurate` and `p2shSigOpCount` read scripts with `nextOp`, in steps linear in the length of the script (issue #149).
+`getSigOpCountAccurate_eq_scanOps` proves the accurate count equal to `accurateSigOps` over the opcodes of `scanOps`.
+`p2shSigOpCount_eq_lastPushFrom` proves the P2SH count equal to the same count with the loop `lastPushFrom`, which reads with `readInstruction`.
+By `#print axioms`, `getSigOpCountAccurate_eq_scanOps` depends on `propext` and `Quot.sound`.
+`lastPushFrom_eq_lastPushLoop` and `p2shSigOpCount_eq_lastPushFrom` depend on `propext`, `Classical.choice` and `Quot.sound`.
 
 **Block validation.**
 `validateBlock` is the composition of the five checks in the order of `AcceptBlockHeader`, `AcceptBlock` and `ConnectBlock`.

@@ -1768,10 +1768,12 @@ A block with more than 1,000,000 transactions has at least 10 MB, and the size c
 A sigop product that wraps modulo `2^32` needs `2^30` operations.
 The strict chain ID rule through `block.check` needs a mined mainnet header, and `block.check_pow` covers that rule.
 
-The oracle's sigop count reads a script as a byte list, and its time grows with the square of the number of instructions.
-A script of 80,000 one-byte opcodes takes about 3 seconds, and Core takes less than 0.1 seconds.
+Until [issue 149](https://github.com/dghelm/DogeLib/issues/149) was fixed, the oracle's sigop count took time that grew with the square of the number of instructions.
+A `tx.check` request whose one input has a `scriptSig` of 80,000 `OP_0` bytes (`0x00`) took about 3 seconds with the oracle of `main` at `bf5598e`.
 So the requests of a megabyte hold one large push, and no request has more than about 30,000 separate opcodes in one script.
-[Issue 149](https://github.com/dghelm/DogeLib/issues/149) tracks a faster reader.
+The count now reads with `nextOp`, in time linear in the length of the script.
+The same request takes 0.04 seconds, and one with 1,000,000 `OP_0` bytes takes under 0.5 seconds.
+Each time is the best of a few runs of the oracle on one core of a shared development machine, at nice 19.
 
 ### Contextual block body comparison evidence
 

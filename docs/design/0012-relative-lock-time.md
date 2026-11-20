@@ -227,11 +227,14 @@ Reason 3 covers one chain only. Two branches of a fork can reach `ACTIVE` at dif
 The revision reads `Activation.height .mainnet` alone.
 
 **Where the rules apply.**
-The revised rules apply only to a block with a predecessor whose header does not have the genesis hash.
-For every other block, the revision is inactive at every activation height.
+A block is *applicable* when two conditions hold.
+Its view of the predecessor is not empty.
+The hash of its own header is not the hash of the mainnet genesis block.
+The revised rules apply only to an applicable block, and for every other block the revision is inactive at every activation height.
+
 `validateBlock` runs no header check on a header with the genesis hash, and `connectBlock` connects none of its transactions.
 So no check gives the time order that the cutoff needs (section 6.4), and no transaction of such a block reaches the two other rules.
-This record calls a block inside that limit *applicable*.
+The block at height 1 is applicable: its predecessor is the genesis block, and its own hash is another hash.
 
 Core's cutoff reads `pindexPrev->GetMedianTimePast()` [R4, line 3135], and `EvaluateSequenceLocks` asserts a predecessor [R2, line 373].
 At the pin, `VersionBitsState` of a null predecessor is `DEFINED`, so Core never reaches either line without one.
@@ -552,7 +555,7 @@ No line of Core's source changes.
 The seed is set for one block and cleared after it.
 Below height 10,080 the aligned boundary is null, which is also the cache key of a block without a predecessor.
 A seed that stays there makes Core dereference a null predecessor at line 3135.
-So the harness seeds nothing for a block that is not applicable, and such a block gets the baseline result on both sides.
+So the harness seeds nothing for a block that is not applicable (section 5), and such a block gets the baseline result on both sides.
 
 The two seeds differ in kind.
 `csv_never_lockedIn` shows that `FAILED` is Core's own result on a mainnet chain.
@@ -578,7 +581,7 @@ SOUNDNESS.md records the seed as a harness input with no theorem behind it.
 2. Made blocks for each boundary of section 10.1. Each block stands on a committed block and has no proof of work, as in case 3 of design record 0011, section 10.3.
 3. Each new reason at least once: `bad-txns-nonfinal` from the cutoff, `bad-txns-nonfinal` from a sequence lock, and `non-mandatory-script-verify-flag` from the opcode.
 4. A self-test: the comparison fails when the Lean side runs with the revision inactive on a block of item 2.
-5. The genesis block with the argument: both programs give the baseline result.
+5. The genesis block with the argument: both programs give the baseline result. The block at height 1 with the argument: Core runs with CSV active, and the two programs agree.
 
 Agreement shows that the Lean revision equals Core's dormant code on those requests.
 It does not show that the rules are right for Dogecoin, and it is not evidence about mainnet.
@@ -713,7 +716,7 @@ Every row is a proposal.
 | 2 | Name | `DogeLib.Proposals.RelativeLockTime`, one proposal for the three rules. | Three proposals, one for each BIP. A name with "CSV". | Proposed |
 | 3 | Deciding source | Core's code of the rules at the pin (R1 to R10). The BIPs explain, and the module documentation lists each difference (section 2.3). | The BIP text decides, and the code is a comparison. | Proposed |
 | 4 | Proposal documents | P1 to P3 by the commit of `bitcoin/bips` that last changed each file. P4 by URL, author, date and the SHA-256 of its first post. Issue 1798 and `1.21-dev` are background and get no identifier. | A committed copy of each text. Identifiers for the background texts too. | Proposed |
-| 5 | Activation | One fixed height on mainnet through `Activation`, for the three rules together, with no default. Inactive for a block that is not applicable: one without a predecessor, or with the genesis hash (section 5). | One Boolean for each rule. A signalling model first. | Proposed |
+| 5 | Activation | One fixed height on mainnet through `Activation`, for the three rules together, with no default. Inactive for a block that is not applicable: one with an empty view, or one whose own header has the genesis hash (section 5). | One Boolean for each rule. A signalling model first. | Proposed |
 | 6 | Block level | The layer of design record 0011, decision 11, and no second framework. The extensions E1 to E3 are changes to that layer: the flags of a block, a test of one transaction, and the arguments of the body check (section 6.3). | The layer unchanged: the opcode as a revised spend check with another reject reason than Core's, and no sequence locks or cutoff. A copy of `connectBlock` for this proposal. | Proposed |
 | 7 | Order with design record 0011 | The definitions and the agreement theorem of that record's stage 6 can land before its Core pass. Stage 1 here follows them (section 6.7). | Stage 1 waits for the whole of that stage 6. Stage 1 builds the definitions itself, under that record's decision 11. | Proposed |
 | 8 | Results at the block level | Extension E4: a block error and an unsupported reason of the proposal, in the form of issue #122. An unsupported reason is never a rejection (section 6.3). | `Except` with one sum type and an `isRejection` function of the proposal. | Proposed |

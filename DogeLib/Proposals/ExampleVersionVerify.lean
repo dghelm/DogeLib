@@ -36,7 +36,7 @@ With `active` false, or in a branch that does not execute, `OP_NOP10` stays a NO
 
 `exampleStep` runs the baseline `evalInstruction` first.
 When the result is `next t`, the opcode is `0xb9`, the branch executes and `active` is true, it applies `versionCheck` to `t`.
-Every other result passes unchanged, with a baseline error mapped by `Sum.inl`.
+Every other result passes unchanged, with a baseline error and a baseline unsupported reason mapped by `Sum.inl`.
 `versionCheck` returns `next t` or fails, so the step restricts the baseline step.
 
 The baseline step checks the stack size after the opcode.
@@ -47,11 +47,9 @@ The difference changes an error, never acceptance.
 
 The errors are `ScriptError ⊕ ExampleError`, with the baseline errors under `Sum.inl` (decision 10).
 
-The framework's unsupported reasons are the baseline type `DogeLib.Script.Unsupported`, which the example cannot extend.
-So a missing transaction context reports `noContext`, which is `Unsupported.signatureOpcode 0xb9`.
-That constructor's documentation describes an unavailable signature check, so the label is a stand-in.
-Issue #122 proposes a framework type of unsupported reasons that a proposal can extend.
-A baseline step reports `signatureOpcode op` only for the signature opcodes `0xac` to `0xaf`, so the opcode `0xb9` identifies the example.
+The unsupported reasons are `Unsupported ⊕ ExampleUnsupported`, with the baseline reasons under `Sum.inl` (issue #122).
+A missing transaction context reports `Sum.inr ExampleUnsupported.missingContext`.
+No baseline result maps to a reason under `Sum.inr`, so the reason identifies the example's own case.
 The reason is a label for a missing capability. It is not a rejection, and it makes no claim about any verdict.
 
 ## Context
@@ -97,6 +95,18 @@ inductive ExampleError where
 /-- The error type of the revised definitions: a baseline error under `Sum.inl`, or an example error under `Sum.inr`. -/
 abbrev ExampleScriptError : Type := ScriptError ⊕ ExampleError
 
+/--
+The unsupported reasons of the example.
+A missing context stays an unsupported result. It is never a rejection.
+-/
+inductive ExampleUnsupported where
+  /-- An executed `OP_NOP10`, with `active` true, has no transaction context to read. -/
+  | missingContext
+  deriving DecidableEq, Repr
+
+/-- The type of unsupported reasons of the revised definitions: a baseline reason under `Sum.inl`, or an example reason under `Sum.inr`. -/
+abbrev ExampleScriptUnsupported : Type := Unsupported ⊕ ExampleUnsupported
+
 /-- The transaction context that the rule reads. -/
 structure ExampleContext where
   /-- The spending transaction. -/
@@ -106,22 +116,12 @@ structure ExampleContext where
 def ExampleContext.ofInput (ctx : InputContext) : ExampleContext := ⟨ctx.tx⟩
 
 /--
-The unsupported reason of an executed `OP_NOP10` without a transaction context.
-The framework reuses the baseline reasons, so the example labels this case `signatureOpcode 0xb9`.
-That constructor's documentation describes an unavailable signature check, so the label is a stand-in, not a description.
-No baseline step gives that reason, because the baseline reports `signatureOpcode op` only for `0xac` to `0xaf`.
-
-A missing context stays an unsupported result. It is never a rejection.
-Issue #122 proposes a framework type of unsupported reasons that a proposal can extend.
--/
-def noContext : Unsupported := .signatureOpcode nop10
-
-/--
 The checks of the example on the state `t` after the baseline NOP, in the order of the module documentation.
 The operand is the top item of `t`, and the check never pops it.
 It returns `next t` or fails.
 -/
-def versionCheck (ctx : Option ExampleContext) (t : ExecState) : StepOutcome ExampleScriptError :=
+def versionCheck (ctx : Option ExampleContext) (t : ExecState) :
+    StepOutcome ExampleScriptError ExampleScriptUnsupported :=
   match t.stack.reverse with
   | [] => .rejected (.inl .invalidStackOperation)
   | top :: _ =>
@@ -130,39 +130,40 @@ def versionCheck (ctx : Option ExampleContext) (t : ExecState) : StepOutcome Exa
     | .ok n =>
       if n < 0 then .rejected (.inr .negativeOperand)
       else match ctx with
-        | none => .unsupported noContext
+        | none => .unsupported (.inr .missingContext)
         | some c => if n ≤ (c.tx.version.toNat : Int) then .next t else .rejected (.inr .versionTooLow)
 
 /--
 The revised step.
 It runs `evalInstruction checker script flags s i`.
 A successful `OP_NOP10` in an executing branch, with `active` true, then goes through `versionCheck`.
-Every other result passes unchanged, with a baseline error under `Sum.inl`.
+Every other result passes unchanged, with a baseline error and a baseline unsupported reason under `Sum.inl`.
 -/
 def exampleStep (active : Bool) (ctx : Option ExampleContext) (checker : Option SignatureChecker) (flags : UInt32) :
-    Step ExampleScriptError :=
+    Step ExampleScriptError ExampleScriptUnsupported :=
   fun script s i =>
     match evalInstruction checker script flags s i with
     | .next t => if active && isNop10 i.opcode && s.fExec then versionCheck ctx t else .next t
     | .rejected e => .rejected (.inl e)
-    | .unsupported u => .unsupported u
+    | .unsupported u => .unsupported (.inl u)
 
 /-- The revised `evalScript`: `evalScriptWith` with the example step. -/
 def exampleEvalScript (active : Bool) (ctx : Option ExampleContext) (checker : Option SignatureChecker)
-    (flags : UInt32) (script : List UInt8) (stack : List (List UInt8)) : EvalOutcome ExampleScriptError :=
-  evalScriptWith Sum.inl (exampleStep active ctx checker flags) flags script stack
+    (flags : UInt32) (script : List UInt8) (stack : List (List UInt8)) :
+    EvalOutcome ExampleScriptError ExampleScriptUnsupported :=
+  evalScriptWith Sum.inl Sum.inl (exampleStep active ctx checker flags) flags script stack
 
 /-- The revised `verifyScript`: `verifyScriptWith` with the example step, for the checker `c`. -/
 def exampleVerifyScript (active : Bool) (ctx : Option ExampleContext) (c : SignatureChecker) (flags : UInt32)
-    (scriptSig scriptPubKey : List UInt8) : VerifyOutcome ExampleScriptError :=
-  verifyScriptWith Sum.inl (exampleStep active ctx (some c) flags) flags scriptSig scriptPubKey
+    (scriptSig scriptPubKey : List UInt8) : VerifyOutcome ExampleScriptError ExampleScriptUnsupported :=
+  verifyScriptWith Sum.inl Sum.inl (exampleStep active ctx (some c) flags) flags scriptSig scriptPubKey
 
 /--
 The revised spend predicate of one legacy input.
 It runs `exampleVerifyScript` with the transaction of `ctx` as the example context and with the checker of `verifyLegacySpend`.
 -/
 def exampleVerifyLegacySpend (active : Bool) (ctx : InputContext) (prevScriptPubKey : Transaction.Script)
-    (flags : UInt32) (verify : SignatureVerifier) : VerifyOutcome ExampleScriptError :=
+    (flags : UInt32) (verify : SignatureVerifier) : VerifyOutcome ExampleScriptError ExampleScriptUnsupported :=
   exampleVerifyScript active (some (.ofInput ctx)) (transactionChecker ctx.tx ctx.index verify) flags
     ctx.input.scriptSig.bytes.val prevScriptPubKey.bytes.val
 
@@ -182,7 +183,7 @@ def baselineSpend (a : SpendArgs) : VerifyResult :=
   verifyLegacySpend a.ctx a.prevScriptPubKey a.flags a.verify
 
 /-- `exampleVerifyLegacySpend` on spend arguments. -/
-def revisedSpend (active : Bool) (a : SpendArgs) : VerifyOutcome ExampleScriptError :=
+def revisedSpend (active : Bool) (a : SpendArgs) : VerifyOutcome ExampleScriptError ExampleScriptUnsupported :=
   exampleVerifyLegacySpend active a.ctx a.prevScriptPubKey a.flags a.verify
 
 /--

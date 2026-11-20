@@ -77,7 +77,7 @@ def baselineVerdict : VerifyResult → Verdict
   | .unsupported _ => .unsupported
 
 /-- The verdict of a framework `VerifyScript` result. -/
-def VerifyOutcome.verdict {ε : Type} : VerifyOutcome ε → Verdict
+def VerifyOutcome.verdict {ε υ : Type} : VerifyOutcome ε υ → Verdict
   | .accepted => .accepted
   | .rejected _ => .rejected
   | .unsupported _ => .unsupported

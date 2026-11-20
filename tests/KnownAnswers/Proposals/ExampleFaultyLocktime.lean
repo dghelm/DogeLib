@@ -50,9 +50,9 @@ structure Case where
   flags : UInt32 := 0
   scriptSig : List UInt8 := []
   scriptPubKey : List UInt8
-  faulty : VerifyOutcome ScriptError
-  corrected : VerifyOutcome ScriptError
-  inactive : VerifyOutcome ScriptError
+  faulty : VerifyOutcome ScriptError Unsupported
+  corrected : VerifyOutcome ScriptError Unsupported
+  inactive : VerifyOutcome ScriptError Unsupported
 
 /-- `OP_1 OP_2 OP_NOP4 OP_1 OP_EQUAL`. -/
 def counterexample : List UInt8 := [0x51, 0x52, 0xb3, 0x51, 0x87]
@@ -117,7 +117,7 @@ def check : IO Nat := do
   let mut failures := 0
   for c in cases do
     let checker := checkerOf c.lockTime c.sequence
-    let baseline := VerifyOutcome.ofBaseline id (verifyScript checker c.flags c.scriptSig c.scriptPubKey)
+    let baseline := VerifyOutcome.ofBaseline id id (verifyScript checker c.flags c.scriptSig c.scriptPubKey)
     for (v, expected) in [(Variant.faulty, c.faulty), (.corrected, c.corrected)] do
       let active := revisedVerifyScript v true checker c.flags c.scriptSig c.scriptPubKey
       let inactive := revisedVerifyScript v false checker c.flags c.scriptSig c.scriptPubKey
@@ -130,8 +130,8 @@ def check : IO Nat := do
   let spend (lockTime : UInt32) : InputContext :=
     ⟨mkTx 1 lockTime 0xfffffffe, 0, by simp [mkTx], by simp [mkTx], by simp [mkTx]⟩
   let script (bytes : List UInt8) (h : bytes.length < 2 ^ 64) : DogeLib.Transaction.Script := ⟨⟨bytes, h⟩⟩
-  let spendCases : List (String × UInt32 × DogeLib.Transaction.Script × VerifyResult × VerifyOutcome ScriptError ×
-      VerifyOutcome ScriptError) := [
+  let spendCases : List (String × UInt32 × DogeLib.Transaction.Script × VerifyResult ×
+      VerifyOutcome ScriptError Unsupported × VerifyOutcome ScriptError Unsupported) := [
     ("counterexample, lock time 2", 2, script counterexample (by decide), .rejected .evalFalse, .accepted,
       .rejected .evalFalse),
     ("counterexample, lock time 1", 1, script counterexample (by decide), .rejected .evalFalse,

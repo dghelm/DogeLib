@@ -60,7 +60,7 @@ def parseExpected (text : String) : Except String (String × String × String) :
     ← (← ok.getObjVal? "script_error").getStr?)
 
 /-- The `result` and `script_error` fields that the oracle writes for an outcome. An unsupported outcome never matches a fixture. -/
-def fields : VerifyOutcome ScriptError → String × String
+def fields : VerifyOutcome ScriptError Unsupported → String × String
   | .accepted => ("accepted", "OK")
   | .rejected e => ("rejected", e.name)
   | .unsupported _ => ("unsupported", "")
@@ -74,8 +74,8 @@ def check : IO Nat := do
   let dir : System.FilePath := "tests/script/campaign"
   let requests ← lines (dir / "requests.jsonl")
   let mut failures := 0
-  let programs : List (String × (Request → VerifyOutcome ScriptError)) := [
-    ("expected.jsonl", fun r => VerifyOutcome.ofBaseline id (verifyLegacySpend r.ctx r.prevScript r.flags coreVerifier)),
+  let programs : List (String × (Request → VerifyOutcome ScriptError Unsupported)) := [
+    ("expected.jsonl", fun r => VerifyOutcome.ofBaseline id id (verifyLegacySpend r.ctx r.prevScript r.flags coreVerifier)),
     ("expected-faulty.jsonl", fun r => revisedVerifyLegacySpend .faulty true r.ctx r.prevScript r.flags coreVerifier),
     ("expected-corrected.jsonl", fun r => revisedVerifyLegacySpend .corrected true r.ctx r.prevScript r.flags coreVerifier)
   ]

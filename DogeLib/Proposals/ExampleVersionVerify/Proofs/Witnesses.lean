@@ -69,11 +69,11 @@ theorem example_use : revisedSpend true (witnessArgs 2) = .accepted ∧ RunsRule
 
 /--
 The spend predicate of the example is a soft fork of `verifyLegacySpend` at the level of one input, in the sense of the framework's `SoftFork`.
-The embedding maps a baseline error under `Sum.inl`, and the use predicate is `RunsRule`.
+The embedding maps a baseline error and a baseline unsupported reason under `Sum.inl`, and the use predicate is `RunsRule`.
 Script-local: it is not a soft-fork claim about the network, which also needs block validity (design record 0007, section 8.3).
 -/
 theorem example_softFork :
-    SoftFork (VerifyOutcome.ofBaseline Sum.inl) baselineVerdict VerifyOutcome.verdict RunsRule baselineSpend
+    SoftFork (VerifyOutcome.ofBaseline Sum.inl Sum.inl) baselineVerdict VerifyOutcome.verdict RunsRule baselineSpend
       revisedSpend where
   inactive_eq := example_inactiveEq
   restricts := example_restrictsAcceptance

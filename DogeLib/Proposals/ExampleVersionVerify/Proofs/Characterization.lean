@@ -154,35 +154,38 @@ private theorem evalInstruction_nop10 {checker : Option SignatureChecker} {flags
 
 /-! ## One evaluation of the operand script -/
 
-/-- For every flag set and the two scripts: the verdict of the baseline and that of the error-mapped baseline agree on acceptance. -/
-private theorem ofBaseline_eq_accepted {ε : Type} {embed : ScriptError → ε} {r : VerifyResult} :
-    VerifyOutcome.ofBaseline embed r = .accepted ↔ r = .accepted := by
+/-- For every error map, map of unsupported reasons and baseline result: the mapped result is accepted exactly when the baseline result is. -/
+private theorem ofBaseline_eq_accepted {ε υ : Type} {embed : ScriptError → ε} {embedU : Unsupported → υ}
+    {r : VerifyResult} :
+    VerifyOutcome.ofBaseline embed embedU r = .accepted ↔ r = .accepted := by
   cases r <;> simp [VerifyOutcome.ofBaseline]
 
-/-- For every error map and success state: an error-mapped baseline evaluation succeeds with `t` exactly when the baseline evaluation does. -/
-private theorem evalOfBaseline_eq_ok {ε : Type} {embed : ScriptError → ε} {r : EvalResult} {t : ExecState} :
-    EvalOutcome.ofBaseline embed r = .ok t ↔ r = .ok t := by
+/-- For every error map, map of unsupported reasons and success state: a mapped baseline evaluation succeeds with `t` exactly when the baseline evaluation does. -/
+private theorem evalOfBaseline_eq_ok {ε υ : Type} {embed : ScriptError → ε} {embedU : Unsupported → υ}
+    {r : EvalResult} {t : ExecState} :
+    EvalOutcome.ofBaseline embed embedU r = .ok t ↔ r = .ok t := by
   cases r <;> simp [EvalOutcome.ofBaseline]
 
 /--
-Let `scriptPubKey` lie outside the P2SH template. This holds for every step, error map, flag set and `scriptSig`.
+Let `scriptPubKey` lie outside the P2SH template. This holds for every step, error map, map of unsupported reasons, flag set and `scriptSig`.
 `verifyScriptWith` accepts exactly when the flags are supported, both evaluations succeed, and the final top item is true.
 -/
-private theorem verifyScriptWith_accepted_iff {ε : Type} {embed : ScriptError → ε} {step : Step ε} {flags : UInt32}
+private theorem verifyScriptWith_accepted_iff {ε υ : Type} {embed : ScriptError → ε} {embedU : Unsupported → υ}
+    {step : Step ε υ} {flags : UInt32}
     {scriptSig scriptPubKey : List UInt8} (hp : isPayToScriptHash scriptPubKey = false) :
-    verifyScriptWith embed step flags scriptSig scriptPubKey = .accepted ↔
-      unsupportedFlagBits flags = 0 ∧ ∃ s t, evalScriptWith embed step flags scriptSig [] = .ok s ∧
-        evalScriptWith embed step flags scriptPubKey s.stack = .ok t ∧ trueTop t.stack = true := by
+    verifyScriptWith embed embedU step flags scriptSig scriptPubKey = .accepted ↔
+      unsupportedFlagBits flags = 0 ∧ ∃ s t, evalScriptWith embed embedU step flags scriptSig [] = .ok s ∧
+        evalScriptWith embed embedU step flags scriptPubKey s.stack = .ok t ∧ trueTop t.stack = true := by
   unfold verifyScriptWith
   by_cases hf : unsupportedFlagBits flags = 0
   case neg => simp [hf]
   simp only [hf, ne_eq, not_true_eq_false, ↓reduceIte, true_and]
-  cases hs : evalScriptWith embed step flags scriptSig [] with
+  cases hs : evalScriptWith embed embedU step flags scriptSig [] with
   | rejected e => simp
   | unsupported u => simp
   | ok s =>
     simp only
-    cases ht : evalScriptWith embed step flags scriptPubKey s.stack with
+    cases ht : evalScriptWith embed embedU step flags scriptPubKey s.stack with
     | rejected e => simp [ht]
     | unsupported u => simp [ht]
     | ok t =>
@@ -197,8 +200,9 @@ The active example loop succeeds with `t` exactly when the baseline loop succeed
 private theorem evalScriptWith_operand_iff {ctx : ExampleContext} {checker : Option SignatureChecker}
     {flags : UInt32} {b S : List UInt8} (hb₅ : b.length ≤ 5) (hS : opcodeFree isNop10 S = true)
     (stk : List (List UInt8)) (t : ExecState) :
-    evalScriptWith Sum.inl (exampleStep true (some ctx) checker flags) flags (operandScript b S) stk = .ok t ↔
-      evalScriptWith (ε := ExampleScriptError) Sum.inl (baselineStep Sum.inl checker flags) flags
+    evalScriptWith Sum.inl Sum.inl (exampleStep true (some ctx) checker flags) flags (operandScript b S) stk = .ok t ↔
+      evalScriptWith (ε := ExampleScriptError) (υ := ExampleScriptUnsupported) Sum.inl Sum.inl
+          (baselineStep Sum.inl Sum.inl checker flags) flags
           (operandScript b S) stk = .ok t ∧
         0 ≤ ScriptNum.value b ∧ ScriptNum.value b ≤ (ctx.tx.version.toNat : Int) := by
   obtain ⟨-, -, -, hnop, -⟩ := lengthByte_facts hb₅
@@ -240,7 +244,7 @@ private theorem evalScriptWith_operand_iff {ctx : ExampleContext} {checker : Opt
     rw [he, ← hlen, opcodeFreeFrom_append]
     exact hS
   have hcongr := evalLoopWith_congr (embed := Sum.inl) (step₁ := exampleStep true (some ctx) checker flags)
-    (step₂ := baselineStep Sum.inl checker flags)
+    (step₂ := baselineStep Sum.inl Sum.inl checker flags)
     (fun s i hi => exampleStep_eq_of_not_nop10 true (some ctx) checker flags (operandScript b S) s i hi)
     { ExecState.init stk with stack := stk ++ [b], opCount := 1, pc := b.length + 2 } hfree
   by_cases hneg : ScriptNum.value b < 0
@@ -273,9 +277,10 @@ theorem example_accepted_iff (ctx : ExampleContext) (c : SignatureChecker) (flag
   have hp : isPayToScriptHash (operandScript b S) = false := by
     simp [isPayToScriptHash, operandScript, ha9]
   unfold exampleVerifyScript
-  rw [← ofBaseline_eq_accepted (embed := (Sum.inl : ScriptError → ExampleScriptError)),
+  rw [← ofBaseline_eq_accepted (embed := (Sum.inl : ScriptError → ExampleScriptError))
+      (embedU := (Sum.inl : Unsupported → ExampleScriptUnsupported)),
     ← verifyScriptWith_baseline, verifyScriptWith_accepted_iff hp, verifyScriptWith_accepted_iff hp]
-  rw [evalScriptWith_congr (step₂ := baselineStep Sum.inl (some c) flags)
+  rw [evalScriptWith_congr (step₂ := baselineStep Sum.inl Sum.inl (some c) flags)
     (fun s i hi => exampleStep_eq_of_not_nop10 true (some ctx) (some c) flags scriptSig s i hi) flags [] hsig]
   constructor
   · rintro ⟨hf, s, t, hs, ht, htop⟩

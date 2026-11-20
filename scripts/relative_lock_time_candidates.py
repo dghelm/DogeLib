@@ -20,8 +20,9 @@ With --check, it fails when that file differs from the list that it computes.
 The list is committed before a run of scripts/compare_csv_forced.py, which requires that the
 blocks with a changed verdict are exactly the candidates.
 
-The theorem relativeLockTime_eq_of_cutoff_untouched shows that a block without a cutoff
-transaction has one result under the baseline and under the revision with the rule of BIP 113.
+The theorem contextualBody_eq_of_cutoff_untouched shows that the body check of a block without
+a cutoff transaction has one result under the baseline and under the revision. The list is about
+that check alone, which runs no script.
 A count is a statement about these blocks. It says nothing about unconfirmed transactions.
 """
 import argparse

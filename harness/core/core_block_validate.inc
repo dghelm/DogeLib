@@ -31,6 +31,21 @@
 //   the order of the transaction IDs. A set in Core's CCoinsViewDB needs
 //   another visitSet alone, over the cursor of that view, which visits the
 //   same entries in the same order (src/txdb.cpp, lines 93 to 104).
+//
+// force_csv_active (design record 0012, section 10.2 and decision 12): with
+// the value true, each block also runs with the CSV state forced to ACTIVE,
+// on the state before the block. The harness seeds THRESHOLD_ACTIVE for CSV
+// at the boundary that the block reads, runs the five checks, and removes the
+// seed. Core's own ContextualCheckBlock and ConnectBlock then run their CSV
+// branches (D110, lines 3127 to 3140, and D114, lines 1906 to 1911 and 1948
+// to 1959), and no line of Core's source changes. The block record gains the
+// object `forced` with the result. The forced run never changes the carried
+// state: only the run without the seed carries the coin set and the chain to
+// the next block. A block without a predecessor, and a block with the genesis
+// hash, get no seed, and their `forced` object is the result without it.
+// No mainnet chain reaches the state ACTIVE (csv_never_lockedIn). The object
+// shows what Core's code does in a state that Core never enters. It is not
+// mainnet behavior, and it is not a Core comparison of the baseline.
 
 // The carried coin set: a CCoinsView over a map, as CCoinsViewTest of Core's
 // src/test/coins_tests.cpp, without that class's random choices. An entry that
@@ -338,6 +353,52 @@ void readCoins(const UniValue& req, MemoryCoinsView& store)
     }
 }
 
+// With CSV forced active, ConnectBlock runs SequenceLocks (D114, lines 1948 to
+// 1959) on each transaction that is not a coinbase and has a version of at
+// least 2 as an unsigned value. CalculateSequenceLocks (D110, lines 309 to
+// 359) reads each input whose sequence has bit 31 clear, with the height c of
+// its coin:
+// - A height lock adds c + 65535 - 1 at most, in `int`. The harness refuses a
+//   coin height from 2^31 - 65535, where that sum can overflow (design record
+//   0012, section 7.2).
+// - A time lock reads the median time past of the ancestor at max(c - 1, 0)
+//   (line 348). That ancestor and its ten predecessors must be inside the
+//   supplied chain, and at or below the predecessor of the block. The harness
+//   refuses another read, because GetAncestor would return null or leave the
+//   chain.
+// The scan changes nothing and calls no Core function that can assert. The
+// coin of an input is the entry of the carried set, or an earlier transaction
+// of the block, whose coins have the height of the block. When both exist the
+// scan tests both heights. It does not follow ConnectBlock's early exits, so
+// it can refuse a request that Core would reject before SequenceLocks.
+void refuseSequenceLockOutsideDomain(const CBlock& block, const MemoryCoinsView& store, const CBlockIndex* tip, int oldest, int height)
+{
+    if (!tip) return;
+    std::set<uint256> created;
+    auto test = [&](int coinHeight, bool timeLock) {
+        if (!timeLock) {
+            if (coinHeight > std::numeric_limits<int>::max() - 65535)
+                throw RequestError{"a forced height lock reads a coin height outside the int domain"};
+            return;
+        }
+        const int at = std::max(coinHeight - 1, 0);
+        if (at > tip->nHeight || at - std::min(10, at) < oldest)
+            throw RequestError{"a forced time lock reads an ancestor outside the chain"};
+    };
+    for (const auto& tx : block.vtx) {
+        if (!tx->IsCoinBase() && static_cast<uint32_t>(tx->nVersion) >= 2) {
+            for (const auto& in : tx->vin) {
+                if (in.nSequence & CTxIn::SEQUENCE_LOCKTIME_DISABLE_FLAG) continue;
+                const bool timeLock = (in.nSequence & CTxIn::SEQUENCE_LOCKTIME_TYPE_FLAG) != 0;
+                const auto entry = store.coins.find(in.prevout.hash);
+                if (entry != store.coins.end()) test(entry->second.nHeight, timeLock);
+                if (created.count(in.prevout.hash)) test(height, timeLock);
+            }
+        }
+        created.insert(tx->GetHash());
+    }
+}
+
 UniValue blockValidate(const UniValue& req)
 {
     // The blocks come from `blocks_hex`, or from the file that `blocks_file` names.
@@ -347,7 +408,8 @@ UniValue blockValidate(const UniValue& req)
     checkArgs(req, "block.validate", {"mode", "check_pow", "check_merkle_root", "adjusted_time", "chain",
                                       "bip34_ancestor_hex", coinsFromFile ? "coins_file" : "coins",
                                       fromFile ? "blocks_file" : "blocks_hex",
-                                      "snapshot_heights", "snapshot_dir", "digest_heights"});
+                                      "snapshot_heights", "snapshot_dir", "digest_heights", "force_csv_active"});
+    const bool forceCsvActive = req.exists("force_csv_active") && argBool(req, "force_csv_active");
     if (fromFile && !arg(req, "blocks_file").isStr()) throw RequestError{"blocks_file must be a string"};
     if (coinsFromFile && !fromFile) throw RequestError{"coins_file needs blocks_file"};
     if (coinsFromFile && !arg(req, "coins_file").isStr()) throw RequestError{"coins_file must be a string"};
@@ -524,6 +586,8 @@ UniValue blockValidate(const UniValue& req)
 
         // The reads of Core below the tip must stay inside the supplied chain.
         const int height = tip ? tip->nHeight + 1 : 0;
+        // The aligned boundary of the block: the key of its version-bits states. It is null below the first period.
+        CBlockIndex* boundary = nullptr;
         if (tip) {
             if (tip->nHeight - std::min(10, tip->nHeight) < oldest) throw RequestError{"chain is too short for the median time"};
             if (!genesis) {
@@ -536,7 +600,7 @@ UniValue blockValidate(const UniValue& req)
             const int aligned = tip->nHeight - ((tip->nHeight + 1) % period);
             if (aligned >= 0) {
                 if (aligned - std::min(10, aligned) < oldest) throw RequestError{"chain does not reach the aligned boundary"};
-                CBlockIndex* boundary = tip->GetAncestor(aligned);
+                boundary = tip->GetAncestor(aligned);
                 const int64_t boundaryMtp = boundary->GetMedianTimePast();
                 // The seed of design record 0010, decision 3, as in block.contextual_check_body.
                 if (boundaryMtp >= 1493596800) {
@@ -551,77 +615,123 @@ UniValue blockValidate(const UniValue& req)
         // A record of a file gives the height of its block.
         if (fromFile && fileHeight != height) throw SpecError{validateFailure("file_height", index)};
 
-        CValidationState state;
-        bool valid = true;
-        std::string function = "CheckBlockHeader";
-        if (!genesis) {
-            if (checkPow) valid = CheckBlockHeader(block, state, true);
-            if (valid) {
-                function = "ContextualCheckBlockHeader";
-                valid = ContextualCheckBlockHeader(block, state, tip, adjustedTime);
+        // The five checks on the state before the block. With `forced` false, an
+        // accepted block is flushed into the carried set. With `forced` true,
+        // the cache is discarded, so the run changes no carried state.
+        struct Run {
+            bool valid = true;
+            CValidationState state;
+            std::string function = "CheckBlockHeader";
+            uint256 changes;
+            uint64_t spent = 0, created = 0;
+        };
+        auto runChecks = [&](Run& run, bool forced) {
+            bool& valid = run.valid;
+            CValidationState& state = run.state;
+            std::string& function = run.function;
+            uint256& changes = run.changes;
+            uint64_t& spent = run.spent;
+            uint64_t& created = run.created;
+            if (!genesis) {
+                if (checkPow) valid = CheckBlockHeader(block, state, true);
+                if (valid) {
+                    function = "ContextualCheckBlockHeader";
+                    valid = ContextualCheckBlockHeader(block, state, tip, adjustedTime);
+                }
             }
-        }
-        if (valid) {
-            function = "CheckBlock";
-            valid = CheckBlock(block, state, checkPow, checkMerkle);
-        }
-        if (valid) {
-            function = "ContextualCheckBlock";
-            valid = ContextualCheckBlock(block, state, tip);
-        }
-        uint256 changes;
-        uint64_t spent = 0, created = 0;
-        if (valid) {
-            function = "ConnectBlock";
-            CCoinsViewCache view(&store);
-            CBlockIndex candidate(block);
-            candidate.pprev = tip;
-            candidate.nHeight = height;
-            candidate.phashBlock = &hash;
-            valid = ConnectBlock(block, state, &candidate, view, Params(), true);
             if (valid) {
-                // The changes, read from a second cache that repeats Core's
-                // UpdateCoins on the transactions in order. The genesis block
-                // changes nothing (D114, lines 1821 to 1825).
-                if (!genesis) {
-                    CCoinsViewCache shadow(&store);
-                    for (const auto& tx : block.vtx) {
-                        if (!tx->IsCoinBase()) {
-                            for (const auto& in : tx->vin) {
-                                const CCoins* coins = shadow.AccessCoins(in.prevout.hash);
-                                if (!coins || !coins->IsAvailable(in.prevout.n))
-                                    throw UnmappedCoreError{"an accepted block spends a coin that the view lacks"};
-                                digestCoin(changes, 0, in.prevout, *coins, coins->vout[in.prevout.n]);
-                                ++spent;
+                function = "CheckBlock";
+                valid = CheckBlock(block, state, checkPow, checkMerkle);
+            }
+            if (valid) {
+                function = "ContextualCheckBlock";
+                valid = ContextualCheckBlock(block, state, tip);
+            }
+            if (valid) {
+                function = "ConnectBlock";
+                CCoinsViewCache view(&store);
+                CBlockIndex candidate(block);
+                candidate.pprev = tip;
+                candidate.nHeight = height;
+                candidate.phashBlock = &hash;
+                if (forced) refuseSequenceLockOutsideDomain(block, store, tip, oldest, height);
+                valid = ConnectBlock(block, state, &candidate, view, Params(), true);
+                if (valid) {
+                    // The changes, read from a second cache that repeats Core's
+                    // UpdateCoins on the transactions in order. The genesis block
+                    // changes nothing (D114, lines 1821 to 1825).
+                    if (!genesis) {
+                        CCoinsViewCache shadow(&store);
+                        for (const auto& tx : block.vtx) {
+                            if (!tx->IsCoinBase()) {
+                                for (const auto& in : tx->vin) {
+                                    const CCoins* coins = shadow.AccessCoins(in.prevout.hash);
+                                    if (!coins || !coins->IsAvailable(in.prevout.n))
+                                        throw UnmappedCoreError{"an accepted block spends a coin that the view lacks"};
+                                    digestCoin(changes, 0, in.prevout, *coins, coins->vout[in.prevout.n]);
+                                    ++spent;
+                                }
+                            }
+                            UpdateCoins(*tx, shadow, height);
+                            const CCoins* coins = shadow.AccessCoins(tx->GetHash());
+                            if (!coins) continue;
+                            for (size_t n = 0; n < coins->vout.size(); ++n) {
+                                if (coins->vout[n].IsNull()) continue;
+                                digestCoin(changes, 1, COutPoint(tx->GetHash(), static_cast<uint32_t>(n)), *coins, coins->vout[n]);
+                                ++created;
                             }
                         }
-                        UpdateCoins(*tx, shadow, height);
-                        const CCoins* coins = shadow.AccessCoins(tx->GetHash());
-                        if (!coins) continue;
-                        for (size_t n = 0; n < coins->vout.size(); ++n) {
-                            if (coins->vout[n].IsNull()) continue;
-                            digestCoin(changes, 1, COutPoint(tx->GetHash(), static_cast<uint32_t>(n)), *coins, coins->vout[n]);
-                            ++created;
+                        // The second cache must end in the state of the cache that ConnectBlock used.
+                        auto same = [&](const uint256& txid) {
+                            const CCoins* a = view.AccessCoins(txid);
+                            const CCoins* b = shadow.AccessCoins(txid);
+                            const CCoins none;
+                            return (a ? *a : none) == (b ? *b : none);
+                        };
+                        for (const auto& tx : block.vtx) {
+                            if (!same(tx->GetHash())) throw UnmappedCoreError{"the two caches differ after ConnectBlock"};
+                            if (tx->IsCoinBase()) continue;
+                            for (const auto& in : tx->vin)
+                                if (!same(in.prevout.hash)) throw UnmappedCoreError{"the two caches differ after ConnectBlock"};
                         }
                     }
-                    // The second cache must end in the state of the cache that ConnectBlock used.
-                    auto same = [&](const uint256& txid) {
-                        const CCoins* a = view.AccessCoins(txid);
-                        const CCoins* b = shadow.AccessCoins(txid);
-                        const CCoins none;
-                        return (a ? *a : none) == (b ? *b : none);
-                    };
-                    for (const auto& tx : block.vtx) {
-                        if (!same(tx->GetHash())) throw UnmappedCoreError{"the two caches differ after ConnectBlock"};
-                        if (tx->IsCoinBase()) continue;
-                        for (const auto& in : tx->vin)
-                            if (!same(in.prevout.hash)) throw UnmappedCoreError{"the two caches differ after ConnectBlock"};
+                    if (!forced) {
+                        view.SetBestBlock(hash);
+                        if (!view.Flush()) throw UnmappedCoreError{"the coin set refused a flush"};
                     }
                 }
-                view.SetBestBlock(hash);
-                if (!view.Flush()) throw UnmappedCoreError{"the coin set refused a flush"};
             }
+        };
+
+        // The forced run comes first, on the state before the block. A block
+        // that is not applicable gets no seed (design record 0012, section 5).
+        UniValue forcedRecord(UniValue::VOBJ);
+        if (forceCsvActive) {
+            auto& csv = versionbitscache.caches[Consensus::DEPLOYMENT_CSV];
+            const bool applicable = tip && !genesis;
+            const bool seeded = csv.count(boundary) != 0;
+            const ThresholdState before = seeded ? csv[boundary] : THRESHOLD_DEFINED;
+            if (applicable) csv[boundary] = THRESHOLD_ACTIVE;
+            Run forced;
+            runChecks(forced, true);
+            if (applicable) {
+                if (seeded) csv[boundary] = before;
+                else csv.erase(boundary);
+            }
+            pushVerdict(forcedRecord, forced.valid, forced.state, forced.function);
+            forcedRecord.pushKV("changes_digest_hex",
+                                forced.valid ? UniValue(hex(forced.changes.begin(), forced.changes.end())) : UniValue());
+            forcedRecord.pushKV("spent", forced.valid ? UniValue(forced.spent) : UniValue());
+            forcedRecord.pushKV("created", forced.valid ? UniValue(forced.created) : UniValue());
         }
+
+        Run plain;
+        runChecks(plain, false);
+        const bool valid = plain.valid;
+        const CValidationState& state = plain.state;
+        const std::string& function = plain.function;
+        const uint256& changes = plain.changes;
+        const uint64_t spent = plain.spent, created = plain.created;
 
         UniValue record(UniValue::VOBJ);
         record.pushKV("height", height);
@@ -664,6 +774,7 @@ UniValue blockValidate(const UniValue& req)
         }
         record.pushKV("set_digest_hex", digest);
         record.pushKV("set_value", value);
+        if (forceCsvActive) record.pushKV("forced", forcedRecord);
         records.push_back(record);
     }
 

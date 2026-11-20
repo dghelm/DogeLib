@@ -1,13 +1,14 @@
 module
 
-public import DogeLib.Proposals.RelativeLockTime.Proofs.Cutoff
+public import DogeLib.Proposals.RelativeLockTime.Proofs.Block
 public import DogeLib.Work.Proofs.MedianTimePast
 
 /-!
 # Proofs: `Proposals.RelativeLockTime`, witnesses of the lock-time cutoff
 
 The strictness witness and the use witness of design record 0012, section 9.3, for the rule of BIP 113.
-The revision is partial: it has that rule alone (`DogeLib.Proposals.RelativeLockTime`).
+The revision is partial: it has that rule and the rule of BIP 112 (`DogeLib.Proposals.RelativeLockTime`).
+`DogeLib.Proposals.RelativeLockTime.Proofs.OpcodeWitnesses` has the witnesses of the other rule.
 Both witnesses are block-level: each is one call of `validateBlock` and of the revision on one block, with an empty coin set.
 
 ## The witness block
@@ -33,7 +34,7 @@ The block has no script to run, so the verifier is never called.
 
 - `cutoff_strict`: with the lock time 1,395,094,000, `validateBlock` accepts the block, and the active revision rejects it with `bad-txns-nonfinal` of `ContextualCheckBlock`.
 - `cutoff_use`: with the lock time 1,395,093,999, the active revision accepts the block, and the rule runs (`RunsCutoff`).
-- `cutoff_softFork`: the framework's `SoftFork` for the revision with this rule and `validateBlock`. Block-level.
+- `cutoff_softFork`: the framework's `SoftFork` for the partial revision and `validateBlock`, with the witnesses of this rule. Block-level.
 
 ## How the kernel computes the witnesses
 
@@ -244,9 +245,11 @@ theorem cutoff_use :
   · have hconn : connectBlockWith ConnectEmbedding.baseline (blockRevision witnessVerifier) true true
         (connectContextOf witnessContext (witnessBlock 1395093999)) CoinSet.empty (witnessBlock 1395093999) =
           .ok r := by
-      rw [connectBlockWith_congr_revision ConnectEmbedding.baseline (rev₁ := blockRevision witnessVerifier)
-        (rev₂ := .baseline id id witnessVerifier) true
-        (fun _ _ _ _ _ _ _ _ _ => rfl) rfl (fun _ _ _ _ _ _ => rfl), connectBlockWith_ofBaseline, hr]
+      rw [connectBlockWith_eq_of_opcode_untouched ConnectEmbedding.baseline witnessVerifier true true
+        (ctx := connectContextOf witnessContext (witnessBlock 1395093999)) (fun i tx hi hcb => by
+          have hall : ∀ t ∈ (witnessBlock 1395093999).transactions, t.isCoinBase = true := by decide
+          rw [hall tx (List.mem_of_getElem? hi)] at hcb
+          cases hcb), connectBlockWith_ofBaseline, hr]
       rfl
     unfold revisedValidate validateBlockWithActive
     change ValidateEmbedding.baseline.afterChecks
@@ -261,8 +264,9 @@ theorem cutoff_use :
   · decide
 
 /--
-The revision with the rule of BIP 113 is a soft fork of `validateBlock` at the level of one block, in the sense of the framework's `SoftFork`.
+The revision with the rules of BIP 113 and BIP 112 is a soft fork of `validateBlock` at the level of one block, in the sense of the framework's `SoftFork`.
 The embedding is `ValidateEmbedding.ofBaseline` with the baseline error types, and the use predicate is `RunsCutoff`.
+The two witnesses are those of the cutoff. `opcode_softFork` states the same with the witnesses of the opcode.
 
 Block-level: the statement is about one block on a supplied coin set and view, for mainnet rules.
 It is not a soft-fork claim about the network, and it says nothing about fork choice, convergence or liveness.

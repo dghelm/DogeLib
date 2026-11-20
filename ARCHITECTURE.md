@@ -164,8 +164,8 @@ It is not a proposal for Dogecoin.
 It is a teaching example for [docs/in-practice.md](docs/in-practice.md), and a test that the framework refutes a false soft-fork claim.
 
 `DogeLib.Proposals.RelativeLockTime` is the proposed revision of [design record 0012](docs/design/0012-relative-lock-time.md): the rules of BIP 68, BIP 112 and BIP 113.
-It is partial, with the rule of BIP 113 alone.
-Its theorems are under `DogeLib/Proposals/RelativeLockTime/Proofs/`, and its known answers are in `tests/KnownAnswers/Proposals/RelativeLockTime.lean`.
+It is partial, with the rules of BIP 113 and BIP 112.
+Its theorems are under `DogeLib/Proposals/RelativeLockTime/Proofs/`, and its known answers are in `tests/KnownAnswers/Proposals/RelativeLockTime.lean` and `RelativeLockTimeOpcode.lean`.
 The proposal executable also answers `block.contextual_check_body` with the argument `revision`.
 
 ## Adopted upstream code

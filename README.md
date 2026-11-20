@@ -48,7 +48,7 @@ Each item below links to its evidence.
 - **Block checks without coins.** The block codec, `CheckTransaction`, `CheckBlock`, `ContextualCheckBlock` on mainnet, the mainnet block subsidy and the version-bits state, stage 0010a of [design record 0010](docs/design/0010-block-validity.md).
   `block.check` and `block.contextual_check_body` agree with Core on 11,018 real mainnet blocks ([the block checks](SOUNDNESS.md#block-codec-checktransaction-and-checkblock), [the contextual block body](SOUNDNESS.md#the-contextual-block-body)).
 - **Proposed revisions.** A framework that states a revision of the Script rules and classifies it against the baseline, for example as a `SoftFork` ([design record 0007](docs/design/0007-proposed-revisions.md)).
-  It has two invented examples and one proposed revision, `RelativeLockTime`, which is partial: it has the rule of BIP 113 alone ([design record 0012](docs/design/0012-relative-lock-time.md)).
+  It has two invented examples and one proposed revision, `RelativeLockTime`, which is partial: it has the rules of BIP 113 and BIP 112 ([design record 0012](docs/design/0012-relative-lock-time.md)).
   Its compatibility theorems are Script-local or block-level: each is about one Script evaluation, one transaction input or one block, not about the network ([the framework](SOUNDNESS.md#proposed-revisions-the-framework)).
 - **Campaign.** `scripts/campaign.py` generates spends that Core signs, checks stated properties of them, reduces a failure and replays it on a regtest node ([design record 0009](docs/design/0009-bug-finding-campaign.md)).
   It found no fault in Core or in DogeLib, and its regression fixtures come from planted faults ([campaign](COVERAGE.md#campaign-infrastructure)).

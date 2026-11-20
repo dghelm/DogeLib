@@ -3,7 +3,8 @@ import DogeLib.Proposals
 /-!
 ## Proposals: the proposed revision `RelativeLockTime`, the lock-time cutoff
 
-`RelativeLockTime` is the revision of design record 0012. It is partial: it has the rule of BIP 113 alone.
+`RelativeLockTime` is the revision of design record 0012. It is partial: it has the rules of BIP 113 and BIP 112.
+`KnownAnswers.Proposals.RelativeLockTimeOpcode` has the cases of BIP 112.
 These cases run `contextualBodyWith`, `validateBlockWithActive` and `validateBlockWith` with the revision through the compiled code.
 
 Each expected result is derived by hand, never computed by DogeLib, from two sources:

@@ -34,6 +34,13 @@ Let `O` be a set of opcodes, and let two steps agree on every instruction whose 
 - `evalScriptWith_congr`: the same for one evaluation of a script with no instruction in `O`.
 - `verifyScriptWith_congr`: the same for `VerifyScript`, when `scriptSig`, `scriptPubKey` and the P2SH redeem script have no instruction in `O`.
 
+## Scripts after a prefix, and acceptance
+
+- `readInstruction_append`, `opcodeFreeFrom_append`: the reader and the opcode test of a script after a prefix are those of the script alone, with every cursor moved by the length of the prefix.
+- `VerifyOutcome.ofBaseline_eq_accepted`, `EvalOutcome.ofBaseline_eq_ok`: a mapped baseline result is a success exactly when the baseline result is.
+- `verifyScriptWith_accepted_iff`: outside the P2SH template, `verifyScriptWith` accepts exactly when the flags are supported, both evaluations succeed and the final top item is true.
+- `verifyScriptWith_flags_congr`: `verifyScriptWith` reads its flag argument through the unsupported bits and `SCRIPT_VERIFY_P2SH` alone.
+
 These theorems are statements about the definitions. They do not say that a proposal is a soft fork of the network.
 -/
 
@@ -342,5 +349,103 @@ theorem verifyScriptWith_congr {O : UInt8 → Bool} {embed : ScriptError → ε}
     rcases hsr : s.stack.reverse with _ | ⟨redeem, rest⟩
     · rfl
     · simp only [evalScriptWith_congr (hstep redeem) flags rest.reverse (hredeem s redeem rest hs hsr)]
+
+/-! ## Scripts after a prefix -/
+
+/-- At the end of the script, the opcode test gives `true`. -/
+theorem opcodeFreeFrom_atEnd {O : UInt8 → Bool} {script : List UInt8} {pc : Nat}
+    (hr : readInstruction script pc = .atEnd) : opcodeFreeFrom O script pc = true := by
+  rw [opcodeFreeFrom]
+  split <;> simp_all
+
+/-- At a short push, the opcode test gives `true`. -/
+theorem opcodeFreeFrom_truncated {O : UInt8 → Bool} {script : List UInt8} {pc : Nat} {o : UInt8}
+    {p : ShortPart} {c : Nat} (hr : readInstruction script pc = .truncated o p c) :
+    opcodeFreeFrom O script pc = true := by
+  rw [opcodeFreeFrom]
+  split <;> simp_all
+
+/-- For every prefix `p`, script `S` and cursor `k`: the reader at `p.length + k` of `p ++ S` reads what it reads at `k` of `S`. Every cursor moves by `p.length`. -/
+theorem readInstruction_append (p S : List UInt8) (k : Nat) :
+    readInstruction (p ++ S) (p.length + k) =
+      match readInstruction S k with
+      | .instruction i => .instruction { i with next := p.length + i.next }
+      | .atEnd => .atEnd
+      | .truncated o part c => .truncated o part (p.length + c) := by
+  have h : (p ++ S).drop (p.length + k) = S.drop k := by
+    rw [← List.drop_drop, List.drop_left]
+  simp only [readInstruction, h]
+  split <;> simp <;> omega
+
+/-- For every opcode set `O`, prefix `p`, script `S` and cursor `k`: the test of `p ++ S` from `p.length + k` is the test of `S` from `k`. -/
+theorem opcodeFreeFrom_append (O : UInt8 → Bool) (p S : List UInt8) (k : Nat) :
+    opcodeFreeFrom O (p ++ S) (p.length + k) = opcodeFreeFrom O S k := by
+  induction k using opcodeFreeFrom.induct S with
+  | case1 k hr =>
+    rw [opcodeFreeFrom_atEnd hr]
+    apply opcodeFreeFrom_atEnd
+    rw [readInstruction_append, hr]
+  | case2 k o part c hr =>
+    rw [opcodeFreeFrom_truncated hr]
+    apply opcodeFreeFrom_truncated (o := o) (p := part) (c := p.length + c)
+    rw [readInstruction_append, hr]
+  | case3 k i hr _ ih =>
+    rw [opcodeFreeFrom_instruction hr, ← ih]
+    have h' := readInstruction_append p S k
+    rw [hr] at h'
+    rw [opcodeFreeFrom_instruction h']
+
+/-! ## Acceptance -/
+
+/-- For every error map, map of unsupported reasons and baseline result: the mapped result is accepted exactly when the baseline result is. -/
+theorem VerifyOutcome.ofBaseline_eq_accepted {ε υ : Type} {embed : ScriptError → ε} {embedU : Unsupported → υ}
+    {r : VerifyResult} :
+    VerifyOutcome.ofBaseline embed embedU r = .accepted ↔ r = .accepted := by
+  cases r <;> simp [VerifyOutcome.ofBaseline]
+
+/-- For every error map, map of unsupported reasons and success state: a mapped baseline evaluation succeeds with `t` exactly when the baseline evaluation does. -/
+theorem EvalOutcome.ofBaseline_eq_ok {ε υ : Type} {embed : ScriptError → ε} {embedU : Unsupported → υ}
+    {r : EvalResult} {t : ExecState} :
+    EvalOutcome.ofBaseline embed embedU r = .ok t ↔ r = .ok t := by
+  cases r <;> simp [EvalOutcome.ofBaseline]
+
+/--
+Let `scriptPubKey` lie outside the P2SH template. This holds for every step, error map, map of unsupported reasons, flag set and `scriptSig`.
+`verifyScriptWith` accepts exactly when the flags are supported, both evaluations succeed, and the final top item is true.
+-/
+theorem verifyScriptWith_accepted_iff {ε υ : Type} {embed : ScriptError → ε} {embedU : Unsupported → υ}
+    {step : Step ε υ} {flags : UInt32}
+    {scriptSig scriptPubKey : List UInt8} (hp : isPayToScriptHash scriptPubKey = false) :
+    verifyScriptWith embed embedU step flags scriptSig scriptPubKey = .accepted ↔
+      unsupportedFlagBits flags = 0 ∧ ∃ s t, evalScriptWith embed embedU step flags scriptSig [] = .ok s ∧
+        evalScriptWith embed embedU step flags scriptPubKey s.stack = .ok t ∧ trueTop t.stack = true := by
+  unfold verifyScriptWith
+  by_cases hf : unsupportedFlagBits flags = 0
+  case neg => simp [hf]
+  simp only [hf, ne_eq, not_true_eq_false, ↓reduceIte, true_and]
+  cases hs : evalScriptWith embed embedU step flags scriptSig [] with
+  | rejected e => simp
+  | unsupported u => simp
+  | ok s =>
+    simp only
+    cases ht : evalScriptWith embed embedU step flags scriptPubKey s.stack with
+    | rejected e => simp [ht]
+    | unsupported u => simp [ht]
+    | ok t =>
+      by_cases h1 : trueTop t.stack = true
+      · simp [h1, hp, ht]
+      · simp [h1, ht]
+
+/--
+`verifyScriptWith` reads its flag argument through `unsupportedFlagBits` and `SCRIPT_VERIFY_P2SH` alone.
+For two flag sets with the same unsupported bits and the same `SCRIPT_VERIFY_P2SH`, it gives one result, for every step, error map, map of unsupported reasons, `scriptSig` and `scriptPubKey`.
+The step keeps its own flags.
+-/
+theorem verifyScriptWith_flags_congr {embed : ScriptError → ε} {embedU : Unsupported → υ} (step : Step ε υ)
+    {f g : UInt32} (hu : unsupportedFlagBits f = unsupportedFlagBits g)
+    (hp : hasFlag f ScriptFlags.p2sh = hasFlag g ScriptFlags.p2sh) (scriptSig scriptPubKey : List UInt8) :
+    verifyScriptWith embed embedU step f scriptSig scriptPubKey =
+      verifyScriptWith embed embedU step g scriptSig scriptPubKey := by
+  simp only [verifyScriptWith, evalScriptWith, hu, hp]
 
 end DogeLib.Proposals.Framework

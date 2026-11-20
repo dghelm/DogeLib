@@ -35,6 +35,7 @@ The block record gains the object `revised`:
 | `verdict` | `accepted`, `rejected` or `unsupported`. |
 | `step` | For a rejection or an unsupported result, the name of the check: one of the five steps of `validateBlock`. |
 | `reject_reason` | For a rejection, Core's reject reason. For a script failure, the bracket holds the text of the revision's error. |
+| `dos`, `reject_code` | For a rejection, the denial-of-service score and the reject code. A script failure that is not mandatory has the score 0 and the code `0x40`, as in the baseline. |
 | `tx`, `input` | For a rejection that names them, the position of the transaction in the block and of the input in the transaction. |
 | `script_error` | For a script failure, the text of the error of the first script run. |
 | `mandatory` | For a script failure, false when the second run, without the flags that are not mandatory, accepts. |
@@ -69,7 +70,8 @@ So a revision that reads the median time past of the view needs a view with that
 ## The revisions
 
 `ExampleFaultyLocktime` and `ExampleVersionVerify` are the two examples of the `Proposals` library. Neither is a proposal for Dogecoin.
-`RelativeLockTime` is the revision of design record 0012. It is partial: it has the rule of BIP 113 alone, so its `revised` objects are not the results of the three rules together.
+`RelativeLockTime` is the revision of design record 0012. It is partial: it has the rules of BIP 113 and BIP 112, so its `revised` objects are not the results of the three rules together.
+For `block.contextual_check_body`, its `revised` object holds the result of the lock-time cutoff alone, because that operation runs no script.
 -/
 
 @[expose] public section
@@ -80,10 +82,15 @@ open Lean (Json)
 open DogeLib.Exports DogeLib.Block DogeLib.Block.Exports DogeLib.Script DogeLib.Work
 open DogeLib.Proposals.Framework
 
-/-- The fields of a `revised` object that describe a failure, with nulls where a field does not apply. -/
-def failureFields (step : Option String) (rejectReason : Option String) (tx input : Option Nat)
-    (scriptError : Option String) (mandatory : Option Bool) (reason : Option String) : List (String × Json) :=
+/--
+The fields of a `revised` object that describe a failure, with nulls where a field does not apply.
+`score` holds the denial-of-service score and the reject code of a rejection.
+-/
+def failureFields (step : Option String) (rejectReason : Option String) (score : Option (Nat × Nat))
+    (tx input : Option Nat) (scriptError : Option String) (mandatory : Option Bool) (reason : Option String) :
+    List (String × Json) :=
   [("step", (step.map Json.str).getD .null), ("reject_reason", (rejectReason.map Json.str).getD .null),
+    ("dos", (score.map (natJson ·.1)).getD .null), ("reject_code", (score.map (natJson ·.2)).getD .null),
     ("tx", (tx.map natJson).getD .null), ("input", (input.map natJson).getD .null),
     ("script_error", (scriptError.map Json.str).getD .null), ("mandatory", (mandatory.map Json.bool).getD .null),
     ("reason", (reason.map Json.str).getD .null)]
@@ -110,19 +117,25 @@ The embedding of `ConnectBlock` results into the failure fields of a `revised` o
 -/
 def connectFields {ε υ : Type} (describe : ε → String) (describeU : υ → String) :
     ConnectEmbedding ε υ (List (String × Json)) (List (String × Json)) where
-  rejected e := failureFields (some "ConnectBlock") e.rejectReason (rejectionTx e) none none none none
-  unsupported e := failureFields (some "ConnectBlock") none none none none none (some (reprStr e))
+  rejected e :=
+    failureFields (some "ConnectBlock") e.rejectReason (some (e.dosScore, e.rejectCode)) (rejectionTx e) none none
+      none none
+  unsupported e := failureFields (some "ConnectBlock") none none none none none none (some (reprStr e))
   script tx input mandatory e :=
     let kind := if mandatory then "mandatory-script-verify-flag-failed" else "non-mandatory-script-verify-flag"
-    failureFields (some "ConnectBlock") (some s!"{kind} ({describe e})") (some tx) (some input) (some (describe e))
-      (some mandatory) none
-  scriptUnsupported u := failureFields (some "ConnectBlock") none none none none none (some (describeU u))
+    -- The score and the code of `ConnectBlockError.script`, which do not depend on the script error.
+    let score := if mandatory then (100, 0x10) else (0, 0x40)
+    failureFields (some "ConnectBlock") (some s!"{kind} ({describe e})") (some score) (some tx) (some input)
+      (some (describe e)) (some mandatory) none
+  scriptUnsupported u := failureFields (some "ConnectBlock") none none none none none none (some (describeU u))
 
 /-- The embedding of `validateBlock` results into the failure fields of a `revised` object. The fields of a `ConnectBlock` result pass unchanged. -/
 def validateFields :
     ValidateEmbedding (List (String × Json)) (List (String × Json)) (List (String × Json)) (List (String × Json)) where
-  rejected e := failureFields (some e.step) e.rejectReason (validateRejectionTx e) none none none none
-  unsupported e := failureFields (some e.step) none none none none none (some (reprStr e))
+  rejected e :=
+    failureFields (some e.step) e.rejectReason (some (e.dosScore, e.rejectCode)) (validateRejectionTx e) none none none
+      none
+  unsupported e := failureFields (some e.step) none none none none none none (some (reprStr e))
   connect := id
   connectUnsupported := id
 
@@ -140,7 +153,7 @@ def revisedHook {ε υ : Type} (rev : BlockRevision ε υ (List (String × Json)
     | .ok result =>
       Json.mkObj ([("active", active), ("verdict", "accepted"),
         ("changes_digest_hex", .str (hexOf (changesDigest result.changes).toList))] ++
-        failureFields none none none none none none none)
+        failureFields none none none none none none none none)
     | .rejected fields =>
       Json.mkObj ([("active", active), ("verdict", "rejected"), ("changes_digest_hex", .null)] ++ fields)
     | .unsupported fields =>
@@ -222,7 +235,7 @@ def versionVerifyRevision :
     BlockRevision ExampleVersionVerify.ExampleScriptError ExampleVersionVerify.ExampleScriptUnsupported Fields Fields :=
   ExampleVersionVerify.blockRevision coreVerifier
 
-/-- `RelativeLockTime` as a revision of the executable. It has the rule of BIP 113 alone. -/
+/-- `RelativeLockTime` as a revision of the executable. It has the rules of BIP 113 and BIP 112. -/
 def relativeLockTimeRevision : BlockRevision ScriptError Unsupported Fields Fields :=
   RelativeLockTime.blockRevision coreVerifier
 
@@ -230,7 +243,7 @@ def relativeLockTimeRevision : BlockRevision ScriptError Unsupported Fields Fiel
 The revisions that a request can name, with `coreVerifier`.
 `ExampleFaultyLocktime` has the variants `corrected` and `faulty`. `ExampleVersionVerify` has no variant.
 Neither example is a proposal for Dogecoin.
-`RelativeLockTime` is the revision of design record 0012, with the rule of BIP 113 alone. It has no variant.
+`RelativeLockTime` is the revision of design record 0012, with the rules of BIP 113 and BIP 112. It has no variant.
 -/
 def revisions : List NamedRevision :=
   [⟨"ExampleFaultyLocktime", some "corrected",

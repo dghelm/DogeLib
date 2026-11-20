@@ -225,9 +225,11 @@ That digest does not cover the replies.
 | P3 | BIP 113, [`bip-0113.mediawiki`](https://github.com/bitcoin/bips/blob/24e96e870fffaa257b465ce1f0370c14aac588e8/bip-0113.mediawiki) in `bitcoin/bips` | The same commit as P2, which is also the last change of this file | 2026-01-12 | `RelativeLockTime` |
 | P4 | [Discussion 3509 of `dogecoin/dogecoin`](https://github.com/dogecoin/dogecoin/discussions/3509), "Proposal: activate CSV with 1.15", by `patricklodder` | SHA-256 `f991a5409472fd30c565fc9a99b9974e638e39335918e51344ce78b553d79200` of the first post. The GitHub API returned that text on 2026-11-20, with no edit time | 2024-04-04 | `RelativeLockTime` |
 
-`RelativeLockTime` is partial: it has the rule of BIP 113 alone, and the rules of BIP 112 and BIP 68 are stages 2 and 3 of design record 0012.
+`RelativeLockTime` is partial: it has the rules of BIP 113 and BIP 112, and the rule of BIP 68 is stage 3 of design record 0012.
 Its Lean definitions follow Core's code of the rule at the Dogecoin pin, which is Core's own implementation of the BIP (design record 0012, decision 3).
 The rule of BIP 113 is in D110 (`src/validation.cpp`, `IsFinalTx` at lines 258 to 269 and `ContextualCheckBlock` at lines 3127 to 3140) and in D18 (`GetMedianTimePast`).
+The rule of BIP 112 is in D114 (`ConnectBlock`, lines 1906 to 1911, which set `SCRIPT_VERIFY_CHECKSEQUENCEVERIFY`), in D3 (`src/script/interpreter.cpp`, the opcode at lines 392 to 427 and `CheckSequence` at lines 1310 to 1354) and in D101 (`CheckInputs`, lines 1488 to 1512, the two script runs).
+Core's records with the flag are in D28, D29 and D45, and D30 is the runner of the two transaction files.
 The BIPs explain the rules, and the module documentation of `DogeLib.Proposals.RelativeLockTime` lists each difference between a BIP and the pinned code.
 
 ## Historical header fixture

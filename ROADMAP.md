@@ -165,8 +165,8 @@ The revision is not part of the baseline, and DogeLib takes no position on its a
 
 | Stage | Deliverable | Status |
 | --- | --- | --- |
-| 1 | The extensions E1 to E4 of the block-level layer of design record 0011, and BIP 113, the median-time cutoff. The cutoff has its restriction theorem, known answers and the cutoff count. A comparison runs Core's code with the CSV state forced to `ACTIVE` | Implemented, exit conditions 1 to 6. `connectChainWith_restricts` waits for stage 3, as the record allows. The revision is partial until stage 3: it has the rule of BIP 113 alone ([COVERAGE.md](COVERAGE.md#proposed-revisions)) |
-| 2 | BIP 112: the CSV flag of a block, the Script-local theorems for `OP_CHECKSEQUENCEVERIFY` and the corpus records | Not started |
+| 1 | The extensions E1 to E4 of the block-level layer of design record 0011, and BIP 113, the median-time cutoff. The cutoff has its restriction theorem, known answers and the cutoff count. A comparison runs Core's code with the CSV state forced to `ACTIVE` | Implemented, exit conditions 1 to 6. `connectChainWith_restricts` waits for stage 3, as the record allows. The revision is partial until stage 3 ([COVERAGE.md](COVERAGE.md#proposed-revisions)) |
+| 2 | BIP 112: the CSV flag of a block, the Script-local theorems for `OP_CHECKSEQUENCEVERIFY` and the corpus records | Implemented, exit conditions 1 to 4. The opcode witnesses are block-level. The forced-active comparison of `block.validate` covers made blocks for the opcode. The revision has the rules of BIP 113 and BIP 112, and it is partial until stage 3 |
 | 3 | BIP 68: sequence locks with the ancestor median times, the block-level `SoftFork` with its witnesses, and `relativeLock_enforced` | Not started |
 | 4 | The historical counts on heights 0 to 10,000 and 0 to 145,000, with a committed candidate list | Not started |
 

@@ -1,10 +1,10 @@
 # Mainnet coin-set replay above height 145,000
 
 **Status:** Draft, proposed on 2026-11-20.
-No part of this record is adopted, and every decision of section 11 has the status `Proposed`.
+No part of this record is adopted, and every decision of section 13 has the status `Proposed`.
 
 **Date:** 2026-11-20
-**Companions:** [Design record 0010](0010-block-validity.md), [oracle contract](../oracle.md), [coverage](../../COVERAGE.md), [soundness](../../SOUNDNESS.md) and the [block fixtures](../../tests/block/mainnet-blocks/README.md).
+**Companions:** [Design record 0010](0010-block-validity.md), [design record 0007](0007-proposed-revisions.md), [design record 0001](0001-initial-handoff.md), [oracle contract](../oracle.md), [coverage](../../COVERAGE.md), [soundness](../../SOUNDNESS.md) and the [block fixtures](../../tests/block/mainnet-blocks/README.md).
 
 ## 1. Purpose
 
@@ -21,6 +21,15 @@ This record proposes coin-set snapshots.
 The Core harness replays the chain once and writes its coin set at chosen heights.
 The oracle starts a range from a snapshot, checks each block against Core, and checks the digest of the whole set at the end.
 The record gives the ranges, the storage, the options for the recent range, the costs and the stages.
+
+Design record 0001, section 1, gives DogeLib three purposes.
+The record has a deliverable for each one:
+
+| Purpose | Deliverable | Sections |
+| --- | --- | --- |
+| Make existing consensus behaviour precise | Each range compares named Lean definitions with Core on the blocks of one rule change. The record flags each rule that `block.validate` does not model | 3, 4 and 4.1 |
+| Support versioned protocol proposals | A run of a proposed revision of design record 0007 over every range, which reports each historical block whose verdict changes | 10 |
+| Give contracts to other implementations | A public corpus that a program other than the oracle can run: the range fixtures, the request of each range, the expected results and the snapshot format | 9 |
 
 Core is Dogecoin Core at the pin `e0a1c157`. Line numbers refer to `src/validation.cpp` unless a file is named.
 
@@ -265,6 +274,30 @@ A range around a rule change at height `h` runs from `h - 1,000` to `h + 999`.
 | G | 6,455,302 to 6,456,301 | 1,000 | The recent range of design record 0010, with the blocks of stage 0010a |
 | E1, E2 | Fixed in stage 4 | 2,000 each | The CSV window: one range across the first `STARTED` boundary and one across the `FAILED` boundary |
 
+### 4.1 Rules and definitions
+
+The table names the rule of each range, and the Lean definitions that the range compares with Core.
+Every range also compares the whole of `validateBlock`: the five checks of section 5 of design record 0010, and the coin set.
+
+| Range | Rule that the range exercises | Lean definitions | In `block.validate` |
+| --- | --- | --- | --- |
+| S | The random subsidy and coinbase maturity 30 | `getDogecoinBlockSubsidy` with `generateMTRandom`, `coinbaseMaturity` | Yes |
+| A | The fixed subsidy from 145,000. Maturity 240 for a coinbase from that height, first spent from 145,240. The DigiShield retarget at each block | `getDogecoinBlockSubsidy` with `mainnetSimplifiedRewards`, `coinbaseMaturity`, and the `nBits` check of `contextualCheckBlockHeader` | Yes |
+| B | AuxPoW from 371,337: the payload check, the chain ID, and the end of legacy blocks | `checkBlockHeader` with `AuxPow.check`, and `getContextualParams` with `mainnetAuxpowContextualParams` | Yes |
+| C | The subsidy of 10,000 coins from 600,000 | `getDogecoinBlockSubsidy` | Yes |
+| D | From 1,034,383: the height in the coinbase script, block versions below 3 rejected, and the DERSIG flag | `coinbaseHeightPrefix` in `contextualCheckBlockBody`, `contextualCheckBlockHeader`, and `connectScriptFlags` | Yes |
+| F | From 3,464,751: block versions below 4 rejected, and the CLTV flag | `contextualCheckBlockHeader` and `connectScriptFlags` | Yes |
+| H, G | No rule change. P2SH spends, the sigop limit with P2SH, and the blocks of two recent periods | `verifyLegacySpend` through `checkInputScripts`, and `getTransactionSigOpCost` | Yes |
+| E1, E2 | The version-bits state of CSV inside its window | The full walk of `Block.VersionBits` | No. `block.validate` returns an adapter error there, and stage 4 adds the walk |
+
+Three limits apply to every row:
+
+- A block of mainnet shows only the accepting side of a rule. The rejecting side has its evidence in the changed blocks of the full comparison ([evidence](../oracle.md#block-validation-comparison-evidence)).
+- `block.validate` runs `contextualCheckBlockHeader` with checkpoints disabled. So no range exercises the checkpoint rule, in either program.
+- CSV and SegWit semantics stay outside the Lean definitions, which prove them inactive on mainnet (design record 0010, section 7). A range in the oracle fails with `outside_model` if a block needs them.
+
+Apart from E1 and E2, the record found no rule change of a range that `block.validate` does not model.
+
 **Cost.**
 The ranges A, B, C, D, F, H and G have 20,000 blocks.
 Range A has about 0.45 million inputs, from the last 5,000 blocks below it, so the oracle needs about 30 minutes.
@@ -336,8 +369,11 @@ A second Core pass writes the same files again, so the files themselves stay loc
 **The restricted coins.**
 The entries of a snapshot that a range reads are small.
 For range G they are the entries of 15,999 transaction IDs.
-A tool writes them as the `coins` argument of an ordinary request, and they become a release asset with a committed SHA-256.
-CI can then run the range with no snapshot (section 9, stage 3).
+A tool writes them as the `coins` argument of an ordinary request.
+
+The *range request* is that request without its blocks: the restricted coins, `chain`, `bip34_ancestor_hex`, the adjusted time and the flags.
+It becomes a release asset with a committed SHA-256, for every range.
+CI can then run the range with no snapshot (section 11, stage 3).
 
 ## 6. The recent range and the transaction index
 
@@ -416,9 +452,152 @@ The changes are additive, within `dogelib-oracle/1` ([format stability](../oracl
 - New errors of kind `block_validate` for a snapshot that does not open, is truncated, or has a fault of section 3.1.
 
 The snapshot file `dogelib-coins/1` is a fixture format, so its adoption is the maintainer's (decision 1).
+So is the results file `dogelib-range-results/1` of section 9 (decision 13).
+The `revision` argument of section 10.2 belongs to a separate executable, and `dogelib-oracle` does not take it.
 A request with `coins` and no file does not change.
 
-## 9. Stages and exit conditions
+## 9. The ranges as a conformance corpus
+
+The third purpose of DogeLib is a contract against which another implementation can be checked.
+A program that validates Dogecoin blocks can run the ranges with no oracle, no Core harness and no node.
+The proposal publishes what such a run needs:
+
+| Part | Format | Where | What fixes it |
+| --- | --- | --- | --- |
+| The blocks of each range | `dogelib-blocks/1` | Release asset | SHA-256 in `release.json`, and the committed list of block hashes |
+| The range request of each range | The arguments of `block.validate` in `dogelib-oracle/1` | Release asset | SHA-256 in `release.json` |
+| The expected results of each range | A proposed format `dogelib-range-results/1` | Committed | The repository |
+| The snapshot at each range start | `dogelib-coins/1` | Local. The manifest is committed | The digest, the number of coins and the SHA-256 of the manifest |
+
+**Expected results.**
+The file of a range holds one line for each block.
+The line gives the height, the hash, the verdict, the digest of the coin changes, and the numbers of spent and created coins.
+It also holds the digests of the restricted set at the start and at the end.
+The values are the response of the Core harness, in a run in which the oracle agreed.
+So the expectation of a third program comes from Core's code and not from that program.
+
+**What a third party runs.**
+The party downloads the blocks and the range request, and checks both against the committed SHA-256 values.
+Its program then has two ways to take the range:
+
+- It reads `block.validate` requests and writes responses in `dogelib-oracle/1`. `scripts/compare_core.py` takes any two programs of that format, so the program can stand in the place of the oracle or of the harness.
+- It reads the files directly and writes a results file. A committed checker compares that file with the expected results, and needs no other program.
+
+A result on the restricted coins shows agreement on verdicts and coin changes.
+It does not show the digest of the whole coin set, which needs the snapshot.
+
+**A snapshot stays local.**
+A third party makes the file again in two steps.
+It builds the Core harness at the pin with `scripts/build_core_harness.sh`, and it runs the Core pass on blocks from its own node.
+
+A snapshot has one byte sequence for one coin set (section 3.1).
+So the new file must have the SHA-256, the digest and the number of coins of the committed manifest.
+Its block must have the block hash of the manifest.
+A file that fails any of the four is not the snapshot of the record.
+Stage 1 makes the snapshot at height 9,000 in CI from released blocks alone, so that case needs no node.
+
+**Versions.**
+Each format has a name with a version, and a document that defines it without reference to the Lean code.
+The assets belong to a release with a dated tag, as the block fixtures of design record 0010 do.
+A change of a published file is a new release, and the old tag stays.
+
+**The Rust path.**
+The corpus is also the conformance test of a later Rust implementation.
+For example, a Rust reader of `dogelib-coins/1` with a refinement theorem, as the CompactSize reader has, would run the same snapshots.
+This record proposes no Rust work.
+
+## 10. Historical impact of a proposed revision
+
+The second purpose of DogeLib is support for versioned protocol proposals.
+Design record 0007 states a proposed revision and proves its compatibility at the level of one Script spend.
+Its section 8.3 names what the block level needs, and that record had no block validity to build on.
+With the snapshots and the ranges, a run can answer a first question at the block level:
+which historical blocks get another verdict under a revision?
+
+### 10.1 Definitions
+
+A proposed revision of the Script rules gives a revised spend check, with an `active` argument (design record 0007, sections 6 and 7).
+`connectBlock` takes Core's signature verifier, not a spend check.
+So the proposal adds `connectBlockWith` and `validateBlockWith` to the `Proposals` library, with the spend check as a parameter.
+The addition follows option M2 of design record 0007: no baseline file changes, and an agreement theorem pins the copy to the baseline.
+The block height and an `Activation` value give `active` (design record 0007, section 7.2).
+
+The theorem targets follow. The names are proposals:
+
+| Target | Statement |
+| --- | --- |
+| `connectBlockWith_baseline` | With the baseline spend check, `connectBlockWith` equals `connectBlock`. |
+| `validateBlockWith_inactive` | Below the activation height, or with no activation height, `validateBlockWith` of a revision with the inactive equality equals `validateBlock`. |
+| `validateBlockWith_congr` | Take a block in which no `scriptSig`, no spent `scriptPubKey` and no P2SH redeem script holds an instruction that the revision redefines. Then `validateBlockWith` of the active revision equals `validateBlock`. It lifts `verifyScriptWith_congr`. |
+| `connectBlockWith_restricts` | Take a revision whose spend check restricts acceptance. If `connectBlockWith` accepts a block on a coin set, `connectBlock` accepts it on that set with the same result. |
+
+The last target is the block obligation of design record 0007, section 8.3, for a Script revision with the identity projection.
+The statement for chains needs an induction over it, and this record does not require that step.
+
+### 10.2 The request
+
+Design record 0007, decision 8, keeps the `Exports` library and `dogelib-oracle` free of proposals during 0.x.
+It allows a later decision to add a `ProposalExports` library.
+Decision 10 below is that later decision, as a proposal.
+
+A separate executable, built from `ProposalExports`, answers `block.validate` with one more argument:
+
+```text
+"revision": {"name": "ExampleVersionVerify", "variant": null, "activation_height": 0}
+```
+
+`activation_height` is a height or null for no activation.
+`dogelib-oracle` returns a request error for the argument, and the import check keeps every baseline library free of `DogeLib.Proposals`.
+
+The executable carries the baseline state through the range, as `block.validate` does.
+For each block it runs the baseline and the revision on the same state before the block.
+Each block record gains a `revised` object with the verdict of the revision and, for a rejection, the transaction, the input and the error.
+A *changed block* is a block whose two verdicts differ.
+So the run answers one question for each block: what does the revision say about this block on the historical chain below it?
+It does not build the chain that revised nodes would have built after the first changed block.
+
+The report of a run lists the changed blocks of each range, each with its height, its hash, both verdicts and the reason.
+The run costs about twice the block work of section 4, because each input runs two script checks.
+
+### 10.3 The self-test
+
+The two examples of the `Proposals` library test the run: `ExampleVersionVerify`, and the corrected variant of `ExampleFaultyLocktime`.
+The expected number of changed blocks is fixed before each run, from a source other than the run:
+
+1. **No activation height.** No block of any range changes, by the inactive equality of each example.
+2. **Active from height 0.** A separate script reads the blocks and the range requests, and lists the *candidate blocks*. A candidate has a spend that holds the redefined opcode as an instruction, `0xb9` or `0xb3`. The lane commits that list before the run. Every changed block must be a candidate, by the congruence theorem. Each change must go from accepted to rejected, because both examples are soft forks.
+3. **Made blocks.** The test builds blocks on the last block of range S, from the proved witnesses of each example. They have no proof of work, as the changed blocks of the full comparison. A block from a strictness witness must be the one changed block of its request, with the error of the witness. A block from a use witness runs the rule and must not change. A block with the counterexample of the faulty variant must change in the other direction: the baseline rejects it, and the faulty variant accepts it.
+
+The record does not predict the number of candidates.
+If the list of case 2 is empty, the expected number of changed blocks is 0.
+
+### 10.4 What a result shows
+
+A result is a statement about the blocks of the ranges, on the hypothesis of section 3.4:
+
+- The ranges are a sample: about 20,000 of the blocks above height 145,000. A revision that changes only blocks outside the ranges gives an empty report.
+- The replay from the genesis block to height 145,000 is the only range that starts from the empty set. A run of a revision over it costs about as much as two replays of section 2.
+- The run shows what the Lean definition of the revision does. No Core behaviour exists for a revision, so no comparison supports the `revised` verdicts (design record 0007, section 9).
+- An empty report is not a compatibility proof. The theorem targets of section 10.1 are the proofs, and they hold for every block.
+- The report says nothing about transactions that no block of the ranges holds, such as unconfirmed spends of existing coins.
+
+### 10.5 The whole chain
+
+Three ways give the impact of a revision on every block. Decision 12 leaves the choice to the maintainer.
+
+| Option | Work | Cost | What the result rests on |
+| --- | --- | --- | --- |
+| W1: the ranges alone | Section 10.2. | About twice the block work of the ranges. | The Lean definition of the revision, on a sample. |
+| W2: candidate blocks from the Core pass | The Core pass takes a list of opcodes. It lists each candidate block of the chain, and writes the block with its range request. The proposal executable then runs those blocks alone. | One more Core pass, about 12 to 14 hours by the estimate of section 2. No added pass if the opcodes are known before the first one. The number of candidate blocks is not known. | The Lean definition, on every candidate block. `validateBlockWith_congr` shows that no other block changes. It needs that theorem for the revision. |
+| W3: a patched harness | A patch of Core's interpreter states the revision in C++, and the pass runs with it. | One Core pass for each revision and each activation height, and the patch itself. | A second implementation of the revision, with no theorem that relates it to the Lean definition. Design record 0007 calls that a comparison with another implementation, never a Core comparison. |
+
+**Recommendation.**
+W1 in this record, and W2 as a later stage when a revision with a congruence theorem needs the whole chain.
+The record does not recommend W3 as a way to measure impact.
+A patch is useful as an independent implementation to compare with, which is a separate kind of evidence.
+The record commits to none of W2 and W3.
+
+## 11. Stages and exit conditions
 
 ### Stage 0: measurements
 
@@ -467,13 +646,35 @@ It adds a version to each entry of `chain` in the oracle, and the full walk of t
 It fixes the heights of E1 and E2 from the output of the version-bits walk.
 It exits when both ranges agree under section 3.4, and Core reports `STARTED` and then `FAILED` in them.
 
+### Stage 5: the conformance corpus
+
+The stage follows stages 2 and 3, and runs only if decision 13 is accepted.
+
+1. A document defines `dogelib-blocks/1`, `dogelib-coins/1`, the range request and `dogelib-range-results/1`, with the digests, and without reference to the Lean code.
+2. Each range has its blocks and its range request as release assets, and its expected results in the repository. The results are the response of the Core harness in a run of stage 2 or 3.
+3. A committed checker compares a results file with the expected results. It passes on a file from the oracle and on a file from the harness. It fails on a planted wrong verdict, a wrong digest, a missing block and an added block.
+4. A person who did not write the tools runs one range from the document alone. They use the assets, and a program in the harness slot of `scripts/compare_core.py`. The pull request records the steps that the document lacked.
+5. In CI, the checker runs range G and the short range of stage 1 from the released assets.
+
+### Stage 6: the historical impact of a proposed revision
+
+The stage follows stage 2, and runs only if decisions 10 and 11 are accepted.
+It adds `connectBlockWith` and `validateBlockWith`, the `ProposalExports` library with its executable, and the report.
+
+1. `connectBlockWith_baseline` and `validateBlockWith_inactive` are proved. The other two targets of section 10.1 are proved, or the pull request states why one is not. In that case it labels the evidence of case 2 as a test alone.
+2. With no `revision` argument, the proposal executable gives the response of `dogelib-oracle` byte for byte on every request of the full comparison of `block.validate`.
+3. The import check passes, and its self-test still fails on a baseline module that imports `DogeLib.Proposals`.
+4. The three cases of section 10.3 give their expected numbers for both examples, on every range of stages 1 to 3. The candidate list is committed before the run.
+5. COVERAGE.md records each report in the section for proposals, with the label of section 10.4. The label says: a sample of ranges, with no Core comparison of the `revised` verdicts.
+
 ### Gates
 
 Each stage adds its commands to the gate table of AGENTS.md.
 The gates of stage 1, condition 5, and stage 3, condition 3, run in CI.
+So do condition 5 of stage 5, and cases 1 and 3 of section 10.3 on range S of stage 1's short form.
 The Core pass and the ranges of stage 2 are recorded gates outside CI, as the replay to height 145,000 is.
 
-## 10. Excluded
+## 12. Excluded
 
 - A replay of every block above height 145,000, and any work on the speed of the oracle. Issue 149 stays a separate task.
 - A published snapshot, and any claim that a snapshot is the coin set of mainnet without the hypothesis of section 3.4.
@@ -481,9 +682,12 @@ The Core pass and the ranges of stage 2 are recorded gates outside CI, as the re
 - Reorganization, undo data, and Core's own database format on disk.
 - Script-check threads and assumed-valid blocks, as in design record 0010.
 - Testnet and regtest.
+- A revision of a rule outside Script, such as a header or subsidy rule. Section 10 covers revisions that the Script framework of design record 0007 states.
+- The chain that revised nodes would build after a changed block, activation by signalling, and the merits of any proposal.
+- A patched Core build, except as option W3 of decision 12.
 - The total value of the coin set ([issue 171](https://github.com/dghelm/DogeLib/issues/171)), except the count comparison of stage 2, condition 3.
 
-## 11. Decisions
+## 13. Decisions
 
 **Date:** none. **Decision maker:** Maintainer.
 Every row is a proposal.
@@ -499,8 +703,13 @@ Every row is a proposal.
 | 7 | Comparison with a node | Stage 2, condition 3: `hash_serialized`, `transactions` and `txouts` of the harness's last set against `gettxoutsetinfo` of the node at one height. | No comparison. The second item of section 3.4 then rests on the replay to height 145,000 alone. | Proposed |
 | 8 | CI | Stage 1, condition 5, and range G with restricted coins, in the `core` workflow. The pass and the other ranges outside CI. | All of it outside CI. | Proposed |
 | 9 | CSV window | Stage 4: the ranges E1 and E2, with a version in each `chain` entry of the oracle. The harness gets that change in stage 2 in every case. | No range in the window. The version-bits walk stays the evidence there. | Proposed |
+| 10 | Proposal request | A `ProposalExports` library and a separate executable that answers `block.validate` with a `revision` argument. `dogelib-oracle` and `Exports` stay baseline-only (section 10.2). Decision 8 of design record 0007 allows this later decision. | The test executable `proposal-replay` alone, as in design record 0009, decision 11, with no exported library. | Proposed |
+| 11 | Block level of a revision | `connectBlockWith` and `validateBlockWith` in the `Proposals` library, with the four theorem targets of section 10.1. | A copy of `connectBlock` for each proposal. | Proposed |
+| 12 | Scope of an impact run | W1: the ranges, in stage 6. W2 is a later stage, decided when a revision needs it. W3 is not used to measure impact (section 10.5). | W2 in this record, with the opcodes of the examples in the first Core pass. W3. | Proposed |
+| 13 | Conformance corpus | Publish the blocks, the range request and the expected results of each range, with a document of the formats, `dogelib-range-results/1` and a checker (section 9, stage 5). | The fixtures stay tools of the DogeLib comparison, with no expected results and no promise to other programs. | Proposed |
+| 14 | Self-test of the impact run | The three cases of section 10.3 with `ExampleVersionVerify` and the corrected `ExampleFaultyLocktime`, and the faulty variant in case 3. | Case 1 alone. | Proposed |
 
-## 12. Remaining risks
+## 14. Remaining risks
 
 | Risk | Mitigation |
 | --- | --- |
@@ -510,8 +719,14 @@ Every row is a proposal.
 | The restricted run differs from the run on the whole set. | `validateBlock_restrict`, and condition 4 of stage 1. The end digest of each range also fails if the restricted run changes an entry in another way than Core. |
 | A range holds a block that the sigop count makes very slow. | The `block.check` run before each range (section 7). |
 | Agreement on ranges is read as a replay of the chain. | Each record states the heights and the hypothesis of section 3.4. The ranges of section 4 without S, E1 and E2 cover 20,000 of about 6.3 million blocks above height 145,000. |
+| An impact report is read as the effect of a revision on the whole chain, or as a proof that it is a soft fork. | Section 10.4, and the label of stage 6, condition 5. The proofs are the targets of section 10.1. |
+| The proposal executable differs from the oracle on the baseline. | `connectBlockWith_baseline`, and condition 2 of stage 6. |
+| A proposal reaches a baseline library through the new executable. | The import check and its self-test, condition 3 of stage 6. |
+| The expected results hold a mistake that the oracle and Core share. | The file states its source. A third program that disagrees is a finding to examine, not a failure of that program by itself. |
+| A published file changes after another project pins it. | Dated release tags and committed SHA-256 values (section 9). |
 | The node changes or is not reachable in the middle of the pass. | The pass continues from its last snapshot. Each block is checked against the pins and the links, whatever the source. |
 
 This record changes no pin and no agreed theorem statement, and it asks for no exception to the trust policy.
-Decision 1 introduces a fixture format, and decision 5 replaces an exit condition of an adopted record. Both need the maintainer.
+Decisions 1 and 13 introduce fixture formats, and decision 5 replaces an exit condition of an adopted record.
+Decision 10 uses the later decision that decision 8 of design record 0007 allows. All four need the maintainer.
 Adoption of the scope establishes no result, and it does not authorize the merge of a later implementation.

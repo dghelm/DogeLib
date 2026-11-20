@@ -1072,7 +1072,7 @@ The evaluator is in the proof library, and no compiled code runs it.
 No theorem states a distribution of the subsidy, and none bounds its value.
 `getDogecoinBlockSubsidy` does not read a coinbase.
 `connectBlock` adds the fees to the subsidy and compares the sum with the coinbase value (D101, line 1996).
-[`connect_value_bound`](#connect_value_bound-a-block-adds-at-most-its-subsidy) bounds the value that an accepted block adds by its subsidy.
+[`connect_value_bound`](#connect_value_bound-a-block-adds-at-most-its-subsidy) bounds the value that an accepted block adds by its subsidy, on a coin set whose amounts are in range.
 
 The comparison evidence is in [COVERAGE.md](COVERAGE.md#operations).
 `lake test` runs Core's three subsidy tests (D105) through the compiled code.

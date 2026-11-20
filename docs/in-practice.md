@@ -333,5 +333,7 @@ This direction is not implemented:
 
 Properties of a whole block, such as "no block spends one outpoint twice", need a model of the coin set, because per-input Script verification does not describe them.
 `connectBlock` models Core's `ConnectBlock` on mainnet, over a coin set ([SOUNDNESS.md](../SOUNDNESS.md#the-coin-set-checktxinputs-and-connectblock)).
-`connect_spends_available` states that each input of an accepted block spends a present coin, and that the inputs of one transaction name pairwise different outpoints.
-That second conclusion excludes the bug class of CVE-2018-17144 ([SOUNDNESS.md](../SOUNDNESS.md#connect_spends_available-each-input-spends-a-present-coin)).
+Take a block that `connectBlock` accepts, whose hash is not the mainnet genesis hash.
+`connect_spends_available` states that each input of a transaction of that block other than the coinbase spends a present coin.
+It also states that the inputs of one such transaction name pairwise different outpoints.
+The pairwise different outpoints exclude the bug class of CVE-2018-17144 ([SOUNDNESS.md](../SOUNDNESS.md#connect_spends_available-each-input-spends-a-present-coin)).

@@ -340,7 +340,8 @@ The array must have at most 2^31 entries.
 A larger array is a request error before Merkle computation.
 This caller bound avoids counter wrap in Core's final sweep ([D42, `MerkleComputation`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/consensus/merkle.cpp)).
 The Lean specification `computeMerkleRoot` has no such bound.
-No operation checks transaction validity, witness commitments or full block validity.
+The hash, header and Merkle operations do not check transaction or block validity.
+[Transaction and block checks](#transaction-and-block-checks) and [block validation](#block-validation) describe the operations that do.
 
 ### Work arguments
 

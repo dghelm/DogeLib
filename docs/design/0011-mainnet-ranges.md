@@ -105,7 +105,8 @@ A reader rejects a file with any of these faults:
 - A tag other than 2, or bytes after the last complete record.
 - A record that is not above the record before it in the order of the set.
 - Two records of one transaction ID with different heights or coinbase bytes.
-- An amount above `MAX_MONEY`, an output index of 1,048,576 or more, or a script that `IsUnspendable` rejects.
+- An amount outside the range from 0 to `MAX_MONEY` as a signed 64-bit value, which excludes the amount -1 of a null output.
+- An output index of 1,048,576 or more, or a script that `IsUnspendable` rejects.
 - A height above 2,147,483,646, or a coinbase byte other than 0 and 1.
 - A script length that is not in the shortest CompactSize form.
 
@@ -144,11 +145,23 @@ So the pass needs a change of the harness first.
 Each entry of `chain` gains the version of its header, and the harness removes the refusal.
 
 Core's own `VersionBitsState` then walks the supplied entries and the accepted blocks.
-A segment that starts inside the window gets a dense chain back to the last boundary below the CSV start, up to about 525,000 entries.
+A segment that starts inside the window gets a dense chain back to the last boundary below the CSV start.
+The chain also holds the ten real headers below that boundary.
+Core reads the median time of that boundary from them (`versionbits.cpp`, line 44, and `chain.h`, line 286).
+The chain has up to about 525,000 entries, and the harness refuses a shorter one.
 This change is a condition of stage 2. The same change in the oracle is the option of stage 4.
 
+**Arithmetic.**
+Core adds amounts in `ConnectBlock` with no range check, and an overflow is undefined behaviour (design record 0010, section 3).
+In a comparison, the oracle's `out_of_domain_at` keeps such a block from the harness.
+The pass runs blocks that the oracle never reads, so it has no such guard.
+
+The proposal builds the harness of the pass with `-fsanitize=signed-integer-overflow` and `-fno-sanitize-recover`.
+An overflow then ends the pass with an error, and the lane stops and reports the block.
+The record does not claim that any block of mainnet overflows.
+
 The pass checks every script, as the harness does today: `hashAssumeValid` is null and no check thread runs.
-The pass computes the digest of the whole set only where it writes a snapshot.
+The pass computes the digest of the whole set only at the listed heights: where it writes a snapshot, and at each range end.
 The existing digest at each multiple of 1,000 would cost one pass over the set for each 1,000 blocks.
 No measurement supports that cost at the size of the set today.
 
@@ -220,6 +233,7 @@ The statement has a hypothesis, and the comparison does not discharge it:
 
 - **The start state comes from Core.** The harness made the snapshot with Core's `ConnectBlock` on every block from the genesis block. The oracle checked those blocks only up to height 145,000 and inside the earlier ranges. An error of the Lean definitions on a block outside every range stays unseen.
 - **The harness, not Core, carries the set.** The map, the commit after each block and the snapshot writer are harness code. A fault there can give both programs the same wrong start state. The replay from the genesis block compares that code with the oracle up to height 145,000. Exit condition 3 of stage 2 compares the last set of the pass with a node.
+- **The arithmetic.** No sum of `ConnectBlock` left the `int64_t` range in the pass. The build of section 3.2 ends the pass on an overflow, so a finished pass gives this hypothesis, if the sanitizer finds every such overflow.
 - **The context.** The digest covers coins alone. The chain view, the ancestor hash and the predecessor of the first block come from the headers that the pass kept (section 3.2). The comparator requires that the first block of a range names the block hash of the snapshot's manifest. Both programs get the same context, so a wrong context is a wrong supplied state, as a wrong snapshot is.
 - **The blocks.** Section 5 states what authenticates them.
 
@@ -327,9 +341,11 @@ CI can then run the range with no snapshot (section 9, stage 3).
 
 Stage 0010b is open in one part: the recent range, range G here.
 Design record 0010, section 5, planned a fetch tool that takes each spent coin from its funding transaction.
-Without `-txindex`, `getrawtransaction` finds a confirmed transaction only while one of its outputs is unspent.
-`GetTransaction` then takes the height from the coin entry and reads that block (lines 1108 to 1125).
-A funding transaction whose outputs are all spent has no entry, so the node cannot supply every funding transaction.
+Without `-txindex`, `getrawtransaction` finds a confirmed transaction only through a coin entry of its ID.
+`GetTransaction` takes the height from that entry and reads the block (lines 1108 to 1125).
+A funding transaction whose outputs are all spent has no entry in the database, and at most a pruned entry in the cache.
+So the node does not reliably supply every funding transaction.
+
 A change of `-txindex` needs `-reindex-chainstate` (`init.cpp`, lines 1515 to 1517).
 
 The options for the coins of range G follow. Decision 5 leaves the choice to the maintainer.
@@ -419,7 +435,7 @@ The stage adds the format, the arguments of section 8 in both programs, `validat
 It needs no new block.
 
 1. The harness replays heights 0 to 145,000, writes snapshots at 100,000 and 145,000, and reports the digest at 101,000. The snapshot at 145,000 has 5,094,671 coins and the digest of section 3.4.
-2. A changed snapshot fails. One case changes each field: the amount, the script, the height and the coinbase byte. The other cases are a removed record, an added record, two records in the wrong order, a truncated file, and one case for each other fault of section 3.1. One removed record has an ID outside `T`, so only the start digest finds it.
+2. A changed snapshot fails. One case changes each field: the amount, the script, the height and the coinbase byte. The other cases are a removed record, an added record, two records in the wrong order and a truncated file. Each other fault of section 3.1 has a case, and one has the amount -1. One removed record has an ID outside `T`, so only the start digest finds it.
 3. Range S agrees under section 3.4. Its block records equal those of the same heights in a replay from the genesis block, without `set_digest_hex`.
 4. The oracle runs range S in two forms: with `coins_file`, and with the whole set of height 100,000 in memory. Both give the same end digest, and the same block records without `set_digest_hex`.
 5. CI runs a short form of conditions 2 to 4, on the released blocks of heights 0 to 10,000 with a snapshot at 9,000.
@@ -474,7 +490,7 @@ Every row is a proposal.
 | --- | --- | --- | --- | --- |
 | 1 | Snapshot format | `dogelib-coins/1`: the coin records of the whole set in digest order, with the existing digest and a manifest (section 3.1). | A format with an index for random reads. A digest that updates for one coin. | Proposed |
 | 2 | Oracle start state | The entries of `T` in memory, with one read of the file for the start digest and one for the end digest. The theorem target `validateBlock_restrict` (section 3.3). | The whole set in memory, which fits only while the set is small. The same reads with test evidence and no theorem. | Proposed |
-| 3 | Core pass | One replay by the harness from the genesis block, in segments of at most 100,000 blocks. It checks every script, and it runs the version-bits walk in the CSV window. Blocks come from the node in segments that the pass deletes (sections 3.2 and 5). | A pass without script checks, which is faster and checks less of the start states. A pass that reads the node's block files in place. | Proposed |
+| 3 | Core pass | One replay by the harness from the genesis block, in segments of at most 100,000 blocks. It checks every script, it runs the version-bits walk in the CSV window, and its build stops on a signed overflow. Blocks come from the node in segments that the pass deletes (sections 3.2 and 5). | A pass without script checks, which is faster and checks less of the start states. A check of each sum in wider integers before `ConnectBlock`, in the place of the sanitizer. A pass that reads the node's block files in place. | Proposed |
 | 4 | Ranges | S, A, B, C, D, F, H and G of section 4, in that order, with up to three oracle runs beside the pass. | Range G alone. More or longer ranges. | Proposed |
 | 5 | Coins of the recent range | T2: the snapshot at 6,455,301. The fetch tool is not built, and exit condition 2 of stage 0010b becomes exit condition 2 of stage 1 here (section 6). | T1, T3 or T4 of section 6. | Proposed |
 | 6 | Storage and pins | Range blocks and restricted coins as release assets with committed SHA-256 values. A committed list of block hashes for each range. Snapshot manifests committed, and snapshot files local. A committed hash for height 6,456,301 if three sources agree (section 5). | Range blocks local only. Range G stays `linked`. | Proposed |

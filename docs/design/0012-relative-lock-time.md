@@ -121,11 +121,14 @@ A transaction that fails the test gives `bad-txns-nonfinal`.
 
 ### 3.2 BIP 112: the opcode
 
+This section describes the opcode under the flags that `ConnectBlock` can set.
+Those flags have neither `DISCOURAGE_UPGRADABLE_NOPS` nor `MINIMALDATA`, which change the opcode as policy.
+
 With the flag `SCRIPT_VERIFY_CHECKSEQUENCEVERIFY` clear, opcode `0xb2` is `OP_NOP3` [R7].
 With the flag set, the opcode checks in this order:
 
 1. An empty stack gives `INVALID_STACK_OPERATION`.
-2. The top item decodes as a `CScriptNum` of at most 5 bytes. A negative operand gives `NEGATIVE_LOCKTIME`.
+2. The top item decodes as a `CScriptNum` of at most 5 bytes. A longer item gives `UNKNOWN_ERROR`. A negative operand gives `NEGATIVE_LOCKTIME`.
 3. An operand with bit 31 set makes the opcode a NOP.
 4. `CheckSequence` fails when the transaction version, as an unsigned 32-bit value, is below 2.
 5. `CheckSequence` fails when bit 31 of the input's sequence is set.
@@ -223,9 +226,13 @@ Reason 3 covers one chain only. Two branches of a fork can reach `ACTIVE` at dif
 `validateBlock` and `connectBlock` specify mainnet.
 The revision reads `Activation.height .mainnet` alone.
 
-**No predecessor.**
-The revised rules apply only to a block with a predecessor.
-With an empty view, the revision is inactive at every activation height.
+**Where the rules apply.**
+The revised rules apply only to a block with a predecessor whose header does not have the genesis hash.
+For every other block, the revision is inactive at every activation height.
+`validateBlock` runs no header check on a header with the genesis hash, and `connectBlock` connects none of its transactions.
+So no check gives the time order that the cutoff needs (section 6.4), and no transaction of such a block reaches the two other rules.
+This record calls a block inside that limit *applicable*.
+
 Core's cutoff reads `pindexPrev->GetMedianTimePast()` [R4, line 3135], and `EvaluateSequenceLocks` asserts a predecessor [R2, line 373].
 At the pin, `VersionBitsState` of a null predecessor is `DEFINED`, so Core never reaches either line without one.
 
@@ -309,7 +316,7 @@ A proposal with its own errors `E` and reasons `U` uses sums with the baseline v
 | --- | --- | --- |
 | Error | `sequenceLocks index` | The transaction at `index` fails section 3.3. The reason is `bad-txns-nonfinal`, with DoS score 100 and the code `REJECT_INVALID`. |
 | Reason | `ancestorOutsideView` | A time lock needs ancestor times below the supplied view. |
-| Reason | `coinAboveBlock` | A time lock reads a coin whose height is above the height of the block. `GetAncestor` then returns null, and Core dereferences it [R2, line 348]. |
+| Reason | `coinAboveBlock` | A time lock reads a coin whose height `c` is above the height `h` of the block. For `c = h + 1`, Core reads the median time of the block itself. For a larger `c`, `GetAncestor` returns null, and Core dereferences it [R2, line 348]. The revision excludes both cases as a limit of its input. |
 | Reason | `heightOutOfDomain` | A height is too large for Core's `int` sums (section 7.2). |
 
 A reason is never a rejection.
@@ -330,6 +337,9 @@ A revision *restricts* the baseline when they hold at every height:
 3. The baseline value of the test of E2 accepts everything, so this condition holds for every revised test.
 4. For `validateBlockWith`: the revised cutoff is at most the baseline cutoff.
 
+Every statement takes the baseline with `csvActive` false in its context.
+With `csvActive` true, the baseline `connectBlock` returns a result outside the model, and no restriction holds.
+
 The conclusion does not change.
 If the revision accepts a block, the baseline accepts it with the same coin set and the same list of coin changes.
 That equality is the state part of the legacy projection.
@@ -337,7 +347,8 @@ That equality is the state part of the legacy projection.
 Condition 4 is not free for the cutoff of section 3.1.
 It needs that the median time past of the predecessor is at most the time of the block.
 `validateBlock` runs `contextualCheckBlockHeader` first, which rejects a block whose time is not above that median [R5].
-So the lift for `validateBlockWith` needs no added hypothesis for a block with a predecessor.
+So the lift for `validateBlockWith` needs no added hypothesis for an applicable block.
+A header with the genesis hash skips that check, which is one reason for the limit of section 5.
 The revision computes the median from the same view that the header check reads, not from a separate argument.
 
 ### 6.5 The request and the report
@@ -385,7 +396,8 @@ With `active` true:
 | BIP 112 | E1 | `connectScriptFlags height` with the CSV flag added. |
 | BIP 68 | E2 | `sequenceLocks` of section 7.2. |
 
-The block-level definition maps the context to `active`: the activation is active at the height on mainnet, and the view is not empty (section 5).
+Each rule-level definition applies its rule only when `active` is true and the block is applicable (section 5).
+The block-level definition takes `active` from the activation at the height on mainnet.
 
 ### 7.2 Sequence locks
 
@@ -438,9 +450,9 @@ The last two rows are additions.
 | `connectBlockWith_baseline` | With the baseline spend check and the baseline values of E1 and E2, `connectBlockWith` equals the embedded result of `connectBlock`. The context has `csvActive` false. |
 | `validateBlockWith_inactive` | As in design record 0011, for a revision whose values of E1 to E3 are the baseline values when `active` is false. |
 | `validateBlockWith_congr` | The hypothesis also requires that the values of E1 to E3 agree with the baseline on the block. `relativeLockTime_eq_of_untouched` is the instance for this revision. |
-| `connectBlockWith_restricts` | The hypothesis is conditions 1 to 3 of section 6.4. The conclusion is that of design record 0011. |
-| `validateBlockWith_restricts` | New. The same for `validateBlockWith`, with condition 4, for a block with a predecessor. |
-| `connectChainWith_restricts` | New. The lift of `connectBlockWith_restricts` to a list of blocks, by induction: an accepted list gives the same final coin set under the baseline. Design record 0011 names this step and does not require it. |
+| `connectBlockWith_restricts` | The hypothesis is conditions 1 to 3 of section 6.4, and the baseline context has `csvActive` false. The conclusion is that of design record 0011. |
+| `validateBlockWith_restricts` | New. The same for `validateBlockWith`, with condition 4. The revised values of E1 to E3 are the baseline values on a block that is not applicable. |
+| `connectChainWith_restricts` | New. The lift of `connectBlockWith_restricts` to a list of blocks, by induction. An accepted list gives the same final coin set under the baseline, with `csvActive` false in each baseline context. The statement covers connection alone, so it has no part for the cutoff. Design record 0011 names this step and does not require it. |
 
 ### 9.2 Rule level
 
@@ -466,20 +478,21 @@ The context holds the verifier, the two check flags, the view, the times, the co
 | Target | Statement |
 | --- | --- |
 | `relativeLockTime_inactive_eq` | `revised false` equals the embedded `baseline` result, for every context. The equality covers each rejection and each result outside the model. |
-| `relativeLockTime_restricts` | If `revised active` accepts a block with a result, `baseline` accepts it with the same result. For every `active` and context. |
+| `relativeLockTime_restricts` | If `revised active` accepts a block with a result, `baseline` accepts it with the same result. For every `active` and context, applicable or not. |
 | `relativeLockTime_strict` | Three witnesses, one for each rule: a context where `baseline` accepts and `revised true` rejects with the error of that rule. |
 | `relativeLockTime_use` | Three witnesses: a context where `revised true` accepts and the rule runs. The first case has a time lock time below the median cutoff. The second has an executed `0xb2` with a satisfied operand. The third has a version 2 input with a met height lock of `n ≥ 1`. |
 | `relativeLockTime_softFork` | The framework's `SoftFork` for `revised` and `baseline`, from the four targets above. Block-level. |
 | `relativeLockTime_activation` | For every `Activation`: below the activation height, or with no height, the block-level revision equals `baseline`. From `Activation.isActive_lt` and `none_inactive`. |
-| `relativeLockTime_chain` | Block-level. Take a list of blocks with their contexts. If the revision connects the list from a coin set, `connectChain` connects it from that set to the same final set. For every `Activation`. |
-| `relativeLockTime_eq_of_untouched` | Take a block in which no rule has an object. No transaction has a time lock time from the median cutoff to below the block time. No transaction that is not a coinbase has both a version of at least 2 and an input with bit 31 clear. No `scriptSig`, spent `scriptPubKey` or P2SH redeem script holds an instruction `0xb2`. Then `revised true` equals the embedded `baseline` result. |
-| `relativeLock_enforced` | Block-level. Suppose that `revised true` accepts a block, and that an input of it spends a coin whose script has the form of `csv_accepted_iff`. Let the operand `n` have bits 22 and 31 clear, and let `d` be its low 16 bits. Then the height of the block is at least the height of the coin plus `d`. |
+| `relativeLockTime_chain` | Block-level, for connection alone. Take a list of blocks with their contexts. If the revised connection accepts the list from a coin set, `connectChain` accepts it from that set to the same final set. Each baseline context has `csvActive` false. For every `Activation`. The statement covers the flag and the sequence locks. `connectChain` runs no body check, so the cutoff has the one-block target alone. |
+| `relativeLockTime_eq_of_untouched` | Take a block in which no rule has an object. No transaction has a time lock time from the median cutoff to below the block time. No transaction that is not a coinbase has both a version of at least 2 and an input with bit 31 clear. No `scriptSig`, spent `scriptPubKey` or P2SH redeem script holds an instruction `0xb2`. Then `revised true` equals the embedded `baseline` result. A block that is not applicable needs none of the three conditions. |
+| `relativeLock_enforced` | Block-level. Suppose that `revised true` accepts an applicable block. Suppose that an input of a transaction that is not a coinbase spends a coin whose script has the form of `csv_accepted_iff`. Let the operand `n` have bits 22 and 31 clear, and let `d` be its low 16 bits. Then the height of the block is at least the height of the coin plus `d`. |
 
 `relativeLock_enforced` is the property that a user of the rule wants.
 It joins the opcode and the sequence lock.
 The opcode bounds the sequence of the input, and the sequence lock bounds the depth of the coin.
 A property of this kind answers the second question of [DogeLib in practice](../in-practice.md#two-questions).
-The time form of the target has the same shape, with ancestor times in the place of heights.
+Without the two conditions on the block and the transaction, no check of the rule runs, and the conclusion can fail.
+The time form of the target has the same conditions and the same shape, with ancestor times in the place of heights.
 
 A second target of that kind is optional in stage 3.
 `sequenceLocks_zero` states that a lock with `n` equal to 0 always passes.
@@ -491,9 +504,9 @@ That holds when each entry of the view passed the `time-too-old` test, which bec
 | Hypothesis | Used by | Where Core enforces it |
 | --- | --- | --- |
 | The median time past of the predecessor is at most the block time. | `contextualCheckBlockBody_csv_restricts` | `ContextualCheckBlockHeader`, `time-too-old` [R5]. `validateBlock` runs it first, so the block-level targets do not assume it. |
-| The block has a predecessor. | Every active rule | Section 5. Core reaches the code only with a non-null `pindexPrev`. |
+| The block is applicable. | Every active rule | Section 5, as part of the definition and not as a hypothesis of a restriction target. Core reaches the code only with a non-null `pindexPrev`. |
 | The height bound of section 7.2. | `sequenceLocks_fits` | Not enforced as a rule. A coin height is at most the height of a block of its chain, and mainnet heights are far below the bound. |
-| The coin height is at most the block height. | Time locks | Not enforced as a rule. It holds for a coin set that a replay built. A supplied coin set can break it, and the result is then `coinAboveBlock`. |
+| The coin height is at most the block height. | Time locks | Not enforced as a rule. It holds for a coin set that a replay built. A supplied coin set can break it, and the result is then `coinAboveBlock`. Core has a defined result for a coin one block above (section 6.3), which the revision does not give. |
 | The domain of design record 0010, section 3. | Every block-level target | As in that record. The revision adds no sum of amounts. |
 
 The targets add no axiom and no trust assumption.
@@ -512,8 +525,8 @@ No expected value comes from DogeLib.
 
 | Source | Content | Use |
 | --- | --- | --- |
-| `script_tests.json` [R13] | 12 records that hold `CHECKSEQUENCEVERIFY`. | The Script corpus already holds them. Stage 2 lists them as evidence for the flag. |
-| `tx_valid.json`, `tx_invalid.json` [R13] | 30 and 16 records with the flag `CHECKSEQUENCEVERIFY`. Core's tests run `VerifyScript` on each input with the flags of the record. | Stage 2 states which existing gate runs each record's scripts, and adds the others as cases of `verifyLegacySpend`. |
+| `script_tests.json` [R13] | 12 records that hold `CHECKSEQUENCEVERIFY`. | The Script corpus already holds them. Stage 2 lists each one as run or as unsupported. A record with a flag outside `supportedFlags`, such as `MINIMALDATA`, is unsupported and is no evidence. |
+| `tx_valid.json`, `tx_invalid.json` [R13] | 30 and 16 records with the flag `CHECKSEQUENCEVERIFY`. Core's tests run `VerifyScript` on each input with the flags of the record. | Stage 2 states which existing gate runs each record's scripts, and adds the others as cases of `verifyLegacySpend`. It lists a record with an unsupported flag as unsupported. |
 | `miner_tests.cpp` [R14] | Cases of `SequenceLocks` and `IsFinalTx` on a test chain: a height lock, a time lock, and the cutoff one second apart. | The values depend on the test chain. Stage 3 derives cases of the same form by hand, and cites each line. |
 | The functional tests [R15] | Tables of versions, sequences and operands, with the expected verdict of a node. | A source of hand-made cases only. The tests do not run at the pin (section 3.5), and this lane uses no node. |
 | P1, P2 and P3 | The rules in prose and the reference code of each BIP. | Expected values derived by hand, on each side of every boundary of sections 3.1 to 3.3. |
@@ -532,9 +545,14 @@ The hand-made cases include at least these boundaries:
 
 The harness already writes the version-bits cache: it seeds `THRESHOLD_FAILED` after the CSV timeout (design record 0010, decision 3).
 The record proposes one more request argument, `force_csv_active`, for `block.contextual_check_body` and `block.validate` in the Core harness.
-With it, the harness seeds `THRESHOLD_ACTIVE` for CSV at each boundary that the request reads.
+With it, the harness seeds `THRESHOLD_ACTIVE` for CSV at the boundary that each applicable block reads.
 Core's own `ContextualCheckBlock` and `ConnectBlock` then run the lines of R3 and R4.
 No line of Core's source changes.
+
+The seed is set for one block and cleared after it.
+Below height 10,080 the aligned boundary is null, which is also the cache key of a block without a predecessor.
+A seed that stays there makes Core dereference a null predecessor at line 3135.
+So the harness seeds nothing for a block that is not applicable, and such a block gets the baseline result on both sides.
 
 The two seeds differ in kind.
 `csv_never_lockedIn` shows that `FAILED` is Core's own result on a mainnet chain.
@@ -556,10 +574,11 @@ SOUNDNESS.md records the seed as a harness input with no theorem behind it.
 
 **Content.** The comparison covers verdict, reject reason, DoS score, reject code and coin digests, as `block.validate` does:
 
-1. Heights 1 to 10,000 of mainnet in one request, with CSV forced active. The two programs must agree on each block. The run does not require acceptance.
+1. Heights 0 to 10,000 of mainnet in one request. The harness runs each block twice on the state before it: once unchanged, and once with CSV forced active. Only the unchanged run carries the coin set and the chain to the next block, as the proposal executable does (design record 0011, section 10.2). The two programs must agree on the forced result of each block. The run does not require acceptance.
 2. Made blocks for each boundary of section 10.1. Each block stands on a committed block and has no proof of work, as in case 3 of design record 0011, section 10.3.
 3. Each new reason at least once: `bad-txns-nonfinal` from the cutoff, `bad-txns-nonfinal` from a sequence lock, and `non-mandatory-script-verify-flag` from the opcode.
 4. A self-test: the comparison fails when the Lean side runs with the revision inactive on a block of item 2.
+5. The genesis block with the argument: both programs give the baseline result.
 
 Agreement shows that the Lean revision equals Core's dormant code on those requests.
 It does not show that the rules are right for Dogecoin, and it is not evidence about mainnet.
@@ -587,8 +606,14 @@ An opcode output that stays unspent is an output whose spend the revision could 
 The count cannot see a P2SH redeem script before its spend.
 
 **Expected values.**
-A separate script lists the *candidate blocks* before each run, from the blocks and headers alone.
+A separate script lists the *candidate blocks* before each run.
+It reads the blocks, the headers and the scripts of the spent coins.
 A candidate has a cutoff transaction, a sequence candidate, or a script with the instruction `0xb2`.
+The scripts are each `scriptSig`, each spent `scriptPubKey`, and the last push of a `scriptSig` that spends a P2SH output, parsed as a script.
+
+In a replay from the genesis block, each spent script is in an earlier block.
+A range above the genesis block takes the spent scripts from the coins of its range request.
+A spend whose script the script cannot find makes its block a candidate.
 `relativeLockTime_eq_of_untouched` shows that every changed block is a candidate.
 The lane commits the list before the run.
 The record predicts no count.
@@ -633,7 +658,7 @@ The stage adds the flag to the revision.
 
 1. `csvFlagStep_restricts`, `csvFlag_soft_fork_local` and `csv_accepted_iff` are proved, and the block-level restriction covers the flag.
 2. The strictness and use witnesses of the opcode are proved at the block level. If the lane proves them at the spend level, the pull request gives the reason (section 14).
-3. Each record of R13 with the flag has a named gate that runs its scripts.
+3. Each record of R13 with the flag and with supported flags alone has a named gate that runs its scripts. The pull request lists every other record as unsupported, with its flag.
 4. The harness has `force_csv_active` for `block.validate`. Made blocks reach `non-mandatory-script-verify-flag` through the opcode, and the two programs agree.
 
 ### Stage 3: BIP 68 and the block-level soft fork
@@ -688,7 +713,7 @@ Every row is a proposal.
 | 2 | Name | `DogeLib.Proposals.RelativeLockTime`, one proposal for the three rules. | Three proposals, one for each BIP. A name with "CSV". | Proposed |
 | 3 | Deciding source | Core's code of the rules at the pin (R1 to R10). The BIPs explain, and the module documentation lists each difference (section 2.3). | The BIP text decides, and the code is a comparison. | Proposed |
 | 4 | Proposal documents | P1 to P3 by the commit of `bitcoin/bips` that last changed each file. P4 by URL, author, date and the SHA-256 of its first post. Issue 1798 and `1.21-dev` are background and get no identifier. | A committed copy of each text. Identifiers for the background texts too. | Proposed |
-| 5 | Activation | One fixed height on mainnet through `Activation`, for the three rules together, with no default. Inactive for a block without a predecessor (section 5). | One Boolean for each rule. A signalling model first. | Proposed |
+| 5 | Activation | One fixed height on mainnet through `Activation`, for the three rules together, with no default. Inactive for a block that is not applicable: one without a predecessor, or with the genesis hash (section 5). | One Boolean for each rule. A signalling model first. | Proposed |
 | 6 | Block level | The layer of design record 0011, decision 11, and no second framework. The extensions E1 to E3 are changes to that layer: the flags of a block, a test of one transaction, and the arguments of the body check (section 6.3). | The layer unchanged: the opcode as a revised spend check with another reject reason than Core's, and no sequence locks or cutoff. A copy of `connectBlock` for this proposal. | Proposed |
 | 7 | Order with design record 0011 | The definitions and the agreement theorem of that record's stage 6 can land before its Core pass. Stage 1 here follows them (section 6.7). | Stage 1 waits for the whole of that stage 6. Stage 1 builds the definitions itself, under that record's decision 11. | Proposed |
 | 8 | Results at the block level | Extension E4: a block error and an unsupported reason of the proposal, in the form of issue #122. An unsupported reason is never a rejection (section 6.3). | `Except` with one sum type and an `isRejection` function of the proposal. | Proposed |

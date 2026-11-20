@@ -135,8 +135,27 @@ Stage 0010c proves three properties of `connectBlock`.
 | --- | --- | --- |
 | 0 | The harness compiles Core's `src/validation.cpp`. `block.contextual_check` and `block.header_sequence` call Core's own functions. | Implemented |
 | 0010a | Block checks without coins: `CheckTransaction`, `CheckBlock`, `ContextualCheckBlock`, the subsidy and the version-bits state, compared with Core on two mainnet ranges and on mutations | Implemented. `block.subsidy`, `tx.check`, `block.check` and `block.contextual_check_body` agree with Core on mutations for each reachable reject reason ([COVERAGE.md](COVERAGE.md#operations)). `block.check` and `block.contextual_check_body` agree on 11,018 real mainnet blocks: heights 0 to 10,000, the 1,000 blocks from 6,455,302, and 17 blocks at and next to the rule changes ([fixtures](tests/block/mainnet-blocks/README.md)). The version-bits walk agrees with Core on the mainnet header chain through the CSV window, in a run outside CI. `csv_never_lockedIn` and `versionBits_shortcut` justify the `FAILED` seed of decision 3. |
-| 0010b | Block connection: the coin set, `ConnectBlock` and `block.validate`, replayed with Core | Part 1 implemented. `block.validate` agrees with Core on mutations for each reachable reject reason of `ConnectBlock`, and on a replay of mainnet heights 0 to 10,000 from the empty coin set, with the digests of each block's coin changes and of the whole set ([COVERAGE.md](COVERAGE.md#operations)). One recorded run outside CI replays heights 0 to 145,000 with the same agreement ([evidence](docs/oracle.md#replay-of-mainnet-to-height-145000)). `connect_fits` gives the arithmetic domain. Open: the recent range, which needs the coin fetch tool |
+| 0010b | Block connection: the coin set, `ConnectBlock` and `block.validate`, replayed with Core | Part 1 implemented. `block.validate` agrees with Core on mutations for each reachable reject reason of `ConnectBlock`, and on a replay of mainnet heights 0 to 10,000 from the empty coin set, with the digests of each block's coin changes and of the whole set ([COVERAGE.md](COVERAGE.md#operations)). One recorded run outside CI replays heights 0 to 145,000 with the same agreement ([evidence](docs/oracle.md#replay-of-mainnet-to-height-145000)). `connect_fits` gives the arithmetic domain. Open: the recent range. Decision 5 of [design record 0011](docs/design/0011-mainnet-ranges.md) replaces exit condition 2 of this stage. The coins of the recent range come from a coin-set snapshot, and the fetch tool is not built. Exit condition 2 of stage 1 of that record plants faults in a snapshot. They take the place of the planted faults of the fetch tool. Stage 3 of that record closes the recent range |
 | 0010c | Properties of connection: available spends, the value bound and the issuance bound | Proved: `connect_spends_available`, `connect_value_bound` and `chain_issuance_bound`, with the invariant `connect_valuesInRange` ([soundness](SOUNDNESS.md#connect_spends_available-each-input-spends-a-present-coin)). The first has the added hypothesis that the block's hash is not the genesis hash. It also has the added conclusion that the outpoints of one transaction are pairwise different. `lake test` pins the total value on a chain of two blocks. The replay of heights 0 to 10,000 compares the total value with Core at each multiple of 1,000. It also checks the total against the sum of the subsidies ([oracle](docs/oracle.md#total-value)) |
+
+### Mainnet replay above height 145,000
+
+[Design record 0011](docs/design/0011-mainnet-ranges.md) defines the replay of mainnet ranges above height 145,000 from coin-set snapshots.
+The maintainer adopted it on 2026-11-20, with all 14 decisions of its section 13.
+Its section 11 gives the stages and their exit conditions:
+
+| Stage | Deliverable | Status |
+| --- | --- | --- |
+| 0 | Measurements: the size of the chain, the coins at the tip, and whether the Core pass fits the machine | Not started |
+| 1 | The snapshot format `dogelib-coins/1`, `coins_file` in both programs, the theorem target `validateBlock_restrict`, and the self-test range below height 145,000 | Not started |
+| 2 | The Core pass to height 5,050,000, with the version-bits walk in the harness, and the ranges A, B, C, D, F and H | Not started |
+| 3 | The recent range from the snapshot at 6,455,301, and its run in CI with restricted coins. It closes stage 0010b | Not started |
+| 4 | The CSV window in the oracle: a version in each `chain` entry, and the ranges E1 and E2 | Not started |
+| 5 | The conformance corpus: the format document, the range requests, the expected results and the checker | Not started |
+| 6 | The historical impact of a proposed revision: `connectBlockWith`, the `ProposalExports` executable, and the self-test with the two examples | Not started |
+
+Adoption of the record establishes no result.
+Each stage reports its evidence in COVERAGE.md and SOUNDNESS.md when it merges.
 
 One other candidate is unscheduled, and it needs an approved scope before work starts:
 

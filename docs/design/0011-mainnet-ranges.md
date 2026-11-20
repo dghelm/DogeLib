@@ -1,7 +1,7 @@
 # Mainnet coin-set replay above height 145,000
 
-**Status:** Draft, proposed on 2026-11-20.
-No part of this record is adopted, and every decision of section 13 has the status `Proposed`.
+**Status:** Adopted on 2026-11-20, with the decisions of section 13.
+This record is frozen. Implementation status belongs in ROADMAP.md and COVERAGE.md.
 
 **Date:** 2026-11-20
 **Companions:** [Design record 0010](0010-block-validity.md), [design record 0007](0007-proposed-revisions.md), [design record 0001](0001-initial-handoff.md), [oracle contract](../oracle.md), [coverage](../../COVERAGE.md), [soundness](../../SOUNDNESS.md) and the [block fixtures](../../tests/block/mainnet-blocks/README.md).
@@ -710,25 +710,25 @@ The Core pass and the ranges of stage 2 are recorded gates outside CI, as the re
 
 ## 13. Decisions
 
-**Date:** none. **Decision maker:** Maintainer.
-Every row is a proposal.
+**Date:** 2026-11-20. **Decision maker:** Maintainer.
+The maintainer accepted every proposal, as its status states.
 
 | Number | Topic | Proposal | Alternative | Status |
 | --- | --- | --- | --- | --- |
-| 1 | Snapshot format | `dogelib-coins/1`: the coin records of the whole set in digest order, with the existing digest and a manifest (section 3.1). | A format with an index for random reads. A digest that updates for one coin. | Proposed |
-| 2 | Oracle start state | The entries of `T` in memory, with one read of the file for the start digest and one for the end digest. The theorem target `validateBlock_restrict` (section 3.3). | The whole set in memory, which fits only while the set is small. The same reads with test evidence and no theorem. | Proposed |
-| 3 | Core pass | One replay by the harness from the genesis block, in segments of at most 100,000 blocks. It checks every script, it runs the version-bits walk in the CSV window, and its build stops on a signed overflow. Blocks come from the node in segments that the pass deletes (sections 3.2 and 5). | A pass without script checks, which is faster and checks less of the start states. A check of each sum in wider integers before `ConnectBlock`, in the place of the sanitizer. A pass that reads the node's block files in place. | Proposed |
-| 4 | Ranges | S, A, B, C, D, F, H and G of section 4, in that order, with up to three oracle runs beside the pass. | Range G alone. More or longer ranges. | Proposed |
-| 5 | Coins of the recent range | T2: the snapshot at 6,455,301. The fetch tool is not built, and exit condition 2 of stage 0010b becomes exit condition 2 of stage 1 here (section 6). | T1, T3 or T4 of section 6. | Proposed |
-| 6 | Storage and pins | Range blocks and restricted coins as release assets with committed SHA-256 values. A committed list of block hashes for each range. Snapshot manifests committed, and snapshot files local. A committed hash for height 6,456,301 if three sources agree (section 5). | Range blocks local only. Range G stays `linked`. | Proposed |
-| 7 | Comparison with a node | Stage 2, condition 3: `hash_serialized`, `transactions` and `txouts` of the harness's last set against `gettxoutsetinfo` of the node at one height. | No comparison. The second item of section 3.4 then rests on the replay to height 145,000 alone. | Proposed |
-| 8 | CI | Stage 1, condition 5, and range G with restricted coins, in the `core` workflow. The pass and the other ranges outside CI. | All of it outside CI. | Proposed |
-| 9 | CSV window | Stage 4: the ranges E1 and E2, with a version in each `chain` entry of the oracle. The harness gets that change in stage 2 in every case. | No range in the window. The version-bits walk stays the evidence there. | Proposed |
-| 10 | Proposal request | A `ProposalExports` library and a separate executable that answers `block.validate` with a `revision` argument. `dogelib-oracle` and `Exports` stay baseline-only (section 10.2). Decision 8 of design record 0007 allows this later decision. | The test executable `proposal-replay` alone, as in design record 0009, decision 11, with no exported library. | Proposed |
-| 11 | Block level of a revision | `connectBlockWith` and `validateBlockWith` in the `Proposals` library, with the four theorem targets of section 10.1. | A copy of `connectBlock` for each proposal. | Proposed |
-| 12 | Scope of an impact run | W1: the ranges, in stage 6. W2 is a later stage, decided when a revision needs it. W3 is not used to measure impact (section 10.5). | W2 in this record, with the opcodes of the examples in the first Core pass. W3. | Proposed |
-| 13 | Conformance corpus | Publish the blocks, the range request and the expected results of each range, with a document of the formats, `dogelib-range-results/1` and a checker (section 9, stage 5). | The fixtures stay tools of the DogeLib comparison, with no expected results and no promise to other programs. | Proposed |
-| 14 | Self-test of the impact run | The three cases of section 10.3 with `ExampleVersionVerify` and the corrected `ExampleFaultyLocktime`, and the faulty variant in case 3. | Case 1 alone. | Proposed |
+| 1 | Snapshot format | `dogelib-coins/1`: the coin records of the whole set in digest order, with the existing digest and a manifest (section 3.1). | A format with an index for random reads. A digest that updates for one coin. | Accepted |
+| 2 | Oracle start state | The entries of `T` in memory, with one read of the file for the start digest and one for the end digest. The theorem target `validateBlock_restrict` (section 3.3). | The whole set in memory, which fits only while the set is small. The same reads with test evidence and no theorem. | Accepted |
+| 3 | Core pass | One replay by the harness from the genesis block, in segments of at most 100,000 blocks. It checks every script, it runs the version-bits walk in the CSV window, and its build stops on a signed overflow. Blocks come from the node in segments that the pass deletes (sections 3.2 and 5). | A pass without script checks, which is faster and checks less of the start states. A check of each sum in wider integers before `ConnectBlock`, in the place of the sanitizer. A pass that reads the node's block files in place. | Accepted |
+| 4 | Ranges | S, A, B, C, D, F, H and G of section 4, in that order, with up to three oracle runs beside the pass. | Range G alone. More or longer ranges. | Accepted |
+| 5 | Coins of the recent range | T2: the snapshot at 6,455,301. The fetch tool is not built, and exit condition 2 of stage 0010b becomes exit condition 2 of stage 1 here (section 6). | T1, T3 or T4 of section 6. | Accepted |
+| 6 | Storage and pins | Range blocks and restricted coins as release assets with committed SHA-256 values. A committed list of block hashes for each range. Snapshot manifests committed, and snapshot files local. A committed hash for height 6,456,301 if three sources agree (section 5). | Range blocks local only. Range G stays `linked`. | Accepted |
+| 7 | Comparison with a node | Stage 2, condition 3: `hash_serialized`, `transactions` and `txouts` of the harness's last set against `gettxoutsetinfo` of the node at one height. | No comparison. The second item of section 3.4 then rests on the replay to height 145,000 alone. | Accepted |
+| 8 | CI | Stage 1, condition 5, and range G with restricted coins, in the `core` workflow. The pass and the other ranges outside CI. | All of it outside CI. | Accepted |
+| 9 | CSV window | Stage 4: the ranges E1 and E2, with a version in each `chain` entry of the oracle. The harness gets that change in stage 2 in every case. | No range in the window. The version-bits walk stays the evidence there. | Accepted |
+| 10 | Proposal request | A `ProposalExports` library and a separate executable that answers `block.validate` with a `revision` argument. `dogelib-oracle` and `Exports` stay baseline-only (section 10.2). Decision 8 of design record 0007 allows this later decision. | The test executable `proposal-replay` alone, as in design record 0009, decision 11, with no exported library. | Accepted |
+| 11 | Block level of a revision | `connectBlockWith` and `validateBlockWith` in the `Proposals` library, with the four theorem targets of section 10.1. | A copy of `connectBlock` for each proposal. | Accepted |
+| 12 | Scope of an impact run | W1: the ranges, in stage 6. W2 is a later stage, decided when a revision needs it. W3 is not used to measure impact (section 10.5). | W2 in this record, with the opcodes of the examples in the first Core pass. W3. | Accepted |
+| 13 | Conformance corpus | Publish the blocks, the range request and the expected results of each range, with a document of the formats, `dogelib-range-results/1` and a checker (section 9, stage 5). | The fixtures stay tools of the DogeLib comparison, with no expected results and no promise to other programs. | Accepted |
+| 14 | Self-test of the impact run | The three cases of section 10.3 with `ExampleVersionVerify` and the corrected `ExampleFaultyLocktime`, and the faulty variant in case 3. | Case 1 alone. | Accepted |
 
 ## 14. Remaining risks
 

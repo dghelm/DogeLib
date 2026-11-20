@@ -1,0 +1,37 @@
+{
+  "blocks": 11018,
+  "candidate_blocks": 0,
+  "cutoff_transactions": 0,
+  "format": "dogelib-cutoff-candidates/1",
+  "groups": [
+    {
+      "blocks": 10001,
+      "candidates": [],
+      "cutoff_transactions": 0,
+      "first": 0,
+      "last": 10000,
+      "name": "genesis-10000",
+      "time_lock_transactions": 0
+    },
+    {
+      "blocks": 1000,
+      "candidates": [],
+      "cutoff_transactions": 0,
+      "first": 6455302,
+      "last": 6456301,
+      "name": "recent-6455302-6456301",
+      "time_lock_transactions": 3
+    },
+    {
+      "blocks": 17,
+      "candidates": [],
+      "cutoff_transactions": 0,
+      "first": 144998,
+      "last": 3464752,
+      "name": "rule-changes",
+      "time_lock_transactions": 0
+    }
+  ],
+  "revision": "RelativeLockTime",
+  "rule": "BIP 113 lock-time cutoff"
+}

@@ -67,7 +67,7 @@ jobs:
         run: lake build dogelib-oracle
 
       - name: harness
-        run: time JOBS=4 bash scripts/build_core_harness.sh core-src build/core-harness
+        run: time JOBS=4 bash scripts/build_core_harness.sh --trap-overflow core-src build/core-harness
 
       - name: signed-spend regeneration
         run: python3 -I scripts/check_signed_spends.py build/core-harness/core-signer
@@ -145,3 +145,12 @@ jobs:
       - name: snapshot range, short form
         if: ${{ !cancelled() }}
         run: time python3 -I scripts/snapshot_range.py --start 9000 --end 10000 --output build/snapshot-range/short .lake/build/bin/dogelib-oracle build/core-harness/core-oracle build/mainnet-blocks/genesis-10000
+
+      # Design record 0011, stage 2: the harness arguments of the Core pass
+      # and scripts/core_pass.py. Core's version-bits state through a
+      # synthetic CSV window, the coin set in CCoinsViewDB, a pass of heights
+      # 0 to 10,000 in segments with a restart, hash_serialized, and the
+      # build that traps a signed overflow.
+      - name: Core pass self-test
+        if: ${{ !cancelled() }}
+        run: time python3 -I scripts/test_core_pass.py .lake/build/bin/dogelib-oracle build/core-harness/core-oracle build/core-harness/core-oracle-trap build/mainnet-blocks/genesis-10000

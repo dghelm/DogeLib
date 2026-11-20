@@ -13,6 +13,7 @@ public import DogeLib.Block.Proofs.Header
 public import DogeLib.Block.Proofs.HeaderSequence
 public import DogeLib.Block.Proofs.Merkle
 public import DogeLib.Block.Proofs.ProofOfWork
+public import DogeLib.Block.Proofs.Restrict
 public import DogeLib.Block.Proofs.Subsidy
 public import DogeLib.Block.Proofs.VersionBits
 public import DogeLib.Block.Proofs.VersionGate

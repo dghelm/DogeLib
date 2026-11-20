@@ -190,7 +190,7 @@ Regtest has `fStrictChainId` true, so the three tests of R15 cannot activate CSV
 
 ## 4. What DogeLib has and what is missing
 
-| Part | State in DogeLib at `3a8401b` |
+| Part | State in DogeLib at `ae66db4` |
 | --- | --- |
 | The opcode (section 3.2) | Defined. `Script.checkSequenceStep` and `sequenceSatisfied` follow R7, and `supportedFlags` holds the CSV flag. The comparison with Core includes 940 targeted CSV requests and the CSV records of `script_tests.json` ([docs/oracle.md](../oracle.md#the-comparison)). |
 | The cutoff (section 3.1) | Defined. `Block.contextualCheckBlockBody` takes `csvActive` and the median time past of the predecessor. The oracle derives `csvActive` from the version-bits state, which is never `ACTIVE` on the compared blocks. |

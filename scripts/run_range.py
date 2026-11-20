@@ -60,18 +60,26 @@ def file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def pass_records(state_dir: Path, state: dict, first: int, last: int) -> list[dict]:
-    """The block records of the pass for the heights from `first` to `last`."""
-    records = []
-    for segment in state["segments"]:
-        if segment["last"] < first or segment["first"] > last:
+def pass_records(state_dir: Path, first: int, last: int) -> list[dict]:
+    """The block records of the pass for the heights from `first` to `last`.
+
+    The records come from every archived response on disk. A restart of the pass removes a segment
+    above its snapshot from the state, but its archive stays, and a later segment can cover the same
+    heights again. Two records of one height must then be equal."""
+    by_height = {}
+    for archive in sorted((state_dir / "responses").glob("from-*.json.gz")):
+        start = int(archive.name[len("from-"):-len(".json.gz")])
+        if start > last:
             continue
-        with gzip.open(state_dir / "responses" / f"from-{segment['first']}.json.gz", "rt") as stream:
+        with gzip.open(archive, "rt") as stream:
             ok = json.loads(stream.readline())["ok"]
-        records += [r for r in ok["blocks"] if first <= r["height"] <= last]
-    if [r["height"] for r in records] != list(range(first, last + 1)):
+        for record in ok["blocks"]:
+            if first <= record["height"] <= last:
+                if by_height.setdefault(record["height"], record) != record:
+                    raise ReplayError(f"two archived records of height {record['height']} differ")
+    if sorted(by_height) != list(range(first, last + 1)):
         raise ReplayError(f"the pass's responses do not hold the heights {first} to {last}")
-    return records
+    return [by_height[h] for h in range(first, last + 1)]
 
 
 def strip(records: list[dict]) -> list[dict]:
@@ -85,7 +93,7 @@ def run_range(name: str, state_dir: Path, fixture: Path, output: Path, oracle: s
     state = core_pass.load_state(state_dir / "state.json")
     if state["height"] < end or str(end) not in state["digests"]:
         raise ReplayError(f"the pass is at height {state['height']}, without the digest at {end}")
-    headers = core_pass.Headers(state_dir / "headers.bin", state["height"] + 1)
+    headers = core_pass.Headers(state_dir / "headers.bin", state["height"] + 1, read_only=True)
 
     # 1. The fixture and the hash list.
     try:
@@ -164,7 +172,7 @@ def run_range(name: str, state_dir: Path, fixture: Path, output: Path, oracle: s
     for field in ("set_digest_hex", "set_coins", "set_value"):
         if ok[field] != end_digest[field]:
             raise ReplayError(f"range {name}: the end has {field} {ok[field]!r}, and the pass has {end_digest[field]!r}")
-    if strip(ok["blocks"]) != strip(pass_records(state_dir, state, start + 1, end)):
+    if strip(ok["blocks"]) != strip(pass_records(state_dir, start + 1, end)):
         raise ReplayError(f"range {name}: the block records differ from those of the pass")
     log(f"range {name}: agrees: from {manifest['coins']} coins to {ok['set_coins']} coins, end digest {ok['set_digest_hex']}")
 

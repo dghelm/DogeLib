@@ -117,13 +117,15 @@ class DiskLow(PassError):
 class Headers:
     """The 80-byte header of each accepted block, by height, in `headers.bin`."""
 
-    def __init__(self, path: Path, count: int):
+    def __init__(self, path: Path, count: int, read_only: bool = False):
+        """The first `count` headers. The pass truncates a longer file. A reader beside a running
+        pass sets `read_only`, because the pass appends headers before it saves its state."""
         self.path = path
         data = path.read_bytes() if path.exists() else b""
         if len(data) < 80 * count:
             raise PassError(f"{path} has {len(data) // 80} headers, and the state has {count}")
         self.data = bytearray(data[:80 * count])
-        if len(data) != 80 * count:
+        if len(data) != 80 * count and not read_only:
             path.write_bytes(self.data)
 
     def __len__(self) -> int:
@@ -578,7 +580,7 @@ def compare_node(state: dict, height: int, log) -> None:
 def check_version_bits(state_dir: Path, oracle: str, harness: str, log) -> int:
     """Compare the recorded states of the window's boundaries with the full walk of both programs."""
     state = load_state(state_dir / "state.json")
-    headers = Headers(state_dir / "headers.bin", state["height"] + 1)
+    headers = Headers(state_dir / "headers.bin", state["height"] + 1, read_only=True)
     boundaries = [int(h) for h in state["version_bits"]]
     window = [h for h in sorted(boundaries) if headers.median_time(h) >= CSV_START]
     window = [h for h in window if headers.median_time(h - PERIOD) < CSV_TIMEOUT]

@@ -6,7 +6,10 @@ Usage: python3 -I scripts/test_replay_blocks.py <dogelib-oracle> <core-oracle> [
 BLOCKS_DIR is the directory that scripts/fetch_release_blocks.py writes, `build/mainnet-blocks`
 by default. The tests use its range of heights 0 to 10,000 and its recent range.
 
-1. The replay of heights 0 to 200 passes, and its summary has those heights.
+1. The replay of heights 0 to 200 passes, and its summary has those heights. The issuance check
+   of the replay fails on a total value one koinu above the sum of the subsidies, on a subsidy
+   that differs between the two programs, and on a request that does not start at the genesis
+   block.
 2. The replay fails with the oracle in the place of the harness, and with the harness in the
    place of the oracle.
 3. The replay fails for a fixture that does not start at height 0, for a fixture with one changed
@@ -51,6 +54,44 @@ def error_matches(response: dict, want: dict) -> bool:
     return error == want
 
 
+def issuance_faults(check, oracle: str, harness: str, response: dict) -> None:
+    """The issuance check fails on each planted fault of a passing replay's response."""
+    request = {"op": "block.validate", "chain": [], "coins": []}
+    ok = response["ok"]
+    sent = validate.issuance_requests(request, ok)
+    ours, core = answers(oracle, sent), answers(harness, sent)
+    failure, summary = validate.issuance_bound(request, ok, sent, ours, core)
+    check("issuance control", failure is None, str(failure))
+    if failure is not None:
+        return
+    # The final total one koinu above the bound.
+    above = {**ok, "set_value": str(int(summary["subsidy_sum"]) + 1)}
+    failure, _ = validate.issuance_bound(request, above, sent, ours, core)
+    check("issuance above the bound", failure is not None and "exceeds" in failure[1], str(failure))
+    # A total of a block record above the bound: the bound at height 0 is 0.
+    first = {**ok, "blocks": [{**ok["blocks"][0], "set_value": "1"}] + ok["blocks"][1:]}
+    failure, _ = validate.issuance_bound(request, first, sent, ours, core)
+    check("issuance above the bound at height 0", failure is not None and "after height 0" in failure[1], str(failure))
+    # One subsidy differs between the two programs.
+    changed = json.loads(json.dumps(core))
+    changed[0]["ok"]["subsidies"][0] = str(int(changed[0]["ok"]["subsidies"][0]) + 1)
+    failure, _ = validate.issuance_bound(request, ok, sent, ours, changed)
+    check("issuance subsidy disagreement", failure is not None and "different subsidies" in failure[1], str(failure))
+    # A range that does not start at the genesis block.
+    later = {**ok, "blocks": ok["blocks"][1:]}
+    failure, _ = validate.issuance_bound(request, later, sent, ours, core)
+    check("issuance without the genesis block", failure is not None and "genesis" in failure[1], str(failure))
+    check("issuance requests need the empty start", validate.issuance_requests({**request, "chain": [{}]}, ok) is None)
+    # The genesis block alone: no subsidy request, and the bound 0 still holds for the record and the result.
+    genesis = {**ok, "blocks": ok["blocks"][:1], "set_value": "0"}
+    check("issuance genesis alone", validate.issuance_requests(request, genesis) == []
+          and validate.issuance_bound(request, genesis, [], [], [])[0] is None)
+    for name, changed in (("record", {**genesis, "blocks": [{**genesis["blocks"][0], "set_value": "1"}]}),
+                          ("result", {**genesis, "set_value": "1"})):
+        failure, _ = validate.issuance_bound(request, changed, [], [], [])
+        check(f"issuance genesis alone, {name} above 0", failure is not None and "exceeds" in failure[1], str(failure))
+
+
 def main() -> int:
     if len(sys.argv) not in (3, 4):
         print(__doc__)
@@ -88,6 +129,9 @@ def main() -> int:
                   json.dumps(summary))
             check("replay responses", all((work / "pass" / name).is_file() for name in
                                           ("blocks.bin", "oracle-response.json", "core-response.json", "summary.json")))
+            check("replay issuance", int(summary["set_value"]) <= int(summary["subsidy_sum"])
+                  and summary["bound_points"] == 2, json.dumps(summary))
+            issuance_faults(check, oracle, harness, json.loads((work / "pass" / "oracle-response.json").read_text()))
         fails("oracle as harness", "BLOCK_VALIDATE", oracle, oracle, [str(genesis)], work / "a", LAST)
         fails("harness as oracle", "BLOCK_VALIDATE", harness, harness, [str(genesis)], work / "b", LAST)
         fails("fixture above height 0", "follows height -1", oracle, harness, [str(recent)], work / "c", LAST)

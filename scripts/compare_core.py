@@ -38,6 +38,11 @@ tests/block/mainnet-blocks/release.json gives, or the run fails with
 `FAIL BLOCK_ASSETS`. The stream must hold one request for each block of
 release.json. The ranges are a separate run because the comparator's
 self-test runs the full stream twice.
+After the comparison, both programs answer `block.subsidy` for each height of
+the `block.validate` request from the genesis block, and each total value of
+the coin set must be at most the sum of the subsidies up to its height
+(`check_issuance`, the bound of `chain_issuance_bound`). A failure is
+`FAIL ISSUANCE`.
 
 The transaction field walker below only locates fields in transactions that
 are known to parse. No expected value comes from this script.
@@ -74,6 +79,7 @@ from oracle_block_validate import (block_validate_sets, compare as compare_valid
                                    reasons_reached as validate_reasons_reached,
                                    reasons_missing as validate_reasons_missing,
                                    mainnet_validate_sets, mainnet_validate_counts,
+                                   issuance_requests, issuance_bound,
                                    QUICK_SETS as VALIDATE_QUICK_SETS)
 from oracle_block_check import block_check_sets, corpus_requests as check_corpus_requests, compare as compare_block_check, reasons_reached, reasons_missing, LABELS as CHECK_LABELS, QUICK_SET as CHECK_QUICK_SET, mainnet_range_sets, mainnet_range_counts, BlockAssets
 
@@ -987,6 +993,36 @@ def compare(req: dict, ours: dict, core: dict, peer: str = "core") -> tuple[str,
     return None
 
 
+def check_issuance(requests: list[dict], ours: list[dict], oracle: str, harness: str, timeout: float) -> list[str]:
+    """The bound of `chain_issuance_bound` on each `block.validate` request that starts at the genesis block.
+
+    Both programs answer `block.subsidy` for the accepted heights, and each total value of the
+    oracle's response must be at most the sum of the subsidies up to its height. The comparison
+    has already required the harness to report the same totals."""
+    failures = []
+    for req, a in zip(requests, ours):
+        if req["op"] != "block.validate" or not isinstance(a.get("ok"), dict):
+            continue
+        sent = issuance_requests(req, a["ok"])
+        # An empty list still has the bound 0 for the genesis block alone.
+        if sent is None:
+            continue
+        sent = [{**r, "id": f"{req['id']}-s{i}"} for i, r in enumerate(sent)]
+        try:
+            failure, summary = issuance_bound(req, a["ok"], sent, run_stream(oracle, sent, timeout),
+                                              run_stream(harness, sent, timeout))
+        except RunError as e:
+            failure = (e.code, str(e))
+        if failure:
+            failures.append(failure[0])
+            print(f"FAIL {failure[0]} [{req['id']}] {failure[1]}")
+            continue
+        print(f"block.validate {req['id']}: total value {summary['set_value']} koinu after height "
+              f"{a['ok']['blocks'][-1]['height']}, at most the sum of the subsidies {summary['subsidy_sum']} koinu, "
+              f"at {summary['bound_points']} points")
+    return failures
+
+
 def check_versions(oracle: str, harness: str, timeout: float, oracle_format: str = ORACLE_FORMAT) -> list[str]:
     failures = []
     for program, expected in ((oracle, oracle_format), (harness, oracle_format + "-core-projection")):
@@ -1325,6 +1361,7 @@ def main() -> int:
                 failures.append("REASON_NOT_REACHED")
                 print(f"FAIL REASON_NOT_REACHED Core returned {missing} for no request")
     if args.mainnet_blocks:
+        failures.extend(check_issuance(requests, ours, args.oracle, args.harness, args.timeout))
         failures.extend(check_operation_counts(requests, {**mainnet_range_counts(), **mainnet_body_counts(),
                                                           **mainnet_validate_counts()},
                                                "tests/block/mainnet-blocks/release.json"))

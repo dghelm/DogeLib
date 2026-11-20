@@ -66,8 +66,8 @@ SIG_PUSHONLY = "Only non-push operators allowed in signatures"
 UNSATISFIED_LOCKTIME = "Locktime requirement not satisfied"
 OP_RETURN_TEXT = "OP_RETURN was encountered"
 BLOCK_FIELDS = {"height", "hash_hex", "hash_display", "valid", "reject_reason", "dos", "reject_code",
-                "changes_digest_hex", "spent", "created", "set_digest_hex"}
-OK_FIELDS = {"blocks", "out_of_domain_at", "set_digest_hex", "set_coins"}
+                "changes_digest_hex", "spent", "created", "set_digest_hex", "set_value"}
+OK_FIELDS = {"blocks", "out_of_domain_at", "set_digest_hex", "set_coins", "set_value"}
 
 EXPECTATIONS = {}
 
@@ -354,7 +354,7 @@ def expect(req: dict, reasons: list, out_of_domain_at: int | None = None, error:
         assert len(reasons) == (len(req["blocks_hex"]) if out_of_domain_at is None else out_of_domain_at)
         digest, count = model.set_digest()
         expectation.update({"blocks": records, "out_of_domain_at": out_of_domain_at,
-                            "set_digest_hex": digest.hex(), "set_coins": count})
+                            "set_digest_hex": digest.hex(), "set_coins": count, "set_value": model.set_value()})
     EXPECTATIONS[key(req)] = expectation
     return req
 
@@ -425,12 +425,17 @@ class Model:
             digest = sha256d(digest + coin_record(2, point, *self.coins[point]))
         return digest, len(self.coins)
 
+    def set_value(self) -> str:
+        """The sum of the amounts of the set, as a string of decimal digits."""
+        return str(sum(coin[2] for coin in self.coins.values()))
+
     def record(self, raw: bytes, verdict) -> dict:
         header, txs = split_block(raw)
         block_hash = sha256d(raw[:80])
         record = {"height": self.height, "hash_hex": block_hash.hex(), "hash_display": block_hash[::-1].hex(),
                   "valid": verdict is None, "reject_reason": None, "dos": None, "reject_code": None,
-                  "changes_digest_hex": None, "spent": None, "created": None, "set_digest_hex": None}
+                  "changes_digest_hex": None, "spent": None, "created": None, "set_digest_hex": None,
+                  "set_value": None}
         if verdict is not None:
             record.update(zip(("reject_reason", "dos", "reject_code"), verdict))
             return record
@@ -454,6 +459,7 @@ class Model:
         record.update({"changes_digest_hex": digest.hex(), "spent": spent, "created": created})
         if self.height % SET_DIGEST_INTERVAL == 0:
             record["set_digest_hex"] = self.set_digest()[0].hex()
+            record["set_value"] = self.set_value()
         self.height += 1
         return record
 
@@ -876,7 +882,8 @@ def file_twins(requests: list[dict], responses: list[dict], directory) -> list[t
     path = pathlib.Path(directory) / "twin-empty.bin"
     path.write_bytes(b"")
     twins.append((file_request(request([]), path),
-                  {"blocks": [], "out_of_domain_at": None, "set_digest_hex": "00" * 32, "set_coins": 0}))
+                  {"blocks": [], "out_of_domain_at": None, "set_digest_hex": "00" * 32, "set_coins": 0,
+                   "set_value": "0"}))
     return twins
 
 
@@ -934,12 +941,20 @@ def is_digest(value) -> bool:
     return isinstance(value, str) and len(value) == 64 and all(c in "0123456789abcdef" for c in value)
 
 
+def is_value(value) -> bool:
+    """A total value: a string of decimal digits without a leading zero."""
+    return (isinstance(value, str) and value.isascii() and value.isdigit()
+            and (value == "0" or not value.startswith("0")))
+
+
 def malformed(req: dict, ok, oracle: bool) -> str | None:
     """A fault in the form of an `ok` object, or None. The oracle alone has `diagnostic` in each block."""
     if not isinstance(ok, dict) or set(ok) != OK_FIELDS or not isinstance(ok["blocks"], list):
         return "must return exactly the fields " + ", ".join(sorted(OK_FIELDS))
     if not is_digest(ok["set_digest_hex"]) or type(ok["set_coins"]) is not int or ok["set_coins"] < 0:
         return "has a malformed digest of the set"
+    if not is_value(ok["set_value"]):
+        return "has a malformed total value of the set"
     end = ok["out_of_domain_at"]
     if oracle:
         if end is not None and (type(end) is not int or end != len(ok["blocks"])):
@@ -961,6 +976,12 @@ def malformed(req: dict, ok, oracle: bool) -> str | None:
                 return "has an accepted block without its changes"
             if (record["set_digest_hex"] is not None) != (record["height"] % SET_DIGEST_INTERVAL == 0):
                 return f"has the digest of the set at the wrong heights (height {record['height']})"
+            if record["set_digest_hex"] is not None and not is_digest(record["set_digest_hex"]):
+                return f"has a malformed digest of the set (height {record['height']})"
+            if (record["set_value"] is not None) != (record["set_digest_hex"] is not None):
+                return f"does not have the total value of the set exactly with its digest (height {record['height']})"
+            if record["set_value"] is not None and not is_value(record["set_value"]):
+                return f"has a malformed total value of the set (height {record['height']})"
         else:
             reason = record["reject_reason"]
             if not isinstance(reason, str) or type(record["dos"]) is not int or type(record["reject_code"]) is not int:
@@ -968,7 +989,7 @@ def malformed(req: dict, ok, oracle: bool) -> str | None:
             known = CONNECT_REASONS.get(reason.split(" (")[0])
             if known is not None and (record["dos"], record["reject_code"]) != known:
                 return f"returned score {record['dos']} and code {record['reject_code']} for {reason}, and Core's text gives {known[0]} and {known[1]}"
-            if any(record[f] is not None for f in ("changes_digest_hex", "spent", "created", "set_digest_hex")):
+            if any(record[f] is not None for f in ("changes_digest_hex", "spent", "created", "set_digest_hex", "set_value")):
                 return "has a change in a rejected block"
             if oracle and not isinstance(record["diagnostic"], str):
                 return "has no Lean diagnostic for a rejection"
@@ -1004,7 +1025,7 @@ def unexpected(req: dict, ours: dict, expected: dict) -> str | None:
         for field in sorted(BLOCK_FIELDS):
             if not same(got[field], want[field]):
                 return f"block {index}: expected {field} {want[field]!r}, got {got[field]!r}"
-    for field in ("set_digest_hex", "set_coins"):
+    for field in ("set_digest_hex", "set_coins", "set_value"):
         if not same(ok[field], expected[field]):
             return f"expected {field} {expected[field]!r}, got {ok[field]!r}"
     return None
@@ -1035,7 +1056,7 @@ def compare(req: dict, ours: dict, core: dict, peer: str = "core") -> tuple[str,
                     return LABEL, f"block {index} (height {x['height']}), {field}: oracle {x[field]!r}, {peer} {y[field]!r}"
         if len(a["blocks"]) != len(b["blocks"]):
             return LABEL, f"oracle has {len(a['blocks'])} block records, {peer} has {len(b['blocks'])}"
-        for field in ("set_digest_hex", "set_coins"):
+        for field in ("set_digest_hex", "set_coins", "set_value"):
             if not same(a[field], b[field]):
                 return LABEL, f"{field}: oracle {a[field]!r}, {peer} {b[field]!r}"
     elif not same(ours["error"], core["error"]):
@@ -1046,6 +1067,72 @@ def compare(req: dict, ours: dict, core: dict, peer: str = "core") -> tuple[str,
         if fault:
             return LABEL, f"both programs disagree with the independent expectation: {fault}"
     return None
+
+
+# ---------------------------------------------------------------------------
+# The issuance bound
+
+
+SUBSIDY_BATCH = 1000
+
+
+def issuance_requests(req: dict, ok: dict) -> list[dict] | None:
+    """The `block.subsidy` requests for the accepted blocks of a request that starts at the genesis block.
+
+    A request starts there when its chain and its coins are empty. Each case is the height of an
+    accepted block from 1 and the hash of the accepted block before it, so the subsidies are the
+    terms of `chainSubsidy` (DogeLib/Block/Proofs/ConnectProperties.lean). The genesis block adds no
+    coin and has no term, so a request with the genesis block alone gives an empty list. The result
+    is None for a request that does not start at the genesis block."""
+    if req.get("chain") != [] or req.get("coins") != []:
+        return None
+    accepted = [record for record in ok["blocks"] if record["valid"]]
+    cases = [{"height": record["height"], "prev_hash_hex": before["hash_hex"]}
+             for before, record in zip(accepted, accepted[1:])]
+    return [{"op": "block.subsidy", "cases": cases[i:i + SUBSIDY_BATCH]}
+            for i in range(0, len(cases), SUBSIDY_BATCH)]
+
+
+def issuance_bound(req: dict, ok: dict, subsidy_requests: list[dict], ours: list[dict], core: list[dict],
+                   peer: str = "core") -> tuple[tuple[str, str] | None, dict]:
+    """Check the total values of `ok` against the sums of the subsidies, after the comparison of the two programs.
+
+    `subsidy_requests` are `issuance_requests(req, ok)`, and `ours` and `core` are the responses of
+    the two programs to them. The two programs must give the same subsidies. Each total value that
+    `ok` reports must be at most the sum of the subsidies of the heights from 1 to its height: the
+    bound of `chain_issuance_bound`. Return a failure or None, and a summary of the final total."""
+    accepted = [record for record in ok["blocks"] if record["valid"]]
+    if not accepted or accepted[0]["hash_hex"] != GENESIS_HASH.hex() or accepted[0]["height"] != 0:
+        return ("ISSUANCE", "the request does not start with the genesis block, so no bound applies"), {}
+    if [record["height"] for record in accepted] != list(range(len(accepted))):
+        return ("ISSUANCE", "the accepted blocks do not have the heights from 0"), {}
+    subsidies = []
+    for number, (sent, a, b) in enumerate(zip(subsidy_requests, ours, core)):
+        cases = len(sent["cases"])
+        for side, response in (("oracle", a), (peer, b)):
+            values = response.get("ok", {}).get("subsidies") if isinstance(response.get("ok"), dict) else None
+            if (not isinstance(values, list) or len(values) != cases
+                    or not all(is_value(v) for v in values)):
+                return ("ISSUANCE", f"{side} gave no subsidy for each case of subsidy request {number}: "
+                                    f"{json.dumps(response)[:300]}"), {}
+        if a["ok"]["subsidies"] != b["ok"]["subsidies"]:
+            return ("ISSUANCE", f"subsidy request {number}: the two programs give different subsidies"), {}
+        subsidies.extend(int(v) for v in a["ok"]["subsidies"])
+    if len(subsidy_requests) != len(ours) or len(ours) != len(core) or len(subsidies) != len(accepted) - 1:
+        return ("ISSUANCE", f"{len(subsidies)} subsidies for {len(accepted) - 1} accepted blocks after the genesis block"), {}
+    # bound[h] is the sum of the subsidies of the heights from 1 to h.
+    bound = [0]
+    for subsidy in subsidies:
+        bound.append(bound[-1] + subsidy)
+    points = [(record["height"], record["set_value"]) for record in accepted if record["set_value"] is not None]
+    points.append((accepted[-1]["height"], ok["set_value"]))
+    for height, value in points:
+        if int(value) > bound[height]:
+            return ("ISSUANCE", f"the total value {value} after height {height} exceeds the sum of the subsidies "
+                                f"{bound[height]}"), {}
+    summary = {"set_value": ok["set_value"], "subsidy_sum": str(bound[-1]),
+               "difference": str(bound[-1] - int(ok["set_value"])), "bound_points": len(points)}
+    return None, summary
 
 
 # ---------------------------------------------------------------------------

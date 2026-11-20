@@ -1,10 +1,11 @@
 # Relative lock time as a proposed revision
 
-**Status:** Draft, proposed on 2026-11-20.
-No part of this record is adopted, and every decision of section 13 has the status `Proposed`.
+**Status:** Adopted on 2026-11-20, with the decisions that section 13 records.
+This record is frozen.
+Implementation status belongs in ROADMAP.md and COVERAGE.md.
 
 **Date:** 2026-11-20
-**Companions:** [Design record 0007](0007-proposed-revisions.md), [design record 0010](0010-block-validity.md), design record 0011 (pull request #174, which the maintainer adopts and which is not merged yet), [sources](../../SOURCES.md), [coverage](../../COVERAGE.md), [soundness](../../SOUNDNESS.md), [oracle contract](../oracle.md) and [DogeLib in practice](../in-practice.md).
+**Companions:** [Design record 0007](0007-proposed-revisions.md), [design record 0010](0010-block-validity.md), [design record 0011](0011-mainnet-ranges.md), [sources](../../SOURCES.md), [coverage](../../COVERAGE.md), [soundness](../../SOUNDNESS.md), [oracle contract](../oracle.md) and [DogeLib in practice](../in-practice.md).
 
 ## 1. Purpose and boundary
 
@@ -199,7 +200,7 @@ Regtest has `fStrictChainId` true, so the three tests of R15 cannot activate CSV
 | Sequence locks (section 3.3) | Missing. No definition of `CalculateSequenceLocks` or `EvaluateSequenceLocks` exists. `DogeLib.Block.Connect` documents why the baseline needs none. |
 | Ancestor times at a coin's height | Missing. `ValidateContext.view` is a contiguous view from the predecessor, and nothing reads it at the depth of a coin. |
 | A revision of block rules | Not built. Design record 0011, decision 11, defines `connectBlockWith` and `validateBlockWith` for a revised spend check. Section 6 states what they lack for these rules. |
-| An unsupported reason of a proposal | In progress. Issue #122 gives the Script result types a parameter for it. |
+| An unsupported reason of a proposal | Defined for Script. The result types of the framework take a type `υ` of unsupported reasons, and a map `embedU : Unsupported → υ` for the baseline reasons (issue #122, pull request #176). The block level has no such parameter. |
 
 ## 5. Identity and activation
 
@@ -299,7 +300,8 @@ So the cutoff needs no copy of `contextualCheckBlockBody`. The revision runs the
 **E4: errors and unsupported reasons of a proposal.**
 The layer is generic in the script error.
 E2 needs an error that is not a script error, and it needs results that are not rejections.
-Issue #122 gives the Script framework a type parameter `υ` for unsupported reasons, beside the error parameter `ε`.
+The Script framework has a type parameter `υ` for unsupported reasons, beside the error parameter `ε` (issue #122, pull request #176).
+Its `ofBaseline` maps take `embed : ScriptError → ε` and `embedU : Unsupported → υ`.
 The block level follows that form:
 
 ```text
@@ -310,8 +312,11 @@ inductive BlockOutcome (ε υ α : Type) where
 ```
 
 `ConnectBlockError` holds Core's rejections and six results outside the model, and `isRejection` separates the two kinds.
-The embedding maps a baseline error with `isRejection` true to `rejected`, and every other error to `unsupported`.
+So the block level has two maps of that one type, in the roles of `embed` and `embedU`.
+A baseline error with `isRejection` true becomes `rejected` through the first map, and every other error becomes `unsupported` through the second.
+A script result inside a block result keeps the two Script maps.
 A proposal with its own errors `E` and reasons `U` uses sums with the baseline values under `Sum.inl`.
+A proposal without its own reasons uses the identity, as in the Script framework.
 
 `RelativeLockTime` adds one error and three reasons:
 
@@ -450,7 +455,7 @@ The last two rows are additions.
 
 | Target | Statement with the extensions |
 | --- | --- |
-| `connectBlockWith_baseline` | With the baseline spend check and the baseline values of E1 and E2, `connectBlockWith` equals the embedded result of `connectBlock`. The context has `csvActive` false. |
+| `connectBlockWith_baseline` | With the baseline spend check and the baseline values of E1 and E2, `connectBlockWith` equals the embedded result of `connectBlock`. The embedding is the pair of maps of E4. The context has `csvActive` false. |
 | `validateBlockWith_inactive` | As in design record 0011, for a revision whose values of E1 to E3 are the baseline values when `active` is false. |
 | `validateBlockWith_congr` | The hypothesis also requires that the values of E1 to E3 agree with the baseline on the block. `relativeLockTime_eq_of_untouched` is the instance for this revision. |
 | `connectBlockWith_restricts` | The hypothesis is conditions 1 to 3 of section 6.4, and the baseline context has `csvActive` false. The conclusion is that of design record 0011. |
@@ -644,7 +649,8 @@ Until stage 3 merges, COVERAGE.md labels the proposal as partial and names the r
 
 ### Stage 1: the extensions of the layer and BIP 113
 
-The stage follows the change for issue #122 and the definitions of design record 0011 (section 6.7).
+The stage follows the definitions of design record 0011 (section 6.7).
+The change for issue #122 is in `main` (pull request #176).
 It adds the extensions E1 to E4 to that layer, and the revision with the cutoff alone.
 It adds P1 to P4 to SOURCES.md, and the label of section 8 and the rows to COVERAGE.md.
 
@@ -707,28 +713,28 @@ The run to height 145,000 is a recorded gate outside CI.
 
 ## 13. Decisions
 
-**Date:** none. **Decision maker:** Maintainer.
-Every row is a proposal.
+**Date:** 2026-11-20. **Decision maker:** Maintainer.
+The maintainer accepted each proposal as its status states.
 
 | Number | Topic | Proposal | Alternative | Status |
 | --- | --- | --- | --- | --- |
-| 1 | Form of this scope | A design record of its own, 0012. Design record 0007 stays frozen, and this record builds on its decisions. | An amendment of design record 0007, sections 8.2 and 8.3. | Proposed |
-| 2 | Name | `DogeLib.Proposals.RelativeLockTime`, one proposal for the three rules. | Three proposals, one for each BIP. A name with "CSV". | Proposed |
-| 3 | Deciding source | Core's code of the rules at the pin (R1 to R10). The BIPs explain, and the module documentation lists each difference (section 2.3). | The BIP text decides, and the code is a comparison. | Proposed |
-| 4 | Proposal documents | P1 to P3 by the commit of `bitcoin/bips` that last changed each file. P4 by URL, author, date and the SHA-256 of its first post. Issue 1798 and `1.21-dev` are background and get no identifier. | A committed copy of each text. Identifiers for the background texts too. | Proposed |
-| 5 | Activation | One fixed height on mainnet through `Activation`, for the three rules together, with no default. Inactive for a block that is not applicable: one with an empty view, or one whose own header has the genesis hash (section 5). | One Boolean for each rule. A signalling model first. | Proposed |
-| 6 | Block level | The layer of design record 0011, decision 11, and no second framework. The extensions E1 to E3 are changes to that layer: the flags of a block, a test of one transaction, and the arguments of the body check (section 6.3). | The layer unchanged: the opcode as a revised spend check with another reject reason than Core's, and no sequence locks or cutoff. A copy of `connectBlock` for this proposal. | Proposed |
-| 7 | Order with design record 0011 | The definitions and the agreement theorem of that record's stage 6 can land before its Core pass. Stage 1 here follows them (section 6.7). | Stage 1 waits for the whole of that stage 6. Stage 1 builds the definitions itself, under that record's decision 11. | Proposed |
-| 8 | Results at the block level | Extension E4: a block error and an unsupported reason of the proposal, in the form of issue #122. An unsupported reason is never a rejection (section 6.3). | `Except` with one sum type and an `isRejection` function of the proposal. | Proposed |
-| 9 | The cutoff | Through E3, the revision runs the baseline `contextualCheckBlockBody` with `csvActive` true and the median of the view. No copy. | A cutoff function as a parameter. | Proposed |
-| 10 | Ancestor times | The contiguous view, read at the depth of the coin. A short view gives `ancestorOutsideView` (section 7.2). | A supplied table of heights and median times, which adds an input that nothing checks. | Proposed |
-| 11 | Compatibility claim | Block-level `SoftFork` with the identity projection, three strictness and three use witnesses, and the chain target. A third label, *block-level*, in COVERAGE.md (sections 8 and 9.3). | The Script-local and rule-level targets alone. | Proposed |
-| 12 | Core with CSV forced active | The harness argument `force_csv_active`, which seeds `THRESHOLD_ACTIVE`. The label and the sentences of section 10.2 in COVERAGE.md, `docs/oracle.md` and SOUNDNESS.md. | No such run, and known answers alone. A patched Core build. | Proposed |
-| 13 | Lean side of that comparison | The proposal executable of design record 0011, decision 10, with the argument and the report of section 6.5. No operation in `dogelib-oracle`. | The test executable `proposal-replay`. | Proposed |
-| 14 | Known answers | The sources of section 10.1. The functional tests of R15 are a source of hand-made cases and are not run. | A regtest run of those tests on a build with another activation. | Proposed |
-| 15 | Historical counts | The six counts and the ranges of section 10.3, with a committed candidate list before each run. | Changed blocks alone, as in design record 0011. | Proposed |
-| 16 | Order of stages | BIP 113 with the extensions of the layer, then BIP 112, then BIP 68 with the block-level soft fork, then the counts. Each extension of the rules has `!` in its title. | BIP 112 first, as the smallest step. One lane for all three rules. | Proposed |
-| 17 | Issue #122 | Stage 1 waits for that change and follows its form. | Stage 1 defines its own parameter, and a later change joins the two. | Proposed |
+| 1 | Form of this scope | A design record of its own, 0012. Design record 0007 stays frozen, and this record builds on its decisions. | An amendment of design record 0007, sections 8.2 and 8.3. | Accepted |
+| 2 | Name | `DogeLib.Proposals.RelativeLockTime`, one proposal for the three rules. | Three proposals, one for each BIP. A name with "CSV". | Accepted |
+| 3 | Deciding source | Core's code of the rules at the pin (R1 to R10). The BIPs explain, and the module documentation lists each difference (section 2.3). | The BIP text decides, and the code is a comparison. | Accepted |
+| 4 | Proposal documents | P1 to P3 by the commit of `bitcoin/bips` that last changed each file. P4 by URL, author, date and the SHA-256 of its first post. Issue 1798 and `1.21-dev` are background and get no identifier. | A committed copy of each text. Identifiers for the background texts too. | Accepted |
+| 5 | Activation | One fixed height on mainnet through `Activation`, for the three rules together, with no default. Inactive for a block that is not applicable: one with an empty view, or one whose own header has the genesis hash (section 5). | One Boolean for each rule. A signalling model first. | Accepted |
+| 6 | Block level | The layer of design record 0011, decision 11, and no second framework. The extensions E1 to E3 are changes to that layer: the flags of a block, a test of one transaction, and the arguments of the body check (section 6.3). | The layer unchanged: the opcode as a revised spend check with another reject reason than Core's, and no sequence locks or cutoff. A copy of `connectBlock` for this proposal. | Accepted |
+| 7 | Order with design record 0011 | The definitions and the agreement theorem of that record's stage 6 can land before its Core pass. Stage 1 here follows them (section 6.7). | Stage 1 waits for the whole of that stage 6. Stage 1 builds the definitions itself, under that record's decision 11. | Accepted |
+| 8 | Results at the block level | Extension E4: a block error and an unsupported reason of the proposal, in the form of issue #122. An unsupported reason is never a rejection (section 6.3). | `Except` with one sum type and an `isRejection` function of the proposal. | Accepted |
+| 9 | The cutoff | Through E3, the revision runs the baseline `contextualCheckBlockBody` with `csvActive` true and the median of the view. No copy. | A cutoff function as a parameter. | Accepted |
+| 10 | Ancestor times | The contiguous view, read at the depth of the coin. A short view gives `ancestorOutsideView` (section 7.2). | A supplied table of heights and median times, which adds an input that nothing checks. | Accepted |
+| 11 | Compatibility claim | Block-level `SoftFork` with the identity projection, three strictness and three use witnesses, and the chain target. A third label, *block-level*, in COVERAGE.md (sections 8 and 9.3). | The Script-local and rule-level targets alone. | Accepted |
+| 12 | Core with CSV forced active | The harness argument `force_csv_active`, which seeds `THRESHOLD_ACTIVE`. The label and the sentences of section 10.2 in COVERAGE.md, `docs/oracle.md` and SOUNDNESS.md. | No such run, and known answers alone. A patched Core build. | Accepted |
+| 13 | Lean side of that comparison | The proposal executable of design record 0011, decision 10, with the argument and the report of section 6.5. No operation in `dogelib-oracle`. | The test executable `proposal-replay`. | Accepted |
+| 14 | Known answers | The sources of section 10.1. The functional tests of R15 are a source of hand-made cases and are not run. | A regtest run of those tests on a build with another activation. | Accepted |
+| 15 | Historical counts | The six counts and the ranges of section 10.3, with a committed candidate list before each run. | Changed blocks alone, as in design record 0011. | Accepted |
+| 16 | Order of stages | BIP 113 with the extensions of the layer, then BIP 112, then BIP 68 with the block-level soft fork, then the counts. Each extension of the rules has `!` in its title. | BIP 112 first, as the smallest step. One lane for all three rules. | Accepted |
+| 17 | Issue #122 | Stage 1 waits for that change and follows its form. The change merged on 2026-11-20 as pull request #176, and section 6.3 states its form. | Stage 1 defines its own parameter, and a later change joins the two. | Accepted |
 
 ## 14. Remaining risks
 
@@ -743,7 +749,7 @@ Every row is a proposal.
 | The Lean rule and Core's code share a misreading of a BIP. | Hand-made known answers from the BIP text (section 10.1), separate from the comparison with Core's code. |
 | A later Dogecoin proposal changes the rules, such as the time unit. | The name describes the rule of P1 to P3. Another rule gets another name (design record 0007, section 5). |
 | The layer of design record 0011 lands late, behind its Core pass. | Decision 7. Stages 1 to 3 need the definitions and the executable, and nothing of the snapshots. |
-| Issue #122 lands in another form. | Decision 17. Extension E4 states what the form must support: an unsupported result that is never a rejection. |
+| The block level cannot use `embedU : Unsupported → υ` as it is, because its results outside the model have the type `ConnectBlockError`. | Extension E4 gives the block level its own pair of maps, and keeps the rule of issue #122: an unsupported result is never a rejection. |
 | A time lock on an old coin gives `ancestorOutsideView` in a range above the genesis block. | Section 10.3 counts those blocks by reason, and never counts one as changed. |
 | A historical count is read as the whole effect of an activation. | Section 10.3 states the ranges and the limits. Unconfirmed transactions and unspent P2SH scripts are outside every count. |
 | The record is read as support for activation. | Sections 1 and 12. The record names the proposal and its source, and it takes no position. |
@@ -757,4 +763,4 @@ Decision 6 changes the layer of design record 0011, and removes that record's ex
 Decision 11 adds a label to COVERAGE.md.
 Decision 12 adds a harness argument and a kind of evidence.
 
-Adoption of the scope establishes no result, and it does not authorize the merge of a later implementation.
+Adoption of the record establishes no target theorem, and it does not authorize the merge of a later implementation.

@@ -168,8 +168,9 @@ The example defines no `Activation` value, because no network activates it.
 
 ### What the example establishes
 
-Every theorem of the example is *Script-local*: it is about one call of `verifyScript` or `verifyLegacySpend`.
-A soft-fork claim about the network also needs block validity and a legacy projection, which DogeLib does not have (design record 0007, section 8.3).
+Most theorems of the example are *Script-local*: each is about one call of `verifyScript` or `verifyLegacySpend`.
+`block_inactive`, `block_congr` and `corrected_block_restricts` are block-level: each is about one block on a supplied coin set and chain view ([SOUNDNESS.md](../SOUNDNESS.md#proposed-revisions-the-block-level)).
+A soft-fork claim about the network also needs a statement about a chain and a legacy projection, which DogeLib does not have (design record 0007, section 8.3).
 
 The known answers run both variants through the compiled code on 13 `verifyScript` cases and 4 spends.
 A person derived each expected result by hand from Core's rules.
@@ -239,12 +240,17 @@ So Lean and Core agree, and the agreement shows nothing about the safety of the 
 
 Core does not make the roots different.
 Instead, `CheckBlock` rejects a block whose computation sets the mutation flag, with the reason `bad-txns-duplicate` (D90, `src/validation.cpp`, lines 2951 to 2962).
-DogeLib does not specify `CheckBlock`, so no DogeLib theorem states that a validator rejects such a block.
-A model of block validity could state that property and prove it.
 
-The theorem above is about one duplicated leaf.
+`checkBlock` in `DogeLib.Block.Check` models `CheckBlock`, and `checkBlock_rejects_merkleDuplication` in `DogeLib.Block.Proofs.Check` states the property for it.
+Let `checkBlock` accept a block with the Merkle check.
+Let a second block have the same header.
+Let its transaction IDs come from those of the first by one or more duplications of a trailing subtree (`MerkleDuplication`).
+Then `checkBlock` rejects the second block with `bad-txns-duplicate` ([SOUNDNESS.md](../SOUNDNESS.md#block-codec-checktransaction-and-checkblock)).
+The theorem is about the Lean definition, and it does not show that Core's `CheckBlock` has the property.
+
+`computeMerkleRoot_duplicate_last` is about one duplicated leaf.
 Core's comment gives a second shape, in which the last two leaves of six repeat.
-`computeMerkleRoot_duplicate_last` does not cover that shape.
+`MerkleDuplication` covers both shapes, so `checkBlock_rejects_merkleDuplication` covers both.
 
 ## Comparing with Core and reading a disagreement
 
@@ -321,7 +327,11 @@ It does not replay `block.contextual_check` or `block.header_sequence` requests.
 
 ## Further directions
 
-These directions are not implemented:
+This direction is not implemented:
 
 - **Resource bounds for proposals.** A proposal record could state a bound on the work of validation, such as the number of bytes hashed. The bound would be a claim beside compatibility, strictness and use.
-- **Transaction and UTXO validation.** [ROADMAP.md](../ROADMAP.md#next-work) names block validity as the next milestone. A model of `CheckTransaction`, of the UTXO set and of value accounting could state properties such as "no block spends one outpoint twice". Properties of this kind, the class of CVE-2018-17144, need such a model, because per-input Script verification does not describe them. At the pin, `CheckBlock` calls `CheckTransaction` with its duplicate-input check enabled (D90, lines 551 to 559 and 2984).
+
+Properties of a whole block, such as "no block spends one outpoint twice", need a model of the coin set, because per-input Script verification does not describe them.
+`connectBlock` models Core's `ConnectBlock` on mainnet, over a coin set ([SOUNDNESS.md](../SOUNDNESS.md#the-coin-set-checktxinputs-and-connectblock)).
+`connect_spends_available` states that each input of an accepted block spends a present coin, and that the inputs of one transaction name pairwise different outpoints.
+That second conclusion excludes the bug class of CVE-2018-17144 ([SOUNDNESS.md](../SOUNDNESS.md#connect_spends_available-each-input-spends-a-present-coin)).

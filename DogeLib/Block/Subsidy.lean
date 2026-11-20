@@ -25,7 +25,8 @@ Boost's distribution draws again when it rejects a word, and this module has no 
 So `uniformInt` takes fuel, and `getDogecoinBlockSubsidy` returns the error `fuelExhausted` when the fuel runs out.
 
 The module covers mainnet only.
-It does not define the testnet or regtest records, and it does not model `ConnectBlock`.
+It does not define the testnet or regtest records.
+`DogeLib.Block.Connect` models `ConnectBlock`, which calls `getDogecoinBlockSubsidy` and compares the coinbase value with the subsidy plus the fees.
 The theorems are in `DogeLib.Block.Proofs.Subsidy`.
 
 ## Source

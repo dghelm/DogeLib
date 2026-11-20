@@ -26,6 +26,14 @@ It needs no Dogecoin Core. The checks:
    written here by hand from the text of the rule in the module documentation of the example and
    from the flags of the height. No program supplies one.
 
+7. `block.contextual_check_body`. Without `revision`, the proposal executable writes the bytes of
+   `dogelib-oracle` on the requests of the comparison (`contextual_body_sets` of
+   scripts/oracle_contextual_body.py). With a revision and no activation height, each response is
+   the baseline response with a `revised` object that has `active` false and the baseline verdict.
+   The examples change no lock-time argument, so the same holds for them with activation height 0.
+   scripts/compare_csv_forced.py checks the `revised` objects of `RelativeLockTime` against Core's
+   own code, which this script does not run.
+
 The script signs nothing and uses no private key.
 """
 
@@ -39,6 +47,7 @@ import tempfile
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 from oracle_block_check import txout
+from oracle_contextual_body import contextual_body_sets
 from oracle_block_validate import (EVAL_FALSE, Base, Coins, block_validate_sets, coin_id, file_twins,
                                    mainnet_validate_sets, script_reason, spend)
 
@@ -46,9 +55,10 @@ from oracle_block_validate import (EVAL_FALSE, Base, Coins, block_validate_sets,
 FULL_COMPARISON_REQUESTS = 42
 
 REVISIONS = [("ExampleFaultyLocktime", "corrected"), ("ExampleFaultyLocktime", "faulty"),
-             ("ExampleVersionVerify", None)]
-# The revisions with a restriction theorem (`corrected_block_restricts` and `example_block_restricts`).
-SOFT_FORKS = [("ExampleFaultyLocktime", "corrected"), ("ExampleVersionVerify", None)]
+             ("ExampleVersionVerify", None), ("RelativeLockTime", None)]
+# The revisions with a restriction theorem (`corrected_block_restricts`, `example_block_restricts` and
+# `relativeLockTime_restricts`).
+SOFT_FORKS = [("ExampleFaultyLocktime", "corrected"), ("ExampleVersionVerify", None), ("RelativeLockTime", None)]
 
 OP_1NEGATE, OP_1, OP_2, OP_EQUAL, OP_NOP4, OP_NOP10 = 0x4f, 0x51, 0x52, 0x87, 0xb3, 0xb9
 NEGATIVE_LOCKTIME = "Negative locktime"
@@ -310,6 +320,37 @@ def main() -> int:
                 direction = "unchanged" if (expected["verdict"] == "accepted") == baseline_valid else (
                     "accepted to rejected" if baseline_valid else "rejected to accepted")
                 print(f"ok:   made block {name}: {direction}")
+
+    # 7. `block.contextual_check_body`.
+    body = numbered([dict(r) for _, rs in contextual_body_sets() for r in rs], "body")
+    body_baseline = run(oracle, body, timeout)
+    if check(run(proposal, body, timeout) == body_baseline,
+             f"block.contextual_check_body: the proposal executable differs from dogelib-oracle on {len(body)} requests"):
+        print(f"ok:   {len(body)} block.contextual_check_body requests: the same bytes")
+    plain = [json.loads(line) for line in body_baseline.splitlines()]
+    refused = responses(oracle, [{**body[0], "revision": revision("RelativeLockTime", None, None)}], timeout)[0]
+    check(refused.get("error", {}).get("kind") == "request",
+          f"dogelib-oracle accepts revision on block.contextual_check_body: {json.dumps(refused)[:300]}")
+    for name, variant in REVISIONS:
+        heights = (None,) if name == "RelativeLockTime" else (None, 0)
+        for height in heights:
+            where = f"block.contextual_check_body, {label(name, variant)}, activation_height {json.dumps(height)}"
+            answers = responses(proposal, [{**r, "revision": revision(name, variant, height)} for r in body], timeout)
+            good = True
+            for old, new in zip(plain, answers):
+                if "ok" not in old:
+                    good = check(new == old, f"{where}: an error response differs: {json.dumps(new)[:300]}") and good
+                    continue
+                revised = new.get("ok", {}).get("revised")
+                rest = {k: v for k, v in new.get("ok", {}).items() if k != "revised"}
+                want = "accepted" if old["ok"]["valid"] else "rejected"
+                same = (isinstance(revised, dict) and rest == old["ok"] and revised["verdict"] == want
+                        and revised["reject_reason"] == old["ok"]["reject_reason"] and revised["dos"] == old["ok"]["dos"]
+                        and revised["reject_code"] == old["ok"]["reject_code"] and revised["reason"] is None
+                        and (height is None) == (revised["active"] is False))
+                good = check(same, f"{where}: {json.dumps(new)[:400]}") and good
+            if good:
+                print(f"ok:   {where}: {len(answers)} responses, each revised object agrees with the baseline")
 
     if failures:
         print(f"{len(failures)} failure(s)")

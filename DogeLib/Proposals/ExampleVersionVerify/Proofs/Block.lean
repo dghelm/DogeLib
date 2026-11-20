@@ -35,7 +35,8 @@ theorem example_block_inactive (V : ValidateEmbedding ρ μ ρ' μ')
     validateBlockWith V E (blockRevision verify) a fCheckPOW fCheckMerkleRoot ctx s b =
       V.ofBaseline E Sum.inl Sum.inl (validateBlock verify fCheckPOW fCheckMerkleRoot ctx s b) :=
   validateBlockWith_inactive V E (rev := blockRevision verify)
-    (fun ictx spk f => example_spend_inactive_eq ictx spk f verify) fCheckPOW fCheckMerkleRoot hact s b
+    ⟨fun ictx spk f => example_spend_inactive_eq ictx spk f verify, fun _ => rfl, fun _ _ _ _ => rfl, fun _ _ => rfl⟩
+    fCheckPOW fCheckMerkleRoot hact s b
 
 /-- If `validateBlockWith` with the example accepts a block, `validateBlock` accepts it, with the same coin set and the same changes. For every activation. -/
 theorem example_block_restricts {V : ValidateEmbedding ρ μ ρ' μ'}
@@ -44,7 +45,8 @@ theorem example_block_restricts {V : ValidateEmbedding ρ μ ρ' μ'}
     {r : ConnectResult}
     (h : validateBlockWith V E (blockRevision verify) a fCheckPOW fCheckMerkleRoot ctx s b = .ok r) :
     validateBlock verify fCheckPOW fCheckMerkleRoot ctx s b = .ok r :=
-  validateBlockWith_restricts (rev := blockRevision verify) (fun _ _ _ _ hacc => example_soft_fork_local hacc) h
+  validateBlockWith_restricts (rev := blockRevision verify) (fun _ _ _ _ hacc => example_soft_fork_local hacc)
+    (fun _ _ => rfl) (fun _ _ _ _ => Int.le_refl _) h
 
 /-- On a block in which no spend holds `OP_NOP10` as an instruction (`BlockUntouched isNop10`), `validateBlockWith` with the example equals the embedded result of `validateBlock`. For every activation. -/
 theorem example_block_congr (V : ValidateEmbedding ρ μ ρ' μ')
@@ -58,6 +60,6 @@ theorem example_block_congr (V : ValidateEmbedding ρ μ ρ' μ')
       (some (transactionChecker ictx.tx ictx.index verify)) f)
     (fun _ _ _ => rfl)
     (fun _ f script st i hi => exampleStep_eq_of_not_nop10 _ _ _ f script st i hi)
-    fCheckPOW fCheckMerkleRoot hfree
+    rfl (fun _ _ _ => rfl) fCheckPOW fCheckMerkleRoot rfl hfree
 
 end DogeLib.Proposals.ExampleVersionVerify

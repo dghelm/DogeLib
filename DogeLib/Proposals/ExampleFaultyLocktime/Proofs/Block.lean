@@ -43,7 +43,9 @@ theorem block_inactive (V : ValidateEmbedding ρ μ ρ' μ') (E : ConnectEmbeddi
     validateBlockWith V E (blockRevision v verify) a fCheckPOW fCheckMerkleRoot ctx s b =
       V.ofBaseline E id id (validateBlock verify fCheckPOW fCheckMerkleRoot ctx s b) :=
   validateBlockWith_inactive V E (rev := blockRevision v verify)
-    (fun ictx spk f => revisedSpend_inactive_eq v ⟨ictx, spk, f, verify⟩) fCheckPOW fCheckMerkleRoot hact s b
+    ⟨fun ictx spk f => revisedSpend_inactive_eq v ⟨ictx, spk, f, verify⟩, fun _ => rfl, fun _ _ _ _ => rfl,
+      fun _ _ => rfl⟩
+    fCheckPOW fCheckMerkleRoot hact s b
 
 /-- If `validateBlockWith` with the corrected variant accepts a block, `validateBlock` accepts it, with the same coin set and the same changes. For every activation. -/
 theorem corrected_block_restricts {V : ValidateEmbedding ρ μ ρ' μ'} {E : ConnectEmbedding ScriptError Unsupported ρ μ}
@@ -52,8 +54,9 @@ theorem corrected_block_restricts {V : ValidateEmbedding ρ μ ρ' μ'} {E : Con
     (h : validateBlockWith V E (blockRevision .corrected verify) a fCheckPOW fCheckMerkleRoot ctx s b = .ok r) :
     validateBlock verify fCheckPOW fCheckMerkleRoot ctx s b = .ok r :=
   validateBlockWith_restricts (rev := blockRevision .corrected verify)
-    (fun active ictx spk f hacc =>
-      corrected_soft_fork_local (active := active) (a := ⟨ictx, spk, f, verify⟩) hacc) h
+    (fun active height ictx spk hacc =>
+      corrected_soft_fork_local (active := active) (a := ⟨ictx, spk, connectScriptFlags height, verify⟩) hacc)
+    (fun _ _ => rfl) (fun _ _ _ _ => Int.le_refl _) h
 
 /-- For each variant: on a block in which no spend holds `OP_NOP4` as an instruction (`BlockUntouched isNop4`), `validateBlockWith` equals the embedded result of `validateBlock`. For every activation. -/
 theorem block_congr (V : ValidateEmbedding ρ μ ρ' μ') (E : ConnectEmbedding ScriptError Unsupported ρ μ)
@@ -66,6 +69,6 @@ theorem block_congr (V : ValidateEmbedding ρ μ ρ' μ') (E : ConnectEmbedding 
       (some (transactionChecker ictx.tx ictx.index verify)) f)
     (fun _ _ _ => rfl)
     (fun _ f script st i hi => lockStep_eq_of_not_nop4 v _ _ f script st i hi)
-    fCheckPOW fCheckMerkleRoot hfree
+    rfl (fun _ _ _ => rfl) fCheckPOW fCheckMerkleRoot rfl hfree
 
 end DogeLib.Proposals.ExampleFaultyLocktime

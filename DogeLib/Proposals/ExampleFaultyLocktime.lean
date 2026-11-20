@@ -144,8 +144,9 @@ def revisedVerifyLegacySpend (v : Variant) (active : Bool) (ctx : InputContext)
     prevScriptPubKey.bytes.val
 
 /-- Variant `v` at the block level: the spend check `revisedVerifyLegacySpend v` with the verifier `verify`. -/
-def blockRevision (v : Variant) (verify : SignatureVerifier) : BlockRevision ScriptError Unsupported :=
-  ⟨fun active ctx prevScriptPubKey flags => revisedVerifyLegacySpend v active ctx prevScriptPubKey flags verify⟩
+def blockRevision {ρ μ : Type} (v : Variant) (verify : SignatureVerifier) :
+    BlockRevision ScriptError Unsupported ρ μ where
+  spend := fun active ctx prevScriptPubKey flags => revisedVerifyLegacySpend v active ctx prevScriptPubKey flags verify
 
 /-- The arguments of one spend check, other than the variant and `active`: the input, the previous `scriptPubKey`, the flags and the verifier. -/
 structure SpendArgs where

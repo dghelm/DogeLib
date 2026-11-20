@@ -5,12 +5,16 @@ public import DogeLib.Exports.Oracle
 public import DogeLib.Proposals.ExampleFaultyLocktime
 public import DogeLib.Proposals.ExampleVersionVerify
 public import DogeLib.Proposals.Framework.Block
+public import DogeLib.Proposals.RelativeLockTime
 
 /-!
-# `block.validate` with a proposed revision
+# The operations of the proposal executable
 
-The operation `block.validate` of the proposal executable, `dogelib-proposal-oracle`.
-Design record 0011, section 10.2 and decision 10, sets the contract.
+The operations `block.validate` and `block.contextual_check_body` of the proposal executable, `dogelib-proposal-oracle`.
+Design record 0011, section 10.2 and decision 10, sets the contract of the first.
+Design record 0012, section 10.2 and decision 13, sets the contract of the second.
+
+## `block.validate`
 
 The operation is `block.validate` of `dogelib-oracle` with one more argument:
 
@@ -44,7 +48,28 @@ The revision never changes the state that the request carries.
 So `revised` answers one question for each block: what does the revision say about this block on the baseline chain below it?
 No Core behaviour exists for a revision, and no comparison supports a `revised` object (design record 0007, section 9).
 
-The revisions are the two examples of the `Proposals` library. Neither is a proposal for Dogecoin.
+## `block.contextual_check_body`
+
+The operation is `block.contextual_check_body` of `dogelib-oracle` with the same argument `revision`.
+Without the argument, it is the baseline operation, with the same response.
+With the argument, the response gains the object `revised`: `contextualBodyWith` of the revision on the block, in the context that the request gives.
+
+| Field | Value |
+| --- | --- |
+| `active` | Whether the revision is active at the height of the block. |
+| `verdict` | `accepted`, `rejected` or `unsupported`. |
+| `reject_reason`, `dos`, `reject_code` | For a rejection, Core's reject reason, score and code. Null otherwise. |
+| `reason` | For an unsupported result, a text for the input outside the model. Null otherwise. |
+| `lock_time_cutoff` | The lock-time cutoff that the revision gives the check. |
+
+The context of the request has the view `chain`, and the two version-bits states and the median time that the baseline operation computes.
+The operation runs `ContextualCheckBlock` alone, with no header check before it.
+So a revision that reads the median time past of the view needs a view with that median, and the operation gives `unsupported` without one.
+
+## The revisions
+
+`ExampleFaultyLocktime` and `ExampleVersionVerify` are the two examples of the `Proposals` library. Neither is a proposal for Dogecoin.
+`RelativeLockTime` is the revision of design record 0012. It is partial: it has the rule of BIP 113 alone, so its `revised` objects are not the results of the three rules together.
 -/
 
 @[expose] public section
@@ -105,7 +130,8 @@ def validateFields :
 The hook of a revision: `validateBlockWith` on the block, as a `revised` object.
 `describe` and `describeU` give the texts of the revision's script errors and unsupported script reasons.
 -/
-def revisedHook {ε υ : Type} (rev : BlockRevision ε υ) (describe : ε → String) (describeU : υ → String)
+def revisedHook {ε υ : Type} (rev : BlockRevision ε υ (List (String × Json)) (List (String × Json)))
+    (describe : ε → String) (describeU : υ → String)
     (activation : Activation) : BlockHook :=
   fun options ctx s b =>
     let active := Json.bool (activation.isActive .mainnet ctx.height)
@@ -120,14 +146,57 @@ def revisedHook {ε υ : Type} (rev : BlockRevision ε υ) (describe : ε → St
     | .unsupported fields =>
       Json.mkObj ([("active", active), ("verdict", "unsupported"), ("changes_digest_hex", .null)] ++ fields)
 
+/-- The `revised` object of `block.contextual_check_body`, from the context of the request and the block. -/
+abbrev BodyHook : Type := ValidateContext → Block → Json
+
+/--
+The body hook of a revision: `contextualBodyWith` on the block, as a `revised` object.
+`guard` names an input on which the lock-time arguments of the revision are outside its model, for a value of `active`. The result is then `unsupported` with that text.
+-/
+def revisedBody {ε υ ρ μ : Type} (rev : BlockRevision ε υ ρ μ)
+    (guard : Bool → ValidateContext → Block → Option String) (activation : Activation) : BodyHook :=
+  fun ctx b =>
+    let active := activation.isActive .mainnet ctx.height
+    let cutoff := Json.num (Lean.JsonNumber.fromInt (lockTimeCutoff (rev.lockTimeArgs active ctx b) b))
+    let object (verdict : String) (rejectReason dos code reason : Json) : Json :=
+      Json.mkObj [("active", .bool active), ("verdict", .str verdict), ("reject_reason", rejectReason), ("dos", dos),
+        ("reject_code", code), ("reason", reason), ("lock_time_cutoff", cutoff)]
+    match guard active ctx b with
+    | some reason => object "unsupported" .null .null .null (.str reason)
+    | none =>
+      match contextualBodyWith rev active ctx b with
+      | .ok () => object "accepted" .null .null .null .null
+      | .error e =>
+        if e.isRejection then
+          object "rejected" (e.rejectReason.map Json.str |>.getD .null) (natJson e.dosScore) (natJson e.rejectCode)
+            .null
+        else object "unsupported" .null .null .null (.str (reprStr e))
+
+/-- No input is outside the model of the lock-time arguments: the guard of a revision with the baseline arguments. -/
+def noGuard : Bool → ValidateContext → Block → Option String := fun _ _ _ => none
+
+/--
+The guard of `RelativeLockTime`: with `active` true on an applicable block, the view must have a median time past.
+`validateBlockWithActive` needs no guard, because the contextual header check computes the same median first.
+`block.contextual_check_body` runs no header check.
+-/
+def relativeLockTimeGuard (active : Bool) (ctx : ValidateContext) (b : Block) : Option String :=
+  if active && RelativeLockTime.applicable ctx b then
+    match medianTimePast ctx.view with
+    | .ok _ => none
+    | .error e => some s!"RelativeLockTime: the chain has no median time past of the predecessor ({reprStr e})"
+  else none
+
 /-- A revision that a request can name. -/
 structure NamedRevision where
   /-- The value of `name` in the `revision` argument. -/
   name : String
   /-- The value of `variant`, or `none` for a revision without variants, which a request writes as null. -/
   variant : Option String
-  /-- The hook of the revision for an activation. -/
+  /-- The hook of the revision for an activation, for `block.validate`. -/
   hook : Activation → BlockHook
+  /-- The body hook of the revision for an activation, for `block.contextual_check_body`. -/
+  body : Activation → BodyHook
 
 /-- The text of a script error of `ExampleVersionVerify`: Core's text for a baseline error, and a name for an error of the example. -/
 def describeExampleError : ExampleVersionVerify.ExampleScriptError → String
@@ -140,18 +209,42 @@ def describeExampleUnsupported : ExampleVersionVerify.ExampleScriptUnsupported �
   | .inl u => reprStr u
   | .inr .missingContext => "ExampleVersionVerify: missing context"
 
+/-- The type of failure fields, which is the type of rejections and of unsupported reasons of a `revised` object. -/
+abbrev Fields : Type := List (String × Json)
+
+/-- `ExampleFaultyLocktime` with a variant, as a revision of the executable. -/
+def faultyLocktimeRevision (v : ExampleFaultyLocktime.Variant) :
+    BlockRevision ScriptError Unsupported Fields Fields :=
+  ExampleFaultyLocktime.blockRevision v coreVerifier
+
+/-- `ExampleVersionVerify` as a revision of the executable. -/
+def versionVerifyRevision :
+    BlockRevision ExampleVersionVerify.ExampleScriptError ExampleVersionVerify.ExampleScriptUnsupported Fields Fields :=
+  ExampleVersionVerify.blockRevision coreVerifier
+
+/-- `RelativeLockTime` as a revision of the executable. It has the rule of BIP 113 alone. -/
+def relativeLockTimeRevision : BlockRevision ScriptError Unsupported Fields Fields :=
+  RelativeLockTime.blockRevision coreVerifier
+
 /--
-The revisions that a request can name: the two examples of the `Proposals` library, with `coreVerifier`.
+The revisions that a request can name, with `coreVerifier`.
 `ExampleFaultyLocktime` has the variants `corrected` and `faulty`. `ExampleVersionVerify` has no variant.
-Neither is a proposal for Dogecoin.
+Neither example is a proposal for Dogecoin.
+`RelativeLockTime` is the revision of design record 0012, with the rule of BIP 113 alone. It has no variant.
 -/
 def revisions : List NamedRevision :=
   [⟨"ExampleFaultyLocktime", some "corrected",
-      revisedHook (ExampleFaultyLocktime.blockRevision .corrected coreVerifier) ScriptError.description reprStr⟩,
+      revisedHook (faultyLocktimeRevision .corrected) ScriptError.description reprStr,
+      revisedBody (faultyLocktimeRevision .corrected) noGuard⟩,
     ⟨"ExampleFaultyLocktime", some "faulty",
-      revisedHook (ExampleFaultyLocktime.blockRevision .faulty coreVerifier) ScriptError.description reprStr⟩,
+      revisedHook (faultyLocktimeRevision .faulty) ScriptError.description reprStr,
+      revisedBody (faultyLocktimeRevision .faulty) noGuard⟩,
     ⟨"ExampleVersionVerify", none,
-      revisedHook (ExampleVersionVerify.blockRevision coreVerifier) describeExampleError describeExampleUnsupported⟩]
+      revisedHook versionVerifyRevision describeExampleError describeExampleUnsupported,
+      revisedBody versionVerifyRevision noGuard⟩,
+    ⟨"RelativeLockTime", none,
+      revisedHook relativeLockTimeRevision ScriptError.description reprStr,
+      revisedBody relativeLockTimeRevision relativeLockTimeGuard⟩]
 
 /-- The activation with the height `height` on mainnet, and no activation on any other network. -/
 def mainnetActivation (height : Option Nat) : Activation :=
@@ -160,10 +253,10 @@ def mainnetActivation (height : Option Nat) : Activation :=
     | _ => none⟩
 
 /--
-The hook of a request: none without the argument `revision`, and the hook of the named revision with it.
+The revision of a request: none without the argument `revision`, and the named revision with its activation otherwise.
 The argument is an object with exactly the fields `name`, `variant` and `activation_height`.
 -/
-def revisionHook : HookReader := fun fields => do
+def requestRevision (fields : Args) : Except Failure (Option (NamedRevision × Activation)) := do
   let some value := fields.get? "revision" | return none
   let .obj revision := value | throw (.request "revision must be an object")
   for (key, _) in revision do
@@ -179,7 +272,11 @@ def revisionHook : HookReader := fun fields => do
     | _ => (fun h => some h.toNat) <$> argInt revision "activation_height" 0 2147483646
   let some named := revisions.find? fun r => r.name == name && r.variant == variant
     | throw (.request s!"unknown revision {name} with variant {variant.getD "null"}")
-  return some (named.hook (mainnetActivation height))
+  return some (named, mainnetActivation height)
+
+/-- The hook of a request: none without the argument `revision`, and the hook of the named revision with it. -/
+def revisionHook : HookReader := fun fields => do
+  return (← requestRevision fields).map fun (named, activation) => named.hook activation
 
 /-- The arguments that the proposal executable adds to `block.validate`. -/
 def revisionArgs : List String := ["revision"]
@@ -191,9 +288,38 @@ def blockValidate : Operation := blockValidateWith revisionArgs revisionHook
 def blockValidateFile (fields : Args) : IO (Except Failure Json) :=
   blockValidateFileWith revisionArgs revisionHook fields
 
-/-- Every operation of the proposal executable: those of `dogelib-oracle`, with `blockValidate` of this module in the place of the baseline one. -/
+/--
+`block.contextual_check_body` of the proposal executable: the baseline operation with the argument `revision`.
+Without the argument it runs the baseline operation.
+With it, the response of the baseline operation gains the object `revised`, which the body hook of the revision gives.
+A request on which the baseline operation returns an error returns that error.
+-/
+def contextualCheckBody : Operation where
+  name := Block.Exports.contextualCheckBody.name
+  args := Block.Exports.contextualCheckBody.args ++ revisionArgs
+  run fields := do
+    match ← requestRevision fields with
+    | none => Block.Exports.contextualCheckBody.run fields
+    | some (named, activation) =>
+      let base ← Block.Exports.contextualCheckBody.run (fields.erase "revision")
+      let mode ← argMode fields
+      let bs ← argHex fields "block_hex"
+      let chain ← Work.Exports.argView fields
+      match Block.decodeComplete mode bs with
+      | .error _ => throw (.request "the block does not decode")
+      | .ok b =>
+        let (_, csvActive, segwitActive, prevMtp) ← bodyStates chain
+        let ctx : ValidateContext :=
+          { view := chain, adjustedTime := 0, lastCheckpointHeight := none, csvActive, segwitActive,
+            prevMedianTimePast := prevMtp, bip34Ancestor := none }
+        return base.setObjVal! "revised" (named.body activation ctx b)
+
+/-- Every operation of the proposal executable: those of `dogelib-oracle`, with `blockValidate` and `contextualCheckBody` of this module in the place of the baseline ones. -/
 def operations : List Operation :=
-  DogeLib.Exports.operations.map fun op => if op.name == blockValidate.name then blockValidate else op
+  DogeLib.Exports.operations.map fun op =>
+    if op.name == blockValidate.name then blockValidate
+    else if op.name == contextualCheckBody.name then contextualCheckBody
+    else op
 
 /-- Answer a line in `IO`, as the `dogelib-proposal-oracle` executable does. -/
 def respondIO (line : String) : IO (Option Json) :=

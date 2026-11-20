@@ -325,7 +325,9 @@ The candidate height and the CSV and SegWit activeness of a `block.contextual_ch
 The candidate height is the predecessor's height plus one.
 Below the first period the aligned boundary is null, and both states are `DEFINED`.
 Otherwise the chain reaches the aligned boundary, whose median time past gives the states through `versionBitsStateFromBoundary`, and the case-3 gap is an adapter error outside the comparison domain.
-A predecessor at height 2147483646 or above is outside Core's signed-`int` range for the candidate height, and gives an adapter error.
+
+A predecessor at height 2147483646 or above gives an adapter error.
+Core can represent the candidate height 2147483647, so this limit is the adapter's own and narrower than Core's domain.
 The returned median time is the aligned boundary's, a stand-in for the predecessor's own: on mainnet both states are never `ACTIVE`, so the body never reads it.
 -/
 def bodyStates (chain : List Work.BlockIndex) : Except Failure (Nat × Bool × Bool × Int) := do

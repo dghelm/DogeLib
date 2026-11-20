@@ -80,7 +80,7 @@ gh pr list --state merged --limit 200 --json number,title,mergedAt
 Group the entries by layer, and link each capability to its row in [COVERAGE.md](../COVERAGE.md#operations).
 Name each breaking change, from the titles with `!`.
 State the boundaries of the release, as the [status in README.md](../README.md#status) gives them.
-For example, DogeLib does not specify the contextual header checks other than version gating, or block validity.
+For example, DogeLib does not specify `ConnectBlock` on testnet and regtest, or chain selection.
 Check the notes with the writing checker:
 
 ```bash

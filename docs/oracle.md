@@ -340,7 +340,8 @@ The array must have at most 2^31 entries.
 A larger array is a request error before Merkle computation.
 This caller bound avoids counter wrap in Core's final sweep ([D42, `MerkleComputation`](https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/consensus/merkle.cpp)).
 The Lean specification `computeMerkleRoot` has no such bound.
-No operation checks transaction validity, witness commitments or full block validity.
+The hash, header and Merkle operations do not check transaction or block validity.
+[Transaction and block checks](#transaction-and-block-checks) and [block validation](#block-validation) describe the operations that do.
 
 ### Work arguments
 
@@ -674,6 +675,9 @@ It has three required fields:
   Otherwise it reaches the aligned version-bits boundary and its predecessors, for the boundary's median time.
 
 The candidate height is the predecessor's height plus one.
+A predecessor at height 2,147,483,646 or above is a request error in the oracle.
+Core can represent the candidate height 2,147,483,647, and the harness accepts a predecessor at 2,147,483,646, so this limit is narrower than Core's domain.
+The comparator fails on a request error, so no compared request has such a predecessor.
 The body reads the version-bits states of CSV and SegWit only to test whether either is active.
 `csv_never_lockedIn` and `segwit_never_active` show that neither is active on a header chain from the mainnet genesis in which every header passed `checkBlockHeader .mainnet`.
 
@@ -709,7 +713,7 @@ The request supplies the state before the first block, and the operation carries
 - `adjusted_time`: the adjusted time of step 2, as for `block.contextual_check`.
 - `chain`: the view of the predecessor of the first block, newest first, each entry `{height, time, bits}`, as for `block.contextual_check_body`.
   It is empty exactly when the range starts at the genesis block.
-  A predecessor at height 2,147,483,646 or above is a request error in both programs, as for `block.contextual_check_body`.
+  A predecessor at height 2,147,483,646 or above is a request error in both programs, and in the oracle for [`block.contextual_check_body`](#contextual-block-body).
   Core can represent the candidate height 2,147,483,647, so this limit is narrower than Core's domain, and no request compares that height.
 - `bip34_ancestor_hex`: the hash of the ancestor at height 1,034,383 of the predecessor, in serialization order, or null when the predecessor is below that height.
   `ConnectBlock` skips the BIP30 test when that hash is `BIP34Hash`, which never happens on mainnet (design record 0010, section 2).

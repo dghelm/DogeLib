@@ -1070,7 +1070,9 @@ The kernel evaluates the array updates of `seed` and `twist` slowly, so the proo
 The evaluator is in the proof library, and no compiled code runs it.
 
 No theorem states a distribution of the subsidy, and none bounds its value.
-The definition does not model `ConnectBlock`, which adds the fees and compares the sum with the coinbase value (D101, line 1996).
+`getDogecoinBlockSubsidy` does not read a coinbase.
+`connectBlock` adds the fees to the subsidy and compares the sum with the coinbase value (D101, line 1996).
+[`connect_value_bound`](#connect_value_bound-a-block-adds-at-most-its-subsidy) bounds the value that an accepted block adds by its subsidy, on a coin set whose amounts are in range.
 
 The comparison evidence is in [COVERAGE.md](COVERAGE.md#operations).
 `lake test` runs Core's three subsidy tests (D105) through the compiled code.
@@ -3750,7 +3752,9 @@ The comparison trusts this seed ([the contextual block body](#the-contextual-blo
 
 The oracle computes the candidate height and the two states from the same chain:
 
-- It refuses a predecessor at height 2147483646 or above, which is outside Core's signed `int` range for the candidate height.
+- It refuses a predecessor at height 2147483646 or above.
+  Core can represent the candidate height 2147483647, and the harness accepts a predecessor at 2147483646.
+  So this limit is the oracle's own, and narrower than Core's domain.
 - It gives each state from the median time of the aligned boundary through `versionBitsStateFromBoundary`, and an adapter error between the CSV start and timeout.
 - It passes the median time of the aligned boundary to the body in place of the median time of the predecessor.
   `versionBitsStateFromBoundary` never returns `ACTIVE`, and the body reads that value only when CSV is active.

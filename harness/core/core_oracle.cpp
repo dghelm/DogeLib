@@ -63,9 +63,11 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <deque>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <limits>
 #include <map>

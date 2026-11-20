@@ -723,6 +723,8 @@ The request supplies the state before the first block, and the operation carries
   Each output is `{n, value, script_hex}`, where `n` is the output index, below 1,048,576, and `value` is a string of decimal digits.
   A transaction ID occurs once, and each entry has at least one output.
   A script that Core's `IsUnspendable` rejects is a request error, because such an output never enters Core's set.
+- `coins_file`: in the place of `coins`, the path of a coin-set snapshot (see *Coin-set snapshots* below).
+  A request has exactly one of the two, and `coins_file` needs `blocks_file`.
 - `blocks_hex`: the blocks, each one all of its bytes.
 - `blocks_file`: in the place of `blocks_hex`, the path of a file that holds the blocks (see *Blocks from a file* below).
   A request has exactly one of the two.
@@ -744,6 +746,8 @@ The result has five fields:
 - `set_coins`: the number of coins in that set.
 - `set_value`: the total value of that set (see *Total value* below).
 
+A request with `coins_file` has two more fields: `start_set_digest_hex` and `start_set_coins`, the digest and the number of the coins of the snapshot.
+
 Each record has these fields:
 
 | Field | Value |
@@ -751,7 +755,7 @@ Each record has these fields:
 | `height`, `hash_hex`, `hash_display` | The height of the candidate, and its hash in both byte orders |
 | `valid`, `reject_reason`, `dos`, `reject_code` | The verdict of the first failing step, as for `block.check` |
 | `changes_digest_hex`, `spent`, `created` | For an accepted block: the digest of its changes, and the numbers of spent and created coins. Null for a rejected block |
-| `set_digest_hex` | The digest of the coin set after an accepted block whose height is a multiple of 1,000. Null otherwise |
+| `set_digest_hex` | The digest of the coin set after an accepted block whose height is a multiple of 1,000. Null otherwise, and null in every record of a request with `coins_file` |
 | `set_value` | The total value of the same set, exactly where `set_digest_hex` is not null. Null otherwise |
 | `diagnostic` | Lean only: the name of the failing step and the Lean error, or null |
 
@@ -826,9 +830,91 @@ The executable writes one line to standard error after each accepted block whose
 A file request has no `blocks_hex` list to shorten.
 So the comparison fails if the oracle ends the range of a file at a block outside the arithmetic domain.
 
+#### Coin-set snapshots
+
+A *snapshot* is a coin set as a file, in the format `dogelib-coins/1` ([design record 0011](design/0011-mainnet-ranges.md), section 3).
+A request with `coins_file` names a snapshot as the coin set before its first block.
+A relative path starts at the working directory of the program.
+
+**The file.**
+A snapshot is the coin records of the whole set under the tag 2, one after the other, in the order of `set_digest_hex` ([digests](#digests)).
+The transaction IDs are in the order of their 32 bytes, and the outputs of one ID are in index order.
+The file has no header, no count and no other framing.
+A record has 50 bytes before the length of its script: the tag, the outpoint, the height, the coinbase byte and the amount.
+The CompactSize length of the script and the script follow.
+One coin set has exactly one byte sequence as its snapshot.
+The digest of the set is the digest chain over the records, in the order of the file.
+
+**The checks.**
+Both programs read the records in order, and return an error at the first fault.
+`record` in the error is the position of the record, from 0.
+For one record, the checks run in the order of this table:
+
+| `reason` | Fault |
+| --- | --- |
+| `coins_file_truncated` | The file ends inside a record |
+| `coins_file_tag` | The tag is not 2 |
+| `coins_file_index` | The output index is 1,048,576 or more |
+| `coins_file_height` | The height is above 2,147,483,646 |
+| `coins_file_coinbase` | The coinbase byte is not 0 or 1 |
+| `coins_file_value` | The amount is above `MAX_MONEY` as an unsigned 64-bit number. That includes every negative `int64_t` amount, and the -1 of Core's null output |
+| `coins_file_script_length` | The length of the script is not in the shortest CompactSize form |
+| `coins_file_script` | Core's `IsUnspendable` rejects the script: it has more than 10,000 bytes, or its first byte is `OP_RETURN`. A reader does not read a script above 10,000 bytes |
+| `coins_file_order` | The record is not above the record before it in the order of the set |
+| `coins_file_entry` | The record has the transaction ID of the record before it, and another height or coinbase byte |
+
+A file that ends inside the first 50 bytes of a record, inside the length or inside the script is truncated.
+So a byte after the last complete record is the error `coins_file_truncated`.
+`coins_file_unreadable` is the error of a file that does not open, or of a read that fails.
+The limits on the amount, the index, the script and the height are those of the `coins` argument.
+
+**The manifest.**
+A manifest is a JSON object that names one snapshot:
+
+| Field | Value |
+| --- | --- |
+| `format` | `dogelib-coins/1` |
+| `height` | The height of the last accepted block |
+| `block_hash_hex`, `block_hash_display` | The hash of that block, in both byte orders |
+| `coins` | The number of records |
+| `set_digest_hex` | The digest of the set |
+| `set_value` | The total value of the set, as `set_value` of the result |
+| `bytes`, `sha256` | The length and the SHA-256 of the file |
+
+The digest of a coin set does not commit to a block.
+So a range from a snapshot needs the manifest: its first block must name `block_hash_hex` as its previous hash, and `scripts/snapshot_range.py` requires that.
+The manifests of the snapshots of the recorded runs are in `tests/block/mainnet-blocks/snapshots`.
+The snapshot files are not committed and are not release assets.
+
+**The oracle.**
+The oracle does not hold the whole set of a snapshot.
+Let `T` be the transaction IDs that the blocks of the request name: the ID of each transaction, and the ID in the outpoint of each input.
+`Block.Exports.blockValidateSnapshot` works in four steps:
+
+1. It reads the blocks once and collects `T`.
+2. It reads the snapshot once. It computes `start_set_digest_hex` over all records, and keeps the coins whose ID is in `T`.
+3. It runs the blocks on the kept coins. Before each block, it requires that `T` holds every ID that the block names. A block that names another ID is the error `blocks_file_changed`, which can occur only if the file changes between the two reads.
+4. It reads the snapshot again, and computes `set_digest_hex`, `set_coins` and `set_value` of the set after the last record. That set is the records of the file whose ID is not in `T`, merged in order with the entries of the run. A file with another number of records than in step 2 is the error `coins_file_changed`.
+
+The theorem `validateBlock_restrict` is the reason for step 4 ([SOUNDNESS.md](../SOUNDNESS.md#validateblock_restrict-a-block-on-the-coins-that-it-names)).
+On a coin set and on its restriction to `T`, `validateBlock` gives the same error, or the same coin changes.
+The new set then has the entries of the restricted run at the IDs of `T`, and the entries of the old set at every other ID.
+No theorem covers the reads of the two files or the merge of step 4.
+
+The oracle alone takes the optional argument `coins_in_memory`, a Boolean.
+With the value true, the oracle keeps every coin of the snapshot and runs the blocks on the whole set.
+It computes the last digest from that set, as for a request with `coins`.
+That form reads the snapshot once and does not use the merge.
+The result has the same fields and, for one request, must have the same values.
+
+`Exports.respondIO` answers a request with `coins_file`, as it answers one with `blocks_file`.
+`Exports.respond` returns a request error for the argument.
+The executable writes one line to standard error after each read of the snapshot.
+
 #### Errors
 
 A block that does not read gives the `read` or `trailing_bytes` error of `block.check`, with the position of the block as `index`.
+The errors of a snapshot are in the table [above](#coin-set-snapshots), and they have `record` in the place of `index`.
 The other errors have the kind `block_validate`, a `reason`, and `index` when a block causes them:
 
 | `reason` | Condition |
@@ -841,6 +927,9 @@ The other errors have the kind `block_validate`, a `reason`, and `index` when a 
 | `file_truncated` | The file ends inside the 8 bytes before a block, or inside a block |
 | `file_record_too_long` | A record of the file gives a length above 33,554,432 bytes |
 | `file_height` | A record of the file gives a height that is not the height of its candidate |
+| `blocks_file_changed` | Oracle only, with `coins_file`: a block names a transaction ID that the first read of `blocks_file` did not find |
+| `coins_file_changed` | Oracle only: the second read of `coins_file` finds another number of records than the first |
+| `snapshot_unwritable` | Harness only: a snapshot file of `snapshot_dir` does not open, or a write of it fails |
 | `outside_model` | `validateBlock` returned a result that is not Core's, and `detail` holds the Lean error. The cases are an adapter error of an earlier step, an active CSV state, an unsupported script capability, a subsidy without fuel, and a repeated transaction ID outside a coinbase |
 
 ### Block subsidy
@@ -1177,6 +1266,25 @@ The code builds their inputs, and makes these choices (design record 0010, secti
 - **Refusals.** The harness refuses a request whose chain is too short for Core's other reads: the median time, the retarget history, and the aligned version-bits boundary with its ten predecessors. So Core never reads the added predecessor as history.
 - **Version bits.** The harness seeds `THRESHOLD_FAILED` at a boundary at or after the CSV timeout, as for `block.contextual_check_body` (design record 0010, decision 3).
 - **Restored state.** Every exit clears `mapBlockIndex` and the version-bits cache, and restores `fCheckpointsEnabled` and the mock time.
+- **Snapshots.** With `coins_file`, the harness loads every record of the snapshot into the carried set, and reports the digest and the number of the records. Its checks and their order are those of the oracle's reader.
+
+The harness alone takes three more arguments ([design record 0011](design/0011-mainnet-ranges.md), section 3.2):
+
+- `snapshot_heights` with `snapshot_dir`: a list of heights in increasing order, and the path of a directory. After the accepted block at each listed height, the harness writes the carried set as the snapshot `coins-<height>.bin` in that directory. It writes a temporary file first and renames it.
+- `digest_heights`: a list of heights in increasing order. After the accepted block at each listed height, the harness computes the digest of the whole set.
+
+The result then has `snapshots` and `set_digests`, one entry for each listed height that an accepted block reached, in order.
+An entry of `set_digests` has `height`, `set_digest_hex`, `set_coins` and `set_value`.
+An entry of `snapshots` has those fields, the hash of the block as `hash_hex` and `hash_display`, and `file`, `bytes` and `sha256` of the written file.
+`scripts/snapshot_range.py` writes the manifest from that entry, after it computes each value again from the file.
+The oracle returns a request error for the three arguments.
+
+One function of the harness, `visitSet`, walks the carried set, one `CCoins` entry at a time in the order of the transaction IDs.
+The digest of the whole set and the snapshot writer read the set through it alone.
+[Stage 0](#measurements-for-the-core-pass) chose Core's `CCoinsViewDB` for the Core pass.
+That change needs a second `visitSet` over the cursor of that view, and no change to the digest or the writer.
+The cursor visits the same entries in the same order (`src/txdb.cpp`, lines 93 to 104).
+The harness still carries the set in its map.
 
 The harness reads the changes of an accepted block from a second `CCoinsViewCache` over the set before the block.
 For each transaction in order, it reads the entry of each input, calls Core's `UpdateCoins`, and reads the new entry.
@@ -1763,6 +1871,87 @@ The run is evidence for these blocks alone, and it is one run.
 A node supplied the blocks above height 10,000.
 Each has a pinned hash, and the [fixtures](../tests/block/mainnet-blocks/README.md) state what a pinned hash commits to.
 Blocks above height 145,000 are not replayed.
+
+#### Ranges from a snapshot
+
+`scripts/snapshot_range.py` runs a range of mainnet blocks from a [coin-set snapshot](#coin-set-snapshots) in both programs.
+It is the gate of [design record 0011](design/0011-mainnet-ranges.md), stage 1, which tests the snapshot path on blocks that the replay from the genesis block covers.
+A range from the height `a + 1` to the height `b` starts from the snapshot at `a`.
+
+The script first lets the harness replay the blocks from the genesis block, from the empty coin set.
+In that *pass* the harness writes each snapshot and reports the digest of the whole set at `b`.
+The script computes the SHA-256, the digest, the number of coins and the total value of each snapshot again from the file.
+It requires the values of the harness and the committed [manifest](../tests/block/mainnet-blocks/README.md#coin-set-snapshots).
+Both programs then get one request with `coins_file` and the blocks of the range.
+A range agrees when all of these hold:
+
+- Both programs report the digest and the number of coins of the manifest as the start.
+- Both programs accept every block, with equal block records.
+- Both programs report the digest of the pass at `b` as the end.
+- The block records equal those of the same heights in the pass, without the digests of the whole set.
+- The oracle with `coins_in_memory` returns the same `ok` object.
+
+The script also runs 29 changed copies of the snapshot, each with the first 10 blocks of the range, in both programs:
+
+| Change | Cases | Required result |
+| --- | ---: | --- |
+| Another amount, script, height or coinbase byte in one record. A removed record and an added record | 6 | Both programs report a start digest that is not the manifest's. It is the digest that the script computes from the changed file. The script also accepts the error `not_linked` from both programs, after a block that the changed coin makes both reject. In the two recorded runs, all six gave a changed start digest |
+| Two records in the wrong order, and one record twice | 2 | `coins_file_order` |
+| A file that ends inside a record, and a byte after the last record | 4 | `coins_file_truncated` |
+| Each other fault of the [checks](#coin-set-snapshots): the tag, the entry, the amount with the values `MAX_MONEY` + 1, -1 and another negative number, the index, the script, the height, the coinbase byte and the length of the script | 15 | The error of the fault, with the position of the record |
+| A removed record whose transaction ID a block of the request names | 1 | A changed start digest, or the error `not_linked` after a block that both programs reject |
+| A removed record whose transaction ID no block of the request names | 1 | Both programs return the block records of the unchanged snapshot. The start digest and the end digest differ from those of the unchanged snapshot |
+
+The last step runs the 33 small requests of the [full comparison](#block-validation-comparison-evidence) that have one record for each block, with their coins in a snapshot.
+Both programs must return the result of the request with `coins`, without the digests of the whole set in the block records.
+The start digest must be the one that `Model` of `scripts/oracle_block_validate.py` computes.
+These requests hold rejected blocks, the BIP30 cases and the script failures.
+`scripts/test_oracle.py` runs the same requests and 33 changed synthetic snapshots or requests in the oracle alone.
+
+**The short form.**
+CI runs the script on the released blocks of heights 0 to 10,000, with the snapshot at height 9,000.
+The snapshot has 114,056 coins and 8,719,196 bytes.
+Heights 9,001 to 10,000 agree: the blocks spend 47,185 coins and create 76,506, and the set after height 10,000 has the 143,377 coins of the replay.
+On a development machine the run takes about 160 seconds on two cores, of which each oracle run of the range is about 106 seconds.
+
+**Range S.**
+This part records one run of range S of the design record, heights 100,001 to 101,000, on 2026-11-20.
+It is the gate *Snapshot range S* of [AGENTS.md](../AGENTS.md#checks), and it is not in CI.
+
+| Input | Value |
+| --- | --- |
+| Oracle and Core harness | Built from commit `f42b049` of the pull request, with Core at `e0a1c157` |
+| Blocks | The fixtures of the [replay to height 145,000](#replay-of-mainnet-to-height-145000). The file of all 145,001 blocks has the SHA-256 value `5295801124f275bd7b6aad9f60bc734631e8157d99a07d8a9c66ee8f2bd034e3` of that replay |
+| Command | The gate command, with `--write-manifests`, because the run wrote the two committed manifests |
+
+The pass took 1,524 seconds, and the harness accepted every block.
+
+| Snapshot | Coins | Bytes | Digest of the set | SHA-256 of the file |
+| --- | ---: | ---: | --- | --- |
+| Height 100,000 | 5,556,212 | 422,359,596 | `dda64f97c6bc79ee64954d5e95ba26fb207c15b5255ffd041be333d6cbe4e817` | `fc9a4ebf7a2ef72a555aa1caf06583160d1e5785d18738cca729d3cd3783bca9` |
+| Height 145,000 | 5,094,671 | 387,316,918 | `b28411dc46135fd0f85c954a664866d4f610803f7d667c9d2032ddfd6c58716d` | `0fa2f2a1e1aa43c54bf877e5aed1884cb9731412c45a06c9b8a9c84ad0b32012` |
+
+The snapshot at height 145,000 has the number of coins and the digest of the recorded replay.
+The script holds both values as constants and requires them in every run.
+So the harness's snapshot at that height is the set that the oracle reached from the empty set, if double SHA-256 is collision resistant.
+
+Range S agrees.
+Both programs start from 5,556,212 coins with the digest of the manifest, and accept all 1,000 blocks with equal block records.
+The blocks spend 121,665 coins and create 151,427.
+Both programs end with 5,585,974 coins and the digest `e6aeca49614547750a803c3d4dd85f6986f69f819a207531f896e1aa7840aa1b`, which the pass reports at height 101,000.
+The block records equal those of the pass at the same heights.
+The oracle with `coins_in_memory` returns the same `ok` object.
+All 29 changed snapshots give their required results.
+
+Core took 18 seconds for the range.
+The oracle took 682 seconds on the coins that the blocks name, with its two reads of the snapshot, and 728 seconds with `coins_in_memory`.
+A separate run of the first form alone had a peak resident memory of 317 MB.
+The whole run took about 60 minutes on four cores at low priority, on a machine that ran other work.
+
+The run is evidence for these blocks, and it is one run.
+It tests the snapshot path: every block of the range is also in the replay from the genesis block, so the range adds no agreement on a new block.
+The oracle did not check the blocks between heights 101,001 and 145,000 in this run.
+The hypothesis of section 3.4 of the design record applies to every later range from a snapshot: the comparison does not show that the snapshot is Core's coin set.
 
 #### Measurements for the Core pass
 

@@ -137,3 +137,11 @@ jobs:
       - name: replay tool self-test
         if: ${{ !cancelled() }}
         run: python3 -I scripts/test_replay_blocks.py .lake/build/bin/dogelib-oracle build/core-harness/core-oracle build/mainnet-blocks
+
+      # Design record 0011, stage 1, exit condition 5: the snapshot path on
+      # the downloaded heights 0 to 10,000. Core writes the coin-set snapshot
+      # at height 9,000, and both programs run heights 9,001 to 10,000 from
+      # it. Changed snapshots must fail.
+      - name: snapshot range, short form
+        if: ${{ !cancelled() }}
+        run: time python3 -I scripts/snapshot_range.py --start 9000 --end 10000 --output build/snapshot-range/short .lake/build/bin/dogelib-oracle build/core-harness/core-oracle build/mainnet-blocks/genesis-10000

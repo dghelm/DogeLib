@@ -19,6 +19,18 @@
 //   cache is discarded, because UpdateCoins runs before the coinbase check.
 // - mapBlockIndex holds the entry of the view's best block, which CheckInputs
 //   reads for the spend height.
+//
+// Coin-set snapshots (design record 0011, section 3, and docs/oracle.md):
+// - `coins_file` names a snapshot in the format dogelib-coins/1, in the place
+//   of `coins`. readSnapshot loads the whole file into the carried set.
+// - `snapshot_heights` with `snapshot_dir` writes the carried set as a
+//   snapshot after the accepted block at each listed height, and
+//   `digest_heights` reports the digest of the set at each listed height.
+// - visitSet is the only code that walks the carried set. The digest and the
+//   snapshot writer read the set through it, one CCoins entry at a time, in
+//   the order of the transaction IDs. A set in Core's CCoinsViewDB needs
+//   another visitSet alone, over the cursor of that view, which visits the
+//   same entries in the same order (src/txdb.cpp, lines 93 to 104).
 
 // The carried coin set: a CCoinsView over a map, as CCoinsViewTest of Core's
 // src/test/coins_tests.cpp, without that class's random choices. An entry that
@@ -52,16 +64,27 @@ public:
     }
 };
 
-// One step of a digest chain: the double SHA-256 of the digest so far, the
-// tag, the outpoint, the height, the coinbase flag and the serialized output.
-void digestCoin(uint256& digest, unsigned char tag, const COutPoint& outpoint, const CCoins& entry, const CTxOut& out)
+// The record of one coin under a tag: the tag, the outpoint, the height, the
+// coinbase flag and the serialized output (docs/oracle.md, "Digests").
+CDataStream coinRecord(unsigned char tag, const COutPoint& outpoint, const CCoins& entry, const CTxOut& out)
 {
     CDataStream record(SER_NETWORK, PROTOCOL_VERSION);
     record << tag << outpoint << static_cast<uint32_t>(entry.nHeight) << static_cast<unsigned char>(entry.fCoinBase ? 1 : 0) << out;
+    return record;
+}
+
+// One step of a digest chain: the double SHA-256 of the digest so far and the record.
+void digestRecord(uint256& digest, const CDataStream& record)
+{
     CHash256 hasher;
     hasher.Write(digest.begin(), 32);
     hasher.Write(reinterpret_cast<const unsigned char*>(record.data()), record.size());
     hasher.Finalize(digest.begin());
+}
+
+void digestCoin(uint256& digest, unsigned char tag, const COutPoint& outpoint, const CCoins& entry, const CTxOut& out)
+{
+    digestRecord(digest, coinRecord(tag, outpoint, entry, out));
 }
 
 // The whole set: its digest, the number of its coins, and the sum of their
@@ -83,24 +106,37 @@ std::string decimal(unsigned __int128 n)
     return digits;
 }
 
-// The summary of the whole set. std::map visits the transaction IDs in the
-// order of uint256::Compare, which compares the bytes. The sum of the amounts
-// can exceed the int64_t range of CAmount, so it is a 128-bit sum: each amount
-// is at most MAX_MONEY, so no sum of fewer than 2^64 coins overflows it.
-SetSummary setDigest(const MemoryCoinsView& store)
+// Every entry of the carried set, in the order of the transaction IDs.
+// std::map visits them in the order of uint256::Compare, which compares the
+// bytes. This function is the only walk of the set (see the head of the file).
+template <typename Visit>
+void visitSet(const MemoryCoinsView& store, Visit visit)
+{
+    for (const auto& item : store.coins) visit(item.first, item.second);
+}
+
+// The summary of the whole set. `sink`, when it is not null, gets the record
+// of each coin in the order of the digest: the bytes of a snapshot file. The
+// sum of the amounts can exceed the int64_t range of CAmount, so it is a
+// 128-bit sum: each amount is at most MAX_MONEY, so no sum of fewer than 2^64
+// coins overflows it.
+template <typename Store>
+SetSummary setDigest(const Store& store, const std::function<void(const CDataStream&)>* sink = nullptr)
 {
     SetSummary summary;
     unsigned __int128 value = 0;
-    for (const auto& item : store.coins) {
-        for (size_t n = 0; n < item.second.vout.size(); ++n) {
-            const CTxOut& out = item.second.vout[n];
+    visitSet(store, [&](const uint256& txid, const CCoins& entry) {
+        for (size_t n = 0; n < entry.vout.size(); ++n) {
+            const CTxOut& out = entry.vout[n];
             if (out.IsNull()) continue;
-            digestCoin(summary.digest, 2, COutPoint(item.first, static_cast<uint32_t>(n)), item.second, out);
+            const CDataStream record = coinRecord(2, COutPoint(txid, static_cast<uint32_t>(n)), entry, out);
+            digestRecord(summary.digest, record);
+            if (sink) (*sink)(record);
             ++summary.count;
             if (!MoneyRange(out.nValue)) throw UnmappedCoreError{"a coin of the set has an amount outside MoneyRange"};
             value += static_cast<unsigned __int128>(out.nValue);
         }
-    }
+    });
     summary.value = decimal(value);
     return summary;
 }
@@ -112,6 +148,154 @@ UniValue validateFailure(const std::string& reason, int64_t index = -1)
     error.pushKV("reason", reason);
     if (index >= 0) error.pushKV("index", index);
     return error;
+}
+
+// A fault of a snapshot file. `record` is the position of the coin record.
+UniValue coinsFileFailure(const std::string& reason, int64_t record = -1)
+{
+    UniValue error(UniValue::VOBJ);
+    error.pushKV("kind", "block_validate");
+    error.pushKV("reason", reason);
+    if (record >= 0) error.pushKV("record", record);
+    return error;
+}
+
+// The digest and the number of the coins of a snapshot file.
+struct SnapshotStart {
+    uint256 digest;
+    uint64_t count = 0;
+};
+
+// Read a snapshot in the format dogelib-coins/1 into the empty set `store`
+// (docs/oracle.md, "Coin-set snapshots"). The file is the coin records of a
+// whole set under the tag 2, in the order of the digest. The checks and their
+// order are those of the oracle's reader.
+SnapshotStart readSnapshot(const std::string& path, MemoryCoinsView& store)
+{
+    std::ifstream file(path, std::ios::binary);
+    if (!file) throw SpecError{coinsFileFailure("coins_file_unreadable")};
+    auto littleEndian = [](const unsigned char* p, int bytes) -> uint64_t {
+        uint64_t n = 0;
+        for (int i = bytes; i-- > 0;) n = n << 8 | p[i];
+        return n;
+    };
+    SnapshotStart start;
+    uint256 lastTxid;
+    uint32_t lastIndex = 0;
+    CCoins* current = nullptr;
+    std::vector<unsigned char> script;
+    for (int64_t record = 0;; ++record) {
+        // Fills `to` with `count` bytes. False at the end of the file before the first byte.
+        auto fill = [&](unsigned char* to, std::streamsize count, bool first) -> bool {
+            file.read(reinterpret_cast<char*>(to), count);
+            if (file.bad()) throw SpecError{coinsFileFailure("coins_file_unreadable")};
+            if (first && file.gcount() == 0) return false;
+            if (file.gcount() != count) throw SpecError{coinsFileFailure("coins_file_truncated", record)};
+            return true;
+        };
+        // The fixed part: the tag, the outpoint, the height, the coinbase byte and the amount.
+        unsigned char head[50];
+        if (!fill(head, 50, true)) break;
+        if (head[0] != 2) throw SpecError{coinsFileFailure("coins_file_tag", record)};
+        uint256 txid;
+        std::copy(head + 1, head + 33, txid.begin());
+        const uint64_t index = littleEndian(head + 33, 4);
+        const uint64_t height = littleEndian(head + 37, 4);
+        const unsigned char coinbase = head[41];
+        const uint64_t amount = littleEndian(head + 42, 8);
+        if (index > 1048575) throw SpecError{coinsFileFailure("coins_file_index", record)};
+        if (height > 2147483646) throw SpecError{coinsFileFailure("coins_file_height", record)};
+        if (coinbase > 1) throw SpecError{coinsFileFailure("coins_file_coinbase", record)};
+        // A negative int64_t amount, such as the -1 of a null output, is above MAX_MONEY as uint64_t.
+        if (amount > static_cast<uint64_t>(MAX_MONEY)) throw SpecError{coinsFileFailure("coins_file_value", record)};
+        // The length of the script, in the shortest CompactSize form.
+        unsigned char size[8];
+        fill(size, 1, false);
+        uint64_t length = size[0];
+        if (size[0] >= 253) {
+            const int bytes = size[0] == 253 ? 2 : size[0] == 254 ? 4 : 8;
+            fill(size, bytes, false);
+            length = littleEndian(size, bytes);
+            const uint64_t least = bytes == 2 ? 253 : bytes == 4 ? 0x10000ULL : 0x100000000ULL;
+            if (length < least) throw SpecError{coinsFileFailure("coins_file_script_length", record)};
+        }
+        // A script above MAX_SCRIPT_SIZE is unspendable, so the reader does not read it.
+        if (length > MAX_SCRIPT_SIZE) throw SpecError{coinsFileFailure("coins_file_script", record)};
+        script.resize(length);
+        if (length != 0) fill(script.data(), static_cast<std::streamsize>(length), false);
+        const CScript scriptPubKey(script.begin(), script.end());
+        if (scriptPubKey.IsUnspendable()) throw SpecError{coinsFileFailure("coins_file_script", record)};
+        // The order of the set: the transaction IDs by their bytes, then the output indexes.
+        const bool sameTxid = current && txid == lastTxid;
+        if (current && !(lastTxid < txid || (sameTxid && lastIndex < index)))
+            throw SpecError{coinsFileFailure("coins_file_order", record)};
+        if (sameTxid) {
+            if (static_cast<uint64_t>(current->nHeight) != height || current->fCoinBase != (coinbase == 1))
+                throw SpecError{coinsFileFailure("coins_file_entry", record)};
+        } else {
+            current = &store.coins.emplace_hint(store.coins.end(), txid, CCoins())->second;
+            current->fCoinBase = coinbase == 1;
+            current->nHeight = static_cast<int>(height);
+            current->nVersion = 1;
+        }
+        current->vout.resize(index + 1);
+        current->vout[index] = CTxOut(static_cast<CAmount>(amount), scriptPubKey);
+        lastTxid = txid;
+        lastIndex = static_cast<uint32_t>(index);
+        digestCoin(start.digest, 2, COutPoint(txid, lastIndex), *current, current->vout[index]);
+        ++start.count;
+    }
+    return start;
+}
+
+// Write the set as the snapshot file `name` of the directory `dir`, through a
+// temporary file. The result is the record of the snapshot in the response.
+template <typename Store>
+UniValue writeSnapshot(const Store& store, const std::string& dir, int height, const uint256& hash)
+{
+    const std::string name = "coins-" + std::to_string(height) + ".bin";
+    const std::string path = dir + "/" + name;
+    const std::string temporary = path + ".tmp";
+    std::ofstream file(temporary, std::ios::binary | std::ios::trunc);
+    if (!file) throw SpecError{coinsFileFailure("snapshot_unwritable")};
+    CSHA256 hasher;
+    uint64_t bytes = 0;
+    const std::function<void(const CDataStream&)> sink = [&](const CDataStream& record) {
+        file.write(record.data(), static_cast<std::streamsize>(record.size()));
+        hasher.Write(reinterpret_cast<const unsigned char*>(record.data()), record.size());
+        bytes += record.size();
+    };
+    const SetSummary summary = setDigest(store, &sink);
+    file.close();
+    if (!file || std::rename(temporary.c_str(), path.c_str()) != 0) throw SpecError{coinsFileFailure("snapshot_unwritable")};
+    unsigned char sha256[CSHA256::OUTPUT_SIZE];
+    hasher.Finalize(sha256);
+    UniValue snapshot(UniValue::VOBJ);
+    snapshot.pushKV("height", height);
+    pushHash(snapshot, "hash", hash);
+    snapshot.pushKV("file", name);
+    snapshot.pushKV("bytes", bytes);
+    snapshot.pushKV("sha256", hex(sha256, sha256 + CSHA256::OUTPUT_SIZE));
+    snapshot.pushKV("set_digest_hex", hex(summary.digest.begin(), summary.digest.end()));
+    snapshot.pushKV("set_coins", summary.count);
+    snapshot.pushKV("set_value", summary.value);
+    return snapshot;
+}
+
+// A list of heights in increasing order, or the empty list without the argument.
+std::vector<int> argHeights(const UniValue& req, const std::string& key)
+{
+    std::vector<int> heights;
+    if (!req.exists(key)) return heights;
+    const UniValue& list = arg(req, key);
+    if (!list.isArray()) throw RequestError{key + " must be an array"};
+    for (size_t i = 0; i < list.size(); ++i) {
+        UniValue field(UniValue::VOBJ);
+        field.pushKV(key, list[i]);
+        heights.push_back(static_cast<int>(argInt(field, key, 0, 2147483646)));
+        if (i > 0 && heights[i - 1] >= heights[i]) throw RequestError{key + " must be in increasing order"};
+    }
+    return heights;
 }
 
 // The supplied coin set. The checks are those of the oracle's adapter.
@@ -158,9 +342,20 @@ UniValue blockValidate(const UniValue& req)
 {
     // The blocks come from `blocks_hex`, or from the file that `blocks_file` names.
     const bool fromFile = req.exists("blocks_file");
+    // The coin set comes from `coins`, or from the snapshot that `coins_file` names.
+    const bool coinsFromFile = req.exists("coins_file");
     checkArgs(req, "block.validate", {"mode", "check_pow", "check_merkle_root", "adjusted_time", "chain",
-                                      "bip34_ancestor_hex", "coins", fromFile ? "blocks_file" : "blocks_hex"});
+                                      "bip34_ancestor_hex", coinsFromFile ? "coins_file" : "coins",
+                                      fromFile ? "blocks_file" : "blocks_hex",
+                                      "snapshot_heights", "snapshot_dir", "digest_heights"});
     if (fromFile && !arg(req, "blocks_file").isStr()) throw RequestError{"blocks_file must be a string"};
+    if (coinsFromFile && !fromFile) throw RequestError{"coins_file needs blocks_file"};
+    if (coinsFromFile && !arg(req, "coins_file").isStr()) throw RequestError{"coins_file must be a string"};
+    const std::vector<int> snapshotHeights = argHeights(req, "snapshot_heights");
+    const std::vector<int> digestHeights = argHeights(req, "digest_heights");
+    if (req.exists("snapshot_heights") != req.exists("snapshot_dir"))
+        throw RequestError{"snapshot_heights and snapshot_dir go together"};
+    if (req.exists("snapshot_dir") && !arg(req, "snapshot_dir").isStr()) throw RequestError{"snapshot_dir must be a string"};
     LOCK(cs_main);
     SelectParams(CBaseChainParams::MAIN);
     const int version = headerStreamVersion(req);
@@ -223,7 +418,9 @@ UniValue blockValidate(const UniValue& req)
     }
 
     MemoryCoinsView store;
-    readCoins(req, store);
+    SnapshotStart snapshotStart;
+    if (coinsFromFile) snapshotStart = readSnapshot(arg(req, "coins_file").get_str(), store);
+    else readCoins(req, store);
 
     // A file has the format of `blocks.bin` of scripts/fetch_blocks.py: for
     // each block the height and the length as 4-byte little-endian integers,
@@ -258,6 +455,8 @@ UniValue blockValidate(const UniValue& req)
 
     bool tipHashKnown = false;
     UniValue records(UniValue::VARR);
+    UniValue snapshots(UniValue::VARR);
+    UniValue setDigests(UniValue::VARR);
     for (size_t index = 0;; ++index) {
         std::vector<unsigned char> bytes;
         int64_t fileHeight = -1;
@@ -445,10 +644,22 @@ UniValue blockValidate(const UniValue& req)
             tipHashKnown = true;
             mapBlockIndex.clear();
             mapBlockIndex[hash] = tip;
-            if (height % 1000 == 0) {
+            // A request with `coins_file` has no digest of the whole set in a block record.
+            if (!coinsFromFile && height % 1000 == 0) {
                 const SetSummary whole = setDigest(store);
                 digest = UniValue(hex(whole.digest.begin(), whole.digest.end()));
                 value = UniValue(whole.value);
+            }
+            if (std::binary_search(snapshotHeights.begin(), snapshotHeights.end(), height))
+                snapshots.push_back(writeSnapshot(store, arg(req, "snapshot_dir").get_str(), height, hash));
+            if (std::binary_search(digestHeights.begin(), digestHeights.end(), height)) {
+                const SetSummary whole = setDigest(store);
+                UniValue summary(UniValue::VOBJ);
+                summary.pushKV("height", height);
+                summary.pushKV("set_digest_hex", hex(whole.digest.begin(), whole.digest.end()));
+                summary.pushKV("set_coins", whole.count);
+                summary.pushKV("set_value", whole.value);
+                setDigests.push_back(summary);
             }
         }
         record.pushKV("set_digest_hex", digest);
@@ -465,5 +676,11 @@ UniValue blockValidate(const UniValue& req)
     ok.pushKV("set_digest_hex", hex(whole.digest.begin(), whole.digest.end()));
     ok.pushKV("set_coins", whole.count);
     ok.pushKV("set_value", whole.value);
+    if (coinsFromFile) {
+        ok.pushKV("start_set_digest_hex", hex(snapshotStart.digest.begin(), snapshotStart.digest.end()));
+        ok.pushKV("start_set_coins", snapshotStart.count);
+    }
+    if (req.exists("snapshot_heights")) ok.pushKV("snapshots", snapshots);
+    if (req.exists("digest_heights")) ok.pushKV("set_digests", setDigests);
     return ok;
 }

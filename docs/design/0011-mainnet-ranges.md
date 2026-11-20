@@ -473,15 +473,20 @@ The proposal publishes what such a run needs:
 The file of a range holds one line for each block.
 The line gives the height, the hash, the verdict, the digest of the coin changes, and the numbers of spent and created coins.
 It also holds the digests of the restricted set at the start and at the end.
-The values are the response of the Core harness, in a run in which the oracle agreed.
+The values are the response of the Core harness to the range request, with its restricted coins, in a run in which the oracle agreed.
+Stage 5 runs that request for every published range, because stage 2 compares whole snapshots.
+
 So the expectation of a third program comes from Core's code and not from that program.
 
 **What a third party runs.**
 The party downloads the blocks and the range request, and checks both against the committed SHA-256 values.
-Its program then has two ways to take the range:
+Its program reads the two files and writes a results file.
+A committed checker compares that file with the expected results, and needs no other program.
+The document of the formats defines the modes, the flags, the chain context and the digests that the program needs.
 
-- It reads `block.validate` requests and writes responses in `dogelib-oracle/1`. `scripts/compare_core.py` takes any two programs of that format, so the program can stand in the place of the oracle or of the harness.
-- It reads the files directly and writes a results file. A committed checker compares that file with the expected results, and needs no other program.
+`scripts/compare_core.py` is not that checker.
+It requires the version names of the oracle and of the harness, and request sets beyond `block.validate`.
+So a third program cannot stand in either place there, and this record proposes no change to it.
 
 A result on the restricted coins shows agreement on verdicts and coin changes.
 It does not show the digest of the whole coin set, which needs the snapshot.
@@ -526,10 +531,25 @@ The theorem targets follow. The names are proposals:
 
 | Target | Statement |
 | --- | --- |
-| `connectBlockWith_baseline` | With the baseline spend check, `connectBlockWith` equals `connectBlock`. |
-| `validateBlockWith_inactive` | Below the activation height, or with no activation height, `validateBlockWith` of a revision with the inactive equality equals `validateBlock`. |
-| `validateBlockWith_congr` | Take a block in which no `scriptSig`, no spent `scriptPubKey` and no P2SH redeem script holds an instruction that the revision redefines. Then `validateBlockWith` of the active revision equals `validateBlock`. It lifts `verifyScriptWith_congr`. |
-| `connectBlockWith_restricts` | Take a revision whose spend check restricts acceptance. If `connectBlockWith` accepts a block on a coin set, `connectBlock` accepts it on that set with the same result. |
+| `connectBlockWith_baseline` | With the baseline spend check and the baseline error type, `connectBlockWith` equals `connectBlock`. |
+| `validateBlockWith_inactive` | Take a revision with the inactive equality. Below the activation height, or with no activation height, `validateBlockWith` equals the embedded result of `validateBlock`. |
+| `validateBlockWith_congr` | Take a block in which no `scriptSig`, no spent `scriptPubKey` and no P2SH redeem script holds an instruction that the revision redefines. Then `validateBlockWith` of the active revision equals the embedded result of `validateBlock`. It lifts `verifyScriptWith_congr`, for both calls of the script check. |
+| `connectBlockWith_restricts` | Take a revision whose spend check restricts acceptance. If `connectBlockWith` accepts a block on a coin set, `connectBlock` accepts it on that set with the same coin set and the same changes. |
+
+**Errors.**
+A proposal can have its own error type, as `ExampleVersionVerify` has `ScriptError ⊕ ExampleError`, and `ConnectBlockError.script` holds a `ScriptError` alone.
+So the two definitions are generic in the script error, with an embedding of the baseline errors, as the Script framework is (design record 0007, section 6.2).
+*The embedded result* above is the baseline result with its errors mapped through that embedding.
+
+**The second script check.**
+`checkInputScript` runs a failed script again without the flags that are not mandatory, and takes the reject reason from that second run (`DogeLib/Block/Connect.lean`, line 253).
+`connectBlockWith` keeps that contract.
+It runs the revised check again with the reduced flags and the same `active`, classifies by the second run, and keeps the first error.
+Acceptance depends on the first run alone, so `connectBlockWith_restricts` needs no statement about the second.
+
+**Signature operations.**
+The definitions change the spend check and nothing else.
+`getTransactionSigOpCost` counts as in the baseline, so a revision that would count operations in another way is outside this section.
 
 The last target is the block obligation of design record 0007, section 8.3, for a Script revision with the identity projection.
 The statement for chains needs an induction over it, and this record does not require that step.
@@ -565,11 +585,11 @@ The two examples of the `Proposals` library test the run: `ExampleVersionVerify`
 The expected number of changed blocks is fixed before each run, from a source other than the run:
 
 1. **No activation height.** No block of any range changes, by the inactive equality of each example.
-2. **Active from height 0.** A separate script reads the blocks and the range requests, and lists the *candidate blocks*. A candidate has a spend that holds the redefined opcode as an instruction, `0xb9` or `0xb3`. The lane commits that list before the run. Every changed block must be a candidate, by the congruence theorem. Each change must go from accepted to rejected, because both examples are soft forks.
-3. **Made blocks.** The test builds blocks on the last block of range S, from the proved witnesses of each example. They have no proof of work, as the changed blocks of the full comparison. A block from a strictness witness must be the one changed block of its request, with the error of the witness. A block from a use witness runs the rule and must not change. A block with the counterexample of the faulty variant must change in the other direction: the baseline rejects it, and the faulty variant accepts it.
+2. **Active from height 0.** A separate script reads the blocks and the range requests, and lists the *candidate blocks*. A candidate has a spend that holds the redefined opcode as an instruction, `0xb9` or `0xb3`. The lane commits that list before the run. This case is a property test, not a known answer. Every changed block must be a candidate, by the congruence theorem. Each change must go from accepted to rejected, because both examples are soft forks. If the list is empty, the expected number of changed blocks is 0. For each candidate of a list that is not empty, the lane derives the expected verdict by hand from the text of the rule before the run.
+3. **Made blocks.** The test builds blocks as `scripts/oracle_block_validate.py` builds the changed blocks of the full comparison. Each block stands on a committed rule-change block, with a valid coinbase, a synthetic coin whose script holds the rule, a transaction with one output that spends it, and no proof of work. The scripts follow the witnesses of each example. The expected verdict of each block comes from the text of the rule under the flags of its height, derived by hand. The witness theorems do not give it: they use flags 0 and a transaction that no block can hold. The cases are: a spend that the baseline accepts and the revision rejects, which must be the one changed block of its request, with the error of the rule. A spend that runs the rule and passes, which must not change. The counterexample of the faulty variant, which must change in the other direction. And one rejection by the active revision above height 1,034,383, where the second script check runs with other flags.
 
 The record does not predict the number of candidates.
-If the list of case 2 is empty, the expected number of changed blocks is 0.
+Cases 1 and 3 have expected numbers that are fixed in advance. Case 2 has one only for an empty list, or after the derivation by hand.
 
 ### 10.4 What a result shows
 
@@ -580,6 +600,7 @@ A result is a statement about the blocks of the ranges, on the hypothesis of sec
 - The run shows what the Lean definition of the revision does. No Core behaviour exists for a revision, so no comparison supports the `revised` verdicts (design record 0007, section 9).
 - An empty report is not a compatibility proof. The theorem targets of section 10.1 are the proofs, and they hold for every block.
 - The report says nothing about transactions that no block of the ranges holds, such as unconfirmed spends of existing coins.
+- The run revises the spend check alone. It does not show the effect of a revision on the sigop count, or on any rule outside Script.
 
 ### 10.5 The whole chain
 
@@ -588,8 +609,8 @@ Three ways give the impact of a revision on every block. Decision 12 leaves the 
 | Option | Work | Cost | What the result rests on |
 | --- | --- | --- | --- |
 | W1: the ranges alone | Section 10.2. | About twice the block work of the ranges. | The Lean definition of the revision, on a sample. |
-| W2: candidate blocks from the Core pass | The Core pass takes a list of opcodes. It lists each candidate block of the chain, and writes the block with its range request. The proposal executable then runs those blocks alone. | One more Core pass, about 12 to 14 hours by the estimate of section 2. No added pass if the opcodes are known before the first one. The number of candidate blocks is not known. | The Lean definition, on every candidate block. `validateBlockWith_congr` shows that no other block changes. It needs that theorem for the revision. |
-| W3: a patched harness | A patch of Core's interpreter states the revision in C++, and the pass runs with it. | One Core pass for each revision and each activation height, and the patch itself. | A second implementation of the revision, with no theorem that relates it to the Lean definition. Design record 0007 calls that a comparison with another implementation, never a Core comparison. |
+| W2: candidate blocks from the Core pass | The Core pass takes a list of opcodes. It lists each candidate block of the chain, and writes the block with its range request. The proposal executable then runs those blocks alone. | One more Core pass, about 12 to 14 hours by the estimate of section 2. No added pass if the opcodes are known before the first one. Then the run of the candidates in the proposal executable and the storage of their requests. The number of candidates is not known. If most blocks are candidates, the run costs about as much as the replay of the chain in section 2. | The Lean definition, on every candidate block. `validateBlockWith_congr` shows that a block changes only if it is a candidate. The scan of the harness is a trusted premise. The theorem says nothing about a candidate that the scan misses in a spent script or a redeem script. |
+| W3: a patched harness | A patch of Core's interpreter states the revision in C++. A replay with the patch alone stops at the first block that it rejects. So the harness runs Core's unchanged check to carry the state, and the patched check on the same state before each block. | One Core pass for each revision and each activation height, with two script checks for each input, about twice the cost of the pass. Also the patch, and the harness code that runs both. | A second implementation of the revision, with no theorem that relates it to the Lean definition. Design record 0007 calls that a comparison with another implementation, never a Core comparison. |
 
 **Recommendation.**
 W1 in this record, and W2 as a later stage when a revision with a congruence theorem needs the whole chain.
@@ -651,9 +672,9 @@ It exits when both ranges agree under section 3.4, and Core reports `STARTED` an
 The stage follows stages 2 and 3, and runs only if decision 13 is accepted.
 
 1. A document defines `dogelib-blocks/1`, `dogelib-coins/1`, the range request and `dogelib-range-results/1`, with the digests, and without reference to the Lean code.
-2. Each range has its blocks and its range request as release assets, and its expected results in the repository. The results are the response of the Core harness in a run of stage 2 or 3.
+2. Each range has its blocks and its range request as release assets, and its expected results in the repository. For each range, the oracle and the Core harness run the range request, and agree on every block record and on both digests of the restricted set. The expected results are the response of the harness in that run.
 3. A committed checker compares a results file with the expected results. It passes on a file from the oracle and on a file from the harness. It fails on a planted wrong verdict, a wrong digest, a missing block and an added block.
-4. A person who did not write the tools runs one range from the document alone. They use the assets, and a program in the harness slot of `scripts/compare_core.py`. The pull request records the steps that the document lacked.
+4. A person who did not write the tools runs one range from the document alone. They use the assets, the checker, and a program of their own or a wrapper of the harness that writes a results file. The pull request records the steps that the document lacked.
 5. In CI, the checker runs range G and the short range of stage 1 from the released assets.
 
 ### Stage 6: the historical impact of a proposed revision
@@ -664,14 +685,14 @@ It adds `connectBlockWith` and `validateBlockWith`, the `ProposalExports` librar
 1. `connectBlockWith_baseline` and `validateBlockWith_inactive` are proved. The other two targets of section 10.1 are proved, or the pull request states why one is not. In that case it labels the evidence of case 2 as a test alone.
 2. With no `revision` argument, the proposal executable gives the response of `dogelib-oracle` byte for byte on every request of the full comparison of `block.validate`.
 3. The import check passes, and its self-test still fails on a baseline module that imports `DogeLib.Proposals`.
-4. The three cases of section 10.3 give their expected numbers for both examples, on every range of stages 1 to 3. The candidate list is committed before the run.
+4. Cases 1 and 3 of section 10.3 give their expected numbers for both examples. Case 2 holds its two properties on every range of stages 1 to 3, with the candidate list committed before the run.
 5. COVERAGE.md records each report in the section for proposals, with the label of section 10.4. The label says: a sample of ranges, with no Core comparison of the `revised` verdicts.
 
 ### Gates
 
 Each stage adds its commands to the gate table of AGENTS.md.
 The gates of stage 1, condition 5, and stage 3, condition 3, run in CI.
-So do condition 5 of stage 5, and cases 1 and 3 of section 10.3 on range S of stage 1's short form.
+So do condition 5 of stage 5, and case 3 of section 10.3. Case 1 runs in CI on the short range of stage 1 and on range G.
 The Core pass and the ranges of stage 2 are recorded gates outside CI, as the replay to height 145,000 is.
 
 ## 12. Excluded

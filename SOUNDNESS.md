@@ -1427,6 +1427,48 @@ The two are equal whenever the subsidy has fuel, and a subsidy without fuel is a
 
 By `#print axioms`, `connect_spends_available`, `connect_valuesInRange`, `connect_value_bound`, `connectChain_issuance_bound` and `chain_issuance_bound` depend on `propext`, `Classical.choice` and `Quot.sound`.
 
+### `validateBlock_restrict`: a block on the coins that it names
+
+`validateBlock_restrict` (in `DogeLib.Block.Proofs.Restrict`) is the theorem target of design record 0011, section 3.3 and decision 2.
+A block *names* a transaction ID when the ID is the ID of one of its transactions, or the ID in the outpoint of one of its inputs.
+`validateBlock` reads and changes the coin set only at the IDs that the block names.
+
+A coin set stores the entry of an ID under `txidKey` of the ID, and `txidKey_inj` shows that different IDs have different keys.
+The theorem is about keys.
+Let `keep` be a predicate on keys that holds for the key of every ID that the block names (`NamesWithin`).
+`s.restrict keep` has the entries of the set `s` whose key satisfies `keep`.
+Then `validateBlock` returns the same error on `s` and on `s.restrict keep`, or it accepts the block on both.
+When it accepts, four statements hold:
+
+1. The two results have the same coin changes.
+2. The two new sets have equal entries at every key that satisfies `keep`.
+3. The new set of the restriction has no entry at any other key.
+4. The new set of `s` has the entries of `s` at every other key.
+
+So the restricted run and the old set together determine the new set of `s`.
+
+The theorem holds for every verifier, both flags, every context and every coin set.
+The design record expected a hypothesis that each entry is under the key of its own ID.
+The theorem needs no such hypothesis: the restriction selects an entry by its key, and `validateBlock` reads no `TxCoins.txid` field of an entry.
+An equal error includes the results outside the model, such as `outOfDomain`.
+
+`validateBlock_agree` is the general form of statements 1 and 2, for any two sets with equal entries at the keys of `keep`.
+Its conclusion repeats its hypothesis on the sets, so it applies again to the next block when `keep` also holds the keys of that block.
+`validateBlock_frame` is statement 4 for any accepted block and any key that the block does not name.
+
+The theorems do not cover these parts of a `block.validate` request with `coins_file` ([oracle](docs/oracle.md#coin-set-snapshots)):
+
+- **A list of blocks.** No theorem here is about a range. The oracle keeps the coins of the IDs that all blocks of the request name. Before each block, it checks that the kept IDs hold the names of that block. An induction over `validateBlock_agree` and `validateBlock_frame` would state the claim for the range, and it is not written.
+- **The adapter.** `validateStep` also carries the chain view, and no theorem relates its two runs.
+- **The files.** The reads of the snapshot, the choice of the kept coins and the merge that gives the last digest are `IO` code ([B4](#b4-the-oracle-and-foreign-boundaries)). The comparison of the two forms of the request is their evidence.
+- **Core.** The theorems are about the Lean definitions. The harness loads the whole snapshot.
+
+The proofs use `validateBlockAt`, which is `validateBlock` with the hash of the genesis block as a parameter.
+`validateBlock_eq_at` shows that `validateBlock` is that function at the hash of mainnet, by reflexivity.
+The definition exists because the kernel otherwise evaluates the hash from its hexadecimal string when a proof unfolds `validateBlock`, which takes minutes.
+
+By `#print axioms`, `validateBlock_restrict`, `validateBlock_agree` and `validateBlock_frame` depend on `propext`, `Classical.choice` and `Quot.sound`.
+
 ### RIPEMD-160 and Hash160
 
 `Ripemd160.hash` adapts EthLib's executable definition at `6a93711`, as SOURCES.md records.
@@ -3897,6 +3939,18 @@ The read is in `Block.Exports.blockValidateFile`, an `IO` function outside the s
 The comparison trusts that the file holds the intended blocks.
 `scripts/replay_blocks.py` checks each block against a pinned hash before a replay.
 That check shows the intended transactions only if SHA-256 is collision resistant, which DogeLib does not model (A4).
+A request with `coins_file` also opens a coin-set snapshot that the caller names, and the oracle reads it twice.
+The reads, the choice of the coins that the blocks name and the merge of the last digest are in `Block.Exports.blockValidateSnapshot`, an `IO` function outside the specification.
+The blocks again go through `validateStep`.
+The oracle with `coins_in_memory` runs the same request without the choice and the merge, and `scripts/snapshot_range.py` requires equal results of the two forms on its ranges.
+A snapshot is a supplied state.
+A comparison from it shows agreement on the blocks of the range only if the snapshot is Core's coin set at its height ([design record 0011](docs/design/0011-mainnet-ranges.md), section 3.4).
+The harness wrote each snapshot of the recorded runs, with its own map and its own writer, which are harness code and not Core's.
+The snapshot at height 145,000 has the digest that the oracle reached from the empty set in the recorded replay from the genesis block.
+For the snapshot at height 9,000, the replay of heights 0 to 10,000 in CI compares the same digest between the oracle and the harness.
+The recorded replay also compared the digest at height 100,000 between the two programs, with an earlier build of the harness.
+Its record does not state the value.
+Neither program checks that a snapshot file stays the same during a request, except that the oracle requires one number of records in both reads.
 The request of 10,001 real blocks has about 88 MB of JSON.
 
 Any later foreign boundary, such as a C or Rust binding, is listed here with its size and its error handling.

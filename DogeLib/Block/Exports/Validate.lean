@@ -66,7 +66,7 @@ def changesDigest (changes : List CoinChange) : ByteArray :=
     | .spent o c => digestStep d (coinRecord 0 o c)
     | .created o c => digestStep d (coinRecord 1 o c)) digestStart
 
-/-- One entry in the digest of a whole coin set: from the digest and the count so far, the digest and the count after the coins of the entry, in the order of the outputs. -/
+/-- One entry in the digest of a whole coin set. `acc` is the digest and the count so far. The result is the digest and the count after the coins of the entry, in the order of the outputs. -/
 def entryDigest (acc : ByteArray × Nat) (entry : TxCoins) : ByteArray × Nat :=
   entry.coins.foldl (fun (d, n) (o, c) => (digestStep d (coinRecord 2 o c), n + 1)) acc
 

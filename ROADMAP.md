@@ -147,7 +147,7 @@ Its section 11 gives the stages and their exit conditions:
 | Stage | Deliverable | Status |
 | --- | --- | --- |
 | 0 | Measurements: the size of the chain, the coins at the tip, and whether the Core pass fits the machine | Done. The tip has 202,470,869 coins, and the chain has about 179.5 GB of blocks and 0.76 billion inputs. The pass fits the disk. The stage selects `CCoinsViewDB` in the place of the harness's map for the pass ([measurements](docs/oracle.md#measurements-for-the-core-pass)) |
-| 1 | The snapshot format `dogelib-coins/1`, `coins_file` in both programs, the theorem target `validateBlock_restrict`, and the self-test range below height 145,000 | Not started |
+| 1 | The snapshot format `dogelib-coins/1`, `coins_file` in both programs, the theorem target `validateBlock_restrict`, and the self-test range below height 145,000 | Done. `validateBlock_restrict` is proved. Core writes the snapshots at heights 100,000 and 145,000, and the second has the digest of the recorded replay. Range S, heights 100,001 to 101,000, agrees from the snapshot, and every changed snapshot fails. CI runs the short form on heights 9,001 to 10,000 ([recorded run](docs/oracle.md#ranges-from-a-snapshot)) |
 | 2 | The Core pass to height 5,050,000, with the version-bits walk in the harness, and the ranges A, B, C, D, F and H | Not started |
 | 3 | The recent range from the snapshot at 6,455,301, and its run in CI with restricted coins. It closes stage 0010b | Not started |
 | 4 | The CSV window in the oracle: a version in each `chain` entry, and the ranges E1 and E2 | Not started |

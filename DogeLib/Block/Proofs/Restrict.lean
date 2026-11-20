@@ -11,7 +11,7 @@ meta import DogeLib.Proofs.TheoremTag
 `validateBlock` reads and changes the coin set only at the transaction IDs that the block names (design record 0011, section 3.3).
 Those IDs are the ID of each transaction of the block, and the ID in the outpoint of each input.
 
-- `validateBlock_agree`: two coin sets with equal entries at a set of keys give the same error, or accept with the same coin changes and with new sets that again have equal entries at those keys. The set of keys must hold the key of every ID that the block names.
+- `validateBlock_agree`: two coin sets with equal entries at a set of keys give the same error, or both accept. When they accept, the coin changes are the same, and the new sets again have equal entries at those keys. The set of keys must hold the key of every ID that the block names.
 - `validateBlock_frame`: an accepted block changes no entry whose key is not the key of an ID that the block names.
 - `validateBlock_restrict`: the two statements for a set `s` and its restriction `s.restrict keep`, which is the target of design record 0011, decision 2.
 
@@ -390,7 +390,8 @@ theorem validateBlock_agree (verify : SignatureVerifier) (fCheckPOW fCheckMerkle
 An accepted block changes no entry of the coin set at a key that the block does not name.
 
 Suppose that `validateBlock` accepts the block `b` on the coin set `s`, with the result `r`.
-Suppose that `k` is not the key of the ID of a transaction of `b`, and not the key of the ID in the outpoint of an input of `b` (`NotNamed`).
+Suppose that `b` does not name the key `k` (`NotNamed`).
+So `k` is not the key of the ID of a transaction of `b`, or of the ID in the outpoint of an input.
 Then the new set has at `k` the entry that `s` has at `k`, or no entry when `s` has none.
 -/
 @[theorem_tag property]
@@ -409,7 +410,8 @@ theorem validateBlock_frame (verify : SignatureVerifier) (fCheckPOW fCheckMerkle
 /--
 `validateBlock` on a coin set and on its restriction to the transaction IDs that the block names (design record 0011, section 3.3 and decision 2).
 
-Suppose that `keep` holds for the key of every transaction ID that the block `b` names (`NamesWithin`): the ID of each transaction, and the ID in the outpoint of each input.
+Suppose that `keep` holds for the key of every transaction ID that the block `b` names (`NamesWithin`).
+Those IDs are the ID of each transaction, and the ID in the outpoint of each input.
 `s.restrict keep` has the entries of `s` whose key satisfies `keep`.
 Then `validateBlock` returns the same error on `s` and on `s.restrict keep`, or it accepts the block on both.
 When it accepts, with the result `r` on `s` and the result `r'` on the restriction:

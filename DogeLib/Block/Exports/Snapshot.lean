@@ -12,7 +12,8 @@ A `block.validate` request with `coins_file` takes the coin set before its first
 ## The format
 
 A snapshot is the coin records of a whole coin set under the tag 2, in the order of the digest of the whole set (`setDigest`).
-A record is the tag, the outpoint (36 bytes), the height (4 bytes, little-endian), the coinbase byte, the amount (8 bytes, little-endian), the CompactSize length of the script, and the script.
+A record starts with the tag, the outpoint (36 bytes), the height (4 bytes, little-endian) and the coinbase byte.
+The amount (8 bytes, little-endian), the CompactSize length of the script and the script follow.
 The file has no other framing.
 So the digest of the whole set is the digest chain over the records of the file, in the order of the file.
 
@@ -26,7 +27,7 @@ The oracle does not hold the whole set (section 3.3 of the design record).
 1. It reads the blocks once and collects `T`: the keys of the transaction IDs that the blocks name (`blockKeys`).
 2. It reads the snapshot once. It computes the digest of all records, and keeps the coins whose key is in `T`.
 3. It runs the blocks on the kept coins, with `validateFileRun`. Before each block, it requires that `T` has every key that the block names.
-4. It reads the snapshot again, and computes the digest of the set after the run: the records of the file whose key is not in `T`, merged in key order with the entries of the run.
+4. It reads the snapshot again, and computes the digest of the set after the run. That set has the records of the file whose key is not in `T`, and the entries of the run, in key order.
 
 `validateBlock_restrict` (in `DogeLib.Block.Proofs.Restrict`) is the reason for step 4.
 On a set and on its restriction to keys that hold every key of a block, `validateBlock` gives the same error, or the same coin changes.
@@ -36,7 +37,8 @@ The check of step 3 establishes the hypothesis of the theorem for each block, wh
 No theorem covers the reads of the files or the merge of step 4 (SOUNDNESS.md, B4).
 The functions of this module run in `IO`.
 
-With `coins_in_memory` true, the oracle keeps every coin of the snapshot, runs the blocks on the whole set, and computes the last digest from that set with `setDigest`.
+With `coins_in_memory` true, the oracle keeps every coin of the snapshot and runs the blocks on the whole set.
+It computes the last digest from that set with `setDigest`.
 That form reads the snapshot once, and it does not use the merge.
 -/
 

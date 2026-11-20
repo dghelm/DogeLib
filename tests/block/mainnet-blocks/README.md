@@ -124,6 +124,29 @@ python3 -I scripts/fetch_release_blocks.py --pack build/fetch/genesis-10000 gene
 python3 -I scripts/fetch_release_blocks.py --pack build/fetch/recent recent-6455302-6456301 --assets build/assets
 ```
 
+## Coin-set snapshots
+
+[`snapshots`](snapshots) holds the manifests of coin-set snapshots, one file `coins-<height>.json` for each snapshot.
+A snapshot is the coin set after the block at its height, in the format `dogelib-coins/1` ([docs/oracle.md](../../../docs/oracle.md#coin-set-snapshots)).
+A manifest names the height and the block hash.
+It gives the number of coins, the digest and the total value of the set, and the length and the SHA-256 of the file.
+
+| Manifest | Height | Coins | Bytes of the snapshot |
+| --- | ---: | ---: | ---: |
+| `coins-9000.json` | 9,000 | 114,056 | 8,719,196 |
+| `coins-100000.json` | 100,000 | 5,556,212 | 422,359,596 |
+| `coins-145000.json` | 145,000 | 5,094,671 | 387,316,918 |
+
+The snapshot files are not committed and are not release assets ([design record 0011](../../../docs/design/0011-mainnet-ranges.md), decision 6).
+The Core harness writes them in a replay from the genesis block, and `scripts/snapshot_range.py` runs that replay.
+One coin set has one byte sequence as its snapshot, so a second replay must write a file with the SHA-256 of the manifest.
+The script fails when a manifest of its run differs from the committed one.
+
+The values of a manifest come from the Core harness, and the script computes each of them again from the file.
+The snapshot at height 145,000 has the digest of the [recorded replay](../../../docs/oracle.md#replay-of-mainnet-to-height-145000), which the oracle reached from the empty set.
+A manifest does not show that its snapshot is the coin set of mainnet at its height.
+That claim rests on the blocks of the replay and on the harness ([design record 0011](../../../docs/design/0011-mainnet-ranges.md), section 3.4).
+
 ## Checks and coverage
 
 `scripts/oracle_block_check.py` builds the requests, and `scripts/compare_core.py` compares the oracle with Core's `CheckBlock`.

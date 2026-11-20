@@ -131,6 +131,12 @@ def run_pass(harness: str, blocks: Path, blocks_sha256: str, hashes: list[str], 
         raise ReplayError("pass: the harness did not write every snapshot")
     if [d["height"] for d in ok.get("set_digests", [])] != [end]:
         raise ReplayError(f"pass: the harness did not report the digest at height {end}")
+    # A block record of the pass has the digest of the whole set at each multiple of 1,000,
+    # which the replays from the genesis block compare with the oracle.
+    for entry in ok["snapshots"] + ok["set_digests"]:
+        record = records[entry["height"]]
+        if record["set_digest_hex"] not in (None, entry["set_digest_hex"]):
+            raise ReplayError(f"pass: two digests of the whole set at height {entry['height']}")
     return ok
 
 

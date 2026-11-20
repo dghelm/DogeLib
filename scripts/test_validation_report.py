@@ -250,6 +250,11 @@ class Reports(unittest.TestCase):
             'mainnet-replay-to-145-000': 'python3 -I scripts/replay_blocks.py --last 145000 --output build/replay-145000 .lake/build/bin/dogelib-oracle build/core-harness/core-oracle '
                                          'build/mainnet-blocks/genesis-10000 build/mainnet-blocks/range-10001-145000',
             'replay-tool-self-test': 'python3 -I scripts/test_replay_blocks.py .lake/build/bin/dogelib-oracle build/core-harness/core-oracle',
+            'snapshot-range-short-form': 'python3 -I scripts/snapshot_range.py --start 9000 --end 10000 --output build/snapshot-range/short '
+                                         '.lake/build/bin/dogelib-oracle build/core-harness/core-oracle build/mainnet-blocks/genesis-10000',
+            'snapshot-range-s': 'python3 -I scripts/snapshot_range.py --start 100000 --end 101000 --snapshot 145000 --jobs 3 --output build/snapshot-range/s '
+                                '.lake/build/bin/dogelib-oracle build/core-harness/core-oracle '
+                                'build/mainnet-blocks/genesis-10000 build/mainnet-blocks/range-10001-145000',
             'lane-tool': 'bash scripts/test_lane.sh',
         }
         self.assertEqual({g['slug']: g['command'] for g in gates}, expected)

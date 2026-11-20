@@ -50,7 +50,9 @@
 #include "serialize.h"
 #include "streams.h"
 #include "timedata.h"
+#include "txdb.h"
 #include "uint256.h"
+#include "dbwrapper.h"
 #include "utilstrencodings.h"
 #include "utiltime.h"
 #include "version.h"
@@ -59,6 +61,7 @@
 
 #include <univalue.h>
 
+#include <boost/filesystem.hpp>
 #include <boost/version.hpp>
 
 #include <algorithm>
@@ -1424,6 +1427,11 @@ int main(int argc, char** argv)
 #ifdef CORE_BUILD_REVISION
         // A replay build from scripts/build_core_harness.sh --revision names its Core commit.
         v.pushKV("core_revision", CORE_BUILD_REVISION);
+#endif
+#ifdef CORE_TRAP_OVERFLOW
+        // scripts/build_core_harness.sh --trap-overflow: a signed overflow in Core's
+        // validation.cpp or coins.cpp ends the program.
+        v.pushKV("trap_overflow", true);
 #endif
         std::cout << v.write() << std::endl;
         return 0;

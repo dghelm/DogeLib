@@ -4,7 +4,15 @@
 # Core's server library, and harness/core/core_validation.cpp includes Core's
 # src/validation.cpp and src/timedata.cpp as text.
 #
-# Usage: scripts/build_core_harness.sh [--revision COMMIT] <core-git-repo> <build-dir>
+# Usage: scripts/build_core_harness.sh [--trap-overflow] [--revision COMMIT] <core-git-repo> <build-dir>
+#
+# --trap-overflow also builds <build-dir>/core-oracle-trap, the harness of the
+# Core pass (design record 0011, section 3.2). It compiles Core's
+# src/validation.cpp (through harness/core/core_validation.cpp) and
+# src/coins.cpp, which hold the sums of ConnectBlock, with
+# -fsanitize=signed-integer-overflow -fno-sanitize-recover. A signed overflow
+# in those files then ends the program instead of being undefined behaviour.
+# The libraries and core-oracle are the same as without the option.
 #
 # --revision builds against another Core commit for a labelled replay
 # (design record 0009, section 9.2). It needs a build directory other than
@@ -31,14 +39,19 @@ set -euo pipefail
 
 PIN=e0a1c157791544e818c901bd9341896965afbf9d
 revision=
+trap=
+if [ "${1:-}" = --trap-overflow ]; then
+  trap=1
+  shift
+fi
 if [ "${1:-}" = --revision ]; then
-  [ "$#" -eq 4 ] || { echo "usage: $0 [--revision COMMIT] <core-git-repo> <build-dir>" >&2; exit 2; }
+  [ "$#" -eq 4 ] || { echo "usage: $0 [--trap-overflow] [--revision COMMIT] <core-git-repo> <build-dir>" >&2; exit 2; }
   revision=$2
   shift 2
 fi
 
 if [ "$#" -ne 2 ]; then
-  echo "usage: $0 [--revision COMMIT] <core-git-repo> <build-dir>" >&2
+  echo "usage: $0 [--trap-overflow] [--revision COMMIT] <core-git-repo> <build-dir>" >&2
   exit 2
 fi
 
@@ -173,6 +186,31 @@ set -x
 set +x
 echo "built $build/core-oracle against:"
 cat "$build/core.stamp"
+
+if [ -n "$trap" ]; then
+  # The same harness, with the two files of ConnectBlock's sums under the
+  # sanitizer. core_validation.cpp includes validation.cpp as text. The object
+  # of coins.cpp comes before the libraries, so the link takes no archive
+  # member that defines the same symbols.
+  trap_flags=(-fsanitize=signed-integer-overflow -fno-sanitize-recover=signed-integer-overflow)
+  includes=(-I"$src" -I"$src/config" -I"$src/univalue/include" -I"$src/secp256k1/include"
+    -I"$src/leveldb/include" -isystem "$boost/include")
+  set -x
+  "$cxx" -std=c++11 $core_cxxflags -DHAVE_CONFIG_H -DCORE_TRAP_OVERFLOW "${includes[@]}" "${revision_flags[@]}" \
+    -c "$here/harness/core/core_oracle.cpp" -o "$build/trap-core_oracle.o"
+  "$cxx" -std=c++11 $core_cxxflags -DHAVE_CONFIG_H "${trap_flags[@]}" "${includes[@]}" \
+    -c "$here/harness/core/core_validation.cpp" -o "$build/trap-core_validation.o"
+  "$cxx" -std=c++11 $core_cxxflags -DHAVE_CONFIG_H "${trap_flags[@]}" "${includes[@]}" \
+    -c "$src/coins.cpp" -o "$build/trap-coins.o"
+  "$cxx" -std=c++11 "${trap_flags[@]}" -o "$build/core-oracle-trap" \
+    "$build/trap-core_oracle.o" "$build/trap-core_validation.o" "$build/trap-coins.o" \
+    "${oracle_libs[@]}" \
+    -L"$boost/lib" -lboost_system -lboost_filesystem -lboost_program_options -lboost_thread -lboost_chrono \
+    -lssl -lcrypto -levent_pthreads -levent -pthread
+  set +x
+  rm -f "$build/trap-core_oracle.o" "$build/trap-core_validation.o" "$build/trap-coins.o"
+  echo "built $build/core-oracle-trap"
+fi
 
 # UniValue parses the signer's requests. Compile every library source that the
 # pinned sources.mk lists.

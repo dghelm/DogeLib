@@ -654,6 +654,35 @@ class Rpc:
             raise FetchError(f"{method}: {self._clean(detail)}")
         return result
 
+    def batch(self, method: str, params: list[list]) -> list:
+        """One JSON-RPC batch of `method`, once for each parameter list, with the results in order."""
+        if not params:
+            return []
+        first = self._id + 1
+        self._id += len(params)
+        body = json.dumps([{"jsonrpc": "1.0", "id": first + i, "method": method, "params": p}
+                           for i, p in enumerate(params)])
+        try:
+            data = self.transport(self.url, body.encode(), dict(self._headers))
+        except urllib.error.HTTPError as error:
+            error.close()
+            raise FetchError(f"{method} batch: HTTP status {error.code}") from None
+        except Exception as error:
+            raise FetchError(f"{method} batch: request failed: {type(error).__name__}") from None
+        try:
+            responses = json.loads(data)
+            by_id = {r["id"]: r for r in responses}
+            if sorted(by_id) != list(range(first, first + len(params))):
+                raise ValueError
+            ordered = [by_id[first + i] for i in range(len(params))]
+        except (ValueError, KeyError, TypeError):
+            raise FetchError(f"{method} batch: malformed response") from None
+        for r in ordered:
+            if r.get("error") is not None:
+                detail = r["error"].get("message") if isinstance(r["error"], dict) else r["error"]
+                raise FetchError(f"{method}: {self._clean(detail)}")
+        return [r["result"] for r in ordered]
+
     def block_count(self) -> int:
         count = self.call("getblockcount")
         if not isinstance(count, int) or isinstance(count, bool) or count < 0:

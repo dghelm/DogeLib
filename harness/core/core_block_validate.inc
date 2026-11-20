@@ -28,9 +28,20 @@
 //   `digest_heights` reports the digest of the set at each listed height.
 // - visitSet is the only code that walks the carried set. The digest and the
 //   snapshot writer read the set through it, one CCoins entry at a time, in
-//   the order of the transaction IDs. A set in Core's CCoinsViewDB needs
-//   another visitSet alone, over the cursor of that view, which visits the
-//   same entries in the same order (src/txdb.cpp, lines 93 to 104).
+//   the order of the transaction IDs.
+//
+// The Core pass (design record 0011, sections 3.2 and 13, decision 3):
+// - `coins_db` names a directory. The harness then carries the set in Core's
+//   own CCoinsViewDB in `<coins_db>/chainstate`, under a CCoinsViewCache whose
+//   size `coins_db_cache_mb` bounds. visitSet walks the cursor of that view,
+//   which visits the same entries in the order of the transaction IDs
+//   (src/txdb.cpp, lines 93 to 104). With `coins_db_continue` the request
+//   starts from the set in the directory, whose best block the first block
+//   must name.
+// - Each chain entry can hold the `version` of its header. Inside the CSV
+//   window, Core's VersionBitsState then walks the supplied entries and the
+//   accepted blocks back to a boundary below the CSV start.
+//   `version_bits_heights` reports Core's state after a listed height.
 //
 // force_csv_active (design record 0012, section 10.2 and decision 12): with
 // the value true, each block also runs with the CSV state forced to ACTIVE,
@@ -47,9 +58,9 @@
 // shows what Core's code does in a state that Core never enters. It is not
 // mainnet behavior, and it is not a Core comparison of the baseline.
 
-// The carried coin set: a CCoinsView over a map, as CCoinsViewTest of Core's
-// src/test/coins_tests.cpp, without that class's random choices. An entry that
-// is pruned leaves the map.
+// The carried coin set in memory: a CCoinsView over a map, as CCoinsViewTest
+// of Core's src/test/coins_tests.cpp, without that class's random choices. An
+// entry that is pruned leaves the map.
 class MemoryCoinsView : public CCoinsView
 {
 public:
@@ -76,6 +87,89 @@ public:
         }
         if (!hashBlock.IsNull()) best = hashBlock;
         return true;
+    }
+};
+
+UniValue coinsDbFailure(const std::string& reason)
+{
+    UniValue error(UniValue::VOBJ);
+    error.pushKV("kind", "block_validate");
+    error.pushKV("reason", reason);
+    return error;
+}
+
+// The carried coin set of one request: the map above, or Core's CCoinsViewDB
+// on a scratch directory under a CCoinsViewCache of bounded size. `view` is
+// the CCoinsView that each block's cache reads.
+class CarriedSet
+{
+public:
+    MemoryCoinsView memory;
+    std::unique_ptr<CCoinsViewDB> db;
+    std::unique_ptr<CCoinsViewCache> cache;
+    size_t cacheLimit = 0;
+    // Entries that a load has read and not yet written to the database.
+    CCoinsMap pending;
+
+    // Open the database of `dir`. `wipe` empties it first.
+    void open(const std::string& dir, size_t cacheBytes, bool wipe)
+    {
+        if (!boost::filesystem::is_directory(dir)) throw SpecError{coinsDbFailure("coins_db_unusable")};
+        ForceSetArg("-datadir", dir);
+        ClearDatadirCache();
+        try {
+            // LevelDB's own cache, as a node gives it a part of -dbcache.
+            db.reset(new CCoinsViewDB(std::min<size_t>(cacheBytes / 8, 256 << 20), false, wipe));
+        } catch (const std::exception&) {
+            throw SpecError{coinsDbFailure("coins_db_unusable")};
+        }
+        cache.reset(new CCoinsViewCache(db.get()));
+        cacheLimit = cacheBytes;
+    }
+
+    CCoinsView& view() { return db ? static_cast<CCoinsView&>(*cache) : memory; }
+
+    uint256 best() { return db ? cache->GetBestBlock() : memory.best; }
+    void setBest(const uint256& hash)
+    {
+        if (db) cache->SetBestBlock(hash);
+        else memory.best = hash;
+    }
+
+    bool have(const uint256& txid)
+    {
+        if (!db) return memory.coins.count(txid) != 0;
+        return pending.count(txid) != 0 || db->HaveCoins(txid);
+    }
+
+    // Add an entry of a load. The database gets the entries in batches.
+    void insert(const uint256& txid, CCoins&& entry)
+    {
+        if (!db) {
+            memory.coins.emplace_hint(memory.coins.end(), txid, std::move(entry));
+            return;
+        }
+        CCoinsCacheEntry& slot = pending[txid];
+        slot.coins = std::move(entry);
+        slot.flags = CCoinsCacheEntry::DIRTY;
+        if (pending.size() >= 100000) endLoad();
+    }
+    void endLoad()
+    {
+        if (db && !pending.empty() && !db->BatchWrite(pending, uint256()))
+            throw UnmappedCoreError{"the coin database refused a write"};
+        pending.clear();
+    }
+
+    // Write the cache to the database, with its best block.
+    void flush()
+    {
+        if (db && !cache->Flush()) throw UnmappedCoreError{"the coin database refused a flush"};
+    }
+    // After an accepted block: write the cache when it exceeds its bound.
+    void bound()
+    {
+        if (db && cache->DynamicMemoryUsage() > cacheLimit) flush();
     }
 };
 
@@ -124,26 +218,60 @@ std::string decimal(unsigned __int128 n)
 // Every entry of the carried set, in the order of the transaction IDs.
 // std::map visits them in the order of uint256::Compare, which compares the
 // bytes. This function is the only walk of the set (see the head of the file).
+// The database is first written from the cache, and its cursor then visits
+// the keys in LevelDB's byte order. A key is the byte 'c' and the 32 bytes of
+// the ID (src/txdb.cpp, lines 32 and 93 to 104), so that is the same order.
 template <typename Visit>
-void visitSet(const MemoryCoinsView& store, Visit visit)
+void visitSet(CarriedSet& store, Visit visit)
 {
-    for (const auto& item : store.coins) visit(item.first, item.second);
+    if (!store.db) {
+        for (const auto& item : store.memory.coins) visit(item.first, item.second);
+        return;
+    }
+    store.flush();
+    std::unique_ptr<CCoinsViewCursor> cursor(store.db->Cursor());
+    for (; cursor->Valid(); cursor->Next()) {
+        uint256 txid;
+        CCoins entry;
+        if (!cursor->GetKey(txid) || !cursor->GetValue(entry)) throw UnmappedCoreError{"the coin database cursor failed"};
+        visit(txid, entry);
+    }
 }
+
+// The values of Core's GetUTXOStats for the carried set (src/rpc/blockchain.cpp,
+// lines 874 to 905): `hash_serialized` and `transactions`. The hash covers the
+// best block, and for each transaction ID its output indexes, amounts and
+// scripts. It does not cover the height or the coinbase flag.
+struct UtxoStats {
+    uint256 hashSerialized;
+    uint64_t transactions = 0;
+};
 
 // The summary of the whole set. `sink`, when it is not null, gets the record
 // of each coin in the order of the digest: the bytes of a snapshot file. The
 // sum of the amounts can exceed the int64_t range of CAmount, so it is a
 // 128-bit sum: each amount is at most MAX_MONEY, so no sum of fewer than 2^64
-// coins overflows it.
-template <typename Store>
-SetSummary setDigest(const Store& store, const std::function<void(const CDataStream&)>* sink = nullptr)
+// coins overflows it. `stats`, when it is not null, gets Core's GetUTXOStats
+// values from the same walk.
+SetSummary setDigest(CarriedSet& store, const std::function<void(const CDataStream&)>* sink = nullptr,
+                     UtxoStats* stats = nullptr)
 {
     SetSummary summary;
     unsigned __int128 value = 0;
+    CHashWriter ss(SER_GETHASH, PROTOCOL_VERSION);
+    if (stats) ss << store.best();
     visitSet(store, [&](const uint256& txid, const CCoins& entry) {
+        if (stats) {
+            ++stats->transactions;
+            ss << txid;
+        }
         for (size_t n = 0; n < entry.vout.size(); ++n) {
             const CTxOut& out = entry.vout[n];
             if (out.IsNull()) continue;
+            if (stats) {
+                ss << VARINT(static_cast<unsigned int>(n + 1));
+                ss << out;
+            }
             const CDataStream record = coinRecord(2, COutPoint(txid, static_cast<uint32_t>(n)), entry, out);
             digestRecord(summary.digest, record);
             if (sink) (*sink)(record);
@@ -151,7 +279,9 @@ SetSummary setDigest(const Store& store, const std::function<void(const CDataStr
             if (!MoneyRange(out.nValue)) throw UnmappedCoreError{"a coin of the set has an amount outside MoneyRange"};
             value += static_cast<unsigned __int128>(out.nValue);
         }
+        if (stats) ss << VARINT(0);
     });
+    if (stats) stats->hashSerialized = ss.GetHash();
     summary.value = decimal(value);
     return summary;
 }
@@ -185,7 +315,7 @@ struct SnapshotStart {
 // (docs/oracle.md, "Coin-set snapshots"). The file is the coin records of a
 // whole set under the tag 2, in the order of the digest. The checks and their
 // order are those of the oracle's reader.
-SnapshotStart readSnapshot(const std::string& path, MemoryCoinsView& store)
+SnapshotStart readSnapshot(const std::string& path, CarriedSet& store)
 {
     std::ifstream file(path, std::ios::binary);
     if (!file) throw SpecError{coinsFileFailure("coins_file_unreadable")};
@@ -197,6 +327,9 @@ SnapshotStart readSnapshot(const std::string& path, MemoryCoinsView& store)
     SnapshotStart start;
     uint256 lastTxid;
     uint32_t lastIndex = 0;
+    // The entry of the current transaction ID, which goes to the set when the ID changes.
+    CCoins entry;
+    bool open = false;
     CCoins* current = nullptr;
     std::vector<unsigned char> script;
     for (int64_t record = 0;; ++record) {
@@ -210,7 +343,10 @@ SnapshotStart readSnapshot(const std::string& path, MemoryCoinsView& store)
         };
         // The fixed part: the tag, the outpoint, the height, the coinbase byte and the amount.
         unsigned char head[50];
-        if (!fill(head, 50, true)) break;
+        if (!fill(head, 50, true)) {
+            if (open) store.insert(lastTxid, std::move(entry));
+            break;
+        }
         if (head[0] != 2) throw SpecError{coinsFileFailure("coins_file_tag", record)};
         uint256 txid;
         std::copy(head + 1, head + 33, txid.begin());
@@ -248,7 +384,10 @@ SnapshotStart readSnapshot(const std::string& path, MemoryCoinsView& store)
             if (static_cast<uint64_t>(current->nHeight) != height || current->fCoinBase != (coinbase == 1))
                 throw SpecError{coinsFileFailure("coins_file_entry", record)};
         } else {
-            current = &store.coins.emplace_hint(store.coins.end(), txid, CCoins())->second;
+            if (open) store.insert(lastTxid, std::move(entry));
+            entry = CCoins();
+            open = true;
+            current = &entry;
             current->fCoinBase = coinbase == 1;
             current->nHeight = static_cast<int>(height);
             current->nVersion = 1;
@@ -265,8 +404,7 @@ SnapshotStart readSnapshot(const std::string& path, MemoryCoinsView& store)
 
 // Write the set as the snapshot file `name` of the directory `dir`, through a
 // temporary file. The result is the record of the snapshot in the response.
-template <typename Store>
-UniValue writeSnapshot(const Store& store, const std::string& dir, int height, const uint256& hash)
+UniValue writeSnapshot(CarriedSet& store, const std::string& dir, int height, const uint256& hash)
 {
     const std::string name = "coins-" + std::to_string(height) + ".bin";
     const std::string path = dir + "/" + name;
@@ -314,7 +452,7 @@ std::vector<int> argHeights(const UniValue& req, const std::string& key)
 }
 
 // The supplied coin set. The checks are those of the oracle's adapter.
-void readCoins(const UniValue& req, MemoryCoinsView& store)
+void readCoins(const UniValue& req, CarriedSet& store)
 {
     const auto& entries = arg(req, "coins");
     if (!entries.isArray()) throw RequestError{"coins must be an array"};
@@ -348,8 +486,9 @@ void readCoins(const UniValue& req, MemoryCoinsView& store)
             if (n >= coins.vout.size()) coins.vout.resize(n + 1);
             coins.vout[n] = CTxOut(static_cast<CAmount>(value), scriptPubKey);
         }
-        if (store.coins.count(txid)) throw RequestError{"duplicate coin transaction ID"};
-        store.coins[txid] = coins;
+        if (store.have(txid)) throw RequestError{"duplicate coin transaction ID"};
+        if (store.db) store.insert(txid, std::move(coins));
+        else store.memory.coins[txid] = coins;
     }
 }
 
@@ -371,7 +510,7 @@ void readCoins(const UniValue& req, MemoryCoinsView& store)
 // of the block, whose coins have the height of the block. When both exist the
 // scan tests both heights. It does not follow ConnectBlock's early exits, so
 // it can refuse a request that Core would reject before SequenceLocks.
-void refuseSequenceLockOutsideDomain(const CBlock& block, const MemoryCoinsView& store, const CBlockIndex* tip, int oldest, int height)
+void refuseSequenceLockOutsideDomain(const CBlock& block, CCoinsView& store, const CBlockIndex* tip, int oldest, int height)
 {
     if (!tip) return;
     std::set<uint256> created;
@@ -390,8 +529,8 @@ void refuseSequenceLockOutsideDomain(const CBlock& block, const MemoryCoinsView&
             for (const auto& in : tx->vin) {
                 if (in.nSequence & CTxIn::SEQUENCE_LOCKTIME_DISABLE_FLAG) continue;
                 const bool timeLock = (in.nSequence & CTxIn::SEQUENCE_LOCKTIME_TYPE_FLAG) != 0;
-                const auto entry = store.coins.find(in.prevout.hash);
-                if (entry != store.coins.end()) test(entry->second.nHeight, timeLock);
+                CCoins entry;
+                if (store.GetCoins(in.prevout.hash, entry)) test(entry.nHeight, timeLock);
                 if (created.count(in.prevout.hash)) test(height, timeLock);
             }
         }
@@ -405,10 +544,20 @@ UniValue blockValidate(const UniValue& req)
     const bool fromFile = req.exists("blocks_file");
     // The coin set comes from `coins`, or from the snapshot that `coins_file` names.
     const bool coinsFromFile = req.exists("coins_file");
-    checkArgs(req, "block.validate", {"mode", "check_pow", "check_merkle_root", "adjusted_time", "chain",
-                                      "bip34_ancestor_hex", coinsFromFile ? "coins_file" : "coins",
-                                      fromFile ? "blocks_file" : "blocks_hex",
-                                      "snapshot_heights", "snapshot_dir", "digest_heights", "force_csv_active"});
+    // With `coins_db_continue` the coin set is the one in the database of `coins_db`.
+    const bool coinsDb = req.exists("coins_db");
+    const bool coinsContinue = req.exists("coins_db_continue") && argBool(req, "coins_db_continue");
+    std::vector<std::string> known{"mode", "check_pow", "check_merkle_root", "adjusted_time", "chain",
+                                   "bip34_ancestor_hex", fromFile ? "blocks_file" : "blocks_hex",
+                                   "snapshot_heights", "snapshot_dir", "digest_heights", "version_bits_heights",
+                                   "coins_db", "coins_db_cache_mb", "coins_db_continue", "force_csv_active"};
+    if (!coinsContinue) known.push_back(coinsFromFile ? "coins_file" : "coins");
+    checkArgs(req, "block.validate", known);
+    if ((req.exists("coins_db_cache_mb") || req.exists("coins_db_continue")) && !coinsDb)
+        throw RequestError{"coins_db_cache_mb and coins_db_continue need coins_db"};
+    if (coinsDb && !arg(req, "coins_db").isStr()) throw RequestError{"coins_db must be a string"};
+    const size_t cacheMb = req.exists("coins_db_cache_mb") ? static_cast<size_t>(argInt(req, "coins_db_cache_mb", 1, 1 << 20)) : 1024;
+    const std::vector<int> versionBitsHeights = argHeights(req, "version_bits_heights");
     const bool forceCsvActive = req.exists("force_csv_active") && argBool(req, "force_csv_active");
     if (fromFile && !arg(req, "blocks_file").isStr()) throw RequestError{"blocks_file must be a string"};
     if (coinsFromFile && !fromFile) throw RequestError{"coins_file needs blocks_file"};
@@ -432,12 +581,19 @@ UniValue blockValidate(const UniValue& req)
     if (!entries.isArray()) throw RequestError{"chain must be an array"};
     std::deque<CBlockIndex> chain;
     std::deque<uint256> hashes;
+    // The greatest height of a supplied entry without a version, or -1.
+    int unversioned = -1;
     for (size_t i = entries.size(); i-- > 0;) {
         const auto& e = entries[i];
         if (!e.isObject()) throw RequestError{"chain entries must be objects"};
         for (const auto& key : e.getKeys())
-            if (key != "height" && key != "time" && key != "bits") throw RequestError{"unknown chain entry field"};
+            if (key != "height" && key != "time" && key != "bits" && key != "version")
+                throw RequestError{"unknown chain entry field"};
         chain.emplace_back();
+        // The harness alone takes the version of an entry. Core's VersionBitsState counts it
+        // inside the CSV window, and the reads below refuse an entry there without one.
+        if (e.exists("version")) chain.back().nVersion = static_cast<int32_t>(argU32(e, "version"));
+        else unversioned = static_cast<int>(argInt(e, "height", 0, 2147483645));
         // The oracle's adapter refuses a predecessor at height 2147483646 or above (bodyStates).
         // Core can represent the candidate height 2147483647. The limit is the adapter's, and
         // docs/oracle.md states it, so no request compares that height.
@@ -479,10 +635,18 @@ UniValue blockValidate(const UniValue& req)
         }
     }
 
-    MemoryCoinsView store;
+    CarriedSet store;
+    if (coinsDb) store.open(arg(req, "coins_db").get_str(), cacheMb << 20, !coinsContinue);
     SnapshotStart snapshotStart;
-    if (coinsFromFile) snapshotStart = readSnapshot(arg(req, "coins_file").get_str(), store);
-    else readCoins(req, store);
+    if (coinsContinue) {
+        // The set and its best block are the database's.
+    } else if (coinsFromFile) {
+        snapshotStart = readSnapshot(arg(req, "coins_file").get_str(), store);
+    } else {
+        readCoins(req, store);
+    }
+    store.endLoad();
+    const uint256 dbStart = coinsDb ? store.best() : uint256();
 
     // A file has the format of `blocks.bin` of scripts/fetch_blocks.py: for
     // each block the height and the length as 4-byte little-endian integers,
@@ -514,6 +678,64 @@ UniValue blockValidate(const UniValue& req)
     versionbitscache.Clear();
     fCheckpointsEnabled = false;
     harnessSetAdjustedTime(adjustedTime);
+
+    // The reads of Core below a predecessor `at`: the median time, and the
+    // aligned version-bits boundary with its ten predecessors. Below the CSV
+    // start Core's walk stops at that boundary. At or after the CSV timeout the
+    // harness seeds FAILED there (design record 0010, decision 3). Inside the
+    // window Core walks back one period at a time to a boundary whose median
+    // time is below the CSV start, and counts the versions of every block above
+    // it (versionbits.cpp, lines 44 to 108). So the chain must reach that
+    // boundary and its ten predecessors, and every supplied entry above it needs
+    // a version (design record 0011, section 3.2).
+    const auto& csv = Params().GetConsensus(0).vDeployments[Consensus::DEPLOYMENT_CSV];
+    const int period = Params().GetConsensus(0).nMinerConfirmationWindow;
+    auto checkReads = [&](CBlockIndex* at) {
+        if (at->nHeight - std::min(10, at->nHeight) < oldest) throw RequestError{"chain is too short for the median time"};
+        const int aligned = at->nHeight - ((at->nHeight + 1) % period);
+        if (aligned < 0) return;
+        if (aligned - std::min(10, aligned) < oldest) throw RequestError{"chain does not reach the aligned boundary"};
+        CBlockIndex* boundary = at->GetAncestor(aligned);
+        const int64_t boundaryMtp = boundary->GetMedianTimePast();
+        if (boundaryMtp >= csv.nTimeout) {
+            versionbitscache.caches[Consensus::DEPLOYMENT_CSV][boundary] = THRESHOLD_FAILED;
+            versionbitscache.caches[Consensus::DEPLOYMENT_SEGWIT][boundary] = THRESHOLD_FAILED;
+            return;
+        }
+        if (boundaryMtp < csv.nStartTime) return;
+        const CBlockIndex* base = boundary;
+        while (base->GetMedianTimePast() >= csv.nStartTime) {
+            if (base->nHeight < period) throw UnmappedCoreError{"a boundary of the first period is inside the CSV window"};
+            const int below = base->nHeight - period;
+            if (below - std::min(10, below) < oldest)
+                throw RequestError{"chain does not reach a version-bits boundary below the CSV start"};
+            base = base->GetAncestor(below);
+        }
+        if (unversioned > base->nHeight) throw RequestError{"a chain entry in the CSV window has no version"};
+    };
+    // Core's state of CSV and SegWit for the block after `at`, as its checks read it.
+    UniValue versionBitsStates(UniValue::VARR);
+    auto reportState = [&](CBlockIndex* at) {
+        if (!std::binary_search(versionBitsHeights.begin(), versionBitsHeights.end(), at->nHeight)) return;
+        checkReads(at);
+        const auto& params = Params().GetConsensus(at->nHeight + 1);
+        auto name = [](ThresholdState s) -> std::string {
+            switch (s) {
+                case THRESHOLD_DEFINED: return "defined";
+                case THRESHOLD_STARTED: return "started";
+                case THRESHOLD_LOCKED_IN: return "locked_in";
+                case THRESHOLD_ACTIVE: return "active";
+                case THRESHOLD_FAILED: return "failed";
+            }
+            throw UnmappedCoreError{"unknown threshold state"};
+        };
+        UniValue state(UniValue::VOBJ);
+        state.pushKV("height", at->nHeight);
+        state.pushKV("csv", name(VersionBitsState(at, params, Consensus::DEPLOYMENT_CSV, versionbitscache)));
+        state.pushKV("segwit", name(VersionBitsState(at, params, Consensus::DEPLOYMENT_SEGWIT, versionbitscache)));
+        versionBitsStates.push_back(state);
+    };
+    if (tip) reportState(tip);
 
     bool tipHashKnown = false;
     UniValue records(UniValue::VARR);
@@ -576,7 +798,12 @@ UniValue blockValidate(const UniValue& req)
                     hashes.push_back(block.hashPrevBlock);
                     tip->phashBlock = &hashes.back();
                 }
-                store.best = block.hashPrevBlock;
+                // ConnectBlock asserts that the view's best block is the predecessor.
+                if (coinsContinue) {
+                    if (store.best() != block.hashPrevBlock) throw SpecError{coinsDbFailure("coins_db_best_block")};
+                } else {
+                    store.setBest(block.hashPrevBlock);
+                }
                 mapBlockIndex[block.hashPrevBlock] = tip;
                 tipHashKnown = true;
             } else if (block.hashPrevBlock != tip->GetBlockHash()) {
@@ -589,27 +816,16 @@ UniValue blockValidate(const UniValue& req)
         // The aligned boundary of the block: the key of its version-bits states. It is null below the first period.
         CBlockIndex* boundary = nullptr;
         if (tip) {
-            if (tip->nHeight - std::min(10, tip->nHeight) < oldest) throw RequestError{"chain is too short for the median time"};
+            checkReads(tip);
             if (!genesis) {
                 std::vector<CBlockIndex> recent;
                 for (const CBlockIndex* walk = tip; walk && walk != &anchor && recent.size() < 242; walk = walk->pprev)
                     recent.push_back(*walk);
                 checkWorkHistory(recent, block, Params().GetConsensus(height));
             }
-            const int period = 10080;
+            // checkReads requires the boundary's reads and seeds its states.
             const int aligned = tip->nHeight - ((tip->nHeight + 1) % period);
-            if (aligned >= 0) {
-                if (aligned - std::min(10, aligned) < oldest) throw RequestError{"chain does not reach the aligned boundary"};
-                boundary = tip->GetAncestor(aligned);
-                const int64_t boundaryMtp = boundary->GetMedianTimePast();
-                // The seed of design record 0010, decision 3, as in block.contextual_check_body.
-                if (boundaryMtp >= 1493596800) {
-                    versionbitscache.caches[Consensus::DEPLOYMENT_CSV][boundary] = THRESHOLD_FAILED;
-                    versionbitscache.caches[Consensus::DEPLOYMENT_SEGWIT][boundary] = THRESHOLD_FAILED;
-                } else if (boundaryMtp >= 1462060800) {
-                    throw RequestError{"version-bits gap is outside the comparison domain"};
-                }
-            }
+            if (aligned >= 0) boundary = tip->GetAncestor(aligned);
         }
 
         // A record of a file gives the height of its block.
@@ -649,19 +865,19 @@ UniValue blockValidate(const UniValue& req)
             }
             if (valid) {
                 function = "ConnectBlock";
-                CCoinsViewCache view(&store);
+                CCoinsViewCache view(&store.view());
                 CBlockIndex candidate(block);
                 candidate.pprev = tip;
                 candidate.nHeight = height;
                 candidate.phashBlock = &hash;
-                if (forced) refuseSequenceLockOutsideDomain(block, store, tip, oldest, height);
+                if (forced) refuseSequenceLockOutsideDomain(block, store.view(), tip, oldest, height);
                 valid = ConnectBlock(block, state, &candidate, view, Params(), true);
                 if (valid) {
                     // The changes, read from a second cache that repeats Core's
                     // UpdateCoins on the transactions in order. The genesis block
                     // changes nothing (D114, lines 1821 to 1825).
                     if (!genesis) {
-                        CCoinsViewCache shadow(&store);
+                        CCoinsViewCache shadow(&store.view());
                         for (const auto& tx : block.vtx) {
                             if (!tx->IsCoinBase()) {
                                 for (const auto& in : tx->vin) {
@@ -698,6 +914,7 @@ UniValue blockValidate(const UniValue& req)
                     if (!forced) {
                         view.SetBestBlock(hash);
                         if (!view.Flush()) throw UnmappedCoreError{"the coin set refused a flush"};
+                        store.bound();
                     }
                 }
             }
@@ -754,8 +971,11 @@ UniValue blockValidate(const UniValue& req)
             tipHashKnown = true;
             mapBlockIndex.clear();
             mapBlockIndex[hash] = tip;
-            // A request with `coins_file` has no digest of the whole set in a block record.
-            if (!coinsFromFile && height % 1000 == 0) {
+            reportState(tip);
+            // The Core pass reads its progress, and the last height before a stop, from standard error.
+            if (coinsDb && height % 10000 == 0) std::cerr << "block.validate: accepted height " << height << std::endl;
+            // A request with `coins_file` or `coins_db` has no digest of the whole set in a block record.
+            if (!coinsFromFile && !coinsDb && height % 1000 == 0) {
                 const SetSummary whole = setDigest(store);
                 digest = UniValue(hex(whole.digest.begin(), whole.digest.end()));
                 value = UniValue(whole.value);
@@ -763,12 +983,16 @@ UniValue blockValidate(const UniValue& req)
             if (std::binary_search(snapshotHeights.begin(), snapshotHeights.end(), height))
                 snapshots.push_back(writeSnapshot(store, arg(req, "snapshot_dir").get_str(), height, hash));
             if (std::binary_search(digestHeights.begin(), digestHeights.end(), height)) {
-                const SetSummary whole = setDigest(store);
+                UtxoStats stats;
+                const SetSummary whole = setDigest(store, nullptr, &stats);
                 UniValue summary(UniValue::VOBJ);
                 summary.pushKV("height", height);
                 summary.pushKV("set_digest_hex", hex(whole.digest.begin(), whole.digest.end()));
                 summary.pushKV("set_coins", whole.count);
                 summary.pushKV("set_value", whole.value);
+                // Core's gettxoutsetinfo values for this set (design record 0011, decision 7).
+                summary.pushKV("hash_serialized", stats.hashSerialized.GetHex());
+                summary.pushKV("transactions", stats.transactions);
                 setDigests.push_back(summary);
             }
         }
@@ -793,5 +1017,12 @@ UniValue blockValidate(const UniValue& req)
     }
     if (req.exists("snapshot_heights")) ok.pushKV("snapshots", snapshots);
     if (req.exists("digest_heights")) ok.pushKV("set_digests", setDigests);
+    if (req.exists("version_bits_heights")) ok.pushKV("version_bits_states", versionBitsStates);
+    if (coinsDb) {
+        // The best block of the database at the start and at the end, in display order.
+        // The digest above wrote the cache to the database.
+        ok.pushKV("coins_db_start_display", dbStart.GetHex());
+        ok.pushKV("coins_db_best_display", store.best().GetHex());
+    }
     return ok;
 }

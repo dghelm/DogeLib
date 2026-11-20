@@ -35,7 +35,7 @@ A proposal with its own errors `E` uses `ε = ScriptError ⊕ E` and `embed = Su
 The baseline result types carry an `Unsupported` reason, and a proposal cannot add a constructor to that type either.
 So the framework result types also take the type of unsupported reasons `υ` as a parameter.
 
-The loop and `VerifyScript` produce one baseline reason of their own: `Unsupported.flags` for a flag outside `supportedFlags`.
+`evalScriptWith` and `verifyScriptWith` produce one baseline reason of their own: `Unsupported.flags` for a flag outside `supportedFlags`.
 `evalScriptWith`, `verifyScriptWith`, `baselineStep` and the `ofBaseline` maps take a map `embedU : Unsupported → υ` for the baseline reasons.
 `evalLoopWith` produces no reason of its own, so it needs no such map.
 A proposal with its own reasons `U` uses `υ = Unsupported ⊕ U` and `embedU = Sum.inl`.

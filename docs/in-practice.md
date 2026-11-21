@@ -234,13 +234,16 @@ The last two parts matter. A revision that rejects every block also restricts ac
 
 **A property that a user wants.** The soft-fork claim says nothing about what a lock achieves.
 `relativeLock_enforced` states it for the coin script above, and for every script of that form.
-Suppose that the active revision accepts an applicable block, and that an input spends a coin whose script is a height operand `d`, then `0xb2`, then a script without `0xb2`.
+Suppose that the active revision accepts an applicable block, and that an input of a transaction that is not a coinbase spends a coin with a script of this form:
+a push of an operand of at most 5 bytes, then `0xb2`, then a script without `0xb2`.
+Let the `scriptSig` of the input have no `0xb2`, and let the operand have bits 31 and 22 clear. Let `d` be the low 16 bits of the operand.
 Then the block is at least `d` blocks above the coin.
+The bound is `d`, and not the whole operand: the rule masks both values with `0x0040ffff`. The operand 65,537 has `d` equal to 1.
 
 For `01 01 b2` that means: no accepted block spends the coin in the block that creates it.
 The proof joins two rules. The opcode bounds the sequence of the input, and the sequence lock bounds the depth of the coin.
 Neither rule gives the property alone: without BIP 68, a sequence is a number that nothing compares with the chain.
-`relativeLock_enforced_time` is the same property for a time operand.
+`relativeLock_enforced_time` is the property for an operand with bit 22 set, with median times past in the place of heights.
 
 **A comparison with Core's own code.** No Core behaviour exists for an invented rule. For this revision Core's code exists, and only its activation state never occurs.
 The Core harness can seed that state, and Core's own `ContextualCheckBlock` and `ConnectBlock` then run the three rules.
@@ -252,7 +255,7 @@ python3 -I scripts/compare_csv_forced.py --made-only .lake/build/bin/dogelib-ora
 
 ```text
 Core at e0a1c15 with the CSV state forced to ACTIVE, against the proposed revision RelativeLockTime (the BIP 113 cutoff, the BIP 112 opcode and the BIP 68 sequence locks).
-sequence locks, made blocks: 46 agree with the hand-derived results (ancestorOutsideView 2, bad-txns-nonfinal 16, coinAboveBlock 4, heightOutOfDomain 4, valid 20)
+sequence locks, made blocks: 61 agree with the hand-derived results (ancestorOutsideView 2, bad-txns-BIP30 1, bad-txns-nonfinal 23, coinAboveBlock 4, heightOutOfDomain 4, valid 27)
 This state does not occur on mainnet (csv_never_lockedIn).
 ```
 

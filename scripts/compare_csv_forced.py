@@ -50,7 +50,8 @@ The run has these parts:
    src/validation.cpp, lines 309 to 384) and from BIP 68 (SOURCES.md, P1). A time lock reads
    median times past, which this script computes from the header times of the request by the
    definition of GetMedianTimePast (D18). The made blocks must reach `bad-txns-nonfinal` through a
-   sequence lock. Three kinds of block are outside the model of the revision (design record 0012,
+   sequence lock. Some blocks stand on a made chain from height 0, for the coins at heights 0 and 1
+   and for a time lock that is one second short. Three kinds of block are outside the model of the revision (design record 0012,
    section 6.3). For them the harness does not run Core's ConnectBlock with the seed, and the
    field `unsupported` of `forced` names the reason. The `revised` object must then have the
    verdict `unsupported` with the same reason. The comparison must fail on each planted fault.
@@ -473,6 +474,24 @@ REASON_PREFIX = "RelativeLockTime: "
 REASONS = ("ancestorOutsideView", "coinAboveBlock", "heightOutOfDomain")
 
 
+def well_formed(fields: dict) -> bool:
+    """Whether the fields have the form of their verdict.
+
+    An acceptance has a digest of 64 hexadecimal digits and no reject field. A rejection has a
+    reason, a score and a code, and no digest. A result outside the model has a reason of the
+    revision and no other field. `valid` is a Boolean, so the number 1 does not stand for true."""
+    if fields["unsupported"] is not None:
+        return fields["unsupported"] in REASONS and all(fields[k] is None for k in (*VERDICT_KEYS, "changes_digest_hex"))
+    digest = fields["changes_digest_hex"]
+    if fields["valid"] is True:
+        return (isinstance(digest, str) and len(digest) == 64 and all(c in "0123456789abcdef" for c in digest)
+                and all(fields[k] is None for k in ("reject_reason", "dos", "reject_code")))
+    if fields["valid"] is False:
+        return (digest is None and isinstance(fields["reject_reason"], str)
+                and all(type(fields[k]) is int for k in ("dos", "reject_code")))
+    return False
+
+
 def forced_record_fields(forced) -> dict | None:
     """The verdict fields, the digest of the changes and the reason outside the model of an object `forced`.
 
@@ -482,7 +501,8 @@ def forced_record_fields(forced) -> dict | None:
     if forced["unsupported"] is not None:
         if forced["unsupported"] not in REASONS or any(forced[k] is not None for k in FORCED_KEYS - {"unsupported"}):
             return None
-    return {k: forced[k] for k in (*VERDICT_KEYS, "changes_digest_hex", "unsupported")}
+    fields = {k: forced[k] for k in (*VERDICT_KEYS, "changes_digest_hex", "unsupported")}
+    return fields if well_formed(fields) else None
 
 
 def revised_record_fields(revised) -> dict | None:
@@ -499,9 +519,10 @@ def revised_record_fields(revised) -> dict | None:
         return {**{k: None for k in (*VERDICT_KEYS, "changes_digest_hex")}, "unsupported": reason[len(REASON_PREFIX):]}
     if revised.get("verdict") not in ("accepted", "rejected"):
         return None
-    return {"valid": revised["verdict"] == "accepted", "reject_reason": revised["reject_reason"],
-            "dos": revised["dos"], "reject_code": revised["reject_code"],
-            "changes_digest_hex": revised["changes_digest_hex"], "unsupported": None}
+    fields = {"valid": revised["verdict"] == "accepted", "reject_reason": revised.get("reject_reason"),
+              "dos": revised.get("dos"), "reject_code": revised.get("reject_code"),
+              "changes_digest_hex": revised.get("changes_digest_hex"), "unsupported": None}
+    return fields if well_formed(fields) else None
 
 
 def forced_validate_fields(response: dict) -> dict | None:
@@ -657,7 +678,7 @@ def sequence_cases() -> list[dict]:
                 txs.append(first)
                 point = outpoint(sha256d(first))
             txs.append(transaction([txin(point, b"", sequence)], [txout(1)], version=version))
-            cases.append({"label": f"height {height}, {label}", "forced": forced,
+            cases.append({"label": f"height {height}, {label}", "forced": forced, "baseline": None,
                           "request": base.request([base.block([base.coinbase()] + txs)], coins)})
 
         # Height locks, on a coin 10 blocks below the block.
@@ -698,7 +719,90 @@ def sequence_cases() -> list[dict]:
         case("coin height 2^31 - 65535, time lock", "heightOutOfDomain", TYPE_FLAG, 2**31 - 65535)
         # With bit 31 the input has no lock, so no read is outside the model.
         case("coin height 2^31 - 65535, bit 31", None, DISABLE_FLAG, 2**31 - 65535)
+    cases += low_chain_cases() + [overwrite_case()]
     return cases
+
+
+LOW_TIME = 1400000000  # the time of height 0 of the made chain
+LOW_HEIGHT = 40  # the height of the made block
+
+
+def low_chain_cases() -> list[dict]:
+    """Made blocks at height 40 on a made chain from height 0, for the boundaries that need chosen times and low coins.
+
+    The chain entry at height k has the time LOW_TIME + 512 * k. The times rise with the height, so
+    the median time past of the entry at height k >= 10 is the time of height k - 5. At height 0 it
+    is the one time, and at height 1 the upper of two times. So the median of the predecessor is
+    m = LOW_TIME + 512 * 34. Heights 1 to 239 have no retarget, so the block has the bits of its
+    chain. It has no proof of work. `second_short` lowers the time of height 34 by one second: that
+    entry stays the sixth of the eleven, and the median is m - 1."""
+    cases = []
+
+    def case(label, forced, sequence, coin_height, second_short=False):
+        chain = [{"height": k, "time": LOW_TIME + 512 * k - (1 if second_short and k == 34 else 0), "bits": BITS}
+                 for k in range(LOW_HEIGHT - 1, -1, -1)]
+        check(median_time_past_low(chain, LOW_HEIGHT - 1) == LOW_TIME + 512 * 34 - (1 if second_short else 0),
+              "the made chain does not have the hand-derived median")
+        coins = Coins()
+        point = coins.add(coin_id(1), 0, 1000, bytes([OP_1]), height=coin_height)
+        tx = transaction([txin(point, b"", sequence)], [txout(1)], version=2)
+        made = block([coinbase_with_height(LOW_HEIGHT), tx], time=LOW_TIME + 512 * LOW_HEIGHT, bits=BITS)
+        req = {"op": "block.validate", "mode": "base", "check_pow": False, "check_merkle_root": True,
+               "adjusted_time": LOW_TIME + 512 * LOW_HEIGHT, "chain": chain, "bip34_ancestor_hex": None,
+               "coins": coins.json(), "blocks_hex": [made.hex()]}
+        cases.append({"label": f"made chain, {label}", "forced": forced, "baseline": None, "request": req})
+
+    # max(c - 1, 0): the coins at heights 0 and 1 both read the ancestor at height 0, with the median LOW_TIME.
+    case("coin at height 0, time lock of 34 units: met exactly", None, TYPE_FLAG | 34, 0)
+    case("coin at height 0, time lock of 35 units", SEQUENCE_NONFINAL, TYPE_FLAG | 35, 0)
+    case("coin at height 1, time lock of 34 units: met exactly", None, TYPE_FLAG | 34, 1)
+    case("coin at height 1, time lock of 35 units", SEQUENCE_NONFINAL, TYPE_FLAG | 35, 1)
+    # The coin at height 2 reads the ancestor at height 1, with the median LOW_TIME + 512.
+    case("coin at height 2, time lock of 33 units: met exactly", None, TYPE_FLAG | 33, 2)
+    case("coin at height 2, time lock of 34 units", SEQUENCE_NONFINAL, TYPE_FLAG | 34, 2)
+    # The coin at height 21 reads the ancestor at height 20, with the median LOW_TIME + 512 * 15.
+    case("coin at height 21, time lock of 19 units: met exactly", None, TYPE_FLAG | 19, 21)
+    case("coin at height 21, time lock of 20 units", SEQUENCE_NONFINAL, TYPE_FLAG | 20, 21)
+    # The same lock of 19 units with the median of the predecessor one second lower: one second short.
+    case("coin at height 21, time lock of 19 units, one second short", SEQUENCE_NONFINAL, TYPE_FLAG | 19, 21,
+         second_short=True)
+    case("coin at height 21, time lock of 18 units, median one second lower", None, TYPE_FLAG | 18, 21,
+         second_short=True)
+    # Height locks on the low coins.
+    case("coin at height 0, height lock 40: met exactly", None, 40, 0)
+    case("coin at height 0, height lock 41", SEQUENCE_NONFINAL, 41, 0)
+    case("coin at height 1, height lock 39: met exactly", None, 39, 1)
+    case("coin at height 1, height lock 40", SEQUENCE_NONFINAL, 40, 1)
+    return cases
+
+
+def median_time_past_low(chain: list[dict], height: int) -> int:
+    """`median_time_past` for a chain that reaches height 0: the walk stops at the genesis entry."""
+    times = {e["height"]: e["time"] for e in chain}
+    span = sorted(times[h] for h in range(max(height - 10, 0), height + 1))
+    return span[len(span) // 2]
+
+
+BIP30 = ("bad-txns-BIP30", 100, 16)  # D114, lines 1880 to 1887
+
+
+def overwrite_case() -> dict:
+    """A block that Core rejects through BIP30, on which the scan of the harness must not update its cache.
+
+    The transaction T spends a supplied coin. The coin set also holds two unspent outputs under
+    the transaction ID of T. The transaction A spends the first of them, and stands before T in
+    the block. BIP30 is enforced at this height, and T would overwrite an unspent output, so the
+    baseline and the forced run reject the block before they connect a transaction."""
+    base = Base(1034382)
+    coins = Coins()
+    funding = coins.add(coin_id(1), 0, 1000, bytes([OP_1]))
+    t = transaction([txin(funding, b"", 0xffffffff)], [txout(1), txout(1)])
+    txid = sha256d(t)
+    first = coins.add(txid, 0, 1, bytes([OP_1]))
+    coins.add(txid, 1, 1, bytes([OP_1]))
+    a = transaction([txin(first, b"", 0xffffffff)], [txout(1)])
+    return {"label": "a transaction that would overwrite unspent outputs of its own ID", "forced": BIP30,
+            "baseline": BIP30, "request": base.request([base.block([base.coinbase(), a, t])], coins)}
 
 
 def expected_sequence_fields(forced) -> dict:
@@ -726,22 +830,23 @@ def sequence_run(proposal: str, harness: str, timeout: float) -> tuple[int, dict
         got = forced_validate_fields(forced)
         check(got is not None and {k: got[k] for k in want} == want,
               f"{label}: Core forced gave {json.dumps(forced)[:400]}, expected {want}")
-        # The baseline has no sequence lock: Core without the seed and the proposal executable accept.
+        # The baseline has no sequence lock: Core without the seed and the proposal executable give the baseline verdict.
         record = validate_record(plain)
-        check(record is not None and record["valid"] is True, f"{label}: Core without the seed gave {json.dumps(plain)[:400]}")
+        check(record is not None and {k: record[k] for k in VERDICT_KEYS} == expected_fields(c["baseline"]),
+              f"{label}: Core without the seed gave {json.dumps(plain)[:400]}")
         same = {k: v for k, v in without_forced(forced).items() if k != "id"} == {k: v for k, v in plain.items() if k != "id"}
         check(same, f"{label}: the response with the argument differs from the response without it, apart from `forced`")
         if c["forced"] is None:
             check(got["changes_digest_hex"] == record["changes_digest_hex"],
                   f"{label}: the forced run and the run without the seed have different changes")
         ours = validate_record(lean[i])
-        check(ours is not None and ours["valid"] is True,
+        check(ours is not None and {k: ours[k] for k in VERDICT_KEYS} == expected_fields(c["baseline"]),
               f"{label}: the baseline fields of the proposal executable are {json.dumps(lean[i])[:400]}")
         fault = compare_forced_validate(lean[i], forced)
         check(fault is None, f"{label}: {fault}")
-        # The self-test: with the revision inactive, the comparison fails on every block that the
-        # forced run does not accept, on the verdict and not on the shape.
-        if c["forced"] is not None:
+        # The self-test: with the revision inactive, the comparison fails on every block with two
+        # results, on the verdict and not on the shape.
+        if c["forced"] != c["baseline"]:
             fault = compare_forced_validate(inactive[i], forced)
             check(fault is not None and fault.startswith("revised "),
                   f"self-test {label}: the comparison passes with the revision inactive")
@@ -758,6 +863,18 @@ def sequence_run(proposal: str, harness: str, timeout: float) -> tuple[int, dict
         results[name] = results.get(name, 0) + 1
     for name in ("bad-txns-nonfinal", *REASONS):
         check(results.get(name), f"no made block reaches {name} through a sequence lock")
+    # The self-test of the shape: an acceptance without a digest, a number for the verdict, and a
+    # reason with a verdict are no results, so they cannot agree with anything.
+    accepted = {"valid": True, "reject_reason": None, "dos": None, "reject_code": None, "changes_digest_hex": "00" * 32,
+                "spent": 1, "created": 1, "unsupported": None}
+    check(forced_record_fields(accepted) is not None, "self-test: a well-formed acceptance has no shape")
+    for fault in ({"changes_digest_hex": None}, {"valid": 1}, {"unsupported": "coinAboveBlock"}, {"changes_digest_hex": "00"}):
+        check(forced_record_fields({**accepted, **fault}) is None, f"self-test: the shape {fault} is taken for a result")
+        planted += 1
+    check(revised_record_fields({"verdict": "accepted", "reject_reason": None, "dos": None, "reject_code": None,
+                                 "changes_digest_hex": None}) is None,
+          "self-test: a revised acceptance without a digest is taken for a result")
+    planted += 1
     return len(cases), results, planted
 
 

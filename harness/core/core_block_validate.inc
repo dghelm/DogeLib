@@ -523,8 +523,14 @@ void readCoins(const UniValue& req, CarriedSet& store)
 // block. The scan does not follow the other exits of ConnectBlock: BIP30, the
 // scripts, the count of signature operations and the amounts of an earlier
 // transaction. So it can name a read on a block that Core would reject before
-// that read. The scan calls no Core function that can assert on these inputs:
-// CheckBlock has passed, so no transaction names one outpoint twice.
+// that read. An earlier transaction that fails its own sequence lock is one
+// more such exit. The scan calls no Core function that can assert or throw on
+// these inputs. CheckBlock has passed, so no transaction names one outpoint
+// twice. UpdateCoins throws for a transaction that is not a coinbase when the
+// cache holds unspent coins under its transaction ID (ModifyNewCoins,
+// src/coins.cpp, lines 134 to 140). The scan ends with null before that call:
+// Core rejects such a block through BIP30, or reaches the same call in its
+// own loop, and every read up to that transaction was inside the model.
 const char* sequenceLockOutsideModel(const CBlock& block, CCoinsView& store, const CBlockIndex* tip, int oldest, int height)
 {
     if (!tip) return nullptr;
@@ -543,6 +549,10 @@ const char* sequenceLockOutsideModel(const CBlock& block, CCoinsView& store, con
                     if (at - std::min(10, at) < oldest) return "ancestorOutsideView";
                 }
             }
+        }
+        if (!tx->IsCoinBase()) {
+            const CCoins* existing = shadow.AccessCoins(tx->GetHash());
+            if (existing && !existing->IsPruned()) return nullptr;
         }
         UpdateCoins(*tx, shadow, height);
     }

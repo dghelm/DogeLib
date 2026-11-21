@@ -3981,7 +3981,7 @@ A time lock of BIP 68 reads an ancestor at the height of the spent coin.
 Three reads of `SequenceLocks` are outside the model of the revision: an ancestor below the supplied chain, a time lock on a coin above the block, and a coin height from 2^31 - 65535.
 The harness scans each block for such a read before the forced `ConnectBlock`, and does not run Core on it. The object `forced` then names the reason, and has no verdict.
 The scan is harness code, not Core's code. A user trusts that it finds each such read: a read that it misses reaches Core, which can then dereference a null pointer or leave the supplied chain.
-The scan does not follow every exit of `ConnectBlock`, so it can name a read on a block that Core would reject earlier ([docs/oracle.md](docs/oracle.md#core-with-the-csv-state-forced-to-active)).
+The scan does not follow every exit of `ConnectBlock`, such as an earlier transaction that fails its own sequence lock. So it can name a read on a block that Core would reject earlier ([docs/oracle.md](docs/oracle.md#core-with-the-csv-state-forced-to-active)).
 Agreement on such a block shows that the two programs draw the limit of the model at one place. It shows nothing about a verdict of Core.
 
 The two seeds differ in kind.

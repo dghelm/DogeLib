@@ -1245,8 +1245,8 @@ It compares the forced result of Core with the `revised` object: verdict, reject
 | `block.validate` made blocks | 36 | 18 spends of one supplied coin, at heights 1,034,382 and 3,464,751. A height operand met exactly and one short. Versions 1, 2 and -1. A sequence with bit 31, and with bits outside the mask. Time and height types. An operand with bit 31, a negative operand, one of six bytes, and an empty stack. The opcode in a skipped branch, in the `scriptSig` and in a P2SH redeem script. A script with a false result. Each verdict is derived by hand from D3, lines 392 to 427 and 1310 to 1354, and from D101, lines 1488 to 1512 |
 | `block.validate` harness state | 72 | After each made block with the argument, the same request without it and with the value false. The response with the argument, without its objects `forced`, equals the response without the argument |
 | `block.validate` self-test | 40 | For 20 made blocks with two verdicts, the comparison fails with the revision inactive. It also fails when the harness record without the seed stands in the place of `forced`. Each failure is a difference of verdicts |
-| Sequence locks, made blocks | 46 | 23 blocks at heights 1,034,382 and 3,464,751, each with the argument and then without it. A height lock met exactly, and one block short. Versions 1, 2 and -1. Bit 31, and bits outside the mask. A coin that the block itself creates, with a height lock and a time lock of 0 and of 1. The largest time lock that is met on a coin 20 blocks below, and one unit more. A height lock on a coin above the block. Five blocks at each height are outside the model, for the three reasons. Each result is derived by hand from D114, lines 309 to 384, and from BIP 68. The script computes the median times past from the header times of the request |
-| Sequence locks, self-test | 52 | For the 26 made blocks that the forced run does not accept, the comparison fails with the revision inactive. It also fails when the harness record without the seed stands in the place of `forced` |
+| Sequence locks, made blocks | 61 | Each with the argument and then without it. 23 blocks at each of the heights 1,034,382 and 3,464,751: a height lock met exactly, and one block short. Versions 1, 2 and -1. Bit 31, and bits outside the mask. A coin that the block itself creates, with a height lock and a time lock of 0 and of 1. The largest time lock that is met on a coin 20 blocks below, and one unit more. A height lock on a coin above the block. Five blocks at each height are outside the model, for the three reasons. 14 blocks at height 40 on a made chain from height 0, whose entry at height `k` has the time 1,400,000,000 + 512 * `k`: time locks that are met exactly and one unit more on coins at heights 0, 1, 2 and 21, a time lock that is one second short, and height locks on the coins at heights 0 and 1. One block that Core rejects through BIP30, for the scan of the harness. Each result is derived by hand from D114, lines 309 to 384, and from BIP 68. The script computes the median times past from the times of the request |
+| Sequence locks, self-test | 71 | For the 33 made blocks with two results, the comparison fails with the revision inactive. It also fails when the harness record without the seed stands in the place of `forced`. Five malformed results are not taken for results: an acceptance without a digest of its changes, a digest of another length, the number 1 as a verdict, and a reason with a verdict |
 | `block.validate` on mainnet | 1 | Heights 0 to 10,000 in one request from the empty coin set, with the argument. The harness runs each block with the seed and without it, and the run without the seed carries the state |
 
 Every forced result agrees with its `revised` object.
@@ -1275,7 +1275,7 @@ The 36 made blocks reach `non-mandatory-script-verify-flag` through the opcode 2
 
 With the forced state, Core's `ConnectBlock` also runs `SequenceLocks` of BIP 68 (D114, lines 1948 to 1959), which the revision has as `sequenceLocks`.
 Each of the 36 made blocks of the opcode passes that test, in Core and in the revision: its coin is far below the block, or its lock is 0.
-The 46 made blocks of the sequence locks reach `bad-txns-nonfinal` of `ConnectBlock` 16 times, with the score 100.
+The 61 made blocks of the sequence locks reach `bad-txns-nonfinal` of `ConnectBlock` 23 times, with the score 100.
 
 Three reads of `SequenceLocks` are outside the model of the revision (design record 0012, section 6.3), and the harness does not let Core make them.
 
@@ -1292,13 +1292,16 @@ So for these blocks the comparison checks that the two programs draw the limit o
 For a coin one block above the block, Core has a defined result, which neither program gives.
 
 The scan follows the lookup of the inputs on a second cache, and it ends at a transaction whose inputs are missing.
-It does not follow the other exits of `ConnectBlock`: BIP30, the scripts, the count of signature operations and the amounts of an earlier transaction.
+It also ends at a transaction that would overwrite unspent outputs of its own transaction ID, where Core rejects through BIP30 or stops in its own loop.
+It does not follow the other exits of `ConnectBlock`: BIP30, the scripts, the count of signature operations and the amounts of an earlier transaction, and an earlier transaction that fails its own sequence lock.
 So it can name a read on a block that Core would reject before that read, where the revision gives the rejection. The comparison then fails, and it sends no such block.
+For example, let the transaction at 1 have a height lock that is one block short, and the transaction at 2 a time lock on a coin above the block. The scan names `coinAboveBlock`, and the revision rejects the transaction at 1.
 
 Agreement shows that the Lean rule equals Core's dormant code on these requests.
 It does not show that the rule is right for Dogecoin, and a count says nothing about other heights or about unconfirmed transactions.
 The comparison covers the rule of BIP 113 through `ContextualCheckBlock`, and the rules of BIP 112 and BIP 68 through `block.validate`, on made blocks and on mainnet heights 0 to 10,000.
-No forced run of `block.validate` covers a mainnet block above height 10,000. No made block has a time lock that is one second short: a block on real headers cannot place that boundary, and the known answers of `lake test` cover it.
+No forced run of `block.validate` covers a mainnet block above height 10,000.
+The time lock that is one second short, and the coins at heights 0 and 1, are on the made chain alone: the made blocks on real headers have the times of their headers.
 This state does not occur on mainnet (`csv_never_lockedIn`).
 
 ### Block validation in the harness

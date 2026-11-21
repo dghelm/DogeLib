@@ -209,6 +209,8 @@ class Reports(unittest.TestCase):
                               '(cd tests/block/mainnet-blocks/ranges/B && sha256sum -c SHA256SUMS) && '
                               '(cd tests/block/mainnet-blocks/ranges/C && sha256sum -c SHA256SUMS) && '
                               '(cd tests/block/mainnet-blocks/ranges/D && sha256sum -c SHA256SUMS) && '
+                              '(cd tests/block/mainnet-blocks/ranges/E1 && sha256sum -c SHA256SUMS) && '
+                              '(cd tests/block/mainnet-blocks/ranges/E2 && sha256sum -c SHA256SUMS) && '
                               '(cd tests/block/mainnet-blocks/ranges/F && sha256sum -c SHA256SUMS) && '
                               '(cd tests/block/mainnet-blocks/ranges/H && sha256sum -c SHA256SUMS) && '
                               '(cd tests/block/mainnet-blocks/rule-changes && sha256sum -c SHA256SUMS) && '

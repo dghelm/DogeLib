@@ -5,7 +5,7 @@ Usage:
   python3 -I scripts/test_core_pass.py <dogelib-oracle> <core-oracle> <core-oracle-trap> <genesis-10000-fixture>
 
 The fixture is the released blocks of heights 0 to 10,000 (scripts/fetch_release_blocks.py). The
-test has five parts:
+test has six parts:
 
 1. The CSV window. Synthetic chains from the genesis block: one that signals CSV for a whole
    period inside the window, one that never signals, and one that crosses the CSV timeout. At
@@ -25,7 +25,10 @@ test has five parts:
 4. `hash_serialized`. At height 9,000 the harness's `hash_serialized` and `transactions` must
    equal the values that this script computes from the snapshot file by the definition of Core's
    GetUTXOStats.
-5. The overflow trap. On the two requests of the arithmetic-domain cases that leave the int64_t
+5. The range script. scripts/run_range.py runs heights 9,001 to 9,200 from the pass's snapshot at
+   9,000 in both programs, and they agree with each other and with the pass. A changed hash list
+   and a committed snapshot manifest that differs from the pass's both fail.
+6. The overflow trap. On the two requests of the arithmetic-domain cases that leave the int64_t
    range, the trap build stops with a signed-overflow report, one in validation.cpp and one in
    coins.cpp. On the other requests of those cases it gives the response of the ordinary build.
 """
@@ -40,7 +43,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 import core_pass
+import fetch_blocks
 import oracle_block_validate as validate
+import run_range
+from replay_blocks import ReplayError
 from oracle_block_check import compact_size
 
 PERIOD = core_pass.PERIOD
@@ -181,7 +187,60 @@ def utxo_stats(snapshot: bytes, best: bytes) -> tuple[str, int]:
     return hashlib.sha256(hashlib.sha256(bytes(stream)).digest()).digest()[::-1].hex(), transactions
 
 
-def test_pass(harness: str, trap: str, fixture: str) -> None:
+def range_fixture(blocks: Path, first: int, last: int, directory: Path) -> None:
+    """A fixture of `scripts/fetch_blocks.py` with the heights from `first` to `last` of `blocks`."""
+    verifier = fetch_blocks.Verifier(fetch_blocks.Pins.load())
+    records = b""
+    for height, raw in fetch_blocks.read_blocks(blocks):
+        if first <= height <= last:
+            verifier.add(height, raw)
+            records += validate.file_record(height, raw)
+    directory.mkdir(parents=True)
+    (directory / fetch_blocks.BLOCKS_FILE).write_bytes(records)
+    manifest = {"format": fetch_blocks.FORMAT, "selection": "range", "first": first, "last": last, **verifier.derived()}
+    text = fetch_blocks.manifest_text(manifest).encode()
+    (directory / fetch_blocks.MANIFEST_FILE).write_bytes(text)
+    (directory / fetch_blocks.SUMS_FILE).write_text(
+        f"{hashlib.sha256(records).hexdigest()}  {fetch_blocks.BLOCKS_FILE}\n{hashlib.sha256(text).hexdigest()}  {fetch_blocks.MANIFEST_FILE}\n")
+
+
+def test_range(oracle: str, harness: str, blocks: Path, state_dir: Path, scratch: Path) -> None:
+    core_pass.RANGES["T"] = (9000, 9200)
+    fixture, hashes, manifests = scratch / "fixture", scratch / "hashes", scratch / "manifests"
+    range_fixture(blocks, 9001, 9200, fixture)
+    manifests.mkdir()
+    quiet = lambda text: None
+    summary = run_range.run_range("T", state_dir, fixture, scratch / "out", oracle, harness, write_hashes=True,
+                                  cache_mb=1, log=quiet, hashes=hashes, manifests=manifests)
+    pass_end = json.loads((state_dir / "state.json").read_text())["digests"]["9200"]
+    check((summary["blocks"], summary["set_digest_hex"], summary["set_coins"]) == (200, pass_end["set_digest_hex"], pass_end["set_coins"]),
+          f"range T: {summary}")
+    check((hashes / "T" / "SHA256SUMS").exists() and len((hashes / "T" / "hashes.txt").read_text().splitlines()) == 200,
+          "range T: no hash list")
+    fetch_blocks.read_range_hashes(hashes / "T")
+    # A changed hash list.
+    listing = hashes / "T" / "hashes.txt"
+    lines = listing.read_text().splitlines()
+    lines[7] = lines[7][:-1] + ("0" if lines[7][-1] != "0" else "1")
+    listing.write_text("\n".join(lines) + "\n")
+    try:
+        run_range.run_range("T", state_dir, fixture, scratch / "out", oracle, harness, log=quiet, hashes=hashes, manifests=manifests)
+        check(False, "range T: a changed hash list did not fail")
+    except ReplayError as error:
+        check("differ from the committed list" in str(error), f"range T: a changed hash list gave {error}")
+    # A committed manifest that differs from the pass's. `write_hashes` writes the list again first.
+    written = json.loads((state_dir / "snapshots" / "coins-9000.json").read_text())
+    (manifests / "coins-9000.json").write_text(json.dumps({**written, "coins": written["coins"] + 1}, indent=2) + "\n")
+    try:
+        run_range.run_range("T", state_dir, fixture, scratch / "out", oracle, harness, write_hashes=True, log=quiet,
+                            hashes=hashes, manifests=manifests)
+        check(False, "range T: a changed committed manifest did not fail")
+    except ReplayError as error:
+        check("differs from the committed" in str(error), f"range T: a changed manifest gave {error}")
+    print("range: heights 9,001 to 9,200 from the snapshot at 9,000 agree with the pass; a changed list and manifest fail")
+
+
+def test_pass(oracle: str, harness: str, trap: str, fixture: str) -> None:
     blocks = Path(fixture) / "blocks.bin"
     whole = validate.request([], check_pow=True, mode="allow_witness")
     del whole["blocks_hex"]
@@ -193,7 +252,7 @@ def test_pass(harness: str, trap: str, fixture: str) -> None:
         state_dir = Path(directory) / "pass"
         args = dict(harness=trap, state_dir=state_dir, last=10000, local_fixtures=[fixture], cache_mb=1,
                     max_blocks=2500, max_bytes=4_000_000_000, min_free=0, log=quiet,
-                    extra_snapshots=(3000, 9000), extra_digests=(9000,))
+                    extra_snapshots=(3000, 9000), extra_digests=(9000, 9200))
         state = core_pass.core_pass(stop_after=None, **args)
         for height in (9000, 10000):
             got = {k: state["digests"][str(height)][k] for k in ("set_digest_hex", "set_coins", "set_value", "hash_serialized", "transactions")}
@@ -205,6 +264,8 @@ def test_pass(harness: str, trap: str, fixture: str) -> None:
         computed = utxo_stats(snapshot, best)
         check(computed == (expected[9000]["hash_serialized"], expected[9000]["transactions"]),
               f"hash_serialized at 9000: the harness {expected[9000]['hash_serialized']}, the definition {computed}")
+        # 5. The range script on the snapshot at 9,000.
+        test_range(oracle, harness, blocks, state_dir, Path(directory) / "range")
         # The restart: a database without the state's best block starts again from the newest restart snapshot.
         data = json.loads((state_dir / "state.json").read_text())
         data["db_height"] = None
@@ -248,7 +309,7 @@ def validate_blocks(path: Path):
     yield from fetch_blocks.read_blocks(path)
 
 
-# 5. The overflow trap
+# 6. The overflow trap
 
 
 def test_trap(harness: str, trap: str) -> None:
@@ -275,7 +336,7 @@ def main(argv=None) -> int:
     oracle, harness, trap, fixture = args
     test_window(oracle, harness)
     test_database(harness)
-    test_pass(harness, trap, fixture)
+    test_pass(oracle, harness, trap, fixture)
     test_trap(harness, trap)
     print("PASS")
     return 0

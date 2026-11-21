@@ -4054,6 +4054,25 @@ The recorded replay also compared the digest at height 100,000 between the two p
 Its record does not state the value.
 Neither program checks that a snapshot file stays the same during a request, except that the oracle requires one number of records in both reads.
 
+The ranges A, B, C, D, F and H of stage 2 start from the snapshots of the Core pass ([record](docs/oracle.md#ranges-a-to-h)).
+Each range from `a + 1` to `b` agrees under section 3.4 of [design record 0011](docs/design/0011-mainnet-ranges.md).
+
+So each range shows a conditional statement.
+Suppose that the snapshot at `a` is Core's coin set at height `a`.
+Then the Lean definitions and Core give the same verdict and the same coin changes on each block of the range.
+They also give the same set at `b`.
+Equal digests show equal sets only if double SHA-256 is collision resistant.
+
+For ranges B, C, D, F and H, no comparison discharges the hypothesis.
+These arguments support it, range by range:
+
+- **Range A**, from the snapshot at 145,000. The snapshot has the digest that the oracle reached from the empty set in the recorded replay. So range A needs no assumed start state beyond that digest.
+- **Ranges B, C, D, F and H**, from the snapshots at 370,336, 598,999, 1,033,382, 3,463,750 and 5,049,000. The harness ran Core's `ConnectBlock` on every block from the genesis block to `a`. The oracle checked the blocks up to height 145,000 and inside the earlier ranges, and no others. An error of the Lean definitions on a block between the ranges stays unseen.
+- **The set.** Core's `CCoinsViewDB` and `CCoinsViewCache` carried the set in the pass. The harness's reads of the coin changes, its snapshot writer and its digest are harness code. A fault there can give both programs one wrong start state.
+- **The arithmetic.** The pass ran the build that ends on a signed overflow in `validation.cpp` and `coins.cpp`, and it did not end. So no sum of `ConnectBlock` left the `int64_t` range, if the sanitizer finds every such overflow.
+- **The context.** The chain, the ancestor hash and the block below the range come from the headers that the pass kept. Both programs get the same context.
+- **The blocks.** The pass required each checkpoint of Core. The committed hash list of each range is on the chain of the first checkpoint above it ([fixtures](tests/block/mainnet-blocks/README.md#range-hash-lists)).
+
 The request of 10,001 real blocks has about 88 MB of JSON.
 
 Any later foreign boundary, such as a C or Rust binding, is listed here with its size and its error handling.

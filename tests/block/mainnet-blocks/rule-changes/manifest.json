@@ -41,7 +41,7 @@
     {
       "first": 599998,
       "last": 600001,
-      "previous": "node"
+      "previous": "pinned"
     },
     {
       "first": 1034382,
@@ -87,6 +87,36 @@
       [
         1034382,
         1034384
+      ]
+    ],
+    "tests/block/mainnet-blocks/ranges/A": [
+      [
+        145001,
+        145001
+      ]
+    ],
+    "tests/block/mainnet-blocks/ranges/B": [
+      [
+        371336,
+        371338
+      ]
+    ],
+    "tests/block/mainnet-blocks/ranges/C": [
+      [
+        599998,
+        600001
+      ]
+    ],
+    "tests/block/mainnet-blocks/ranges/D": [
+      [
+        1034382,
+        1034384
+      ]
+    ],
+    "tests/block/mainnet-blocks/ranges/F": [
+      [
+        3464750,
+        3464752
       ]
     ],
     "tests/block/mainnet-subsidy-prev-hashes": [

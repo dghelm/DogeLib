@@ -12,10 +12,11 @@ works in six steps:
 
 1. It checks the fixture as `scripts/fetch_blocks.py --check` does. Each block hash must equal the
    hash of the header that the pass kept at its height, and the committed list
-   `tests/block/mainnet-blocks/ranges/<NAME>/hashes.txt`. `--write-hashes` writes that list from
-   the pass's headers in the place of the comparison.
+   `tests/block/mainnet-blocks/ranges/<NAME>/hashes.txt`. `--write-hashes` writes that list and its
+   `SHA256SUMS` from the pass's headers in the place of the comparison.
 2. It checks the snapshot of the range start: its SHA-256 and length equal the pass's manifest,
-   and the manifest names the block below the range.
+   and the manifest names the block below the range. The manifest file of the pass must equal the
+   committed `tests/block/mainnet-blocks/snapshots/coins-<a>.json`, when that file exists.
 3. `block.check` with both flags on every block, in the oracle and in Core, before the range
    (design record 0011, section 7). Both must accept every block. The oracle's time is recorded.
 4. The range request: the snapshot at `a` as `coins_file`, the blocks of the fixture, the chain
@@ -50,6 +51,7 @@ from replay_blocks import ReplayError
 
 ROOT = Path(__file__).resolve().parent.parent
 HASHES = ROOT / "tests" / "block" / "mainnet-blocks" / "ranges"
+MANIFESTS = ROOT / "tests" / "block" / "mainnet-blocks" / "snapshots"
 
 
 def file_sha256(path: Path) -> str:
@@ -87,7 +89,8 @@ def strip(records: list[dict]) -> list[dict]:
 
 
 def run_range(name: str, state_dir: Path, fixture: Path, output: Path, oracle: str, harness: str,
-              write_hashes: bool = False, cache_mb: int = 2048, log=lambda text: print(text, flush=True)) -> dict:
+              write_hashes: bool = False, cache_mb: int = 2048, log=lambda text: print(text, flush=True),
+              hashes: Path = HASHES, manifests: Path = MANIFESTS) -> dict:
     start, end = core_pass.RANGES[name]
     output.mkdir(parents=True, exist_ok=True)
     state = core_pass.load_state(state_dir / "state.json")
@@ -107,10 +110,11 @@ def run_range(name: str, state_dir: Path, fixture: Path, output: Path, oracle: s
     if [b["hash"] for b in verifier.blocks] != kept:
         raise ReplayError("the fixture's blocks are not the blocks of the pass")
     listing = "".join(f"{h} {value}\n" for h, value in zip(heights, kept))
-    committed = HASHES / name / "hashes.txt"
+    committed = hashes / name / "hashes.txt"
     if write_hashes:
         committed.parent.mkdir(parents=True, exist_ok=True)
         committed.write_text(listing)
+        (committed.parent / "SHA256SUMS").write_text(f"{hashlib.sha256(listing.encode()).hexdigest()}  hashes.txt\n")
     elif committed.read_text() != listing:
         raise ReplayError(f"the blocks differ from the committed list {committed}")
     blocks = Path(fixture) / fetch_blocks.BLOCKS_FILE
@@ -126,6 +130,12 @@ def run_range(name: str, state_dir: Path, fixture: Path, output: Path, oracle: s
         raise ReplayError(f"the snapshot at {start} differs from its manifest")
     if manifest["block_hash_display"] != display(headers.hash(start)):
         raise ReplayError("the manifest does not name the block below the range")
+    written = state_dir / "snapshots" / f"coins-{start}.json"
+    committed_manifest = manifests / written.name
+    if json.loads(written.read_text()) != {k: v for k, v in manifest.items() if k not in ("file", "kept")}:
+        raise ReplayError(f"{written} differs from the pass's state")
+    if committed_manifest.exists() and committed_manifest.read_bytes() != written.read_bytes():
+        raise ReplayError(f"the snapshot manifest of the pass differs from the committed {committed_manifest}")
 
     # 3. block.check on every block.
     checks = [{**block_request(raw, mode="allow_witness", pow=True), "id": str(h)}
@@ -142,7 +152,7 @@ def run_range(name: str, state_dir: Path, fixture: Path, output: Path, oracle: s
     # 4. The range request.
     floor = max(0, start - core_pass.PERIOD - 260)
     boundary = start - ((start + 1) % core_pass.PERIOD)
-    if core_pass.CSV_START <= headers.median_time(boundary) < core_pass.CSV_TIMEOUT:
+    if boundary >= 0 and core_pass.CSV_START <= headers.median_time(boundary) < core_pass.CSV_TIMEOUT:
         raise ReplayError("the range starts inside the CSV window, which the oracle does not model")
     chain = [{k: v for k, v in headers.entry(h).items() if k != "version"} for h in range(start, floor - 1, -1)]
     request = {"id": f"range-{name}", "op": "block.validate", "mode": "allow_witness", "check_pow": True,

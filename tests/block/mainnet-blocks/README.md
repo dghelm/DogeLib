@@ -62,7 +62,7 @@ The rule-change blocks use these pin sources:
 - [`mainnet-bip66-headers`](../mainnet-bip66-headers) for heights 1,034,382 to 1,034,384.
 - [`mainnet-bip65-headers`](../mainnet-bip65-headers) for heights 3,464,750 to 3,464,752.
 - Core's checkpoints at heights 145,000 and 371,337 (D9).
-- The [range hash lists](#range-hash-lists) of ranges A, B, C, D and F, for all 17 heights.
+- The [range hash lists](#range-hash-lists) of ranges A, B, C, D and F, for 14 of the 17 heights. Heights 144,998 to 145,000 are below range A.
 
 A `pinned` block has a hash that a committed fixture or a Core checkpoint gives.
 With the Merkle check, that hash commits to every transaction ID of the block, if SHA-256 is collision resistant.
@@ -119,7 +119,7 @@ It runs every check of `--check`.
 
 | Set | Bytes of the blocks | `blocks.bin` | `blocks.bin` with xz | `manifest.json` | `manifest.json` with xz |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Rule changes | 344,408 | 344,544 | 268,444 | 4,348 | 1,464 |
+| Rule changes | 344,408 | 344,544 | 268,444 | 4,849 | 1,488 |
 | Genesis to 10,000 | 43,937,365 | 44,017,373 | 31,077,776 | 1,490,331 | 389,756 |
 | Recent | 19,939,510 | 19,947,510 | 14,701,988 | 153,517 | 41,956 |
 | Range A | 98,973,165 | 99,053,165 | 57,584,780 | 1,517,681 | 404,480 |

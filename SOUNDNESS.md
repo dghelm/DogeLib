@@ -4063,7 +4063,7 @@ Then the Lean definitions and Core give the same verdict and the same coin chang
 They also give the same set at `b`.
 Equal digests show equal sets only if double SHA-256 is collision resistant.
 
-No comparison discharges the hypothesis.
+For ranges B, C, D, F and H, no comparison discharges the hypothesis.
 These arguments support it, range by range:
 
 - **Range A**, from the snapshot at 145,000. The snapshot has the digest that the oracle reached from the empty set in the recorded replay. So range A needs no assumed start state beyond that digest.

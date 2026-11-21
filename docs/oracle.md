@@ -2245,7 +2245,7 @@ Every range agrees.
 The start of each range has the coins and the digest of its snapshot in the table above.
 The oracle's time includes its two reads of the snapshot.
 `block.check` took the oracle 63, 14, 42, 10, 18 and 37 seconds on the six ranges.
-On range H, the largest resident set of the run was 3.5 GB, which `/usr/bin/time -v` measured.
+On range H, the largest resident set of the run was 3,518,408 KiB, about 3.6 GB, which `/usr/bin/time -v` measured.
 The other runs were not measured.
 
 Each result is one run.

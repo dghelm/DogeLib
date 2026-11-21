@@ -2352,6 +2352,69 @@ The other ranges assume their start states.
 The oracle did not check the blocks between the ranges.
 [SOUNDNESS.md](../SOUNDNESS.md#b4-the-oracle-and-foreign-boundaries) states the hypothesis for each range.
 
+#### The CSV window ranges E1 and E2
+
+E1 and E2 are the two ranges of design record 0011, stage 4.
+The first Core pass recorded Core's version-bits state at each period boundary.
+CSV is `STARTED` from the block after the boundary 1,199,519, and `FAILED` from the block after the boundary 1,703,519.
+So the rule changes at 1,199,520 and 1,703,520, and each range runs from `h - 1,000` to `h + 999`, the rule of section 4.
+
+**The second pass.**
+The first pass kept no snapshot at the two range starts.
+`scripts/core_pass.py --seed` ran a second pass from the kept snapshot of range D at 1,033,382, which the first pass wrote in its replay from the genesis block:
+
+```bash
+nice -n 19 taskset -c 28 python3 -I scripts/core_pass.py --state build/core-pass-csv --seed build/core-pass --seed-height 1033382 --last 1704519 build/core-harness/core-oracle-trap
+```
+
+It ran on 2026-11-21 from 16:45 to 17:39 UTC, with the trap build of the harness at `e70318f`, and read the blocks above 1,033,382 from the node.
+It accepted every block to 1,704,519 and wrote the snapshots at 1,198,519 and 1,702,519.
+Its state names the heights that it checked against the first pass.
+At 1,035,382 and at the seven segment ends of the first pass from 1,099,999 to 1,699,999, the digest, the number of coins and the total value equal the first pass's.
+At the 67 boundaries in its heights, its version-bits states equal the first pass's.
+Its 1,704,520 headers equal those of the first pass byte for byte.
+`python3 -I scripts/core_pass.py --state build/core-pass-csv --version-bits .lake/build/bin/dogelib-oracle build/core-harness/core-oracle` then compared its 52 boundaries of the CSV window with both full walks, and each agreed.
+
+| Snapshot | Coins | Digest | Total value | Bytes |
+| ---: | ---: | --- | ---: | ---: |
+| 1,198,519 | 16,774,101 | `c425e4c6d026e6019de51921dba183cf090da2f0f134650e2494a874c5154578` | 10,415,769,565,167,663,246 | 1,278,149,154 |
+| 1,702,519 | 11,591,197 | `34d3337fd66c3e7f29a8419d816d28faa23434d3fd5a49ca112f10d81d2dec8a` | 10,919,769,565,167,663,246 | 883,951,730 |
+
+The committed manifests are [`coins-1198519.json`](../tests/block/mainnet-blocks/snapshots/coins-1198519.json) and [`coins-1702519.json`](../tests/block/mainnet-blocks/snapshots/coins-1702519.json).
+
+**The ranges.**
+`scripts/run_range.py` ran each range from the second pass's snapshot at its start, as for the ranges A to H.
+The chain of each request holds the version of each entry back to the boundary 1,189,439, the base of the window, and its ten predecessors.
+That is 10,341 entries for E1 and 513,092 for E2.
+Each request has `version_bits_heights` at the range start and at the boundary inside the range:
+
+```bash
+nice -n 19 taskset -c <core> python3 -I scripts/run_range.py --range <NAME> --pass build/core-pass-csv --fixture build/ranges/<NAME> --output build/range-runs/<NAME> .lake/build/bin/dogelib-oracle build/core-harness/core-oracle
+```
+
+The oracle was built from `main` at `cc8bd97`, and the harness `core-oracle` from `e70318f`, whose harness sources equal those of `cc8bd97`.
+The two ranges ran at once on 2026-11-21, on one core each.
+`--write-hashes` wrote the committed [hash lists](../tests/block/mainnet-blocks/README.md#range-hash-lists): in an earlier run of E1, and in the recorded run of E2.
+
+| Range | Heights | SHA-256 of `blocks.bin` | Start | End: coins and digest | Spent | Created | CSV states | Core | Oracle |
+| --- | --- | --- | ---: | --- | ---: | ---: | --- | ---: | ---: |
+| E1 | 1,198,520 to 1,200,519 | `f0647f8e1fdb6109e6297c498f8df154b24829295032824662bd34eba6a584a7` | 16,774,101 | 16,809,066, `5fa47879680925ec78db0c2ba6025722390edbe6d0bd60b01f5ea285f47d2ebe` | 57,055 | 92,020 | `DEFINED` at 1,198,519, `STARTED` at 1,199,519 | 75 s | 825 s |
+| E2 | 1,702,520 to 1,704,519 | `95e0f69d1565f412da666ec68b6b4669d9a280849e12225c1964c8e4f9177225` | 11,591,197 | 11,581,142, `99dfcecda777971dff54621b7eb9b177781abe34d9194aa78a242679cc4070f0` | 68,452 | 58,397 | `STARTED` at 1,702,519, `FAILED` at 1,703,519 | 82 s | 1,100 s |
+
+Both ranges agree under section 3.4.
+Both programs report the start of the manifest, accept every block with equal block records, and report the second pass's digest at the end.
+The block records also equal those of the second pass.
+Both programs report the CSV states of the table, and each state at a boundary equals the one that both passes recorded.
+`block.check` took the oracle 10 and 17 seconds before the ranges, and accepted every block in both programs.
+An earlier run of E1, on a build of the oracle before the fix of an active CSV state, gave the same result.
+
+Each result is one run.
+It holds under the hypothesis of section 3.4: the snapshot at the start is Core's coin set at its height.
+Both snapshots come from Core's replay from the genesis block: the first pass to 1,033,382, and the second pass from there.
+The oracle did not check the blocks between the ranges.
+On mainnet the CSV state is never active, so the walk changes no verdict of the ranges ([SOUNDNESS.md](../SOUNDNESS.md#version-bits)).
+The ranges compare the states that the walk reports, in the oracle and in Core.
+
 ### Block subsidy comparison evidence
 
 The harness calls Core's own `GetDogecoinBlockSubsidy` (D104), so the comparison tests Core's code and the Boost release of the harness build.

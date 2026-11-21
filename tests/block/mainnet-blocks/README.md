@@ -104,8 +104,13 @@ So each hash of a list is on the chain of the first checkpoint above the range, 
 | B | 370,337 to 372,336 | 450,000 |
 | C | 599,000 to 600,999 | 771,275 |
 | D | 1,033,383 to 1,035,382 | 1,250,000 |
+| E1 | 1,198,520 to 1,200,519 | 1,250,000 |
+| E2 | 1,702,520 to 1,704,519 | 1,750,000 |
 | F | 3,463,751 to 3,465,750 | 3,500,000 |
 | H | 5,049,001 to 5,050,000 | 5,050,000 |
+
+The lists of E1 and E2 come from the headers of the second pass of stage 4, which started from the snapshot of range D ([docs/oracle.md](../../../docs/oracle.md#the-csv-window-ranges-e1-and-e2)).
+Those headers equal the first pass's byte for byte up to 1,704,519, and the first pass reached the checkpoint at 1,750,000.
 
 The node gave the headers of the pass, and the claim does not rest on it.
 A reader can check a list again with the headers from the range to its checkpoint, from any source.
@@ -126,10 +131,12 @@ It runs every check of `--check`.
 | Range B | 19,395,278 | 19,411,278 | 11,514,992 | 304,432 | 82,284 |
 | Range C | 35,091,292 | 35,107,292 | 22,563,340 | 305,237 | 82,956 |
 | Range D | 13,912,903 | 13,928,903 | 8,703,188 | 305,603 | 81,692 |
+| Range E1 | 14,246,603 | 14,262,603 | 8,527,792 | 305,487 | 81,588 |
+| Range E2 | 14,259,722 | 14,275,722 | 9,538,088 | 305,577 | 81,644 |
 | Range F | 34,189,002 | 34,205,002 | 21,062,340 | 306,930 | 82,672 |
 | Range H | 79,110,409 | 79,118,409 | 52,320,724 | 154,452 | 42,476 |
 
-The six range fixtures were packed with `--pack` in the same way.
+The eight range fixtures were packed with `--pack` in the same way.
 They are not yet assets of a release, and `release.json` does not name them.
 So `scripts/fetch_release_blocks.py` cannot restore them yet, and a range must be fetched from a node with `scripts/fetch_blocks.py --range`.
 

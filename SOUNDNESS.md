@@ -1196,7 +1196,7 @@ The adapter computes them from a finite view, and the request supplies that view
 A comparison gives the evidence for the adapter.
 In `scripts/test_core_pass.py`, the oracle and the harness report the same state in `block.validate` at 16 boundaries of three synthetic chains.
 The states cover all five, and each equals both full walks.
-The ranges E1 and E2 are to compare the states on mainnet ([gate](AGENTS.md#checks), *Mainnet range*), and this record has no run of them yet.
+The ranges E1 and E2 compare the states on mainnet ([recorded runs](docs/oracle.md#the-csv-window-ranges-e1-and-e2)). Both programs report `DEFINED` and `STARTED` in E1, and `STARTED` and `FAILED` in E2.
 The walk can give `ACTIVE` on a made chain that signals. `block.validate` then returns the error `outside_model` before the checks of the block, because its context holds the aligned boundary's median time and not the predecessor's.
 
 On mainnet the walk changes no verdict.
@@ -4081,6 +4081,7 @@ Its record does not state the value.
 Neither program checks that a snapshot file stays the same during a request, except that the oracle requires one number of records in both reads.
 
 The ranges A, B, C, D, F and H of stage 2 start from the snapshots of the Core pass ([record](docs/oracle.md#ranges-a-to-h)).
+The ranges E1 and E2 of stage 4 start from the snapshots of a second pass, which started from the snapshot of range D ([record](docs/oracle.md#the-csv-window-ranges-e1-and-e2)).
 Each range from `a + 1` to `b` agrees under section 3.4 of [design record 0011](docs/design/0011-mainnet-ranges.md).
 
 So each range shows a conditional statement.
@@ -4089,11 +4090,12 @@ Then the Lean definitions and Core give the same verdict and the same coin chang
 They also give the same set at `b`.
 Equal digests show equal sets only if double SHA-256 is collision resistant.
 
-For ranges B, C, D, F and H, no comparison discharges the hypothesis.
+For ranges B, C, D, E1, E2, F and H, no comparison discharges the hypothesis.
 These arguments support it, range by range:
 
 - **Range A**, from the snapshot at 145,000. The snapshot has the digest that the oracle reached from the empty set in the recorded replay. So range A needs no assumed start state beyond that digest.
 - **Ranges B, C, D, F and H**, from the snapshots at 370,336, 598,999, 1,033,382, 3,463,750 and 5,049,000. The harness ran Core's `ConnectBlock` on every block from the genesis block to `a`. The oracle checked the blocks up to height 145,000 and inside the earlier ranges, and no others. An error of the Lean definitions on a block between the ranges stays unseen.
+- **Ranges E1 and E2**, from the snapshots at 1,198,519 and 1,702,519 of the second pass. The second pass started from the first pass's snapshot at 1,033,382 and ran Core's `ConnectBlock` on every block above it. It reached the first pass's digest at 1,035,382 and at the seven segment ends of the first pass from 1,099,999 to 1,699,999. So the two passes agree at those heights, and the arguments of range D hold for both snapshots.
 - **The set.** Core's `CCoinsViewDB` and `CCoinsViewCache` carried the set in the pass. The harness's reads of the coin changes, its snapshot writer and its digest are harness code. A fault there can give both programs one wrong start state.
 - **The tip.** At height 6,465,793, Core's `hash_serialized`, `transactions` and number of coins of the pass's set equal those of the maintainer's node (decision 7). So the two sets have the same coins, with the same amounts and scripts, if double SHA-256 is collision resistant. That hash does not cover the height or the coinbase flag of a coin, so the equality does not extend to them. The agreement at the tip does not show the set at an earlier range start.
 - **The arithmetic.** The pass ran the build that ends on a signed overflow in `validation.cpp` and `coins.cpp`, and it did not end. So no sum of `ConnectBlock` left the `int64_t` range, if the sanitizer finds every such overflow.

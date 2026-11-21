@@ -516,7 +516,11 @@ def revised_record_fields(revised) -> dict | None:
         reason = revised.get("reason")
         if not isinstance(reason, str) or not reason.startswith(REASON_PREFIX):
             return None
-        return {**{k: None for k in (*VERDICT_KEYS, "changes_digest_hex")}, "unsupported": reason[len(REASON_PREFIX):]}
+        # A result outside the model has no reject field and no digest.
+        if any(revised.get(k) is not None for k in ("reject_reason", "dos", "reject_code", "changes_digest_hex")):
+            return None
+        fields = {**{k: None for k in (*VERDICT_KEYS, "changes_digest_hex")}, "unsupported": reason[len(REASON_PREFIX):]}
+        return fields if well_formed(fields) else None
     if revised.get("verdict") not in ("accepted", "rejected"):
         return None
     fields = {"valid": revised["verdict"] == "accepted", "reject_reason": revised.get("reject_reason"),
@@ -805,6 +809,29 @@ def overwrite_case() -> dict:
             "baseline": BIP30, "request": base.request([base.block([base.coinbase(), a, t])], coins)}
 
 
+def scan_guard_check(harness: str, timeout: float) -> None:
+    """The scan of the harness goes on after a transaction that overwrites an entry of its own ID.
+
+    At height 3,464,751 the BIP34 ancestor is known, so Core does not enforce BIP30. The coin set
+    holds an unspent output under the ID of the transaction T, which no earlier transaction reads.
+    Core's ConnectBlock overwrites that entry and goes on to the next transaction, U, which has a
+    time lock on a coin two blocks above the block. There GetAncestor returns null. So the scan
+    must name `coinAboveBlock`, and the harness must not run ConnectBlock with the seed.
+    This check reads the harness alone: the block is outside the comparison domain of the revision."""
+    base = Base(3464751)
+    coins = Coins()
+    funding = coins.add(coin_id(1), 0, 1000, bytes([OP_1]))
+    t = transaction([txin(funding, b"", 0xffffffff)], [txout(1)])
+    coins.add(sha256d(t), 1, 1, bytes([OP_1]))
+    high = coins.add(coin_id(2), 0, 1000, bytes([OP_1]), height=base.height + 2)
+    u = transaction([txin(high, b"", TYPE_FLAG)], [txout(1)], version=2)
+    req = base.request([base.block([base.coinbase(), t, u])], coins)
+    response = run_stream(harness, with_ids([dict(req, force_csv_active=True)]), timeout)[0]
+    forced = forced_validate_fields(response)
+    check(forced is not None and forced["unsupported"] == "coinAboveBlock",
+          f"the scan does not name the read after an overwritten entry: {json.dumps(response)[:400]}")
+
+
 def expected_sequence_fields(forced) -> dict:
     """The verdict fields and the reason of an expectation of `sequence_cases`."""
     if isinstance(forced, str):
@@ -874,7 +901,16 @@ def sequence_run(proposal: str, harness: str, timeout: float) -> tuple[int, dict
     check(revised_record_fields({"verdict": "accepted", "reject_reason": None, "dos": None, "reject_code": None,
                                  "changes_digest_hex": None}) is None,
           "self-test: a revised acceptance without a digest is taken for a result")
+    outside = {"verdict": "unsupported", "reason": REASON_PREFIX + "coinAboveBlock", "reject_reason": None, "dos": None,
+               "reject_code": None, "changes_digest_hex": None}
+    check(revised_record_fields(outside) is not None, "self-test: a well-formed revised result outside the model has no shape")
+    for fault in ({"changes_digest_hex": "00" * 32}, {"reject_reason": "bad-txns-nonfinal"}, {"dos": 100},
+                  {"reason": REASON_PREFIX + "other"}):
+        check(revised_record_fields({**outside, **fault}) is None,
+              f"self-test: the revised shape {fault} is taken for a result outside the model")
+        planted += 1
     planted += 1
+    scan_guard_check(harness, timeout)
     return len(cases), results, planted
 
 

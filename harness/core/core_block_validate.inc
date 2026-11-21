@@ -528,9 +528,12 @@ void readCoins(const UniValue& req, CarriedSet& store)
 // these inputs. CheckBlock has passed, so no transaction names one outpoint
 // twice. UpdateCoins throws for a transaction that is not a coinbase when the
 // cache holds unspent coins under its transaction ID (ModifyNewCoins,
-// src/coins.cpp, lines 134 to 140). The scan ends with null before that call:
-// Core rejects such a block through BIP30, or reaches the same call in its
-// own loop, and every read up to that transaction was inside the model.
+// src/coins.cpp, lines 134 to 140). The scan clears such an entry first, and
+// goes on. It must not end there: ModifyNewCoins does not read the backing
+// view, so Core's own cache can lack the entry, and ConnectBlock then
+// overwrites it and reaches the later transactions. With BIP30 enforced, Core
+// rejects the block before its loop, and the scan can then name a read that
+// Core does not reach.
 const char* sequenceLockOutsideModel(const CBlock& block, CCoinsView& store, const CBlockIndex* tip, int oldest, int height)
 {
     if (!tip) return nullptr;
@@ -552,7 +555,7 @@ const char* sequenceLockOutsideModel(const CBlock& block, CCoinsView& store, con
         }
         if (!tx->IsCoinBase()) {
             const CCoins* existing = shadow.AccessCoins(tx->GetHash());
-            if (existing && !existing->IsPruned()) return nullptr;
+            if (existing && !existing->IsPruned()) shadow.ModifyCoins(tx->GetHash())->Clear();
         }
         UpdateCoins(*tx, shadow, height);
     }

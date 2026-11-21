@@ -1942,14 +1942,15 @@ The default timeout of that mode is 3,600 seconds.
 
 This closes the first part of exit condition 1 of stage 0010b: agreement on the genesis-to-10,000 range, digests included.
 The recent range needs supplied coins, which design record 0011 takes from a coin-set snapshot.
-The range to height 145,000 is a gate outside CI, and the next section records its one run.
+The range to height 145,000 is a gate outside CI, and the next section records its runs.
 Neither is in this comparison.
 
 #### Replay of mainnet to height 145,000
 
 `scripts/replay_blocks.py` replays mainnet from the genesis block to height 145,000, the whole random-reward era.
 It is the gate *Mainnet replay to 145,000* of [AGENTS.md](../AGENTS.md#checks), and it is not in CI.
-This section records one run, which started on 2026-11-19 and ended on 2026-11-20.
+This section records a run that started on 2026-11-19 and ended on 2026-11-20.
+It also records a later run, which compares the [total value](#total-value) of the coin set as well.
 
 The script checks the two fixtures against their manifests and requires a pinned hash for every block.
 It writes all 145,001 blocks to one file of 3,024,443,782 bytes, with the SHA-256 value `5295801124f275bd7b6aad9f60bc734631e8157d99a07d8a9c66ee8f2bd034e3`.
@@ -1980,7 +1981,28 @@ An earlier run used an oracle from before pull request 173, which made block rea
 That run took 149,428 seconds for the oracle.
 Its response is byte for byte the response of the run above, so two builds of the oracle agree with Core on this range.
 
-The run is evidence for these blocks alone, and it is one run.
+A later run used the oracle and the Core harness built from commit `18310a8` of pull request 175, which added `set_value` and merged as `3a8401b`.
+It read the same blocks, from a file with the same SHA-256 value.
+The command is the one of the gate in [AGENTS.md](../AGENTS.md#checks), run with `taskset -c 6 nice -n 19`.
+It started at 2026-11-20T16:50:34Z and ended at 2026-11-21T11:59:26Z, and it exited with status 0.
+
+Both programs accept every block, and the block records, the 147 digests and the 147 totals of the whole set agree.
+The counts of coins, the digest of the set and the hash of the last block are those of the run of 2026-11-19.
+
+| Quantity | Koinu |
+| --- | --- |
+| `set_value` after height 145,000 | 6,117,565,627,100,000,000 |
+| Sum of the subsidies of heights 1 to 145,000 | 6,122,723,674,900,000,000 |
+| Subsidy sum minus `set_value` | 5,158,047,800,000,000 |
+
+Both programs gave the same subsidy for each height from 1 to 145,000.
+Each of the 147 totals is at most the subsidy sum up to its height, which is the bound of `chain_issuance_bound`.
+The check does not say why the set holds less than the subsidy sum.
+
+The oracle took 67,606 seconds, about 19 hours, on one core at low priority, on a machine that ran other work.
+Core took 1,283 seconds.
+
+The runs are evidence for these blocks alone.
 A node supplied the blocks above height 10,000.
 Each has a pinned hash, and the [fixtures](../tests/block/mainnet-blocks/README.md) state what a pinned hash commits to.
 Blocks above height 145,000 are not replayed.

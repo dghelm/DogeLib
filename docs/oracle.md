@@ -685,6 +685,7 @@ Below the first period the aligned boundary is null and both states are `DEFINED
 Otherwise the boundary's median time selects the case of design record 0010, section 4.
 Below the CSV start the state is `DEFINED`, and at or after the CSV timeout the state is `FAILED`.
 A boundary in the gap between them, which the window from 2016 to 2017 would reach, is an adapter error outside the comparison domain.
+`block.validate` walks that gap ([the CSV window](#the-csv-window)).
 
 The result has `valid`, `reject_reason`, `dos`, `reject_code` and the Lean-only `diagnostic`, as `tx.check` does.
 The four reject reasons are `bad-txns-nonfinal` (score 10), `bad-cb-height`, `unexpected-witness` and `bad-blk-weight` (score 100 each), all with `reject_code` 16.
@@ -712,7 +713,9 @@ The request supplies the state before the first block, and the operation carries
 - `check_pow`, `check_merkle_root`: Booleans. Real blocks set both. A request with changed blocks clears `check_pow`, because a changed block has no valid proof of work.
 - `adjusted_time`: the adjusted time of step 2, as for `block.contextual_check`.
 - `chain`: the view of the predecessor of the first block, newest first, each entry `{height, time, bits}`, as for `block.contextual_check_body`.
+  An entry can also hold the `version` of its header, as an unsigned 32-bit number.
   It is empty exactly when the range starts at the genesis block.
+  A block whose aligned version-bits boundary is in the case-3 gap of CSV needs a longer chain (see *The CSV window* below).
   A predecessor at height 2,147,483,646 or above is a request error in both programs, and in the oracle for [`block.contextual_check_body`](#contextual-block-body).
   Core can represent the candidate height 2,147,483,647, so this limit is narrower than Core's domain, and no request compares that height.
 - `bip34_ancestor_hex`: the hash of the ancestor at height 1,034,383 of the predecessor, in serialization order, or null when the predecessor is below that height.
@@ -728,6 +731,8 @@ The request supplies the state before the first block, and the operation carries
 - `blocks_hex`: the blocks, each one all of its bytes.
 - `blocks_file`: in the place of `blocks_hex`, the path of a file that holds the blocks (see *Blocks from a file* below).
   A request has exactly one of the two.
+- `version_bits_heights`: optional, a list of heights in increasing order.
+  For the supplied predecessor and for each accepted block at a listed height, the response reports the states of CSV and SegWit for the next block.
 
 A block must extend the state.
 The genesis block is valid only as the first block of an empty `chain`.
@@ -747,6 +752,25 @@ The result has five fields:
 - `set_value`: the total value of that set (see *Total value* below).
 
 A request with `coins_file` has two more fields: `start_set_digest_hex` and `start_set_coins`, the digest and the number of the coins of the snapshot.
+A request with `version_bits_heights` has the field `version_bits_states`: one object `{height, csv, segwit}` for each reported height, in order, with the lowercase names of the states.
+
+#### The CSV window
+
+Between about heights 1.2 million and 1.72 million, a block's aligned version-bits boundary has a median time between the CSV start and timeout.
+That is the case-3 gap of design record 0010, section 4, where the shortcut gives no state.
+There `block.validate` computes the state of CSV as Core's `GetStateFor` does (design record 0011, stage 4).
+It walks back one period at a time from the aligned boundary to the *base*: the latest boundary whose median time is below the CSV start.
+Then it folds the step of the walk over the boundaries above the base.
+Each has its median time and the number of blocks of its period that signal CSV.
+`versionBitsStateFull_of_reset` shows that this fold equals the full walk from the genesis block over the same boundaries.
+
+So the chain of such a request reaches the base and its ten predecessors, and every entry above the base has a version.
+Otherwise the request is a request error, in the oracle and in the harness.
+On mainnet the base of the whole window is the boundary at 1,189,439.
+So the chain of a block near the CSV timeout has about 515,000 entries.
+The oracle keeps the state of the last boundary that it walked, so a request walks each boundary once.
+SegWit has a timeout of 0, and its shortcut gives its state at every boundary.
+`block.contextual_check_body` still returns the adapter error `{kind: "version_bits", reason: "gap"}` in the gap.
 
 Each record has these fields:
 
@@ -1341,11 +1365,11 @@ The harness alone takes more arguments ([design record 0011](design/0011-mainnet
 
 - `snapshot_heights` with `snapshot_dir`: a list of heights in increasing order, and the path of a directory. After the accepted block at each listed height, the harness writes the carried set as the snapshot `coins-<height>.bin` in that directory. It writes a temporary file first and renames it.
 - `digest_heights`: a list of heights in increasing order. After the accepted block at each listed height, the harness computes the digest of the whole set.
-- `version_bits_heights`: a list of heights in increasing order. The predecessor at each listed height can be the supplied one or an accepted block. The harness reports Core's `VersionBitsState` of CSV and SegWit for the block after it, with the checks of the CSV window above.
-- `version` in an entry of `chain`: the version of its header, as an unsigned 32-bit number.
+- `version_bits_heights`: as in the oracle. The predecessor at each listed height can be the supplied one or an accepted block. The harness reports Core's `VersionBitsState` of CSV and SegWit for the block after it, with the checks of the CSV window above.
 - `coins_db`, `coins_db_cache_mb` and `coins_db_continue`: the coin database of the Core pass (see *The Core pass* below).
 
 The result then has `snapshots`, `set_digests` and `version_bits_states`, one entry for each listed height that the request reached, in order.
+Both programs take `version` in an entry of `chain` and `version_bits_heights` ([the CSV window](#the-csv-window)).
 An entry of `set_digests` has `height`, `set_digest_hex`, `set_coins`, `set_value`, and two values of Core's `GetUTXOStats` for the same set (`rpc/blockchain.cpp`, lines 874 to 905): `hash_serialized` and `transactions`.
 
 `hash_serialized` is the hash in the byte order of the `gettxoutsetinfo` output. It covers the best block, and each transaction ID with the index, the amount and the script of each of its coins. It does not cover the height or the coinbase flag.
@@ -1353,7 +1377,7 @@ An entry of `set_digests` has `height`, `set_digest_hex`, `set_coins`, `set_valu
 An entry of `version_bits_states` has `height`, `csv` and `segwit`, with the names of `block.version_bits_state`.
 An entry of `snapshots` has those fields, the hash of the block as `hash_hex` and `hash_display`, and `file`, `bytes` and `sha256` of the written file.
 `scripts/snapshot_range.py` writes the manifest from that entry, after it computes each value again from the file.
-The oracle returns a request error for these arguments and for `version` in a chain entry.
+The oracle returns a request error for the other arguments of this list.
 
 One function of the harness, `visitSet`, walks the carried set, one `CCoins` entry at a time in the order of the transaction IDs.
 The digest of the whole set and the snapshot writer read the set through it alone.
@@ -1394,6 +1418,13 @@ The pass keeps the header of every accepted block. It builds the `chain` of each
 It requires each checkpoint of Core, and the digests of heights 100,000, 101,000 and 145,000 of the recorded runs of stage 1.
 It requests Core's version-bits state at each period boundary.
 With `--version-bits`, the script checks each state of a boundary in the CSV window. Both programs compute it again with `block.version_bits_state` on the kept headers from the genesis block.
+
+With `--seed DIR --seed-height H`, the script starts a new state from the kept snapshot at height `H` of the pass in `DIR`, which it only reads.
+It copies that snapshot and checks it against its manifest, and copies the headers to `H`.
+The first segment then loads the snapshot with `coins_file`, as after a restart.
+The new pass must reach each digest that the seed pass recorded above `H`, at its range ends and its segment ends.
+It must also reach each version-bits state that the seed pass recorded.
+It stops on any difference, and its state lists the heights that it checked.
 
 The pass runs `core-oracle-trap`, which `scripts/build_core_harness.sh --trap-overflow` builds beside `core-oracle`.
 That build compiles Core's `src/validation.cpp` and `src/coins.cpp`, which hold the sums of `ConnectBlock`, with `-fsanitize=signed-integer-overflow -fno-sanitize-recover=signed-integer-overflow`.

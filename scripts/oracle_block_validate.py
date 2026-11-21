@@ -70,6 +70,8 @@ BLOCK_FIELDS = {"height", "hash_hex", "hash_display", "valid", "reject_reason", 
 OK_FIELDS = {"blocks", "out_of_domain_at", "set_digest_hex", "set_coins", "set_value"}
 # A request with `coins_file` also reports the digest and the number of the coins of its snapshot.
 START_FIELDS = {"start_set_digest_hex", "start_set_coins"}
+# A request with `version_bits_heights` also reports the states of CSV and SegWit after each listed height.
+VERSION_BITS_FIELDS = {"version_bits_states"}
 
 EXPECTATIONS = {}
 
@@ -1196,7 +1198,8 @@ def is_value(value) -> bool:
 def malformed(req: dict, ok, oracle: bool) -> str | None:
     """A fault in the form of an `ok` object, or None. The oracle alone has `diagnostic` in each block."""
     from_snapshot = "coins_file" in req
-    ok_fields = OK_FIELDS | (START_FIELDS if from_snapshot else set())
+    ok_fields = (OK_FIELDS | (START_FIELDS if from_snapshot else set())
+                 | (VERSION_BITS_FIELDS if "version_bits_heights" in req else set()))
     if not isinstance(ok, dict) or set(ok) != ok_fields or not isinstance(ok["blocks"], list):
         return "must return exactly the fields " + ", ".join(sorted(ok_fields))
     if from_snapshot and (not is_digest(ok["start_set_digest_hex"]) or type(ok["start_set_coins"]) is not int
@@ -1308,7 +1311,8 @@ def compare(req: dict, ours: dict, core: dict, peer: str = "core") -> tuple[str,
                     return LABEL, f"block {index} (height {x['height']}), {field}: oracle {x[field]!r}, {peer} {y[field]!r}"
         if len(a["blocks"]) != len(b["blocks"]):
             return LABEL, f"oracle has {len(a['blocks'])} block records, {peer} has {len(b['blocks'])}"
-        for field in ("set_digest_hex", "set_coins", "set_value") + (tuple(sorted(START_FIELDS)) if "coins_file" in req else ()):
+        for field in (("set_digest_hex", "set_coins", "set_value") + (tuple(sorted(START_FIELDS)) if "coins_file" in req else ())
+                      + (tuple(sorted(VERSION_BITS_FIELDS)) if "version_bits_heights" in req else ())):
             if not same(a[field], b[field]):
                 return LABEL, f"{field}: oracle {a[field]!r}, {peer} {b[field]!r}"
     elif not same(ours["error"], core["error"]):

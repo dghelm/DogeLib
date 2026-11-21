@@ -319,6 +319,6 @@ def blockValidateSnapshot (fields : Args) : IO (Except Failure Json) := do
   IO.eprintln s!"block.validate: read the snapshot again for the digest of {totals.digest.2} coins"
   return .ok (Json.mkObj ([("blocks", .arr run.records), ("out_of_domain_at", (run.outOfDomain.map natJson).getD .null),
     ("set_digest_hex", .str (hexOf totals.digest.1.toList)), ("set_coins", natJson totals.digest.2),
-    ("set_value", valueJson totals.value)] ++ startFields))
+    ("set_value", valueJson totals.value)] ++ startFields ++ versionBitsField run))
 
 end DogeLib.Block.Exports

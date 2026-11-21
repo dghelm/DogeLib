@@ -82,6 +82,8 @@ RANGES = {
     "B": (370336, 372336),
     "C": (598999, 600999),
     "D": (1033382, 1035382),
+    "E1": (1198519, 1200519),
+    "E2": (1702519, 1704519),
     "F": (3463750, 3465750),
     "H": (5049000, 5050000),
     "G": (6455301, 6456301),
@@ -419,6 +421,56 @@ def run_harness(harness: str, request: dict, response: Path, log_path: Path, reg
     return json.loads(lines[0]), seconds
 
 
+def seed_pass(state_dir: Path, seed_dir: Path, height: int, log) -> None:
+    """Start the state in `state_dir` from the kept snapshot at `height` of the pass in `seed_dir`.
+
+    The seed's directory is only read. The new state holds the seed's headers, digests and
+    version-bits states up to `height`, and that snapshot alone, copied. Its database is not at
+    the state's height, so the run starts again from the copied snapshot, as after a restart."""
+    if (state_dir / "state.json").exists():
+        raise PassError(f"{state_dir} already has a state, so --seed does not apply")
+    seed = load_state(seed_dir / "state.json")
+    recorded = seed["snapshots"].get(str(height))
+    if recorded is None or not recorded.get("kept", True):
+        raise PassError(f"the seed pass has no kept snapshot at height {height}")
+    source = seed_dir / "snapshots" / recorded["file"]
+    if not source.exists() or (file_sha256(source), source.stat().st_size) != (recorded["sha256"], recorded["bytes"]):
+        raise PassError(f"the seed's snapshot at height {height} differs from its manifest")
+    headers = Headers(seed_dir / "headers.bin", seed["height"] + 1, read_only=True)
+    (state_dir / "snapshots").mkdir(parents=True, exist_ok=True)
+    log(f"seed: copying the snapshot at height {height} from {seed_dir}")
+    shutil.copyfile(source, state_dir / "snapshots" / recorded["file"])
+    shutil.copyfile(seed_dir / "snapshots" / f"coins-{height}.json", state_dir / "snapshots" / f"coins-{height}.json")
+    if (file_sha256(state_dir / "snapshots" / recorded["file"]), recorded["bytes"]) != (recorded["sha256"], recorded["bytes"]):
+        raise PassError("the copied snapshot differs from its manifest")
+    (state_dir / "headers.bin").write_bytes(bytes(headers.data[:80 * (height + 1)]))
+    state = load_state(state_dir / "state.json")
+    state.update(height=height, hash_display=recorded["block_hash_display"], set_digest_hex=recorded["set_digest_hex"],
+                 db_height=None, snapshots={str(height): recorded},
+                 digests={h: v for h, v in seed["digests"].items() if int(h) <= height},
+                 version_bits={h: v for h, v in seed["version_bits"].items() if int(h) <= height},
+                 seed={"dir": str(seed_dir.resolve()), "height": height, "seed_height": seed["height"],
+                       "checked_digests": [], "checked_version_bits": 0})
+    save_state(state_dir / "state.json", state)
+
+
+def seed_expectations(state: dict, seed_dir: Path, last: int) -> tuple[dict, dict]:
+    """The digests and the version-bits states that the seed pass recorded above the seed height.
+
+    The digests are those of the seed's state and those at the end of each of its segments."""
+    seed = load_state(seed_dir / "state.json")
+    low = state["seed"]["height"]
+    digests = {int(h): {k: v[k] for k in ("set_digest_hex", "set_coins", "set_value")}
+               for h, v in seed["digests"].items() if low < int(h) <= last}
+    for segment in seed["segments"]:
+        if low < segment["last"] <= last:
+            entry = {k: segment[k] for k in ("set_digest_hex", "set_coins", "set_value")}
+            if digests.setdefault(segment["last"], entry) != entry:
+                raise PassError(f"the seed pass has two digests of height {segment['last']}")
+    states = {int(h): v for h, v in seed["version_bits"].items() if low < int(h) <= last}
+    return digests, states
+
+
 def restart_point(state: dict) -> tuple[int, str] | None:
     """The newest snapshot at or below the state's height: its height and file."""
     candidates = [(int(h), s["file"]) for h, s in state["snapshots"].items()
@@ -429,12 +481,19 @@ def restart_point(state: dict) -> tuple[int, str] | None:
 def core_pass(harness: str, state_dir: Path, last: int, local_fixtures: list[str], cache_mb: int,
               max_blocks: int, max_bytes: int, min_free: float, stop_after: int | None,
               rpc_factory=None, pins=None, log=lambda text: print(text, flush=True),
-              register=lambda pid: None, extra_snapshots=(), extra_digests=()) -> dict:
+              register=lambda pid: None, extra_snapshots=(), extra_digests=(), seed: tuple[Path, int] | None = None) -> dict:
     state_dir.mkdir(parents=True, exist_ok=True)
-    plan = plan_of(state_dir, last, extra_snapshots, extra_digests)
-    plan["snapshot_dir"].mkdir(exist_ok=True)
+    if seed is not None:
+        seed_pass(state_dir, seed[0], seed[1], log)
     state_path = state_dir / "state.json"
     state = load_state(state_path)
+    # A seeded pass must reach each digest and each version-bits state that the seed recorded above the seed height.
+    expected_digests, expected_states = ({}, {})
+    if "seed" in state:
+        expected_digests, expected_states = seed_expectations(state, Path(state["seed"]["dir"]), last)
+        extra_digests = set(extra_digests) | set(expected_digests)
+    plan = plan_of(state_dir, last, extra_snapshots, extra_digests)
+    plan["snapshot_dir"].mkdir(exist_ok=True)
     headers = Headers(state_dir / "headers.bin", state["height"] + 1)
     db = state_dir / "coins-db"
     db.mkdir(exist_ok=True)
@@ -522,6 +581,23 @@ def core_pass(harness: str, state_dir: Path, last: int, local_fixtures: list[str
                 log(f"digest {height}: {entry['set_coins']} coins, {entry['set_digest_hex']}")
             for entry in ok["version_bits_states"]:
                 state["version_bits"][str(entry["height"])] = {"csv": entry["csv"], "segwit": entry["segwit"]}
+            if "seed" in state:
+                for entry in ok["set_digests"]:
+                    want = expected_digests.get(entry["height"])
+                    if want is None:
+                        continue
+                    got = {k: entry[k] for k in want}
+                    if got != want:
+                        raise PassError(f"height {entry['height']}: the digest {got} differs from the seed pass's {want}")
+                    state["seed"]["checked_digests"].append(entry["height"])
+                    log(f"digest {entry['height']}: equals the seed pass's")
+                for entry in ok["version_bits_states"]:
+                    want = expected_states.get(entry["height"])
+                    got = {"csv": entry["csv"], "segwit": entry["segwit"]}
+                    if want is not None and got != want:
+                        raise PassError(f"boundary {entry['height']}: Core gives {got}, and the seed pass recorded {want}")
+                    if want is not None:
+                        state["seed"]["checked_version_bits"] += 1
             for h in range(first, end + 1):
                 if h in fetch_blocks.CHECKPOINTS and display(headers.hash(h)) != fetch_blocks.CHECKPOINTS[h]:
                     raise PassError(f"height {h}: the accepted block is not Core's checkpoint")
@@ -562,6 +638,11 @@ def core_pass(harness: str, state_dir: Path, last: int, local_fixtures: list[str
             fetched.get_nowait()
         except queue.Empty:
             pass
+    if "seed" in state and state["height"] == last:
+        missing = sorted(set(expected_digests) - set(state["seed"]["checked_digests"]))
+        if missing:
+            raise PassError(f"the pass did not check the seed's digests at the heights {missing}")
+        save_state(state_path, state)
     if state["height"] == last and str(last) in state["digests"]:
         compare_node(state, last, log)
     return state
@@ -617,6 +698,8 @@ def main(argv=None) -> int:
     parser.add_argument("--min-free-gb", type=float, default=150.0, metavar="GB")
     parser.add_argument("--stop-after", type=int, metavar="N", help="stop after N segments")
     parser.add_argument("--version-bits", action="store_true", help="compare the recorded version-bits states")
+    parser.add_argument("--seed", metavar="DIR", help="start a new state from a snapshot of the pass in DIR, which is only read")
+    parser.add_argument("--seed-height", type=int, metavar="HEIGHT", help="the height of that snapshot")
     parser.add_argument("--url", default=fetch_blocks.DEFAULT_URL)
     parser.add_argument("--user", default=fetch_blocks.DEFAULT_USER)
     parser.add_argument("--timeout", type=float, default=120.0, help="seconds for each RPC request")
@@ -639,8 +722,11 @@ def main(argv=None) -> int:
             password = fetch_blocks.read_password(os.environ, fetch_blocks.PASSWORD_FILE.expanduser())
             return fetch_blocks.Rpc(args.url, args.user, password, fetch_blocks.http_transport(args.timeout))
 
+        if (args.seed is None) != (args.seed_height is None):
+            parser.error("--seed and --seed-height go together")
+        seed = (Path(args.seed), args.seed_height) if args.seed else None
         state = core_pass(args.programs[0], state_dir, args.last, args.local, args.cache_mb, args.segment_blocks,
-                          args.segment_bytes, args.min_free_gb, args.stop_after, rpc_factory)
+                          args.segment_bytes, args.min_free_gb, args.stop_after, rpc_factory, seed=seed)
     except DiskLow as error:
         print(f"STOP (disk): {error}")
         return 4

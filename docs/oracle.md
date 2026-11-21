@@ -795,15 +795,16 @@ The sum can exceed `2^63`, so it is not a JSON number.
 The oracle reports `CoinSet.totalValue` of `Block.Proofs.ConnectProperties`, the quantity of `chain_issuance_bound`.
 The harness adds the amounts of the coins of its own `CCoins` entries, in 128-bit arithmetic.
 
-The harness's sum is an `unsigned __int128`, and it cannot wrap.
+The harness's sum is an `unsigned __int128`.
 Before it adds an amount, the harness requires `MoneyRange`, so each amount is at most `MAX_MONEY`, 10^18 koinu, which is below 2^60.
-The number of coins is a `uint64_t`, so it is below 2^64.
-So the sum is below 2^124.
+For a set of fewer than 2^64 coins, the sum is below 2^124, so it cannot wrap.
+The harness counts the coins in a `uint64_t` without a check, so the bound has that precondition.
+The largest recorded set, at the tip, has 202,470,869 coins.
 
 The harness writes it with its own decimal conversion, and the oracle writes an `Int`, which has no bound.
 The scripts read `set_value` as a string and convert it with Python's `int`, which has no bound.
 The mainnet set exceeds 2^63 - 1, the largest `CAmount`: at height 6,465,793 it holds 15,683,043,286,016,806,072 koinu.
-Part 7 of `scripts/test_core_pass.py` tests a set of 10^19 koinu in both programs.
+Part 7 of `scripts/test_core_pass.py` tests a set of 19,999,999,999,999,999,999 koinu in both programs. That is above 2^64, and a binary64 double does not hold it exactly.
 
 For a request that starts at the genesis block, with the empty chain and no coins, the comparators also check the bound of `chain_issuance_bound`.
 Both programs answer `block.subsidy` for each accepted height from 1, with the hash of the accepted block before it, and the subsidies must agree.
@@ -1407,7 +1408,7 @@ Its `--version` output has `"trap_overflow": true`.
 - `hash_serialized` and `transactions` at height 9,000 equal the values that the test computes from the snapshot file by the definition of `GetUTXOStats`.
 - `scripts/run_range.py` runs heights 9,001 to 9,200 from the pass's snapshot at 9,000 in both programs, which reach the pass's digest at 9,200. A changed hash list and a changed committed manifest each fail.
 - The trap build stops on the two requests of the arithmetic-domain cases whose sums leave the `int64_t` range, once in `validation.cpp` and once in `coins.cpp`. It gives the response of the ordinary build on the other requests of those cases.
-- Ten supplied coins of `MAX_MONEY` each give a set of 10^19 koinu, above 2^63 - 1. Both programs give that exact `set_value` with the coins in the request and in `coins_file`. The harness also gives it with `coins_db` and in the manifest of a written snapshot. The comparator accepts both responses, and they agree with its model.
+- Nineteen supplied coins of `MAX_MONEY` and one of `MAX_MONEY - 1` give a set of 19,999,999,999,999,999,999 koinu, above 2^64. Both programs give that exact `set_value` with the coins in the request and in `coins_file`. The harness also gives it with `coins_db` and in the manifest of a written snapshot. The comparator accepts both responses, and they agree with its model.
 
 The harness reads the changes of an accepted block from a second `CCoinsViewCache` over the set before the block.
 For each transaction in order, it reads the entry of each input, calls Core's `UpdateCoins`, and reads the new entry.
@@ -2237,7 +2238,7 @@ At height 6,465,793, three values of the pass equal those of the node's `gettxou
 
 The script requires all three.
 `hash_serialized` covers the best block, and the ID, the index, the amount and the script of each coin.
-So the pass's set at the tip is the node's set, if double SHA-256 is collision resistant.
+So the pass's set at the tip and the node's set have the same coins, amounts and scripts, if double SHA-256 is collision resistant.
 It does not cover the height or the coinbase flag of a coin, which the digest of the set covers.
 The node is not the reference software revision: it is `/Shibetoshi:1.14.9/`, and the harness is Core at `e0a1c157`.
 

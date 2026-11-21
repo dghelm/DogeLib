@@ -31,10 +31,11 @@ test has seven parts:
 6. The overflow trap. On the two requests of the arithmetic-domain cases that leave the int64_t
    range, the trap build stops with a signed-overflow report, one in validation.cpp and one in
    coins.cpp. On the other requests of those cases it gives the response of the ordinary build.
-7. A set above 2^63 - 1. Ten supplied coins of MAX_MONEY each, and one block, give a total value of
-   10^19 koinu, above the int64_t range of CAmount. The oracle and the harness must give the exact
-   decimal value, with the coins in the request, in `coins_db`, in a `coins_file` snapshot and in
-   the manifest of a written snapshot. The comparator of scripts/oracle_block_validate.py must
+7. A set above 2^64. Twenty supplied coins, nineteen of MAX_MONEY and one of MAX_MONEY - 1, and
+   one block, give a total value of 20 * MAX_MONEY - 1 koinu. That is above the int64_t range of
+   CAmount and above the uint64_t range, and a binary64 double does not hold it exactly. The oracle
+   and the harness must give the exact decimal value, with the coins in the request, in `coins_db`,
+   in a `coins_file` snapshot and in the manifest of a written snapshot. The comparator of scripts/oracle_block_validate.py must
    accept both responses and agree with the expectation of its model.
 """
 
@@ -333,20 +334,20 @@ def test_trap(harness: str, trap: str) -> None:
     print(f"overflow trap: stops in {sorted(set(stopped))}, and agrees with the ordinary build on the other requests")
 
 
-# 7. A set above 2^63 - 1
+# 7. A set above 2^64
 
 INT64_MAX = 2**63 - 1
 
 
 def test_large_value(oracle: str, harness: str) -> None:
     coins = validate.Coins()
-    for n in range(10):
-        coins.add(validate.coin_id(0x7000 + n), 0, validate.MAX_MONEY)
+    for n in range(20):
+        coins.add(validate.coin_id(0x7000 + n), 0, validate.MAX_MONEY - (n == 19))
     base = validate.Base(145000)
     raw = base.block([base.coinbase()])
     req = validate.expect(base.request([raw], coins), [None])
-    want = 10 * validate.MAX_MONEY
-    check(want > INT64_MAX, f"the test value {want} is not above the int64_t range")
+    want = 20 * validate.MAX_MONEY - 1
+    check(want >= 2**64 and float(want) != want, f"the test value {want} is not above 2^64 or a double holds it")
     check(validate.EXPECTATIONS[validate.key(req)]["set_value"] == str(want), "the model gives another total")
 
     (ours,) = run(oracle, [req])
@@ -381,7 +382,7 @@ def test_large_value(oracle: str, harness: str) -> None:
         (snap,) = run(harness, [{**req, "snapshot_heights": [base.height], "snapshot_dir": str(written)}])
         (manifest,) = snap["ok"]["snapshots"]
         check(manifest["set_value"] == str(want), f"the written snapshot has the total {manifest['set_value']!r}")
-    print(f"large value: the total {want} koinu, above {INT64_MAX}, is exact in both programs")
+    print(f"large value: the total {want} koinu, above 2^64 and above {INT64_MAX}, is exact in both programs")
 
 
 def main(argv=None) -> int:

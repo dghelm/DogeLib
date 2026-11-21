@@ -3528,7 +3528,8 @@ So the revision gives no verdict on those inputs, where Core has one or has unde
 - `sequenceLocks_inactive`, `sequenceLocks_iff`: the rule for one transaction, on a supplied view and supplied coins.
   With `active` false, or with a version below 2, the test accepts.
   Take `active` true, a version of at least 2 and a result that is not outside the model. The test accepts exactly when the view is empty, or each input with bit 31 clear meets its lock.
-  The case of an empty view is the block without a predecessor, to which the rule does not apply. `sequenceLocks_iff_of_view` states the characterization without that case.
+  The case of an empty view is the block without a predecessor. Design record 0012, section 5, makes the revision inactive for such a block, so the test accepts every transaction there, and the characterization names the case.
+  `sequenceLocks_iff_of_view` states the characterization without that case, for a view that is not empty.
 - `sequenceLocks_fits`, `inputLock_fits`: the sums of `CalculateSequenceLocks` fit `int` and `int64_t`.
   The first theorem takes a result of `calculateSequenceLocks` from Core's start, and bounds the pair after the last input.
   The second takes a result of `inputLock` for one input, and bounds its term, with the sum before the subtraction of 1.
@@ -3554,7 +3555,7 @@ So the revision gives no verdict on those inputs, where Core has one or has unde
 | Hypothesis | Used by | Where Core enforces it |
 | --- | --- | --- |
 | The median time past of the predecessor is below the time of the block. | `lockTimeCutoff_le` | `ContextualCheckBlockHeader`, `time-too-old` (D33, line 3104). `validateBlock` runs it first, so `relativeLockTime_restricts` does not assume it. |
-| The block is applicable. | The revised rule, `relativeLock_enforced`, `relativeLock_enforced_time` | It is part of the definition. The two theorems about an enforced lock assume it, because no rule runs on another block. No other theorem assumes it. Core reads the median only with a predecessor (D110, line 3135). |
+| The block is applicable. | The revised rule, `relativeLock_enforced`, `relativeLock_enforced_time` | It is part of the definition. The two theorems about an enforced lock assume it, because no rule runs on another block. So do helper theorems that state what the active rule computes, such as `lockTimeArgs_of_headerPassed`, `txTest_of_sequence_untouched` and `enforced_checks`. The inactive equality, the activation, the restriction, the soft fork, the list of blocks and the untouched block do not assume it. Core reads the median only with a predecessor (D110, line 3135). |
 | `csvActive` of the context is false. | `relativeLockTime_eq_of_untouched` | The field is the version-bits state of the pin. `csv_never_lockedIn` shows that it is never active on a mainnet header chain whose headers passed `checkBlockHeader`. No theorem shows that the real chain meets that hypothesis. |
 | The height bound of the sequence locks: a coin height below `2^31 - 65535`. | `sequenceLocks_fits`, `inputLock_fits` | Not enforced as a rule. A coin height is at most the height of a block of its chain, and mainnet heights are far below the bound. The definition returns `heightOutOfDomain` above it. Each theorem assumes a result of the definition, which implies the bound. |
 | The height of a coin is at most the height of the block. | Time locks of `sequenceLocks` | Not enforced as a rule. It holds for a coin set that a replay built. A supplied coin set can break it, and the result is then `coinAboveBlock`. Core has a defined result for a coin one block above, which the revision does not give. |

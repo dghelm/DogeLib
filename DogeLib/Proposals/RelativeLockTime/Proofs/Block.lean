@@ -43,7 +43,7 @@ Every theorem holds for every signature verifier, and none assumes a property of
 | Hypothesis | Used by | Where Core enforces it |
 | --- | --- | --- |
 | The median time past of the predecessor is below the time of the block. | `lockTimeCutoff_le` | `ContextualCheckBlockHeader`, with the reason `time-too-old` (SOURCES.md, D33, line 3104). `validateBlock` runs it first, so `relativeLockTime_restricts` does not assume it. |
-| The block is applicable. | The revised cutoff | It is part of the definition, and no theorem of this module assumes it. Core reads the median only with a predecessor (D110, line 3135). |
+| The block is applicable. | The revised cutoff. `medianTimePast_of_headerPassed`, `lockTimeArgs_of_headerPassed`, `txTest_of_sequence_untouched` | It is part of the definition. The three helper theorems assume it. The targets of this module do not: the inactive equality, the activation, the restriction and the two theorems about an untouched block hold on an applicable block or not. Core reads the median only with a predecessor (D110, line 3135). |
 | `csvActive` of the context is false. | `relativeLockTime_eq_of_untouched` | The field is the version-bits state of the pin, which is never active on a mainnet chain whose headers passed the header checks (`csv_never_lockedIn`). |
 
 `relativeLockTime_restricts` needs no hypothesis on `csvActive`.
@@ -191,7 +191,7 @@ theorem blockRevision_inactiveBaseline (verify : SignatureVerifier) (view : List
     lockTimeArgs_inactive⟩
 
 /--
-The target `relativeLockTime_inactive_eq` of design record 0012, section 9.3, for the revision with the rules of BIP 113 and BIP 112.
+The target `relativeLockTime_inactive_eq` of design record 0012, section 9.3.
 With `active` false, `validateBlockWithActive` with the revision equals the embedded result of `validateBlock`.
 The equality covers every acceptance, each rejection and each result outside the model.
 For every pair of embeddings, verifier, pair of flags, context, coin set and block.
@@ -204,7 +204,7 @@ theorem relativeLockTime_inactive_eq (V : ValidateEmbedding ConnectRejection Con
   validateBlockWithActive_inactive V E (blockRevision_inactiveBaseline verify view) fCheckPOW fCheckMerkleRoot ctx s b
 
 /--
-The target `relativeLockTime_activation` of design record 0012, section 9.3, for the revision with the rules of BIP 113 and BIP 112.
+The target `relativeLockTime_activation` of design record 0012, section 9.3.
 Where the activation is inactive on mainnet at the height of the block, `validateBlockWith` with the revision equals the embedded result of `validateBlock`.
 For every activation, pair of embeddings, verifier, pair of flags, context, coin set and block.
 -/
@@ -236,7 +236,7 @@ theorem relativeLockTime_activation_of_none (V : ValidateEmbedding ConnectReject
 /-! ## Restriction -/
 
 /--
-The target `relativeLockTime_restricts` of design record 0012, section 9.3, for the revision with the rules of BIP 113 and BIP 112.
+The target `relativeLockTime_restricts` of design record 0012, section 9.3.
 If `validateBlockWithActive` with the revision accepts a block, `validateBlock` accepts it, with the same coin set and the same changes.
 For every `active`, pair of embeddings, verifier, pair of flags, context and coin set, on an applicable block or not.
 The statement has no hypothesis on the times: `validateBlockWithActive` runs the contextual header check before the body check.

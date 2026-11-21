@@ -3,7 +3,7 @@
 
 Usage:
   python3 -I scripts/run_range.py --range NAME --pass DIR --fixture DIR --output DIR [--write-hashes]
-      [--cache-mb MB] <dogelib-oracle> <core-oracle>
+      [--hashes DIR] [--cache-mb MB] <dogelib-oracle> <core-oracle>
 
 NAME is a range of design record 0011, section 4: A, B, C, D, E1, E2, F, H or G. DIR of `--pass` is the
 state directory of scripts/core_pass.py, which must have passed the range's end. The fixture is a
@@ -13,7 +13,9 @@ works in six steps:
 1. It checks the fixture as `scripts/fetch_blocks.py --check` does. Each block hash must equal the
    hash of the header that the pass kept at its height, and the committed list
    `tests/block/mainnet-blocks/ranges/<NAME>/hashes.txt`. `--write-hashes` writes that list and its
-   `SHA256SUMS` from the pass's headers in the place of the comparison.
+   `SHA256SUMS` from the pass's headers in the place of the comparison. `--hashes DIR` reads and
+   writes the lists under DIR in the place of `tests/block/mainnet-blocks/ranges`, for a range whose
+   list is not committed.
 2. It checks the snapshot of the range start: its SHA-256 and length equal the pass's manifest,
    and the manifest names the block below the range. The manifest file of the pass must equal the
    committed `tests/block/mainnet-blocks/snapshots/coins-<a>.json`, when that file exists.
@@ -239,13 +241,14 @@ def main(argv=None) -> int:
     parser.add_argument("--fixture", required=True, metavar="DIR")
     parser.add_argument("--output", required=True, metavar="DIR")
     parser.add_argument("--write-hashes", action="store_true")
+    parser.add_argument("--hashes", default=str(HASHES), metavar="DIR")
     parser.add_argument("--cache-mb", type=int, default=2048, metavar="MB")
     parser.add_argument("oracle")
     parser.add_argument("harness")
     args = parser.parse_args(argv)
     try:
         summary = run_range(args.range, Path(args.state), Path(args.fixture), Path(args.output), args.oracle,
-                            args.harness, args.write_hashes, args.cache_mb)
+                            args.harness, args.write_hashes, args.cache_mb, hashes=Path(args.hashes))
     except (ReplayError, core_pass.PassError) as error:
         print(f"FAIL: {error}")
         return 1

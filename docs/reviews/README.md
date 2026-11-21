@@ -18,7 +18,8 @@ The first seven are of 2026-11-11, at DogeLib `865754b`.
 The block subsidy read is of 2026-11-13, at DogeLib `4cd73bc`, and it also reads Boost 1.70.0.
 The block check read is of 2026-11-13, at DogeLib `6ca6373`.
 The version-bits and `ContextualCheckBlock` read is of 2026-11-13, at DogeLib `cc15d98`.
-The coin set and `ConnectBlock` read is of 2026-11-17, at DogeLib `8748567`, and its record names its reader as GPT-5 through Codex:
+The coin set and `ConnectBlock` read is of 2026-11-17, at DogeLib `8748567`, and its record names its reader as GPT-5 through Codex.
+The sequence locks read is of 2026-11-20, at DogeLib `58a30eb`. It reads a definition of the proposed revision `RelativeLockTime` against Core's code of a rule that never runs on mainnet:
 
 | Area | Record | Brief | Findings |
 | --- | --- | --- | --- |
@@ -33,11 +34,12 @@ The coin set and `ConnectBlock` read is of 2026-11-17, at DogeLib `8748567`, and
 | Block codec, `CheckTransaction`, legacy sigop count and `CheckBlock` | [blockcheck.md](blockcheck.md) | [briefs/blockcheck.md](briefs/blockcheck.md) | 1 documentation-only |
 | Version bits and `ContextualCheckBlock` | [contextualbody.md](contextualbody.md) | [briefs/contextualbody.md](briefs/contextualbody.md) | 3 domain boundaries, 1 documentation-only |
 | Coin set, `CheckTxInputs`, sigop cost, `ConnectBlock` and block validation | [connect.md](connect.md) | [briefs/connect.md](briefs/connect.md) | 3 domain boundaries, 1 incorrect finding |
+| Sequence locks of BIP 68, for the proposed revision `RelativeLockTime` | [sequencelocks.md](sequencelocks.md) | [briefs/sequencelocks.md](briefs/sequencelocks.md) | 1 documentation-only |
 
 No read found a consensus-divergent discrepancy.
-Each finding but three is a *domain boundary*: an input outside the domain on which a definition corresponds to Core.
+Each finding but four is a *domain boundary*: an input outside the domain on which a definition corresponds to Core.
 The block check read has one finding about documentation alone: a sentence on Core's `fChecked` member that claimed too much.
-The version-bits read has one such finding too.
+The version-bits read has one such finding too, and so has the sequence locks read: its record corrects which sum of Core can overflow.
 The coin set read has one finding that is not correct, about the hash `BIP34Hash`, and its record says why.
 The AuxPoW and transaction records report the same boundary, Core's default-constructed transaction.
 The section *After the read* of a record says where the repository states each boundary, and how that statement was checked.

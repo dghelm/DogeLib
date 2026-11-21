@@ -167,7 +167,7 @@ The revision is not part of the baseline, and DogeLib takes no position on its a
 | --- | --- | --- |
 | 1 | The extensions E1 to E4 of the block-level layer of design record 0011, and BIP 113, the median-time cutoff. The cutoff has its restriction theorem, known answers and the cutoff count. A comparison runs Core's code with the CSV state forced to `ACTIVE` | Implemented, exit conditions 1 to 6. `connectChainWith_restricts` waits for stage 3, as the record allows. The revision is partial until stage 3 ([COVERAGE.md](COVERAGE.md#proposed-revisions)) |
 | 2 | BIP 112: the CSV flag of a block, the Script-local theorems for `OP_CHECKSEQUENCEVERIFY` and the corpus records | Implemented, exit conditions 1 to 4. The opcode witnesses are block-level. The forced-active comparison of `block.validate` covers made blocks for the opcode. The revision has the rules of BIP 113 and BIP 112, and it is partial until stage 3 |
-| 3 | BIP 68: sequence locks with the ancestor median times, the block-level `SoftFork` with its witnesses, and `relativeLock_enforced` | Not started |
+| 3 | BIP 68: sequence locks with the ancestor median times, the block-level `SoftFork` with its witnesses, and `relativeLock_enforced` | In two pull requests. The first is implemented: exit conditions 1, 2, 3 and 6, and the subsection of SOUNDNESS.md of condition 5. The revision has the three rules. The second has the complete forced-active comparison (condition 4) and the worked example of `docs/in-practice.md` (condition 5) |
 | 4 | The historical counts on heights 0 to 10,000 and 0 to 145,000, with a committed candidate list | Not started |
 
 One other candidate is unscheduled, and it needs an approved scope before work starts:

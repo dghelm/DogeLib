@@ -3,8 +3,8 @@ import DogeLib.Proposals
 /-!
 ## Proposals: the proposed revision `RelativeLockTime`, the lock-time cutoff
 
-`RelativeLockTime` is the revision of design record 0012. It is partial: it has the rules of BIP 113 and BIP 112.
-`KnownAnswers.Proposals.RelativeLockTimeOpcode` has the cases of BIP 112.
+`RelativeLockTime` is the revision of design record 0012.
+`KnownAnswers.Proposals.RelativeLockTimeOpcode` has the cases of BIP 112, and `KnownAnswers.Proposals.RelativeLockTimeSequence` has the cases of BIP 68.
 These cases run `contextualBodyWith`, `validateBlockWithActive` and `validateBlockWith` with the revision through the compiled code.
 
 Each expected result is derived by hand, never computed by DogeLib, from two sources:
@@ -93,12 +93,13 @@ def contextOf (view : List BlockIndex) (adjustedTime : Int64) : ValidateContext 
 /-- An unavailable verifier. No block of this module has a script that calls it. -/
 def noVerifier : SignatureVerifier := fun _ _ _ => none
 
-/-- The revision with the baseline error types. -/
-def revision : BlockRevision ScriptError Unsupported ConnectBlockError ConnectBlockError := blockRevision noVerifier
+/-- The revision on the view `view`. The body check does not read the view of the revision. -/
+def revision (view : List BlockIndex) : BlockRevision ScriptError Unsupported ConnectRejection ConnectReason :=
+  blockRevision noVerifier view
 
 /-- The body check of the revision on a block with the coinbase and one transaction, on the made view. -/
 def body (active : Bool) (view : List BlockIndex) (lockTime sequence : UInt32) : Except ContextualBodyError Unit :=
-  contextualBodyWith revision active (contextOf view 0) (blockOf Hash256.zero blockTime [coinbaseTx, lockedTx lockTime sequence])
+  contextualBodyWith (revision view) active (contextOf view 0) (blockOf Hash256.zero blockTime [coinbaseTx, lockedTx lockTime sequence])
 
 /-- Whether a body result is the expected one: `none` for an acceptance, or the error. -/
 def bodyIs (r : Except ContextualBodyError Unit) (expected : Option ContextualBodyError) : Bool :=
@@ -178,9 +179,10 @@ def activationAt (height : Option Nat) : Activation :=
     | _ => none⟩
 
 /-- `validateBlockWith` with the revision on the block at height 1, for an activation. -/
-def withActivation (height : Option Nat) (lockTime : UInt32) : BlockOutcome ValidateError ValidateError ConnectResult :=
-  validateBlockWith ValidateEmbedding.baseline ConnectEmbedding.baseline (blockRevision noVerifier) (activationAt height)
-    false false heightOneContext CoinSet.empty (heightOne lockTime)
+def withActivation (height : Option Nat) (lockTime : UInt32) :
+    BlockOutcome ValidateRejection ValidateReason ConnectResult :=
+  validateBlockWith validateEmbedding connectEmbedding (blockRevision noVerifier heightOneContext.view)
+    (activationAt height) false false heightOneContext CoinSet.empty (heightOne lockTime)
 
 /-- The error of a baseline result, or `none` for an acceptance. -/
 def baselineError (r : Except ValidateError ConnectResult) : Option ValidateError :=
@@ -188,11 +190,12 @@ def baselineError (r : Except ValidateError ConnectResult) : Option ValidateErro
   | .ok _ => none
   | .error e => some e
 
-/-- Whether an outcome is the expected one: an acceptance for `none`, or a rejection with the error. -/
-def outcomeIs (o : BlockOutcome ValidateError ValidateError ConnectResult) (expected : Option ValidateError) : Bool :=
+/-- Whether an outcome is the expected one: an acceptance for `none`, or a rejection with the baseline error. -/
+def outcomeIs (o : BlockOutcome ValidateRejection ValidateReason ConnectResult) (expected : Option ValidateError) :
+    Bool :=
   match expected with
   | none => o.isOk
-  | some e => decide (o.rejection? = some e)
+  | some e => decide (o.rejection? = some (.inl e))
 
 /-- Runs every case. Returns the number of failures. -/
 def check : IO Nat := do

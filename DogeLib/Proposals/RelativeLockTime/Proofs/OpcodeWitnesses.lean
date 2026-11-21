@@ -6,7 +6,6 @@ public import DogeLib.Proposals.RelativeLockTime.Proofs.Witnesses
 # Proofs: `Proposals.RelativeLockTime`, witnesses of the opcode of BIP 112
 
 The strictness witness and the use witness of design record 0012, section 9.3, for the rule of BIP 112.
-The revision is partial: it has that rule and the rule of BIP 113 (`DogeLib.Proposals.RelativeLockTime`).
 Both witnesses are block-level: each is one call of `validateBlock` and of the revision on one block, on a coin set with one coin.
 
 ## The witness block
@@ -29,11 +28,11 @@ With the flag, the opcode compares the operand 1 with the sequence 1 of the inpu
 | Version | Baseline flags | Revised flags |
 | --- | --- | --- |
 | 1 | Accepted. | `CheckSequence` fails for a version below 2: `UNSATISFIED_LOCKTIME`. The second run without the flag accepts, so the class is that of `non-mandatory-script-verify-flag`. |
-| 2 | Accepted. | Accepted: bit 31 of the sequence is clear, both type bits are clear, and 1 is at most 1. |
+| 2 | Accepted. | Accepted: bit 31 of the sequence is clear, both type bits are clear, and 1 is at most 1. The sequence 1 is also a height lock of one block on a coin at height 1, which the block at height 145,000 meets. |
 
 - `opcode_strict`: with version 1, `validateBlock` accepts the block, and the active revision rejects it with the script error `UNSATISFIED_LOCKTIME` of input 0 of transaction 1, which is not mandatory.
 - `opcode_use`: with version 2, the active revision accepts the block, and the rule runs (`RunsOpcode`).
-- `opcode_softFork`: the framework's `SoftFork` for the partial revision and `validateBlock`, with these two witnesses. Block-level.
+- `opcode_softFork`: the framework's `SoftFork` for the revision and `validateBlock`, with these two witnesses. Block-level.
 
 The witnesses are at the block level, as stage 2 of design record 0012 asks.
 The kernel evaluates each check of `validateBlock` alone with `decide +kernel`, including the transaction hashes and both runs of the script.
@@ -89,11 +88,12 @@ theorem opcode_baselineValidate (version : UInt32) :
 /-- The revision on the arguments of a witness is the outcome of the four checks, and then of `connectBlockWith`. -/
 theorem opcode_revisedValidate (version : UInt32) :
     revisedValidate true (opcodeArgs version) =
-      ValidateEmbedding.baseline.afterChecks
+      validateEmbedding.afterChecks
         (checksBeforeConnect false false witnessContext (lockTimeArgs true witnessContext (opcodeBlock version))
           (opcodeBlock version))
-        (fun _ => connectBlockWith ConnectEmbedding.baseline (blockRevision witnessVerifier) true true
-          (connectContextOf witnessContext (opcodeBlock version)) (opcodeArgs version).coins (opcodeBlock version)) :=
+        (fun _ => connectBlockWith connectEmbedding witnessRevision true true
+          (connectContextOf witnessContext (opcodeBlock version)) (opcodeArgs version).coins (opcodeBlock version)) := by
+  rw [← witnessRevision_eq]
   rfl
 
 /-- The block `opcodeBlock version` is applicable, for every version: its view is not empty, and its header does not have the genesis hash. -/
@@ -155,15 +155,15 @@ set_option maxRecDepth 1000000 in
 Input 0 of transaction 1 fails with `UNSATISFIED_LOCKTIME`, and the second run, without the flags that are not mandatory, accepts.
 -/
 theorem opcode_connect_strict :
-    connectBlockWith ConnectEmbedding.baseline (blockRevision witnessVerifier) true true
+    connectBlockWith connectEmbedding witnessRevision true true
         (connectContextOf witnessContext (opcodeBlock 1)) (opcodeArgs 1).coins (opcodeBlock 1) =
-      .rejected (.script 1 0 false .unsatisfiedLocktime) :=
+      .rejected (.inl (.script 1 0 false .unsatisfiedLocktime)) :=
   BlockOutcome.eq_rejected_of_rejection? (by decide +kernel)
 
 set_option maxRecDepth 1000000 in
-/-- `connectBlockWith` with the active revision accepts `opcodeBlock 2`. -/
+/-- `connectBlockWith` with the active revision accepts `opcodeBlock 2`. The transaction test reads the height lock of the input: the coin at height 1 and one block, at height 145,000. -/
 theorem opcode_connect_use :
-    ∃ r, connectBlockWith ConnectEmbedding.baseline (blockRevision witnessVerifier) true true
+    ∃ r, connectBlockWith connectEmbedding witnessRevision true true
       (connectContextOf witnessContext (opcodeBlock 2)) (opcodeArgs 2).coins (opcodeBlock 2) = .ok r :=
   BlockOutcome.exists_ok_of_isOk (by decide +kernel)
 
@@ -187,7 +187,7 @@ The class of the failure is that of Core's `non-mandatory-script-verify-flag`: t
 -/
 theorem opcode_strict :
     (∃ r, baselineValidate (opcodeArgs 1) = .ok r) ∧
-      revisedValidate true (opcodeArgs 1) = .rejected (.connect (.script 1 0 false .unsatisfiedLocktime)) := by
+      revisedValidate true (opcodeArgs 1) = .rejected (.inl (.connect (.script 1 0 false .unsatisfiedLocktime))) := by
   have hcb := opcode_checkBlock.1
   constructor
   · obtain ⟨r, hr⟩ := opcode_connect_baseline
@@ -216,15 +216,14 @@ theorem opcode_use : (∃ r, revisedValidate true (opcodeArgs 2) = .ok r) ∧ Ru
       by decide +kernel⟩
 
 /--
-The revision with the rules of BIP 113 and BIP 112 is a soft fork of `validateBlock` at the level of one block, in the sense of the framework's `SoftFork`, with the witnesses of the opcode.
-The embedding is `ValidateEmbedding.ofBaseline` with the baseline error types, and the use predicate is `RunsOpcode`.
+The revision is a soft fork of `validateBlock` at the level of one block, in the sense of the framework's `SoftFork`, with the witnesses of the opcode.
+The embedding is `embedBaseline`, and the use predicate is `RunsOpcode`.
 
 Block-level: the statement is about one block on a supplied coin set and view, for mainnet rules.
 It is not a soft-fork claim about the network, and it says nothing about fork choice, convergence or liveness.
-The revision is partial, so this is not the target `relativeLockTime_softFork` of design record 0012, which is about the three rules together.
 -/
 theorem opcode_softFork :
-    SoftFork (ValidateEmbedding.baseline.ofBaseline ConnectEmbedding.baseline id id) baselineVerdict
+    SoftFork embedBaseline baselineVerdict
       BlockOutcome.verdict RunsOpcode baselineValidate revisedValidate where
   inactive_eq := cutoff_softFork.inactive_eq
   restricts := cutoff_softFork.restricts

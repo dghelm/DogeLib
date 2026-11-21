@@ -16,10 +16,10 @@ comparison reads its `revised` object.
 
 Agreement shows that the Lean revision equals Core's dormant code on these requests. It is not a
 Core comparison of the baseline, it is not evidence about mainnet, and it does not show that the
-rule is right for Dogecoin. The revision is partial: this run covers the rules of BIP 113 and
+rule is right for Dogecoin. This run covers a rejection through the rules of BIP 113 and
 BIP 112. With the forced state, Core's ConnectBlock also runs the sequence locks of BIP 68, which
-the revision does not have yet. So each made block of part 7 is one on which BIP 68 rejects
-nothing, and the run says nothing about that rule.
+the revision has as `sequenceLocks`. Each made block of part 7 passes them on both sides, so the
+run does not compare a rejection through that rule.
 
 The run has these parts:
 
@@ -392,9 +392,9 @@ def validate_cases() -> list[dict]:
     opcode alone has the reason `non-mandatory-script-verify-flag`.
 
     The supplied coin has the height 100,000, far below the block. A version 2 input whose sequence
-    is a height lock of n blocks therefore passes Core's sequence lock of BIP 68, which the revision
-    does not have yet. One case has a time lock of 0 on a coin one block below the block, which
-    passes for the same reason. No case rejects through BIP 68."""
+    is a height lock of n blocks therefore passes the sequence lock of BIP 68, in Core and in the
+    revision. One case has a time lock of 0 on a coin one block below the block, which passes too.
+    No case rejects through BIP 68."""
     cases = []
     for height in (1034382, 3464751):
         base = Base(height)
@@ -599,7 +599,7 @@ def main() -> int:
     parser.add_argument("harness")
     args = parser.parse_args()
     print("Core at e0a1c15 with the CSV state forced to ACTIVE, against the proposed revision RelativeLockTime "
-          "(the BIP 113 cutoff and the BIP 112 opcode).")
+          "(rejections through the BIP 113 cutoff and the BIP 112 opcode).")
     try:
         refused = refusals(args.oracle, args.proposal, args.harness, args.timeout)
         print(f"refusals: {refused} requests refused")

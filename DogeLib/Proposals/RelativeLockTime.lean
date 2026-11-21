@@ -1,7 +1,6 @@
 module
 
-public import DogeLib.Proposals.Framework.Block
-public import DogeLib.Work.MedianTimePast
+public import DogeLib.Proposals.RelativeLockTime.SequenceLocks
 
 /-!
 # `Proposals.RelativeLockTime`
@@ -21,10 +20,8 @@ DogeLib is a specification library. This module does not argue for or against th
 
 ## Coverage of this module
 
-**The revision is partial. It has the rules of BIP 113 and BIP 112.**
-The rule of BIP 68 is stage 3 of design record 0012, and this module does not state it.
-With `active` true, the transaction test of `blockRevision` is still that of the baseline.
-So a result of this module is not the result of the three rules together.
+The revision has the three rules.
+`blockRevision` sets the lock-time arguments (BIP 113), the script flags (BIP 112) and the transaction test (BIP 68) of the block layer.
 
 ## The rule of BIP 113
 
@@ -50,6 +47,31 @@ So the second script check of `checkInputScriptWith` runs without it, and a spen
 
 `ConnectBlock` at the pin sets neither `SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS` nor `SCRIPT_VERIFY_MINIMALDATA`, so the opcode has the consensus form of design record 0012, section 3.2.
 
+## The rule of BIP 68
+
+Core's `ConnectBlock` runs `SequenceLocks` on each transaction that is not a coinbase, with `LOCKTIME_VERIFY_SEQUENCE` exactly when the CSV state is active (SOURCES.md, D114, lines 1906 to 1911 and 1948 to 1959).
+The baseline has no definition of that test, because the state is never active on mainnet.
+`DogeLib.Proposals.RelativeLockTime.SequenceLocks` defines it as `sequenceLocks`, and states its three results outside the model.
+Through extension E2 of the block layer, `txTest` runs it.
+
+The test reads ancestor times of the view, and the transaction test of the block layer has no view argument.
+So `blockRevision` takes the view of the predecessor as an argument, and `revisedValidate` passes the view of its context.
+Every theorem that does not read the test holds for every view argument.
+
+## Results
+
+The revision adds one rejection and three results outside the model to those of `ConnectBlock` (extension E4).
+The outcome types are sums, with the baseline values under `Sum.inl`:
+
+| Type | Value |
+| --- | --- |
+| `ConnectRejection` | `ConnectBlockError ⊕ RevisionError` |
+| `ConnectReason` | `ConnectBlockError ⊕ Reason` |
+| `ValidateRejection` | `ValidateError ⊕ RevisionError` |
+| `ValidateReason` | `ValidateError ⊕ Reason` |
+
+`connectEmbedding` and `validateEmbedding` map the baseline results into them.
+
 ## Where the rules apply
 
 A block is *applicable* under two conditions (design record 0012, section 5).
@@ -62,6 +84,7 @@ For every other block it gives the arguments of the baseline.
 So no check gives the order between the median time past and the time of the block, which the restriction theorem needs.
 
 `scriptFlags` takes `active` and the height, and does not read the block.
+`sequenceLocks` accepts on an empty view, and does not read the hash of the block.
 `validateBlockWithActive` still gives the embedded result of `validateBlock` on a block that is not applicable (`relativeLockTime_eq_of_not_applicable` in `Proofs.Block`).
 `connectBlockWith` connects no transaction of a block with the genesis hash, and the contextual header check fails on an empty view.
 
@@ -77,14 +100,15 @@ A caller that runs `contextualBodyWith` alone must check the median itself.
 Where a BIP and the pinned code differ, the definition follows the code (design record 0012, section 2.3):
 
 - BIP 112 and BIP 113 state a version-bits deployment with Bitcoin's parameters. The revision has an activation height, through `Activation`.
-- BIP 68 chose its time unit of 512 seconds for a block interval of 600 seconds. The pinned code keeps that unit. This item concerns stage 3.
+- BIP 68 chose its time unit of 512 seconds for a block interval of 600 seconds. The pinned code keeps that unit, and Dogecoin's interval is 60 seconds.
+- The BIPs state no result outside the model. `sequenceLocks` has three, for an input that Core's `int` arithmetic or the supplied view does not cover.
 
 ## Labels
 
 The theorems of `DogeLib.Proposals.RelativeLockTime.Proofs` are rule-level, Script-local or block-level.
 A Script-local theorem is about one input and its scripts.
-A block-level theorem is about `validateBlock` for one block on a supplied coin set and view.
-It is not a claim about a chain or about the network, and it says nothing about fork choice, convergence or liveness.
+A block-level theorem is about `validateBlock` or `connectBlock` for one block on a supplied coin set and view, or about a list of blocks through `connectChain`.
+It is not a claim about the network, and it says nothing about fork choice, convergence or liveness.
 -/
 
 @[expose] public section
@@ -129,14 +153,43 @@ Otherwise `connectScriptFlags` at the height.
 def scriptFlags (active : Bool) (height : Nat) : UInt32 :=
   if active then withCsvFlag (connectScriptFlags height) else connectScriptFlags height
 
+/-- The rejections of `connectBlockWith` under the revision: those of `ConnectBlock`, or a failure of the sequence locks. -/
+abbrev ConnectRejection : Type := ConnectBlockError ⊕ RevisionError
+
+/-- The results outside the model of `connectBlockWith` under the revision: those of `ConnectBlock`, or a reason of the sequence locks. -/
+abbrev ConnectReason : Type := ConnectBlockError ⊕ Reason
+
+/-- The rejections of `validateBlockWithActive` under the revision. -/
+abbrev ValidateRejection : Type := ValidateError ⊕ RevisionError
+
+/-- The results outside the model of `validateBlockWithActive` under the revision. -/
+abbrev ValidateReason : Type := ValidateError ⊕ Reason
+
+/-- The embedding of the results of `ConnectBlock` into the outcome types of the revision: each baseline value under `Sum.inl`. -/
+def connectEmbedding : ConnectEmbedding ScriptError Unsupported ConnectRejection ConnectReason :=
+  ⟨.inl, .inl, fun tx input mandatory e => .inl (.script tx input mandatory e), fun u => .inl (.scriptUnsupported u)⟩
+
+/-- The embedding of the results of `validateBlock` into the outcome types of the revision. A result of `connectBlockWith` keeps its side of the sum, and a baseline value goes under `ValidateError.connect`. -/
+def validateEmbedding : ValidateEmbedding ConnectRejection ConnectReason ValidateRejection ValidateReason :=
+  ⟨.inl, .inl, Sum.map .connect id, Sum.map .connect id⟩
+
 /--
-The revision at the block level, with the verifier `verify`.
-Its lock-time arguments are `lockTimeArgs`, and its script flags are `scriptFlags`.
-Its spend check and its transaction test are those of the baseline: the revision is partial, and has the rules of BIP 113 and BIP 112.
+The transaction test of the revision (extension E2): `sequenceLocks` on the view `view`, with its error and its reasons under `Sum.inr`.
 -/
-def blockRevision {ρ μ : Type} (verify : SignatureVerifier) : BlockRevision ScriptError Unsupported ρ μ where
+def txTest (active : Bool) (view : List BlockIndex) (height : Nat) : TxTest ConnectRejection ConnectReason :=
+  fun index tx coins => (sequenceLocks active view height index tx coins).map .inr .inr
+
+/--
+The revision at the block level, with the verifier `verify` and the view `view` of the predecessor.
+Its lock-time arguments are `lockTimeArgs` (BIP 113), its script flags are `scriptFlags` (BIP 112), and its transaction test is `sequenceLocks` on `view` (BIP 68).
+Its spend check is that of the baseline.
+`view` is the view that the transaction test reads, and a caller passes the view of the context of the block.
+-/
+def blockRevision (verify : SignatureVerifier) (view : List BlockIndex) :
+    BlockRevision ScriptError Unsupported ConnectRejection ConnectReason where
   spend := fun _ => baselineSpendCheck id id verify
   scriptFlags := scriptFlags
+  txTest := fun active height => txTest active view height
   lockTimeArgs := lockTimeArgs
 
 /--
@@ -161,12 +214,16 @@ def baselineValidate (a : BlockArgs) : Except ValidateError ConnectResult :=
   validateBlock a.verify a.fCheckPOW a.fCheckMerkleRoot a.ctx a.coins a.block
 
 /--
-The revision: `validateBlockWithActive` with `blockRevision`, for the value `active`, with the baseline error types.
-A rejection and an unsupported result both hold a `ValidateError`.
+The revision: `validateBlockWithActive` with `blockRevision` on the view of the context, for the value `active`.
+A rejection is a `ValidateError` of the baseline or a `RevisionError`. A result outside the model is a `ValidateError` or a `Reason`.
 -/
-def revisedValidate (active : Bool) (a : BlockArgs) : BlockOutcome ValidateError ValidateError ConnectResult :=
-  validateBlockWithActive ValidateEmbedding.baseline ConnectEmbedding.baseline (blockRevision a.verify) active
+def revisedValidate (active : Bool) (a : BlockArgs) : BlockOutcome ValidateRejection ValidateReason ConnectResult :=
+  validateBlockWithActive validateEmbedding connectEmbedding (blockRevision a.verify a.ctx.view) active
     a.fCheckPOW a.fCheckMerkleRoot a.ctx a.coins a.block
+
+/-- The embedded result of a baseline `validateBlock` call in the outcome types of the revision. -/
+def embedBaseline (r : Except ValidateError ConnectResult) : BlockOutcome ValidateRejection ValidateReason ConnectResult :=
+  validateEmbedding.ofBaseline connectEmbedding id id r
 
 /--
 The rule of BIP 113 runs on the block.
@@ -198,5 +255,17 @@ def RunsOpcode (a : BlockArgs) : Prop :=
       a.coins.coin input.prevout = some c ∧ ∃ b S, b.length ≤ 5 ∧
         c.out.scriptPubKey.bytes.val = operandScript b S ∧ 0 ≤ ScriptNum.value b ∧
           (ScriptNum.value b).toNat &&& sequenceLockTimeDisableFlag = 0
+
+/--
+The rule of BIP 68 runs on the block.
+The block is applicable.
+A transaction of the block that is not a coinbase has a version of at least 2, as an unsigned value.
+One of its inputs has a sequence with bits 31 and 22 clear and with low 16 bits of at least 1: a height lock of at least one block.
+-/
+def RunsSequenceLock (a : BlockArgs) : Prop :=
+  applicable a.ctx a.block = true ∧
+    ∃ tx ∈ a.block.transactions, tx.isCoinBase = false ∧ 2 ≤ tx.version.toNat ∧ ∃ input ∈ tx.inputs.val,
+      input.sequence.toNat &&& sequenceLockTimeDisableFlag = 0 ∧
+        input.sequence.toNat &&& sequenceLockTimeTypeFlag = 0 ∧ 1 ≤ input.sequence.toNat &&& sequenceLockTimeMask
 
 end DogeLib.Proposals.RelativeLockTime

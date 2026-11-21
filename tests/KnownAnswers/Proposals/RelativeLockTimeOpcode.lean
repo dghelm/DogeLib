@@ -5,7 +5,7 @@ import KnownAnswers.Script
 /-!
 ## Proposals: the proposed revision `RelativeLockTime`, the opcode of BIP 112
 
-`RelativeLockTime` is the revision of design record 0012. It is partial: it has the rules of BIP 113 and BIP 112.
+`RelativeLockTime` is the revision of design record 0012.
 Through extension E1, the revision adds `SCRIPT_VERIFY_CHECKSEQUENCEVERIFY` to the script flags of a block.
 These cases run `verifyLegacySpend`, `verifyScript` and `validateBlockWithActive` through the compiled code.
 No expected value comes from DogeLib.
@@ -40,6 +40,11 @@ The block cases run the whole of `validateBlock` and of the revision on a made b
 The coin set has one coin, with a script that holds opcode `0xb2`. The second transaction of the block spends it.
 Each expected result is derived by hand from BIP 112 (SOURCES.md, P2) and from Core's code of the opcode (D3) and of the two script runs of `CheckInputs` (D101, `src/validation.cpp`, lines 1488 to 1512).
 A spend that fails with the CSV flag and passes without it is not a mandatory failure: Core's reason is `non-mandatory-script-verify-flag`.
+
+The revision also runs the sequence locks of BIP 68 on each spending transaction, before its script.
+The coin is at height 0 and the block is at height 1, and the median time past of the predecessor and of the ancestor of the coin is the time of the genesis block.
+So every sequence of these cases passes the test: a height lock of at most 1 block (`0 + 1 ≤ 1`), a time lock of 0 units, or bit 31 set.
+`KnownAnswers.Proposals.RelativeLockTimeSequence` has the cases that fail it.
 -/
 
 namespace KnownAnswers.Proposals.RelativeLockTimeOpcode
@@ -190,8 +195,8 @@ def blockArgs (script : List UInt8) (version sequence : UInt32) : BlockArgs :=
     blockOf genesisHash (genesisTime + 60) [coinbaseTx, spendTx script version sequence]⟩
 
 /-- `validateBlockWith` with the revision on the arguments, for an activation. -/
-def withActivation (height : Option Nat) (a : BlockArgs) : BlockOutcome ValidateError ValidateError ConnectResult :=
-  validateBlockWith ValidateEmbedding.baseline ConnectEmbedding.baseline (blockRevision a.verify) (activationAt height)
+def withActivation (height : Option Nat) (a : BlockArgs) : BlockOutcome ValidateRejection ValidateReason ConnectResult :=
+  validateBlockWith validateEmbedding connectEmbedding (blockRevision a.verify a.ctx.view) (activationAt height)
     a.fCheckPOW a.fCheckMerkleRoot a.ctx a.coins a.block
 
 /-- The failure of input 0 of transaction 1 with the error `e`, which is not mandatory: Core's `non-mandatory-script-verify-flag`. -/

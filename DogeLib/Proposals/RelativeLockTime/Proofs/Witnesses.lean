@@ -7,8 +7,7 @@ public import DogeLib.Work.Proofs.MedianTimePast
 # Proofs: `Proposals.RelativeLockTime`, witnesses of the lock-time cutoff
 
 The strictness witness and the use witness of design record 0012, section 9.3, for the rule of BIP 113.
-The revision is partial: it has that rule and the rule of BIP 112 (`DogeLib.Proposals.RelativeLockTime`).
-`DogeLib.Proposals.RelativeLockTime.Proofs.OpcodeWitnesses` has the witnesses of the other rule.
+`DogeLib.Proposals.RelativeLockTime.Proofs.OpcodeWitnesses` and `SequenceWitnesses` have the witnesses of the two other rules.
 Both witnesses are block-level: each is one call of `validateBlock` and of the revision on one block, with an empty coin set.
 
 ## The witness block
@@ -34,7 +33,8 @@ The block has no script to run, so the verifier is never called.
 
 - `cutoff_strict`: with the lock time 1,395,094,000, `validateBlock` accepts the block, and the active revision rejects it with `bad-txns-nonfinal` of `ContextualCheckBlock`.
 - `cutoff_use`: with the lock time 1,395,093,999, the active revision accepts the block, and the rule runs (`RunsCutoff`).
-- `cutoff_softFork`: the framework's `SoftFork` for the partial revision and `validateBlock`, with the witnesses of this rule. Block-level.
+- `cutoff_softFork`: the framework's `SoftFork` for the revision and `validateBlock`, with the witnesses of this rule. Block-level.
+- `witnessRevision`, `witnessRevision_eq`: the revision on the witness view, with the median time past of the view as a value. The kernel evaluates `connectBlockWith` with that form.
 
 ## How the kernel computes the witnesses
 
@@ -43,6 +43,7 @@ Two computations need a proof in the place of an evaluation.
 Both use a definition of Lean core by well-founded recursion, which the kernel does not unfold across a module boundary.
 
 - The median time past sorts with `List.mergeSort`. `witness_medianTimePast` uses `medianTimePast_mem`: the median is the time of a view entry, and every entry has one time.
+  The transaction test of the revision reads that median for a transaction with a version of at least 2. `witnessRevision` holds the value in its place, and `witnessRevision_eq` proves that the two revisions are equal.
 - The subsidy below height 145,000 draws from a Mersenne Twister on a `Vector`. The witness block is at height 145,000, where the subsidy is a fixed amount.
 -/
 
@@ -167,6 +168,27 @@ theorem witness_contextualHeader :
   · decide +kernel
   · decide +kernel
 
+/--
+The revision on the witness view, with the value 1,395,094,000 in the place of `Work.medianTimePast` of the view.
+The kernel evaluates this form: it does not unfold the sort of the median.
+-/
+def witnessRevision : BlockRevision ScriptError Unsupported ConnectRejection ConnectReason where
+  spend := fun _ => baselineSpendCheck id id witnessVerifier
+  scriptFlags := scriptFlags
+  txTest := fun active height index tx coins =>
+    (sequenceLocksWith (.ok 1395094000) active witnessContext.view height index tx coins).map .inr .inr
+  lockTimeArgs := lockTimeArgs
+
+/-- The revision with the witness verifier on the witness view is `witnessRevision`. -/
+theorem witnessRevision_eq : blockRevision witnessVerifier witnessContext.view = witnessRevision := by
+  have h : (fun active height => txTest active witnessContext.view height) =
+      fun active height index tx coins =>
+        (sequenceLocksWith (.ok 1395094000) active witnessContext.view height index tx coins).map .inr .inr := by
+    funext active height index tx coins
+    simp only [txTest, sequenceLocks, witness_medianTimePast]
+  unfold blockRevision witnessRevision
+  rw [h]
+
 /-- The witness block is applicable, for every lock time: its view is not empty, and its header does not have the genesis hash. -/
 theorem witness_applicable (lockTime : UInt32) : applicable witnessContext (witnessBlock lockTime) = true := by
   have hg := witness_not_genesis
@@ -201,7 +223,7 @@ The lock time is the median time past of the view, and it is below the time of t
 -/
 theorem cutoff_strict :
     (∃ r, baselineValidate (witnessArgs 1395094000) = .ok r) ∧
-      revisedValidate true (witnessArgs 1395094000) = .rejected (.contextualBody .nonFinal) := by
+      revisedValidate true (witnessArgs 1395094000) = .rejected (.inl (.contextualBody .nonFinal)) := by
   have hcb : checkBlock WorkNetwork.mainnet false false (witnessBlock 1395094000) = .ok () :=
     eq_ok_of_isOk (by decide +kernel)
   constructor
@@ -219,7 +241,7 @@ theorem cutoff_strict :
         (witnessBlock 1395094000) = .error .nonFinal :=
       eq_error_of_test (by decide +kernel)
     unfold revisedValidate validateBlockWithActive
-    change ValidateEmbedding.baseline.afterChecks
+    change validateEmbedding.afterChecks
       (checksBeforeConnect false false witnessContext (lockTimeArgs true witnessContext (witnessBlock 1395094000))
         (witnessBlock 1395094000)) _ = _
     rw [witness_checks _ _ hcb, witness_lockTimeArgs, hbody]
@@ -242,20 +264,22 @@ theorem cutoff_use :
     (connectContextOf witnessContext (witnessBlock 1395093999)) CoinSet.empty (witnessBlock 1395093999))
     (by decide +kernel)
   refine ⟨⟨r, ?_⟩, witness_applicable _, witnessCoinbase 1395093999, ?_, ?_, ?_⟩
-  · have hconn : connectBlockWith ConnectEmbedding.baseline (blockRevision witnessVerifier) true true
+  · have hall : ∀ t ∈ (witnessBlock 1395093999).transactions, t.isCoinBase = true := by decide
+    have hconn : connectBlockWith connectEmbedding (blockRevision witnessVerifier witnessContext.view) true true
         (connectContextOf witnessContext (witnessBlock 1395093999)) CoinSet.empty (witnessBlock 1395093999) =
           .ok r := by
-      rw [connectBlockWith_eq_of_opcode_untouched ConnectEmbedding.baseline witnessVerifier true true
+      rw [connectBlockWith_eq_of_untouched connectEmbedding witnessVerifier _ true true
         (ctx := connectContextOf witnessContext (witnessBlock 1395093999)) (fun i tx hi hcb => by
-          have hall : ∀ t ∈ (witnessBlock 1395093999).transactions, t.isCoinBase = true := by decide
+          rw [hall tx (List.mem_of_getElem? hi)] at hcb
+          cases hcb) (fun i tx hi hcb => by
           rw [hall tx (List.mem_of_getElem? hi)] at hcb
           cases hcb), connectBlockWith_ofBaseline, hr]
       rfl
     unfold revisedValidate validateBlockWithActive
-    change ValidateEmbedding.baseline.afterChecks
+    change validateEmbedding.afterChecks
       (checksBeforeConnect false false witnessContext (lockTimeArgs true witnessContext (witnessBlock 1395093999))
         (witnessBlock 1395093999))
-      (fun _ => connectBlockWith ConnectEmbedding.baseline (blockRevision witnessVerifier) true true
+      (fun _ => connectBlockWith connectEmbedding (blockRevision witnessVerifier witnessContext.view) true true
         (connectContextOf witnessContext (witnessBlock 1395093999)) CoinSet.empty (witnessBlock 1395093999)) = _
     rw [witness_checks _ _ hcb, witness_lockTimeArgs, hbody, hconn]
     rfl
@@ -264,19 +288,18 @@ theorem cutoff_use :
   · decide
 
 /--
-The revision with the rules of BIP 113 and BIP 112 is a soft fork of `validateBlock` at the level of one block, in the sense of the framework's `SoftFork`.
-The embedding is `ValidateEmbedding.ofBaseline` with the baseline error types, and the use predicate is `RunsCutoff`.
-The two witnesses are those of the cutoff. `opcode_softFork` states the same with the witnesses of the opcode.
+The revision is a soft fork of `validateBlock` at the level of one block, in the sense of the framework's `SoftFork`, with the witnesses of the cutoff.
+The embedding is `embedBaseline`, and the use predicate is `RunsCutoff`.
+`relativeLockTime_softFork` states the same with the witnesses of each of the three rules.
 
 Block-level: the statement is about one block on a supplied coin set and view, for mainnet rules.
 It is not a soft-fork claim about the network, and it says nothing about fork choice, convergence or liveness.
-The revision is partial, so this is not the target `relativeLockTime_softFork` of design record 0012, which is about the three rules together.
 -/
 theorem cutoff_softFork :
-    SoftFork (ValidateEmbedding.baseline.ofBaseline ConnectEmbedding.baseline id id) baselineVerdict
+    SoftFork embedBaseline baselineVerdict
       BlockOutcome.verdict RunsCutoff baselineValidate revisedValidate where
   inactive_eq := fun a =>
-    relativeLockTime_inactive_eq ValidateEmbedding.baseline ConnectEmbedding.baseline a.verify a.fCheckPOW
+    relativeLockTime_inactive_eq validateEmbedding connectEmbedding a.verify a.ctx.view a.fCheckPOW
       a.fCheckMerkleRoot a.ctx a.coins a.block
   restricts := fun active a h => by
     obtain ⟨r, hr⟩ := BlockOutcome.verdict_eq_accepted_iff.mp h

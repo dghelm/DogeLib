@@ -5,7 +5,7 @@ Usage:
   python3 -I scripts/test_core_pass.py <dogelib-oracle> <core-oracle> <core-oracle-trap> <genesis-10000-fixture>
 
 The fixture is the released blocks of heights 0 to 10,000 (scripts/fetch_release_blocks.py). The
-test has six parts:
+test has seven parts:
 
 1. The CSV window. Synthetic chains from the genesis block: one that signals CSV for a whole
    period inside the window, one that never signals, and one that crosses the CSV timeout. At
@@ -31,6 +31,12 @@ test has six parts:
 6. The overflow trap. On the two requests of the arithmetic-domain cases that leave the int64_t
    range, the trap build stops with a signed-overflow report, one in validation.cpp and one in
    coins.cpp. On the other requests of those cases it gives the response of the ordinary build.
+7. A set above 2^64. Twenty supplied coins, nineteen of MAX_MONEY and one of MAX_MONEY - 1, and
+   one block, give a total value of 20 * MAX_MONEY - 1 koinu. That is above the int64_t range of
+   CAmount and above the uint64_t range, and a binary64 double does not hold it exactly. The oracle
+   and the harness must give the exact decimal value, with the coins in the request, in `coins_db`,
+   in a `coins_file` snapshot and in the manifest of a written snapshot. The comparator of scripts/oracle_block_validate.py must
+   accept both responses and agree with the expectation of its model.
 """
 
 import hashlib
@@ -328,6 +334,57 @@ def test_trap(harness: str, trap: str) -> None:
     print(f"overflow trap: stops in {sorted(set(stopped))}, and agrees with the ordinary build on the other requests")
 
 
+# 7. A set above 2^64
+
+INT64_MAX = 2**63 - 1
+
+
+def test_large_value(oracle: str, harness: str) -> None:
+    coins = validate.Coins()
+    for n in range(20):
+        coins.add(validate.coin_id(0x7000 + n), 0, validate.MAX_MONEY - (n == 19))
+    base = validate.Base(145000)
+    raw = base.block([base.coinbase()])
+    req = validate.expect(base.request([raw], coins), [None])
+    want = 20 * validate.MAX_MONEY - 1
+    check(want >= 2**64 and float(want) != want, f"the test value {want} is not above 2^64 or a double holds it")
+    check(validate.EXPECTATIONS[validate.key(req)]["set_value"] == str(want), "the model gives another total")
+
+    (ours,) = run(oracle, [req])
+    (core,) = run(harness, [validate.harness_request(req, ours)])
+    fault = validate.compare(req, ours, core)
+    check(fault is None, f"the comparator refuses the responses: {fault}")
+    for side, response in (("oracle", ours), ("harness", core)):
+        value = response["ok"]["set_value"]
+        check(isinstance(value, str) and int(value) == want, f"{side} gives the total {value!r}, not {want}")
+    with tempfile.TemporaryDirectory() as scratch:
+        scratch = Path(scratch)
+        (scratch / "db").mkdir()
+        (db,) = run(harness, [{**req, "coins_db": str(scratch / "db"), "coins_db_cache_mb": 1}])
+        check(db["ok"]["set_value"] == str(want), f"with coins_db the harness gives {db['ok']['set_value']!r}")
+
+        blocks = scratch / "blocks.bin"
+        blocks.write_bytes(validate.file_record(base.height, raw))
+        snapshot = scratch / "coins.bin"
+        snapshot.write_bytes(validate.snapshot_of(req["coins"]))
+        from_file = validate.snapshot_request(req, blocks, snapshot)
+        (ours_file,) = run(oracle, [from_file])
+        (core_file,) = run(harness, [from_file])
+        (memory,) = run(oracle, [validate.snapshot_request(req, blocks, snapshot, in_memory=True)])
+        fault = validate.compare(from_file, ours_file, core_file)
+        check(fault is None, f"the comparator refuses the responses from coins_file: {fault}")
+        for side, response in (("oracle", ours_file), ("harness", core_file), ("oracle in memory", memory)):
+            value = response["ok"]["set_value"]
+            check(value == str(want), f"{side} gives the total {value!r} from coins_file")
+
+        written = scratch / "written"
+        written.mkdir()
+        (snap,) = run(harness, [{**req, "snapshot_heights": [base.height], "snapshot_dir": str(written)}])
+        (manifest,) = snap["ok"]["snapshots"]
+        check(manifest["set_value"] == str(want), f"the written snapshot has the total {manifest['set_value']!r}")
+    print(f"large value: the total {want} koinu, above 2^64 and above {INT64_MAX}, is exact in both programs")
+
+
 def main(argv=None) -> int:
     args = sys.argv[1:] if argv is None else argv
     if len(args) != 4:
@@ -338,6 +395,7 @@ def main(argv=None) -> int:
     test_database(harness)
     test_pass(oracle, harness, trap, fixture)
     test_trap(harness, trap)
+    test_large_value(oracle, harness)
     print("PASS")
     return 0
 

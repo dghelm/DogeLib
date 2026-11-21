@@ -199,4 +199,31 @@ theorem versionBits_shortcut (dep : Deployment) (thr : Nat) (hthr : 0 < thr)
       rcases ThresholdState.notLockedIn_cases hprev with h | h | h <;> rw [h] <;> simp [hto]
     · rw [ite_eq_right hto] at hsc; exact absurd hsc (by simp)
 
+/--
+A boundary whose median time is below the start time resets the walk.
+Take any boundaries `pre` before a boundary `b` whose median time is below the deployment's start time, and any boundaries `rest` after it.
+Then the walk over all of them gives the state of the walk over `rest` alone, from `DEFINED`.
+The reset is the stop of Core's backward walk (D102, lines 44 to 47): Core walks forward only over the boundaries above the latest such boundary.
+The theorem holds for every threshold and every signal count, including those of `pre` and `b`.
+-/
+@[theorem_tag property]
+theorem versionBitsWalk_reset (dep : Deployment) (thr : Nat) (pre rest : List PeriodBoundary)
+    (b : PeriodBoundary) (h : b.mtp < dep.startTime) :
+    versionBitsWalk dep thr (pre ++ b :: rest) = versionBitsWalk dep thr rest := by
+  have hstep : ∀ s, thresholdStep dep thr s b = .defined := fun s => by
+    unfold thresholdStep; simp [h]
+  simp only [versionBitsWalk, List.foldl_append, List.foldl_cons, hstep]
+
+/--
+The full walk of a chain from the genesis block equals the walk over the boundaries above its latest reset.
+If the boundaries of `chain` are `pre`, then a boundary `b` whose median time is below the start time, then `rest`, then `versionBitsStateFull` of the chain is `versionBitsWalk` of `rest`.
+`block.validate` computes the state of CSV in its window by that walk over `rest`, from the boundary entries that the request supplies.
+-/
+@[theorem_tag property]
+theorem versionBitsStateFull_of_reset (dep : Deployment) (thr : Nat) (chain : List VbEntry)
+    (pre rest : List PeriodBoundary) (b : PeriodBoundary)
+    (hsplit : chainBoundaries dep minerConfirmationWindow chain = pre ++ b :: rest) (h : b.mtp < dep.startTime) :
+    versionBitsStateFull dep thr chain = versionBitsWalk dep thr rest := by
+  rw [versionBitsStateFull, hsplit, versionBitsWalk_reset dep thr pre rest b h]
+
 end DogeLib.Block

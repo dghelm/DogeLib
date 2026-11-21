@@ -146,6 +146,8 @@ structure ValidateOptions where
   time : Int64
   /-- Whether a block record has the digest of the whole set at each multiple of `setDigestInterval`. A request with `coins_file` clears it. -/
   setDigests : Bool := true
+  /-- The heights of `version_bits_heights`: after the supplied predecessor and after each accepted block at one of them, the response reports the states of CSV and SegWit for the next block. `none` without the argument. -/
+  versionBitsHeights : Option (List Nat) := none
 
 /-- The state that `block.validate` carries from one block of a request to the next. -/
 structure ValidateRun where
@@ -161,6 +163,105 @@ structure ValidateRun where
   records : Array Json
   /-- The position of the block that left the `int64_t` range, which ends the range. -/
   outOfDomain : Option Nat
+  /-- The version of each entry of `view`, newest first, or `none` for a supplied entry without one. -/
+  versions : List (Option UInt32) := []
+  /-- The state of CSV at the last aligned boundary in the case-3 gap that the run walked: its height and the state. -/
+  csvCache : Option (Nat × ThresholdState) := none
+  /-- The reported states of `version_bits_heights`, or `none` without the argument. -/
+  versionBitsStates : Option (Array Json) := none
+
+/-- One entry of the `chain` of `block.validate`: `{height, time, bits}`, with the optional `version` of its header. -/
+def versionedEntryOfJson (j : Json) : Except Failure (Work.BlockIndex × Option UInt32) := do
+  let .obj fields := j | throw (.request "chain entries must be objects")
+  for (key, _) in fields do
+    unless ["height", "time", "bits", "version"].contains key do
+      throw (.request s!"unknown chain entry field {key}")
+  let entry : Work.BlockIndex := ⟨(← argU32 fields "height").toNat, ← argU32 fields "time", ← argU32 fields "bits"⟩
+  let version ← match fields.get? "version" with
+    | none => pure none
+    | some _ => some <$> argU32 fields "version"
+  return (entry, version)
+
+/-- The request error of a chain that does not reach the boundary below the CSV start, with its ten predecessors. -/
+def shortWindowError : Failure := .request "chain does not reach a version-bits boundary below the CSV start"
+
+/--
+The backward walk of `GetStateFor` (D102, lines 58 to 66): from the boundary at height `k`, one period at a time, to the latest boundary whose median time is below the CSV start.
+`mtpAt` gives the median time past at a height.
+The result is the height of that boundary, the *base*, and the boundaries above it with their median times, oldest first, after those of `acc`.
+A boundary of the first period at or after the start gives an error, as in the harness. On mainnet the first boundary is in 2014.
+-/
+def csvBackwardWalk (mtpAt : Nat → Except Failure Int) : Nat → Nat → List (Nat × Int) → Except Failure (Nat × List (Nat × Int))
+  | 0, _, _ => throw shortWindowError
+  | fuel + 1, k, acc => do
+    let m ← mtpAt k
+    if m < csvDeployment.startTime then return (k, acc)
+    if k < minerConfirmationWindow then
+      throw (.spec (Json.mkObj [("kind", .str "version_bits"), ("reason", .str "first_period")]))
+    csvBackwardWalk mtpAt fuel (k - minerConfirmationWindow) ((k, m) :: acc)
+
+/--
+The state of CSV at the aligned boundary at height `aligned`, whose median time is in the case-3 gap, by Core's walk in `GetStateFor` (D102, lines 24 to 106).
+`view` and `versions` are the chain view and the versions of its entries, newest first, and `top` is the height of the first entry.
+`csvBackwardWalk` finds the base: the latest boundary at or below `aligned` whose median time is below the CSV start.
+The state is `versionBitsWalk` over the boundaries above the base, oldest first, each with its median time and the number of blocks of its period that signal CSV.
+`versionBitsStateFull_of_reset` shows that this walk equals the full walk from the genesis block, when these boundaries are those of the chain.
+The view must reach the base and its ten predecessors, and every entry above the base needs a version, as in the harness.
+-/
+def csvWindowState (view : Array Work.BlockIndex) (versions : Array (Option UInt32)) (top aligned : Nat) :
+    Except Failure ThresholdState := do
+  let lowest := top + 1 - view.size
+  let mtpAt : Nat → Except Failure Int := fun h => do
+    if h < lowest + min 10 h || top < h then throw shortWindowError
+    match Work.medianTimePast (view.extract (top - h) (top - h + 11)).toList with
+    | .ok m => pure m
+    | .error _ => throw shortWindowError
+  let (base, above) ← csvBackwardWalk mtpAt (aligned / minerConfirmationWindow + 1) aligned []
+  unless versions.size == view.size && (versions.extract 0 (top - base)).all Option.isSome do
+    throw (.request "a chain entry in the CSV window has no version")
+  -- The period of the boundary at height `j` is the heights from `j - 10079` to `j`, at the indices from `top - j`.
+  let boundaries := above.map fun (j, m) =>
+    (⟨m, (List.range minerConfirmationWindow).countP fun i =>
+      match versions[top - j + i]? with
+      | some (some v) => versionBitsCondition csvDeployment v
+      | _ => false⟩ : PeriodBoundary)
+  return versionBitsWalk csvDeployment ruleChangeActivationThreshold boundaries
+
+/--
+The candidate height, the states of CSV and SegWit, and the median time of `viewStates` for the next block of `run`, and the run with the updated cache.
+In the case-3 gap of CSV the state comes from `csvWindowState`, or from the cache when the run already walked that boundary.
+The chain only grows within a request, so the state at one aligned boundary does not change.
+-/
+def runStates (run : ValidateRun) : Except Failure ((Nat × ThresholdState × ThresholdState × Int) × ValidateRun) := do
+  let top := (run.view.head?.map (·.nHeight)).getD 0
+  let gap : Nat → Int → Except Failure ThresholdState := fun aligned _ =>
+    match run.csvCache with
+    | some (k, s) => if k == aligned then pure s else csvWindowState run.view.toArray run.versions.toArray top aligned
+    | none => csvWindowState run.view.toArray run.versions.toArray top aligned
+  let (height, csv, seg, mtp) ← viewStates run.view gap
+  -- The median time is that of the aligned boundary. It is in the gap only when the walk gave the state.
+  let csvCache := if run.view.isEmpty || (versionBitsShortcut csvDeployment mtp).isSome then run.csvCache
+    else some ((top - (top + 1) % minerConfirmationWindow), csv)
+  return ((height, csv, seg, mtp), { run with csvCache })
+
+/-- The run after the report of the states for the next block, when `version_bits_heights` lists the height of its predecessor. -/
+def reportVersionBits (options : ValidateOptions) (run : ValidateRun) : Except Failure ValidateRun := do
+  let some heights := options.versionBitsHeights | return run
+  let some prev := run.view.head? | return run
+  unless heights.contains prev.nHeight do return run
+  let ((_, csv, seg, _), run) ← runStates run
+  let state := Json.mkObj [("height", natJson prev.nHeight), ("csv", .str csv.name), ("segwit", .str seg.name)]
+  return { run with versionBitsStates := run.versionBitsStates.map (·.push state) }
+
+/-- The heights of `version_bits_heights`, in increasing order, or `none` without the argument. -/
+def argVersionBitsHeights (fields : Args) : Except Failure (Option (List Nat)) := do
+  let some value := fields.get? "version_bits_heights" | return none
+  let .arr entries := value | throw (.request "version_bits_heights must be an array")
+  let heights ← entries.toList.mapM fun entry =>
+    return (← argInt (Std.TreeMap.Raw.ofList [("version_bits_heights", entry)]) "version_bits_heights" 0 2147483646).toNat
+  unless (heights.zip heights.tail).all (fun (a, b) => a < b) do
+    throw (.request "version_bits_heights must be in increasing order")
+  return some heights
 
 /-- The options and the first state of a `block.validate` request, from every argument except the blocks. -/
 def validateStart (fields : Args) : Except Failure (ValidateOptions × ValidateRun) := do
@@ -168,7 +269,9 @@ def validateStart (fields : Args) : Except Failure (ValidateOptions × ValidateR
   let checkPow ← Work.Exports.argBool fields "check_pow"
   let checkMerkle ← Work.Exports.argBool fields "check_merkle_root"
   let time := Int64.ofInt (← argInt fields "adjusted_time" (-9223372036854775808) maxAdjustedTime)
-  let view ← Work.Exports.argView fields
+  let .arr entries ← arg fields "chain" | throw (.request "chain must be an array")
+  let versioned ← entries.toList.mapM versionedEntryOfJson
+  let view := versioned.map (·.1)
   let ancestor ← match ← arg fields "bip34_ancestor_hex" with
     | .null => pure none
     | _ => some <$> argHash fields "bip34_ancestor_hex"
@@ -178,7 +281,18 @@ def validateStart (fields : Args) : Except Failure (ValidateOptions × ValidateR
   unless ancestor.isSome == aboveBip34 do
     throw (.request "bip34_ancestor_hex must be a hash exactly when the predecessor is at or above height 1034383")
   let coins ← argCoins fields
-  return ({ mode, checkPow, checkMerkle, time }, ⟨view, ancestor, coins, none, #[], none⟩)
+  let versionBitsHeights ← argVersionBitsHeights fields
+  let options : ValidateOptions := { mode, checkPow, checkMerkle, time, versionBitsHeights }
+  let start : ValidateRun :=
+    { view := view
+      ancestor := ancestor
+      coins := coins
+      tip := none
+      records := #[]
+      outOfDomain := none
+      versions := versioned.map (·.2)
+      versionBitsStates := versionBitsHeights.map (fun _ => #[]) }
+  return (options, ← reportVersionBits options start)
 
 /--
 A second check of one block, for a caller outside this library.
@@ -224,7 +338,13 @@ def validateStep (options : ValidateOptions) (run : ValidateRun) (bs : List UInt
     | some t =>
       unless t == b.header.pure.hashPrevBlock do
         throw (validateFailure "not_linked" [("index", natJson index)])
-  let (height, csvActive, segwitActive, prevMtp) ← bodyStates run.view
+  let ((height, csv, seg, prevMtp), run) ← runStates run
+  -- An active CSV state needs the predecessor's own median time, and `prevMtp` is the aligned boundary's.
+  -- The walk can give that state on a made chain, never on mainnet (`csv_never_lockedIn`), so the block is outside the model.
+  if csv == .active then
+    throw (validateFailure "outside_model" [("index", natJson index), ("detail", .str "csv_active")])
+  let csvActive := csv == .active
+  let segwitActive := seg == .active
   if let some h := fileHeight then
     unless h == height do throw (validateFailure "file_height" [("index", natJson index)])
   let ctx : ValidateContext := ⟨run.view, options.time, none, csvActive, segwitActive, prevMtp, run.ancestor⟩
@@ -237,9 +357,10 @@ def validateStep (options : ValidateOptions) (run : ValidateRun) (bs : List UInt
   | .ok result =>
     let set := if options.setDigests && height % setDigestInterval == 0 then
       some ((setDigest result.coins).1, result.coins.totalValue) else none
-    return { run with
+    reportVersionBits options { run with
       coins := result.coins
       view := ⟨height, b.header.pure.nTime, b.header.pure.nBits⟩ :: run.view
+      versions := some b.header.pure.nVersion :: run.versions
       tip := some hash
       ancestor := if height == bip34Height then some hash else run.ancestor
       records := run.records.push (withRevised (blockRecord height hash none (some result.changes) set .null)) }
@@ -254,16 +375,23 @@ def validateStep (options : ValidateOptions) (run : ValidateRun) (bs : List UInt
       if e == .connect .outOfDomain then return { run with tip := tip, outOfDomain := some index }
       else throw (validateFailure "outside_model" [("index", natJson index), ("detail", .str (reprStr e))])
 
+/-- The field `version_bits_states` of a run with `version_bits_heights`, and no field without it. -/
+def versionBitsField (run : ValidateRun) : List (String × Json) :=
+  match run.versionBitsStates with
+  | none => []
+  | some states => [("version_bits_states", .arr states)]
+
 /-- The `ok` object of a `block.validate` request after its last block. -/
 def validateResult (run : ValidateRun) : Json :=
   let (digest, count) := setDigest run.coins
-  Json.mkObj [("blocks", .arr run.records), ("out_of_domain_at", (run.outOfDomain.map natJson).getD .null),
+  Json.mkObj ([("blocks", .arr run.records), ("out_of_domain_at", (run.outOfDomain.map natJson).getD .null),
     ("set_digest_hex", .str (hexOf digest.toList)), ("set_coins", natJson count),
-    ("set_value", valueJson run.coins.totalValue)]
+    ("set_value", valueJson run.coins.totalValue)] ++ versionBitsField run)
 
-/-- The arguments of `block.validate` that give the state before the first block. -/
+/-- The arguments of `block.validate` that give the state before the first block, and `version_bits_heights`. -/
 def validateStateArgs : List String :=
-  ["mode", "check_pow", "check_merkle_root", "adjusted_time", "chain", "bip34_ancestor_hex", "coins"]
+  ["mode", "check_pow", "check_merkle_root", "adjusted_time", "chain", "bip34_ancestor_hex", "coins",
+    "version_bits_heights"]
 
 /--
 `block.validate` with the added arguments `extraArgs` and the hook that `hookOf` reads from the request.

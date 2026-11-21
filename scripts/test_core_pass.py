@@ -11,8 +11,10 @@ test has seven parts:
    period inside the window, one that never signals, and one that crosses the CSV timeout. At
    each period boundary, `block.validate` with a chain that reaches back to the boundary below the
    CSV start, and with `version_bits_heights`, reports Core's state. It must equal
-   `block.version_bits_state` of the oracle and of the harness on the whole chain. A chain one
-   entry shorter, and an entry above that boundary without a version, are request errors.
+   `block.version_bits_state` of the oracle and of the harness on the whole chain, and the state
+   that `block.validate` of the oracle reports by its walk in the window. A chain one entry
+   shorter, and an entry above that boundary without a version, are request errors in both programs.
+   A block after a boundary whose state is `ACTIVE` is the error `outside_model` in the oracle.
 2. The coin database. Each small request of scripts/oracle_block_validate.py gives the same
    response with `coins_db` as without it, apart from the digests of the whole set in the block
    records and the fields of the database.
@@ -41,6 +43,7 @@ test has seven parts:
 
 import hashlib
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -95,7 +98,7 @@ def window_request(chain: list[dict], tip: int, floor: int, drop_version: int | 
     return req
 
 
-def test_window(oracle: str, harness: str) -> int:
+def test_window(oracle: str, harness: str, fixture: str | None = None) -> int:
     start = core_pass.CSV_START
     cases = [
         # Boundary 10,079 is below the CSV start. Period 2 signals, so CSV locks in and then activates.
@@ -115,21 +118,36 @@ def test_window(oracle: str, harness: str) -> int:
         ours = run(oracle, walks)
         core = run(harness, walks)
         local = run(harness, [window_request(chain, tip, base - 10) for tip in tips])
-        for tip, a, b, c in zip(tips, ours, core, local):
+        mine = run(oracle, [window_request(chain, tip, base - 10) for tip in tips])
+        for tip, a, b, c, d in zip(tips, ours, core, local, mine):
             check(a.get("ok") == b.get("ok"), f"{name} {tip}: the oracle's walk {a} and Core's walk {b} differ")
             check("ok" in c, f"{name} {tip}: block.validate returned {c}")
             states = c["ok"]["version_bits_states"]
             check(states == [{"height": tip, **b["ok"]}], f"{name} {tip}: block.validate reports {states}, the walk {b['ok']}")
+            check("ok" in d and d["ok"]["version_bits_states"] == states,
+                  f"{name} {tip}: block.validate of the oracle returned {json.dumps(d)[:300]}, and Core {states}")
             seen.add(b["ok"]["csv"])
             count += 1
         # The refusals, at the last boundary inside the window.
         inside = [tip for tip, b in zip(tips, core) if b["ok"]["csv"] in ("started", "locked_in", "active")]
         if inside:
             tip = inside[-1]
-            short, unversioned = run(harness, [window_request(chain, tip, base - 9),
-                                               window_request(chain, tip, base - 10, drop_version=base + 1)])
-            check(short.get("error", {}).get("kind") == "request", f"{name}: a short chain gave {short}")
-            check(unversioned.get("error", {}).get("kind") == "request", f"{name}: an entry without a version gave {unversioned}")
+            for program in (harness, oracle):
+                short, unversioned = run(program, [window_request(chain, tip, base - 9),
+                                                   window_request(chain, tip, base - 10, drop_version=base + 1)])
+                check(short.get("error", {}).get("kind") == "request", f"{name}: a short chain gave {short}")
+                check(unversioned.get("error", {}).get("kind") == "request",
+                      f"{name}: an entry without a version gave {unversioned}")
+        # A block after a boundary with the state ACTIVE is outside the oracle's model.
+        active = [tip for tip, b in zip(tips, core) if b["ok"]["csv"] == "active"]
+        if active and fixture is not None:
+            raw = next(r for h, r in validate_blocks(Path(fixture) / "blocks.bin") if h == 1)
+            req = window_request(chain, active[0], base - 10)
+            req.update(blocks_hex=[raw.hex()], version_bits_heights=[])
+            (answer,) = run(oracle, [req])
+            error = answer.get("error", {})
+            check(error.get("reason") == "outside_model" and error.get("detail") == "csv_active",
+                  f"{name}: a block after an active boundary gave {json.dumps(answer)[:300]}")
     check({"defined", "started", "locked_in", "active", "failed"} <= seen, f"the cases reach only the states {seen}")
     print(f"CSV window: {count} boundaries agree with both full walks, states {sorted(seen)}; refusals OK")
     return count
@@ -284,6 +302,27 @@ def test_pass(oracle: str, harness: str, trap: str, fixture: str) -> None:
         check(any("restart from the snapshot at height 9000" in line for line in restarted), "the pass did not restart")
         check(state["digests"]["10000"]["set_digest_hex"] == expected[10000]["set_digest_hex"],
               "the restarted pass reaches another digest")
+        # A second pass seeded from the snapshot at 9,000 must reach each digest of the first above it.
+        seeded_args = {**args, "extra_snapshots": (), "extra_digests": ()}
+        seeded = core_pass.core_pass(stop_after=None, **{**seeded_args, "state_dir": Path(directory) / "seeded",
+                                                          "seed": (state_dir, 9000)})
+        check(sorted(seeded["seed"]["checked_digests"]) == [9200, 10000],
+              f"the seeded pass checked the digests at {seeded['seed']['checked_digests']}")
+        check(seeded["digests"]["10000"]["set_digest_hex"] == expected[10000]["set_digest_hex"],
+              "the seeded pass reaches another digest")
+        # A seed whose recorded digest differs stops the seeded pass.
+        planted = Path(directory) / "planted-seed"
+        shutil.copytree(state_dir, planted)
+        data = json.loads((planted / "state.json").read_text())
+        data["digests"]["9200"]["set_digest_hex"] = "00" * 32
+        (planted / "state.json").write_text(json.dumps(data))
+        try:
+            core_pass.core_pass(stop_after=None, **{**seeded_args, "state_dir": Path(directory) / "seeded-2",
+                                                    "seed": (planted, 9000)})
+            check(False, "a seed with a changed digest did not stop the seeded pass")
+        except core_pass.PassError as error:
+            check("differs from the seed pass's" in str(error), f"a changed seed digest gave {error}")
+        shutil.rmtree(planted)
         # A restart from a changed snapshot fails before the harness runs.
         path = state_dir / "snapshots" / "coins-9000.bin"
         changed = bytearray(path.read_bytes())
@@ -391,7 +430,7 @@ def main(argv=None) -> int:
         print(__doc__.splitlines()[2])
         return 2
     oracle, harness, trap, fixture = args
-    test_window(oracle, harness)
+    test_window(oracle, harness, fixture)
     test_database(harness)
     test_pass(oracle, harness, trap, fixture)
     test_trap(harness, trap)

@@ -1179,7 +1179,32 @@ The `FAILED` case uses `walk_notLockedIn`: with a positive threshold, a walk ove
 So the state before the last boundary is `DEFINED`, `STARTED` or `FAILED`, and each goes to `FAILED` at or after the timeout.
 The threshold hypothesis is necessary: with a threshold of 0, a period with no signals can enter `LOCKED_IN`.
 
+`versionBitsWalk_reset` shows that a boundary whose median time is below the start time resets the walk.
+Take any boundaries before such a boundary and any boundaries after it.
+Then the walk over all of them gives the state of the walk over the boundaries after it, from `DEFINED`.
+The theorem holds for every threshold and every signal count.
+`versionBitsStateFull_of_reset` applies it to the boundaries of a chain from the genesis block.
+The reset is the stop of Core's backward walk: Core walks forward only over the boundaries above the latest boundary below the start time.
+
+`block.validate` uses this walk in the case-3 gap of CSV (design record 0011, stage 4).
+Its adapter `csvWindowState` walks back from the aligned boundary to the latest boundary whose median time is below the CSV start.
+For each boundary above that one, it reads the median time and the CSV signal count from the request's chain view and versions.
+Then it returns `versionBitsWalk` over those boundaries.
+
+No theorem shows that these boundaries are those of `chainBoundaries` of the chain from the genesis block.
+The adapter computes them from a finite view, and the request supplies that view, as for every other context of `block.validate`.
+A comparison gives the evidence for the adapter.
+In `scripts/test_core_pass.py`, the oracle and the harness report the same state in `block.validate` at 16 boundaries of three synthetic chains.
+The states cover all five, and each equals both full walks.
+The ranges E1 and E2 are to compare the states on mainnet ([gate](AGENTS.md#checks), *Mainnet range*), and this record has no run of them yet.
+The walk can give `ACTIVE` on a made chain that signals. `block.validate` then returns the error `outside_model` before the checks of the block, because its context holds the aligned boundary's median time and not the predecessor's.
+
+On mainnet the walk changes no verdict.
+`block.validate` reads the state only to test whether CSV is active, and `csv_never_lockedIn` shows that it is not, on a chain that meets its hypothesis.
+The walk lets a request whose boundary is in the gap get a result in the place of an adapter error.
+
 By `#print axioms`, `csv_never_lockedIn` and `versionBitsCondition_false_of_checkBlockHeader` depend on `propext`, `Classical.choice` and `Quot.sound`, and `versionBits_shortcut` depends on `propext` and `Quot.sound`.
+`versionBitsWalk_reset` and `versionBitsStateFull_of_reset` depend on `propext` and `Quot.sound`.
 
 ### The contextual block body
 
@@ -1199,8 +1224,9 @@ At a boundary whose median time is at or after the CSV timeout, the harness inst
 It writes the state into `versionbitscache` for that request only.
 The seed lets the harness answer without the dense block history that Core's walk would otherwise read.
 
-A boundary in the gap between the CSV start and timeout is an adapter error, outside the comparison domain.
+For `block.contextual_check_body`, a boundary in the gap between the CSV start and timeout is an adapter error, outside the comparison domain.
 So no continuous-integration request depends on the seed in that gap.
+`block.validate` walks the gap in both programs from a chain with versions, and the harness installs no seed there (see *Version bits* above).
 This seed is a harness input, so the comparison trusts it.
 
 `csv_never_lockedIn` shows that the state is never `LOCKED_IN` or `ACTIVE` on a chain that meets its hypothesis.

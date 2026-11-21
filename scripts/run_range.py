@@ -5,7 +5,7 @@ Usage:
   python3 -I scripts/run_range.py --range NAME --pass DIR --fixture DIR --output DIR [--write-hashes]
       [--cache-mb MB] <dogelib-oracle> <core-oracle>
 
-NAME is a range of design record 0011, section 4: A, B, C, D, F, H or G. DIR of `--pass` is the
+NAME is a range of design record 0011, section 4: A, B, C, D, E1, E2, F, H or G. DIR of `--pass` is the
 state directory of scripts/core_pass.py, which must have passed the range's end. The fixture is a
 directory of scripts/fetch_blocks.py with the blocks of the range, from `a + 1` to `b`. The script
 works in six steps:
@@ -20,12 +20,17 @@ works in six steps:
 3. `block.check` with both flags on every block, in the oracle and in Core, before the range
    (design record 0011, section 7). Both must accept every block. The oracle's time is recorded.
 4. The range request: the snapshot at `a` as `coins_file`, the blocks of the fixture, the chain
-   from the pass's headers, the BIP34 ancestor, both flags and the adjusted time of the pass. The
+   from the pass's headers, the BIP34 ancestor, both flags and the adjusted time of the pass. For
+   E1 and E2, in the CSV window, the chain holds the version of each entry and reaches the
+   boundary below the CSV start, and the request has `version_bits_heights` at the range start
+   and at each boundary inside the range. The
    harness also gets `coins_db` on a scratch directory, because the set of a recent height does
    not fit in its map. The oracle holds only the coins that the blocks name.
 5. The range agrees under section 3.4 when both programs report the digest and the number of
    coins of the manifest as the start, accept every block with equal block records, and report
    the pass's digest at `b` as the end. The block records must also equal those of the pass.
+   For E1 the CSV states are `DEFINED` and then `STARTED`, and for E2 `STARTED` and then
+   `FAILED`, in both programs, and each state of a boundary equals the pass's.
 6. It writes `summary.json` with the inputs, their SHA-256 values, the counts and the times.
 
 Run each range on one core at low priority, and register it in the lane's STATUS.md.
@@ -51,6 +56,9 @@ from replay_blocks import ReplayError
 
 ROOT = Path(__file__).resolve().parent.parent
 HASHES = ROOT / "tests" / "block" / "mainnet-blocks" / "ranges"
+# The CSV states of the ranges of the CSV window (design record 0011, stage 4): for the block after
+# the range start, and for the block after each period boundary inside the range.
+CSV_STATES = {"E1": ["defined", "started"], "E2": ["started", "failed"]}
 MANIFESTS = ROOT / "tests" / "block" / "mainnet-blocks" / "snapshots"
 
 
@@ -150,15 +158,24 @@ def run_range(name: str, state_dir: Path, fixture: Path, output: Path, oracle: s
     log(f"range {name}: block.check accepts every block in both programs; the oracle took {check_seconds:.0f} seconds")
 
     # 4. The range request.
-    floor = max(0, start - core_pass.PERIOD - 260)
-    boundary = start - ((start + 1) % core_pass.PERIOD)
-    if boundary >= 0 and core_pass.CSV_START <= headers.median_time(boundary) < core_pass.CSV_TIMEOUT:
-        raise ReplayError("the range starts inside the CSV window, which the oracle does not model")
-    chain = [{k: v for k, v in headers.entry(h).items() if k != "version"} for h in range(start, floor - 1, -1)]
+    # A range of the CSV window gets the chain back to the boundary below the CSV start, with the
+    # version of each entry, and the states at its start and at each boundary inside it. Other
+    # ranges keep the chain of stage 2, without versions.
+    window = name in CSV_STATES
+    if window:
+        chain = [headers.entry(h) for h in range(start, core_pass.chain_floor(headers, start + 1) - 1, -1)]
+    else:
+        floor = max(0, start - core_pass.PERIOD - 260)
+        boundary = start - ((start + 1) % core_pass.PERIOD)
+        if boundary >= 0 and core_pass.CSV_START <= headers.median_time(boundary) < core_pass.CSV_TIMEOUT:
+            raise ReplayError("the range starts inside the CSV window, which is the ranges E1 and E2")
+        chain = [{k: v for k, v in headers.entry(h).items() if k != "version"} for h in range(start, floor - 1, -1)]
     request = {"id": f"range-{name}", "op": "block.validate", "mode": "allow_witness", "check_pow": True,
                "check_merkle_root": True, "adjusted_time": validate.ADJUSTED_TIME, "chain": chain,
                "bip34_ancestor_hex": headers.hash(core_pass.BIP34_HEIGHT).hex() if start >= core_pass.BIP34_HEIGHT else None,
                "coins_file": str(snapshot.resolve()), "blocks_file": str(blocks.resolve())}
+    if window:
+        request["version_bits_heights"] = [start] + [h for h in range(start + 1, end + 1) if (h + 1) % core_pass.PERIOD == 0]
     (output / "range-request.json").write_text(json.dumps(request) + "\n")
     with tempfile.TemporaryDirectory(dir=output) as db:
         harness_request = {**request, "coins_db": db, "coins_db_cache_mb": cache_mb}
@@ -184,6 +201,17 @@ def run_range(name: str, state_dir: Path, fixture: Path, output: Path, oracle: s
             raise ReplayError(f"range {name}: the end has {field} {ok[field]!r}, and the pass has {end_digest[field]!r}")
     if strip(ok["blocks"]) != strip(pass_records(state_dir, start + 1, end)):
         raise ReplayError(f"range {name}: the block records differ from those of the pass")
+    if window:
+        # Both programs report the states (compared above). They must be the expected ones, and at
+        # each boundary the state that the pass recorded.
+        states = ok["version_bits_states"]
+        if [s["csv"] for s in states] != CSV_STATES[name]:
+            raise ReplayError(f"range {name}: the CSV states are {[s['csv'] for s in states]}, not {CSV_STATES[name]}")
+        for s in states:
+            recorded = state["version_bits"].get(str(s["height"]))
+            if recorded is not None and recorded != {"csv": s["csv"], "segwit": s["segwit"]}:
+                raise ReplayError(f"range {name}: the state at {s['height']} is {s}, and the pass recorded {recorded}")
+        log(f"range {name}: CSV states {[(s['height'], s['csv']) for s in states]} in both programs")
     log(f"range {name}: agrees: from {manifest['coins']} coins to {ok['set_coins']} coins, end digest {ok['set_digest_hex']}")
 
     summary = {
@@ -197,6 +225,9 @@ def run_range(name: str, state_dir: Path, fixture: Path, output: Path, oracle: s
         "block_check_oracle_seconds": round(check_seconds), "core_seconds": round(core_seconds),
         "oracle_seconds": round(oracle_seconds), "request_sha256": file_sha256(output / "range-request.json"),
     }
+    if window:
+        summary["version_bits_states"] = ok["version_bits_states"]
+        summary["chain_entries"] = len(chain)
     (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     return summary
 

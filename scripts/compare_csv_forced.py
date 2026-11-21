@@ -16,10 +16,8 @@ comparison reads its `revised` object.
 
 Agreement shows that the Lean revision equals Core's dormant code on these requests. It is not a
 Core comparison of the baseline, it is not evidence about mainnet, and it does not show that the
-rule is right for Dogecoin. This run covers a rejection through the rules of BIP 113 and
-BIP 112. With the forced state, Core's ConnectBlock also runs the sequence locks of BIP 68, which
-the revision has as `sequenceLocks`. Each made block of part 7 passes them on both sides, so the
-run does not compare a rejection through that rule.
+rule is right for Dogecoin. The run covers the three rules of the revision: the cutoff of BIP 113
+(parts 2 to 6), the opcode of BIP 112 (part 7) and the sequence locks of BIP 68 (parts 8 and 9).
 
 The run has these parts:
 
@@ -47,7 +45,22 @@ The run has these parts:
    leave the rest of the response as it is without the argument. The comparison must fail on each
    planted fault, as in part 6.
 
-With --made-only the run skips parts 4 and 5, and needs no downloaded block.
+8. `block.validate` with CSV forced active, on made blocks for the sequence locks of BIP 68. Each
+   expectation is derived by hand from CalculateSequenceLocks and EvaluateSequenceLocks (D114,
+   src/validation.cpp, lines 309 to 384) and from BIP 68 (SOURCES.md, P1). A time lock reads
+   median times past, which this script computes from the header times of the request by the
+   definition of GetMedianTimePast (D18). The made blocks must reach `bad-txns-nonfinal` through a
+   sequence lock. Some blocks stand on a made chain from height 0, for the coins at heights 0 and 1
+   and for a time lock that is one second short. Three kinds of block are outside the model of the revision (design record 0012,
+   section 6.3). For them the harness does not run Core's ConnectBlock with the seed, and the
+   field `unsupported` of `forced` names the reason. The `revised` object must then have the
+   verdict `unsupported` with the same reason. The comparison must fail on each planted fault.
+9. Mainnet heights 0 to 10,000 in one `block.validate` request, from the empty coin set. The
+   harness runs each block twice on the state before it: with the seed and without it. Only the
+   run without the seed carries the state. The two programs must agree on the forced result of
+   each block. The run does not require acceptance.
+
+With --made-only the run skips parts 4, 5 and 9, and needs no downloaded block.
 """
 import argparse
 import json
@@ -58,8 +71,10 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 import relative_lock_time_candidates as lister
 from compare_core import RunError, run_stream
-from oracle_block_check import NULL_PREVOUT, COIN, BITS, block, coinbase, genesis_block, transaction, txin, txout
-from oracle_block_validate import EVAL_FALSE, Base, Coins, coin_id, p2sh, push, script_reason
+from oracle_block_check import (NULL_PREVOUT, COIN, BITS, block, coinbase, genesis_block, sha256d, transaction, txin,
+                                txout)
+from oracle_block_validate import (EVAL_FALSE, Base, BlockAssets, Coins, coin_id, mainnet_validate_sets, outpoint, p2sh,
+                                   push, script_reason)
 from oracle_contextual_body import (PERIOD, TIME_AFTER_CSV, TIME_BEFORE_CSV, body_request, chain_entry,
                                     coinbase_with_height, final_by_sequence_tx, nonfinal_tx, period_boundary_chain)
 
@@ -454,24 +469,78 @@ def validate_record(response: dict) -> dict | None:
     return ok["blocks"][0]
 
 
+FORCED_KEYS = {*VERDICT_KEYS, "changes_digest_hex", "spent", "created", "unsupported"}
+REASON_PREFIX = "RelativeLockTime: "
+REASONS = ("ancestorOutsideView", "coinAboveBlock", "heightOutOfDomain")
+
+
+def well_formed(fields: dict) -> bool:
+    """Whether the fields have the form of their verdict.
+
+    An acceptance has a digest of 64 hexadecimal digits and no reject field. A rejection has a
+    reason, a score and a code, and no digest. A result outside the model has a reason of the
+    revision and no other field. `valid` is a Boolean, so the number 1 does not stand for true."""
+    if fields["unsupported"] is not None:
+        return fields["unsupported"] in REASONS and all(fields[k] is None for k in (*VERDICT_KEYS, "changes_digest_hex"))
+    digest = fields["changes_digest_hex"]
+    if fields["valid"] is True:
+        return (isinstance(digest, str) and len(digest) == 64 and all(c in "0123456789abcdef" for c in digest)
+                and all(fields[k] is None for k in ("reject_reason", "dos", "reject_code")))
+    if fields["valid"] is False:
+        return (digest is None and isinstance(fields["reject_reason"], str)
+                and all(type(fields[k]) is int for k in ("dos", "reject_code")))
+    return False
+
+
+def forced_record_fields(forced) -> dict | None:
+    """The verdict fields, the digest of the changes and the reason outside the model of an object `forced`.
+
+    With a reason, the harness did not run ConnectBlock with the seed, and every other field is null."""
+    if not isinstance(forced, dict) or set(forced) != FORCED_KEYS:
+        return None
+    if forced["unsupported"] is not None:
+        if forced["unsupported"] not in REASONS or any(forced[k] is not None for k in FORCED_KEYS - {"unsupported"}):
+            return None
+    fields = {k: forced[k] for k in (*VERDICT_KEYS, "changes_digest_hex", "unsupported")}
+    return fields if well_formed(fields) else None
+
+
+def revised_record_fields(revised) -> dict | None:
+    """An object `revised` of the proposal record, in the shape of `forced_record_fields`.
+
+    An unsupported result of the sequence locks has the reason of the revision. Another unsupported
+    result has no counterpart in Core, and gives None."""
+    if not isinstance(revised, dict):
+        return None
+    if revised.get("verdict") == "unsupported":
+        reason = revised.get("reason")
+        if not isinstance(reason, str) or not reason.startswith(REASON_PREFIX):
+            return None
+        # A result outside the model has no reject field and no digest.
+        if any(revised.get(k) is not None for k in ("reject_reason", "dos", "reject_code", "changes_digest_hex")):
+            return None
+        fields = {**{k: None for k in (*VERDICT_KEYS, "changes_digest_hex")}, "unsupported": reason[len(REASON_PREFIX):]}
+        return fields if well_formed(fields) else None
+    if revised.get("verdict") not in ("accepted", "rejected"):
+        return None
+    fields = {"valid": revised["verdict"] == "accepted", "reject_reason": revised.get("reject_reason"),
+              "dos": revised.get("dos"), "reject_code": revised.get("reject_code"),
+              "changes_digest_hex": revised.get("changes_digest_hex"), "unsupported": None}
+    return fields if well_formed(fields) else None
+
+
 def forced_validate_fields(response: dict) -> dict | None:
     """The object `forced` of the harness record: its verdict fields and the digest of its changes."""
     record = validate_record(response)
     forced = record.get("forced") if record else None
-    if not isinstance(forced, dict) or set(forced) != {*VERDICT_KEYS, "changes_digest_hex", "spent", "created"}:
-        return None
-    return {k: forced[k] for k in (*VERDICT_KEYS, "changes_digest_hex")}
+    return forced_record_fields(forced)
 
 
 def revised_validate_fields(response: dict) -> dict | None:
     """The object `revised` of the proposal record, in the shape of `forced_validate_fields`."""
     record = validate_record(response)
     revised = record.get("revised") if record else None
-    if not isinstance(revised, dict) or revised.get("verdict") not in ("accepted", "rejected"):
-        return None
-    return {"valid": revised["verdict"] == "accepted", "reject_reason": revised["reject_reason"],
-            "dos": revised["dos"], "reject_code": revised["reject_code"],
-            "changes_digest_hex": revised["changes_digest_hex"]}
+    return revised_record_fields(revised)
 
 
 def compare_forced_validate(lean: dict, core: dict) -> str | None:
@@ -495,32 +564,17 @@ def without_forced(response: dict) -> dict:
 
 
 def validate_refusals(oracle: str, proposal: str, harness: str, timeout: float) -> int:
-    """Each program refuses the argument of the other for `block.validate`. The harness refuses a sequence lock outside its domain."""
+    """Each program refuses the argument of the other for `block.validate`."""
     base = Base(1034382)
     coins = Coins()
     point = coins.add(coin_id(1), 0, 1000, bytes([OP_1]))
     plain = base.request([base.block([base.coinbase(), transaction([txin(point, b"", 1)], [txout(1)], version=2)])], coins)
-    # A version 2 input with a time lock on a coin at height 100,000: Core would read the median time
-    # past of the ancestor at height 99,999, which the chain does not hold.
-    outside = base.request(
-        [base.block([base.coinbase(), transaction([txin(point, b"", TYPE_FLAG)], [txout(1)], version=2)])], coins)
-    # A version 2 input with a height lock on a coin at height 2^31 - 65535: Core's sum
-    # nCoinHeight + 65535 - 1 could overflow `int` (D110, line 356).
-    far = Coins()
-    far_point = far.add(coin_id(2), 0, 1000, bytes([OP_1]), height=2**31 - 65535)
-    high = base.request(
-        [base.block([base.coinbase(), transaction([txin(far_point, b"", 1)], [txout(1)], version=2)])], far)
     probes = [(oracle, dict(plain, force_csv_active=True)), (proposal, dict(plain, force_csv_active=True)),
-              (harness, dict(plain, revision=REVISION)), (harness, dict(plain, force_csv_active=1)),
-              (harness, dict(outside, force_csv_active=True)), (harness, dict(high, force_csv_active=True))]
+              (harness, dict(plain, revision=REVISION)), (harness, dict(plain, force_csv_active=1))]
     for program, req in probes:
         response = run_stream(program, with_ids([req]), timeout)[0]
         kind = response.get("error", {}).get("kind") if isinstance(response.get("error"), dict) else None
         check(kind == "request", f"{program} did not refuse a block.validate request: {json.dumps(response)[:300]}")
-    # Without the argument the harness answers the request with the time lock: CSV is not active.
-    response = run_stream(harness, with_ids([outside]), timeout)[0]
-    check(validate_record(response) is not None and validate_record(response)["valid"] is True,
-          f"the harness did not accept the time lock without the argument: {json.dumps(response)[:300]}")
     return len(probes)
 
 
@@ -571,8 +625,9 @@ def validate_run(proposal: str, harness: str, timeout: float) -> tuple[int, dict
             # The record without the seed, in the place of `forced`: the response keeps its shape,
             # so the comparison must fail on the verdict.
             unseeded = {**forced, "ok": {**forced["ok"], "blocks": [
-                {**validate_record(forced), "forced": {k: record[k] for k in (*VERDICT_KEYS, "changes_digest_hex",
-                                                                             "spent", "created")}}]}}
+                {**validate_record(forced), "forced": {**{k: record[k] for k in (*VERDICT_KEYS, "changes_digest_hex",
+                                                                                "spent", "created")},
+                                                       "unsupported": None}}]}}
             check(forced_validate_fields(unseeded) is not None, f"self-test {label}: the unseeded record has no shape")
             fault = compare_forced_validate(lean[i], unseeded)
             check(fault is not None and fault.startswith("revised "),
@@ -589,6 +644,310 @@ def validate_run(proposal: str, harness: str, timeout: float) -> tuple[int, dict
     return len(cases), reasons, planted
 
 
+# ---------------------------------------------------------------------------
+# block.validate: the sequence locks of BIP 68
+
+SEQUENCE_NONFINAL = ("bad-txns-nonfinal", 100, 16)  # reason, score and code of lines 1956 to 1958
+
+
+def median_time_past(chain: list[dict], height: int) -> int:
+    """GetMedianTimePast of the chain entry at `height` (D18, src/chain.h, lines 286 to 298): the sorted time at index n / 2 of the entry and of up to ten predecessors."""
+    times = {e["height"]: e["time"] for e in chain}
+    span = sorted(times[h] for h in range(height - 10, height + 1))
+    return span[len(span) // 2]
+
+
+def sequence_cases() -> list[dict]:
+    """Made blocks for the sequence locks: `forced` with CSV active is a verdict, or the name of a reason outside the model.
+
+    Each block has a coinbase and one or two transactions. The spent coin has the script OP_1, so
+    every script passes, and the baseline accepts every block: it has no sequence lock.
+    SequenceLocks applies to a transaction whose version is at least 2 as an unsigned value. An
+    input whose sequence has bit 31 clear has a lock. Let n be its low 16 bits, c the height of its
+    coin and H the height of the block. With bit 22 clear the transaction fails unless
+    c + n <= H. With bit 22 set it fails unless t + 512 * n <= m, where m is the median time past
+    of the predecessor and t that of the ancestor at max(c - 1, 0). A failure is
+    `bad-txns-nonfinal` with the score 100. A coin that the block itself creates has c = H."""
+    cases = []
+    for height in (1034382, 3464751):
+        base = Base(height)
+
+        def case(label, forced, sequence, coin_height, version=2, same_block=False):
+            coins = Coins()
+            point = coins.add(coin_id(1), 0, 1000, bytes([OP_1]), height=coin_height)
+            txs = []
+            if same_block:
+                # A first transaction with a final sequence creates the coin in the block.
+                first = transaction([txin(point, b"", 0xffffffff)], [txout(1, bytes([OP_1]))])
+                txs.append(first)
+                point = outpoint(sha256d(first))
+            txs.append(transaction([txin(point, b"", sequence)], [txout(1)], version=version))
+            cases.append({"label": f"height {height}, {label}", "forced": forced, "baseline": None,
+                          "request": base.request([base.block([base.coinbase()] + txs)], coins)})
+
+        # Height locks, on a coin 10 blocks below the block.
+        case("height lock met exactly", None, 10, height - 10)
+        case("height lock one block short", SEQUENCE_NONFINAL, 11, height - 10)
+        case("height lock on a coin one block higher", SEQUENCE_NONFINAL, 10, height - 9)
+        # The version is compared as an unsigned value: 1 is below 2, and -1 is 0xffffffff.
+        case("short height lock, version 1", None, 11, height - 10, version=1)
+        case("short height lock, version -1", SEQUENCE_NONFINAL, 11, height - 10, version=-1)
+        case("met height lock, version -1", None, 10, height - 10, version=-1)
+        # Bit 31 turns the lock of the input off.
+        case("short height lock with bit 31", None, DISABLE_FLAG | 11, height - 10)
+        # Bits 16 to 21 and 23 to 30 are outside the mask 0x0040ffff: 0x7fbf000a is a height lock of 10.
+        case("bits outside the mask, lock met", None, 0x7fbf000a, height - 10)
+        case("bits outside the mask, lock short", SEQUENCE_NONFINAL, 0x7fbf000b, height - 10)
+        # A coin of the same block has the height of the block. Its time lock reads the predecessor.
+        case("coin of the same block, height lock 0", None, 0, 100000, same_block=True)
+        case("coin of the same block, height lock 1", SEQUENCE_NONFINAL, 1, 100000, same_block=True)
+        case("coin of the same block, time lock 0", None, TYPE_FLAG, 100000, same_block=True)
+        case("coin of the same block, time lock 1", SEQUENCE_NONFINAL, TYPE_FLAG | 1, 100000, same_block=True)
+        # A time lock on a coin 20 blocks below the block. The lock of n units is met exactly when
+        # t + 512 * n <= m, so the largest n that passes is the whole number of units in m - t.
+        m, t = median_time_past(base.chain, height - 1), median_time_past(base.chain, height - 21)
+        check(0 <= m - t < 512 * 0xffff, f"height {height}: the medians {m} and {t} give no time lock in range")
+        units = (m - t) // 512
+        case(f"time lock of {units} units, the largest that is met", None, TYPE_FLAG | units, height - 20)
+        case(f"time lock of {units + 1} units, one unit more", SEQUENCE_NONFINAL, TYPE_FLAG | (units + 1), height - 20)
+        case("short time lock, version 1", None, TYPE_FLAG | (units + 1), height - 20, version=1)
+        # A height lock on a coin one block above the block reads no ancestor: (H + 1) + 0 - 1 is not below H.
+        case("coin above the block, height lock 0", SEQUENCE_NONFINAL, 0, height + 1)
+        # Outside the model of the revision. The harness does not run ConnectBlock with the seed.
+        case("coin above the block, time lock", "coinAboveBlock", TYPE_FLAG, height + 1)
+        case("coin two blocks above the block, time lock", "coinAboveBlock", TYPE_FLAG, height + 2)
+        # The ancestor at height 99,999 is below the chain of the request.
+        case("time lock on a coin below the chain", "ancestorOutsideView", TYPE_FLAG, 100000)
+        # Core's sum c + 65535 does not fit `int` from this coin height.
+        case("coin height 2^31 - 65535, height lock", "heightOutOfDomain", 1, 2**31 - 65535)
+        case("coin height 2^31 - 65535, time lock", "heightOutOfDomain", TYPE_FLAG, 2**31 - 65535)
+        # With bit 31 the input has no lock, so no read is outside the model.
+        case("coin height 2^31 - 65535, bit 31", None, DISABLE_FLAG, 2**31 - 65535)
+    cases += low_chain_cases() + [overwrite_case()]
+    return cases
+
+
+LOW_TIME = 1400000000  # the time of height 0 of the made chain
+LOW_HEIGHT = 40  # the height of the made block
+
+
+def low_chain_cases() -> list[dict]:
+    """Made blocks at height 40 on a made chain from height 0, for the boundaries that need chosen times and low coins.
+
+    The chain entry at height k has the time LOW_TIME + 512 * k. The times rise with the height, so
+    the median time past of the entry at height k >= 10 is the time of height k - 5. At height 0 it
+    is the one time, and at height 1 the upper of two times. So the median of the predecessor is
+    m = LOW_TIME + 512 * 34. Heights 1 to 239 have no retarget, so the block has the bits of its
+    chain. It has no proof of work. `second_short` lowers the time of height 34 by one second: that
+    entry stays the sixth of the eleven, and the median is m - 1."""
+    cases = []
+
+    def case(label, forced, sequence, coin_height, second_short=False):
+        chain = [{"height": k, "time": LOW_TIME + 512 * k - (1 if second_short and k == 34 else 0), "bits": BITS}
+                 for k in range(LOW_HEIGHT - 1, -1, -1)]
+        check(median_time_past_low(chain, LOW_HEIGHT - 1) == LOW_TIME + 512 * 34 - (1 if second_short else 0),
+              "the made chain does not have the hand-derived median")
+        coins = Coins()
+        point = coins.add(coin_id(1), 0, 1000, bytes([OP_1]), height=coin_height)
+        tx = transaction([txin(point, b"", sequence)], [txout(1)], version=2)
+        made = block([coinbase_with_height(LOW_HEIGHT), tx], time=LOW_TIME + 512 * LOW_HEIGHT, bits=BITS)
+        req = {"op": "block.validate", "mode": "base", "check_pow": False, "check_merkle_root": True,
+               "adjusted_time": LOW_TIME + 512 * LOW_HEIGHT, "chain": chain, "bip34_ancestor_hex": None,
+               "coins": coins.json(), "blocks_hex": [made.hex()]}
+        cases.append({"label": f"made chain, {label}", "forced": forced, "baseline": None, "request": req})
+
+    # max(c - 1, 0): the coins at heights 0 and 1 both read the ancestor at height 0, with the median LOW_TIME.
+    case("coin at height 0, time lock of 34 units: met exactly", None, TYPE_FLAG | 34, 0)
+    case("coin at height 0, time lock of 35 units", SEQUENCE_NONFINAL, TYPE_FLAG | 35, 0)
+    case("coin at height 1, time lock of 34 units: met exactly", None, TYPE_FLAG | 34, 1)
+    case("coin at height 1, time lock of 35 units", SEQUENCE_NONFINAL, TYPE_FLAG | 35, 1)
+    # The coin at height 2 reads the ancestor at height 1, with the median LOW_TIME + 512.
+    case("coin at height 2, time lock of 33 units: met exactly", None, TYPE_FLAG | 33, 2)
+    case("coin at height 2, time lock of 34 units", SEQUENCE_NONFINAL, TYPE_FLAG | 34, 2)
+    # The coin at height 21 reads the ancestor at height 20, with the median LOW_TIME + 512 * 15.
+    case("coin at height 21, time lock of 19 units: met exactly", None, TYPE_FLAG | 19, 21)
+    case("coin at height 21, time lock of 20 units", SEQUENCE_NONFINAL, TYPE_FLAG | 20, 21)
+    # The same lock of 19 units with the median of the predecessor one second lower: one second short.
+    case("coin at height 21, time lock of 19 units, one second short", SEQUENCE_NONFINAL, TYPE_FLAG | 19, 21,
+         second_short=True)
+    case("coin at height 21, time lock of 18 units, median one second lower", None, TYPE_FLAG | 18, 21,
+         second_short=True)
+    # Height locks on the low coins.
+    case("coin at height 0, height lock 40: met exactly", None, 40, 0)
+    case("coin at height 0, height lock 41", SEQUENCE_NONFINAL, 41, 0)
+    case("coin at height 1, height lock 39: met exactly", None, 39, 1)
+    case("coin at height 1, height lock 40", SEQUENCE_NONFINAL, 40, 1)
+    return cases
+
+
+def median_time_past_low(chain: list[dict], height: int) -> int:
+    """`median_time_past` for a chain that reaches height 0: the walk stops at the genesis entry."""
+    times = {e["height"]: e["time"] for e in chain}
+    span = sorted(times[h] for h in range(max(height - 10, 0), height + 1))
+    return span[len(span) // 2]
+
+
+BIP30 = ("bad-txns-BIP30", 100, 16)  # D114, lines 1880 to 1887
+
+
+def overwrite_case() -> dict:
+    """A block that Core rejects through BIP30, on which the scan of the harness must not update its cache.
+
+    The transaction T spends a supplied coin. The coin set also holds two unspent outputs under
+    the transaction ID of T. The transaction A spends the first of them, and stands before T in
+    the block. BIP30 is enforced at this height, and T would overwrite an unspent output, so the
+    baseline and the forced run reject the block before they connect a transaction."""
+    base = Base(1034382)
+    coins = Coins()
+    funding = coins.add(coin_id(1), 0, 1000, bytes([OP_1]))
+    t = transaction([txin(funding, b"", 0xffffffff)], [txout(1), txout(1)])
+    txid = sha256d(t)
+    first = coins.add(txid, 0, 1, bytes([OP_1]))
+    coins.add(txid, 1, 1, bytes([OP_1]))
+    a = transaction([txin(first, b"", 0xffffffff)], [txout(1)])
+    return {"label": "a transaction that would overwrite unspent outputs of its own ID", "forced": BIP30,
+            "baseline": BIP30, "request": base.request([base.block([base.coinbase(), a, t])], coins)}
+
+
+def scan_guard_check(harness: str, timeout: float) -> None:
+    """The scan of the harness goes on after a transaction that overwrites an entry of its own ID.
+
+    At height 3,464,751 the BIP34 ancestor is known, so Core does not enforce BIP30. The coin set
+    holds an unspent output under the ID of the transaction T, which no earlier transaction reads.
+    Core's ConnectBlock overwrites that entry and goes on to the next transaction, U, which has a
+    time lock on a coin two blocks above the block. There GetAncestor returns null. So the scan
+    must name `coinAboveBlock`, and the harness must not run ConnectBlock with the seed.
+    This check reads the harness alone: the block is outside the comparison domain of the revision."""
+    base = Base(3464751)
+    coins = Coins()
+    funding = coins.add(coin_id(1), 0, 1000, bytes([OP_1]))
+    t = transaction([txin(funding, b"", 0xffffffff)], [txout(1)])
+    coins.add(sha256d(t), 1, 1, bytes([OP_1]))
+    high = coins.add(coin_id(2), 0, 1000, bytes([OP_1]), height=base.height + 2)
+    u = transaction([txin(high, b"", TYPE_FLAG)], [txout(1)], version=2)
+    req = base.request([base.block([base.coinbase(), t, u])], coins)
+    response = run_stream(harness, with_ids([dict(req, force_csv_active=True)]), timeout)[0]
+    forced = forced_validate_fields(response)
+    check(forced is not None and forced["unsupported"] == "coinAboveBlock",
+          f"the scan does not name the read after an overwritten entry: {json.dumps(response)[:400]}")
+
+
+def expected_sequence_fields(forced) -> dict:
+    """The verdict fields and the reason of an expectation of `sequence_cases`."""
+    if isinstance(forced, str):
+        return {**{k: None for k in VERDICT_KEYS}, "unsupported": forced}
+    return {**expected_fields(forced), "unsupported": None}
+
+
+def sequence_run(proposal: str, harness: str, timeout: float) -> tuple[int, dict[str, int], int]:
+    cases = sequence_cases()
+    requests = [c["request"] for c in cases]
+    lean = run_stream(proposal, with_ids([dict(r, revision=REVISION) for r in requests]), timeout)
+    inactive = run_stream(proposal, with_ids([dict(r, revision=INACTIVE) for r in requests]), timeout)
+    # Each forced request is followed by the same request without the argument, in one stream.
+    stream = []
+    for r in requests:
+        stream += [dict(r, force_csv_active=True), r]
+    core = run_stream(harness, with_ids(stream), timeout)
+    results: dict[str, int] = {}
+    planted = 0
+    for i, c in enumerate(cases):
+        forced, plain, label = core[2 * i], core[2 * i + 1], c["label"]
+        want = expected_sequence_fields(c["forced"])
+        got = forced_validate_fields(forced)
+        check(got is not None and {k: got[k] for k in want} == want,
+              f"{label}: Core forced gave {json.dumps(forced)[:400]}, expected {want}")
+        # The baseline has no sequence lock: Core without the seed and the proposal executable give the baseline verdict.
+        record = validate_record(plain)
+        check(record is not None and {k: record[k] for k in VERDICT_KEYS} == expected_fields(c["baseline"]),
+              f"{label}: Core without the seed gave {json.dumps(plain)[:400]}")
+        same = {k: v for k, v in without_forced(forced).items() if k != "id"} == {k: v for k, v in plain.items() if k != "id"}
+        check(same, f"{label}: the response with the argument differs from the response without it, apart from `forced`")
+        if c["forced"] is None:
+            check(got["changes_digest_hex"] == record["changes_digest_hex"],
+                  f"{label}: the forced run and the run without the seed have different changes")
+        ours = validate_record(lean[i])
+        check(ours is not None and {k: ours[k] for k in VERDICT_KEYS} == expected_fields(c["baseline"]),
+              f"{label}: the baseline fields of the proposal executable are {json.dumps(lean[i])[:400]}")
+        fault = compare_forced_validate(lean[i], forced)
+        check(fault is None, f"{label}: {fault}")
+        # The self-test: with the revision inactive, the comparison fails on every block with two
+        # results, on the verdict and not on the shape.
+        if c["forced"] != c["baseline"]:
+            fault = compare_forced_validate(inactive[i], forced)
+            check(fault is not None and fault.startswith("revised "),
+                  f"self-test {label}: the comparison passes with the revision inactive")
+            # The record without the seed, in the place of `forced`.
+            unseeded = {**forced, "ok": {**forced["ok"], "blocks": [
+                {**validate_record(forced), "forced": {**{k: record[k] for k in (*VERDICT_KEYS, "changes_digest_hex",
+                                                                                "spent", "created")},
+                                                       "unsupported": None}}]}}
+            fault = compare_forced_validate(lean[i], unseeded)
+            check(fault is not None and fault.startswith("revised "),
+                  f"self-test {label}: the comparison passes without the forced seed")
+            planted += 2
+        name = "valid" if c["forced"] is None else c["forced"] if isinstance(c["forced"], str) else c["forced"][0]
+        results[name] = results.get(name, 0) + 1
+    for name in ("bad-txns-nonfinal", *REASONS):
+        check(results.get(name), f"no made block reaches {name} through a sequence lock")
+    # The self-test of the shape: an acceptance without a digest, a number for the verdict, and a
+    # reason with a verdict are no results, so they cannot agree with anything.
+    accepted = {"valid": True, "reject_reason": None, "dos": None, "reject_code": None, "changes_digest_hex": "00" * 32,
+                "spent": 1, "created": 1, "unsupported": None}
+    check(forced_record_fields(accepted) is not None, "self-test: a well-formed acceptance has no shape")
+    for fault in ({"changes_digest_hex": None}, {"valid": 1}, {"unsupported": "coinAboveBlock"}, {"changes_digest_hex": "00"}):
+        check(forced_record_fields({**accepted, **fault}) is None, f"self-test: the shape {fault} is taken for a result")
+        planted += 1
+    check(revised_record_fields({"verdict": "accepted", "reject_reason": None, "dos": None, "reject_code": None,
+                                 "changes_digest_hex": None}) is None,
+          "self-test: a revised acceptance without a digest is taken for a result")
+    outside = {"verdict": "unsupported", "reason": REASON_PREFIX + "coinAboveBlock", "reject_reason": None, "dos": None,
+               "reject_code": None, "changes_digest_hex": None}
+    check(revised_record_fields(outside) is not None, "self-test: a well-formed revised result outside the model has no shape")
+    for fault in ({"changes_digest_hex": "00" * 32}, {"reject_reason": "bad-txns-nonfinal"}, {"dos": 100},
+                  {"reason": REASON_PREFIX + "other"}):
+        check(revised_record_fields({**outside, **fault}) is None,
+              f"self-test: the revised shape {fault} is taken for a result outside the model")
+        planted += 1
+    planted += 1
+    scan_guard_check(harness, timeout)
+    return len(cases), results, planted
+
+
+def mainnet_validate_run(directory: str, proposal: str, harness: str, timeout: float) -> dict[str, int]:
+    """Heights 0 to 10,000 of mainnet in one request, with CSV forced active for each block (section 10.2, item 1)."""
+    [(_, [req])] = mainnet_validate_sets(directory)
+    lean = run_batches(proposal, with_ids([dict(req, revision=REVISION)]), timeout)[0]
+    core = run_batches(harness, with_ids([dict(req, force_csv_active=True)]), timeout)[0]
+    ours = lean.get("ok", {}).get("blocks") if isinstance(lean.get("ok"), dict) else None
+    theirs = core.get("ok", {}).get("blocks") if isinstance(core.get("ok"), dict) else None
+    check(isinstance(ours, list) and isinstance(theirs, list) and len(ours) == len(theirs) == len(req["blocks_hex"]),
+          f"the replay has no record for each block: {json.dumps(lean)[:200]} and {json.dumps(core)[:200]}")
+    counts = {"blocks": len(ours), "forced_accepted": 0, "forced_rejected": 0, "forced_unsupported": 0, "changed": 0}
+    for mine, yours in zip(ours, theirs):
+        height = mine.get("height")
+        check(height == yours.get("height") and mine.get("hash_hex") == yours.get("hash_hex"),
+              f"the two replays differ at a block: {height} and {yours.get('height')}")
+        # The baseline run carries the state, so both programs must accept each block of mainnet.
+        check(mine.get("valid") is True and yours.get("valid") is True, f"height {height}: the baseline run rejects the block")
+        revised, forced = revised_record_fields(mine.get("revised")), forced_record_fields(yours.get("forced"))
+        check(revised is not None, f"height {height}: no revised verdict: {json.dumps(mine)[:300]}")
+        check(forced is not None, f"height {height}: no forced object: {json.dumps(yours)[:300]}")
+        check(revised == forced,
+              f"height {height}: revised {json.dumps(revised, sort_keys=True)}, Core forced {json.dumps(forced, sort_keys=True)}")
+        # The genesis block is not applicable: its forced result is the result without the seed.
+        check(height != 0 or (mine["revised"].get("active") is False and forced["valid"] is True),
+              "height 0: the genesis block does not have the baseline result")
+        if forced["unsupported"] is not None:
+            counts["forced_unsupported"] += 1
+        elif forced["valid"]:
+            counts["forced_accepted"] += 1
+        else:
+            counts["forced_rejected"] += 1
+            counts["changed"] += 1
+    return counts
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--mainnet-blocks", default=str(ROOT / "build/mainnet-blocks"))
@@ -599,7 +958,7 @@ def main() -> int:
     parser.add_argument("harness")
     args = parser.parse_args()
     print("Core at e0a1c15 with the CSV state forced to ACTIVE, against the proposed revision RelativeLockTime "
-          "(rejections through the BIP 113 cutoff and the BIP 112 opcode).")
+          "(the BIP 113 cutoff, the BIP 112 opcode and the BIP 68 sequence locks).")
     try:
         refused = refusals(args.oracle, args.proposal, args.harness, args.timeout)
         print(f"refusals: {refused} requests refused")
@@ -614,6 +973,10 @@ def main() -> int:
         print(f"block.validate made blocks: {made} agree with the hand-derived verdicts, with and without the seed ("
               + ", ".join(f"{name} {count}" for name, count in sorted(reasons.items())) + ")")
         print(f"block.validate self-test: the comparison fails on {planted} planted faults")
+        made, results, planted = sequence_run(args.proposal, args.harness, args.timeout)
+        print(f"sequence locks, made blocks: {made} agree with the hand-derived results ("
+              + ", ".join(f"{name} {count}" for name, count in sorted(results.items())) + ")")
+        print(f"sequence locks, self-test: the comparison fails on {planted} planted faults")
         if not args.made_only:
             total = 0
             for group in mainnet_run(args.mainnet_blocks, args.proposal, args.harness, args.timeout):
@@ -622,7 +985,11 @@ def main() -> int:
                       f"forced rejected {group['forced_rejected']}, changed {group['changed']}, "
                       f"candidates {group['candidates']}, cutoff transactions {group['cutoff_transactions']}")
             print(f"mainnet blocks: {total} agree, and the changed blocks are the committed candidates")
-    except (RuntimeError, RunError) as error:
+            counts = mainnet_validate_run(args.mainnet_blocks, args.proposal, args.harness, args.timeout)
+            print(f"block.validate, mainnet heights 0 to {counts['blocks'] - 1}: {counts['blocks']} forced results agree; "
+                  f"accepted {counts['forced_accepted']}, rejected {counts['forced_rejected']}, "
+                  f"outside the model {counts['forced_unsupported']}, changed {counts['changed']}")
+    except (RuntimeError, RunError, BlockAssets) as error:
         print(f"FAIL: {error}")
         return 1
     print("This state does not occur on mainnet (csv_never_lockedIn).")

@@ -799,7 +799,7 @@ The harness's sum is an `unsigned __int128`.
 Before it adds an amount, the harness requires `MoneyRange`, so each amount is at most `MAX_MONEY`, 10^18 koinu, which is below 2^60.
 For a set of fewer than 2^64 coins, the sum is below 2^124, so it cannot wrap.
 The harness counts the coins in a `uint64_t` without a check, so the bound has that precondition.
-The largest recorded set, at the tip, has 202,470,869 coins.
+The recorded set at the tip has 202,470,869 coins.
 
 The harness writes it with its own decimal conversion, and the oracle writes an `Int`, which has no bound.
 The scripts read `set_value` as a string and convert it with Python's `int`, which has no bound.

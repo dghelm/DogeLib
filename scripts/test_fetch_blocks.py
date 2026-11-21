@@ -234,8 +234,9 @@ class PinnedSources(Case):
         # and 371337 inside two header fixtures. Then the heights of the
         # range hash lists inside the header fixtures: 145001 to 145030 (A),
         # 371320 to 371340 (B), 599998 to 600001 (C), 1033383 to 1034390 (D)
-        # and 3464739 to 3464760 (F).
-        self.assertEqual(compared, 13 + 281 + 2 + 2 + 30 + 21 + 4 + 1008 + 22)
+        # and 3464739 to 3464760 (F). Then the checkpoint 5050000, the last
+        # height of H.
+        self.assertEqual(compared, 13 + 281 + 2 + 2 + 30 + 21 + 4 + 1008 + 22 + 1)
 
     def test_heights_of_the_sources(self):
         self.assertEqual(len(REAL_PINS.prev_hashes), 32 * 145000)
@@ -250,15 +251,16 @@ class PinnedSources(Case):
         self.assertEqual(names(599997), [ranges + "C"])
         self.assertEqual(names(1034383), ["tests/block/mainnet-bip66-headers", ranges + "D"])
         self.assertEqual(names(3464751), ["tests/block/mainnet-bip65-headers", ranges + "F"])
-        for height in (155000, 370337, 372336, 599000, 600999, 1035382, 3463751, 3465750):
+        self.assertEqual(names(5050000), [ranges + "H", fb.CHECKPOINT_SOURCE])
+        for height in (155000, 370337, 372336, 599000, 600999, 1035382, 3463751, 3465750, 5049001, 5049999):
             self.assertEqual(len(names(height)), 1, height)
-        for height in (155001, 370336, 372337, 598999, 601000, 1035383, 3463750, 3465751, BASE):
+        for height in (155001, 370336, 372337, 598999, 601000, 1035383, 3463750, 3465751, 5049000, 5050001, BASE):
             self.assertEqual(names(height), [], height)
         self.assertEqual(len(fb.CHECKPOINTS), 23)
 
     def test_range_hash_lists(self):
         for name, (first, last) in {"A": (145001, 155000), "B": (370337, 372336), "C": (599000, 600999),
-                                    "D": (1033383, 1035382), "F": (3463751, 3465750)}.items():
+                                    "D": (1033383, 1035382), "F": (3463751, 3465750), "H": (5049001, 5050000)}.items():
             self.assertEqual(sorted(REAL_PINS.tables[fb.RANGE_HASHES + "/" + name]), list(range(first, last + 1)))
 
     def test_malformed_range_hash_list(self):

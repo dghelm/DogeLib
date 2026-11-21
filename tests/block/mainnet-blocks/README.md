@@ -105,6 +105,7 @@ So each hash of a list is on the chain of the first checkpoint above the range, 
 | C | 599,000 to 600,999 | 771,275 |
 | D | 1,033,383 to 1,035,382 | 1,250,000 |
 | F | 3,463,751 to 3,465,750 | 3,500,000 |
+| H | 5,049,001 to 5,050,000 | 5,050,000 |
 
 The node gave the headers of the pass, and the claim does not rest on it.
 A reader can check a list again with the headers from the range to its checkpoint, from any source.
@@ -121,6 +122,12 @@ It runs every check of `--check`.
 | Rule changes | 344,408 | 344,544 | 268,444 | 4,348 | 1,464 |
 | Genesis to 10,000 | 43,937,365 | 44,017,373 | 31,077,776 | 1,490,331 | 389,756 |
 | Recent | 19,939,510 | 19,947,510 | 14,701,988 | 153,517 | 41,956 |
+| Range A | 98,973,165 | 99,053,165 | 57,584,780 | 1,517,681 | 404,480 |
+| Range B | 19,395,278 | 19,411,278 | 11,514,992 | 304,432 | 82,284 |
+| Range C | 35,091,292 | 35,107,292 | 22,563,340 | 305,237 | 82,956 |
+| Range D | 13,912,903 | 13,928,903 | 8,703,188 | 305,603 | 81,692 |
+| Range F | 34,189,002 | 34,205,002 | 21,062,340 | 306,930 | 82,672 |
+| Range H | 79,110,409 | 79,118,409 | 52,320,724 | 154,452 | 42,476 |
 
 The largest fixture that the repository holds is `mainnet-subsidy-prev-hashes`, with 4.64 MB.
 Genesis to 10,000 has 44 MB, and 31 MB with xz, so it is not committed.

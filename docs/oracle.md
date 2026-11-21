@@ -1287,31 +1287,85 @@ The code builds their inputs, and makes these choices (design record 0010, secti
   `main` calls `InitSignatureCache`, because `ConnectBlock` stores accepted signatures in that cache.
 - **`fJustCheck`.** `ConnectBlock` runs with `fJustCheck` true on a new `CCoinsViewCache` over the carried set. With that flag it calls `CheckBlock` with both flags false (line 1804), and it returns before it writes undo data or the transaction index (line 2009).
 - **Commit.** After an accepted block, the harness calls `SetBestBlock` and `Flush` on the cache, because `fJustCheck` returns at line 2009, before `SetBestBlock` (line 2035). After a rejected block, the cache is discarded, because `UpdateCoins` runs before the coinbase check (lines 1988 and 1996).
-- **The carried set.** The set is a `CCoinsView` over a `std::map`, as `CCoinsViewTest` of Core's `src/test/coins_tests.cpp`, without that class's random choices. A flush erases an entry that is pruned.
+- **The carried set.** The set is a `CCoinsView` over a `std::map`, as `CCoinsViewTest` of Core's `src/test/coins_tests.cpp`, without that class's random choices. A flush erases an entry that is pruned. With `coins_db`, the set is in Core's `CCoinsViewDB` instead (see *The Core pass* below).
 - **The block index.** The harness builds one `CBlockIndex` for each entry of `chain` and for each accepted block, with Core's skip list where the skip target is inside the chain. `mapBlockIndex` holds the entry of the last accepted block alone, which `CheckInputs` reads for the spend height (lines 1407 to 1411).
 - **The BIP34 ancestor.** `ConnectBlock` reads the hash of the ancestor at `BIP34Height` (line 1877). Inside the supplied chain, the entry of that height gets the supplied hash. Below the chain, the oldest entry gets a predecessor that is its own predecessor and skip entry, as for `block.header_sequence`, so that `GetAncestor` returns it for every lower height.
 - **Refusals.** The harness refuses a request whose chain is too short for Core's other reads: the median time, the retarget history, and the aligned version-bits boundary with its ten predecessors. So Core never reads the added predecessor as history.
-- **Version bits.** The harness seeds `THRESHOLD_FAILED` at a boundary at or after the CSV timeout, as for `block.contextual_check_body` (design record 0010, decision 3).
+- **Version bits.** The harness seeds `THRESHOLD_FAILED` at a boundary at or after the CSV timeout, as for `block.contextual_check_body` (design record 0010, decision 3). Below the CSV start, Core's walk stops at the aligned boundary.
+- **The CSV window.** Inside the window, Core's `VersionBitsState` walks back one period at a time to a boundary whose median time is below the CSV start. It counts the versions of the blocks above that boundary (`versionbits.cpp`, lines 44 to 108). So the chain must reach the boundary and its ten predecessors, and each supplied entry above it needs a `version`. Otherwise the request is a request error. Each accepted block has the version of its header.
 - **Restored state.** Every exit clears `mapBlockIndex` and the version-bits cache, and restores `fCheckpointsEnabled` and the mock time.
 - **Snapshots.** With `coins_file`, the harness loads every record of the snapshot into the carried set, and reports the digest and the number of the records. Its checks and their order are those of the oracle's reader.
 
-The harness alone takes three more arguments ([design record 0011](design/0011-mainnet-ranges.md), section 3.2):
+The harness alone takes more arguments ([design record 0011](design/0011-mainnet-ranges.md), section 3.2):
 
 - `snapshot_heights` with `snapshot_dir`: a list of heights in increasing order, and the path of a directory. After the accepted block at each listed height, the harness writes the carried set as the snapshot `coins-<height>.bin` in that directory. It writes a temporary file first and renames it.
 - `digest_heights`: a list of heights in increasing order. After the accepted block at each listed height, the harness computes the digest of the whole set.
+- `version_bits_heights`: a list of heights in increasing order. The predecessor at each listed height can be the supplied one or an accepted block. The harness reports Core's `VersionBitsState` of CSV and SegWit for the block after it, with the checks of the CSV window above.
+- `version` in an entry of `chain`: the version of its header, as an unsigned 32-bit number.
+- `coins_db`, `coins_db_cache_mb` and `coins_db_continue`: the coin database of the Core pass (see *The Core pass* below).
 
-The result then has `snapshots` and `set_digests`, one entry for each listed height that an accepted block reached, in order.
-An entry of `set_digests` has `height`, `set_digest_hex`, `set_coins` and `set_value`.
+The result then has `snapshots`, `set_digests` and `version_bits_states`, one entry for each listed height that the request reached, in order.
+An entry of `set_digests` has `height`, `set_digest_hex`, `set_coins`, `set_value`, and two values of Core's `GetUTXOStats` for the same set (`rpc/blockchain.cpp`, lines 874 to 905): `hash_serialized` and `transactions`.
+
+`hash_serialized` is the hash in the byte order of the `gettxoutsetinfo` output. It covers the best block, and each transaction ID with the index, the amount and the script of each of its coins. It does not cover the height or the coinbase flag.
+`transactions` is the number of transaction IDs with a coin.
+An entry of `version_bits_states` has `height`, `csv` and `segwit`, with the names of `block.version_bits_state`.
 An entry of `snapshots` has those fields, the hash of the block as `hash_hex` and `hash_display`, and `file`, `bytes` and `sha256` of the written file.
 `scripts/snapshot_range.py` writes the manifest from that entry, after it computes each value again from the file.
-The oracle returns a request error for the three arguments.
+The oracle returns a request error for these arguments and for `version` in a chain entry.
 
 One function of the harness, `visitSet`, walks the carried set, one `CCoins` entry at a time in the order of the transaction IDs.
 The digest of the whole set and the snapshot writer read the set through it alone.
-[Stage 0](#measurements-for-the-core-pass) chose Core's `CCoinsViewDB` for the Core pass.
-That change needs a second `visitSet` over the cursor of that view, and no change to the digest or the writer.
-The cursor visits the same entries in the same order (`src/txdb.cpp`, lines 93 to 104).
-The harness still carries the set in its map.
+
+#### The Core pass
+
+[Stage 0](#measurements-for-the-core-pass) chose Core's `CCoinsViewDB` for the Core pass, because the map does not fit in memory at the tip.
+With `coins_db`, the path of a directory, the harness carries the set in a `CCoinsViewDB` in `<coins_db>/chainstate`, under one `CCoinsViewCache`.
+Each block's cache reads that cache, as it reads the map otherwise.
+After an accepted block, the harness writes the cache to the database when its `DynamicMemoryUsage` is above `coins_db_cache_mb` megabytes, 1,024 by default.
+Core writes the coins and the best block in one LevelDB batch.
+So the database always holds the set after one accepted block, and names that block.
+
+For `visitSet`, the harness first writes the cache, and then walks the database's cursor.
+The cursor visits the keys in LevelDB's byte order. A key is the byte `c` and the 32 bytes of the ID, so that is the order of the transaction IDs (`src/txdb.cpp`, lines 32 and 93 to 104).
+
+Without `coins_db_continue`, the harness empties the database first, and loads `coins` or `coins_file` into it.
+With `coins_db_continue` true, the request has neither, and the set is the one in the database.
+The first block must then name the database's best block as its previous hash, or the request fails with the error `coins_db_best_block`.
+
+A request with `coins_db` has no digest of the whole set in its block records.
+Its result has `coins_db_start_display` and `coins_db_best_display`: the best block of the database at the start and at the end, in display order.
+The harness writes one line to standard error after each accepted block whose height is a multiple of 10,000.
+`coins_db_unusable` is the error of a directory that does not exist, or of a database that does not open.
+
+`scripts/core_pass.py` runs the pass of design record 0011, section 3.2, with these arguments.
+Each segment is one request, of at most 100,000 blocks and 4 GB.
+The database persists from one segment to the next, so a segment does not load a snapshot.
+This persistent database is how the pass implements the segments of section 3.2, as a detail of decision 3.
+Each segment starts from the database with `coins_db_continue`.
+So the harness requires that the database's best block is the last block of the segment before.
+Each segment reports the digest of the whole set at its end.
+
+The pass writes a snapshot at each range start and at each multiple of 500,000, and keeps only the newest of the latter.
+A stopped harness can leave the database at another height than the pass's state. The pass then starts again from its newest snapshot below that height, which it loads into an empty database with `coins_file`.
+
+The pass keeps the header of every accepted block. It builds the `chain` of each segment from them, with the version of each entry. Inside the window the chain reaches back to the boundary below the CSV start.
+It requires each checkpoint of Core, and the digests of heights 100,000, 101,000 and 145,000 of the recorded runs of stage 1.
+It requests Core's version-bits state at each period boundary.
+With `--version-bits`, the script checks each state of a boundary in the CSV window. Both programs compute it again with `block.version_bits_state` on the kept headers from the genesis block.
+
+The pass runs `core-oracle-trap`, which `scripts/build_core_harness.sh --trap-overflow` builds beside `core-oracle`.
+That build compiles Core's `src/validation.cpp` and `src/coins.cpp`, which hold the sums of `ConnectBlock`, with `-fsanitize=signed-integer-overflow -fno-sanitize-recover=signed-integer-overflow`.
+A signed overflow in those files then ends the program with a report, in the place of undefined behaviour (design record 0011, section 3.2).
+Its `--version` output has `"trap_overflow": true`.
+
+`scripts/test_core_pass.py` tests these parts in CI on the released heights 0 to 10,000:
+
+- Three synthetic chains reach every state from `defined` to `failed`. At each of their boundaries, `version_bits_states` of `block.validate` equals `block.version_bits_state` of both programs on the whole chain. A chain one entry too short, and an entry in the window without a version, are request errors.
+- Each small request of the [full comparison](#block-validation-comparison-evidence) gives one response with `coins_db` and a cache of 1 MB, and with the map. The digests of the block records are not compared.
+- The pass of heights 0 to 10,000 runs in segments of 2,500 blocks. It reaches the digest of the map at heights 9,000 and 10,000, and so does its restart from the snapshot at 9,000. A wrong best block gives `coins_db_best_block`.
+- `hash_serialized` and `transactions` at height 9,000 equal the values that the test computes from the snapshot file by the definition of `GetUTXOStats`.
+- The trap build stops on the two requests of the arithmetic-domain cases whose sums leave the `int64_t` range, once in `validation.cpp` and once in `coins.cpp`. It gives the response of the ordinary build on the other requests of those cases.
 
 The harness reads the changes of an accepted block from a second `CCoinsViewCache` over the set before the block.
 For each transaction in order, it reads the entry of each input, calls Core's `UpdateCoins`, and reads the new entry.

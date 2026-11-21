@@ -2384,8 +2384,9 @@ The committed manifests are [`coins-1198519.json`](../tests/block/mainnet-blocks
 
 **The ranges.**
 `scripts/run_range.py` ran each range from the second pass's snapshot at its start, as for the ranges A to H.
-The chain of each request holds the version of each entry back to the boundary 1,189,439, the base of the window, and its ten predecessors.
-That is 10,341 entries for E1 and 513,092 for E2.
+The chain of each request holds the version of each entry, and reaches at least the boundary 1,189,439, the base of the window, and its ten predecessors.
+`chain_floor` of `scripts/core_pass.py` also keeps one period and 260 blocks below the range start, as for the other ranges.
+So the chain of E1 reaches down to 1,188,179, with 10,341 entries, and the chain of E2 down to 1,189,428, with 513,092 entries.
 Each request has `version_bits_heights` at the range start and at the boundary inside the range:
 
 ```bash

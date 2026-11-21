@@ -14,6 +14,7 @@ test has seven parts:
    `block.version_bits_state` of the oracle and of the harness on the whole chain, and the state
    that `block.validate` of the oracle reports by its walk in the window. A chain one entry
    shorter, and an entry above that boundary without a version, are request errors in both programs.
+   A block after a boundary whose state is `ACTIVE` is the error `outside_model` in the oracle.
 2. The coin database. Each small request of scripts/oracle_block_validate.py gives the same
    response with `coins_db` as without it, apart from the digests of the whole set in the block
    records and the fields of the database.
@@ -97,7 +98,7 @@ def window_request(chain: list[dict], tip: int, floor: int, drop_version: int | 
     return req
 
 
-def test_window(oracle: str, harness: str) -> int:
+def test_window(oracle: str, harness: str, fixture: str | None = None) -> int:
     start = core_pass.CSV_START
     cases = [
         # Boundary 10,079 is below the CSV start. Period 2 signals, so CSV locks in and then activates.
@@ -137,6 +138,16 @@ def test_window(oracle: str, harness: str) -> int:
                 check(short.get("error", {}).get("kind") == "request", f"{name}: a short chain gave {short}")
                 check(unversioned.get("error", {}).get("kind") == "request",
                       f"{name}: an entry without a version gave {unversioned}")
+        # A block after a boundary with the state ACTIVE is outside the oracle's model.
+        active = [tip for tip, b in zip(tips, core) if b["ok"]["csv"] == "active"]
+        if active and fixture is not None:
+            raw = next(r for h, r in validate_blocks(Path(fixture) / "blocks.bin") if h == 1)
+            req = window_request(chain, active[0], base - 10)
+            req.update(blocks_hex=[raw.hex()], version_bits_heights=[])
+            (answer,) = run(oracle, [req])
+            error = answer.get("error", {})
+            check(error.get("reason") == "outside_model" and error.get("detail") == "csv_active",
+                  f"{name}: a block after an active boundary gave {json.dumps(answer)[:300]}")
     check({"defined", "started", "locked_in", "active", "failed"} <= seen, f"the cases reach only the states {seen}")
     print(f"CSV window: {count} boundaries agree with both full walks, states {sorted(seen)}; refusals OK")
     return count
@@ -419,7 +430,7 @@ def main(argv=None) -> int:
         print(__doc__.splitlines()[2])
         return 2
     oracle, harness, trap, fixture = args
-    test_window(oracle, harness)
+    test_window(oracle, harness, fixture)
     test_database(harness)
     test_pass(oracle, harness, trap, fixture)
     test_trap(harness, trap)

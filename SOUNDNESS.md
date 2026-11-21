@@ -1196,7 +1196,8 @@ The adapter computes them from a finite view, and the request supplies that view
 A comparison gives the evidence for the adapter.
 In `scripts/test_core_pass.py`, the oracle and the harness report the same state in `block.validate` at 16 boundaries of three synthetic chains.
 The states cover all five, and each equals both full walks.
-The ranges E1 and E2 compare the states on mainnet ([recorded runs](docs/oracle.md#the-csv-window-ranges-e1-and-e2)).
+The ranges E1 and E2 are to compare the states on mainnet ([gate](AGENTS.md#checks), *Mainnet range*), and this record has no run of them yet.
+The walk can give `ACTIVE` on a made chain that signals. `block.validate` then returns the error `outside_model` before the checks of the block, because its context holds the aligned boundary's median time and not the predecessor's.
 
 On mainnet the walk changes no verdict.
 `block.validate` reads the state only to test whether CSV is active, and `csv_never_lockedIn` shows that it is not, on a chain that meets its hypothesis.

@@ -339,6 +339,10 @@ def validateStep (options : ValidateOptions) (run : ValidateRun) (bs : List UInt
       unless t == b.header.pure.hashPrevBlock do
         throw (validateFailure "not_linked" [("index", natJson index)])
   let ((height, csv, seg, prevMtp), run) ← runStates run
+  -- An active CSV state needs the predecessor's own median time, and `prevMtp` is the aligned boundary's.
+  -- The walk can give that state on a made chain, never on mainnet (`csv_never_lockedIn`), so the block is outside the model.
+  if csv == .active then
+    throw (validateFailure "outside_model" [("index", natJson index), ("detail", .str "csv_active")])
   let csvActive := csv == .active
   let segwitActive := seg == .active
   if let some h := fileHeight then

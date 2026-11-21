@@ -770,6 +770,7 @@ On mainnet the base of the whole window is the boundary at 1,189,439.
 So the chain of a block near the CSV timeout has about 515,000 entries.
 The oracle keeps the state of the last boundary that it walked, so a request walks each boundary once.
 SegWit has a timeout of 0, and its shortcut gives its state at every boundary.
+The walk can give `ACTIVE` on a made chain that signals, never on mainnet (`csv_never_lockedIn`). A block in that context gets the error `outside_model` with the detail `csv_active`, before its checks, because the context holds the aligned boundary's median time in the place of the predecessor's.
 `block.contextual_check_body` still returns the adapter error `{kind: "version_bits", reason: "gap"}` in the gap.
 
 Each record has these fields:

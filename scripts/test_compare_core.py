@@ -655,8 +655,8 @@ def main() -> int:
         import compare_core
         original_sets = compare_core.request_sets
 
-        def fewer_checks():
-            sets, excluded = original_sets()
+        def fewer_checks(*args):
+            sets, excluded = original_sets(*args)
             for name, requests in sets:
                 if name == "Script tx spends accept transaction":
                     requests[0] = {**requests[0], "flags": 256}
@@ -670,8 +670,8 @@ def main() -> int:
         import compare_core
         original_sets = compare_core.request_sets
 
-        def one_fewer():
-            sets, excluded = original_sets()
+        def one_fewer(*args):
+            sets, excluded = original_sets(*args)
             for name, requests in sets:
                 if name == "compactsize":
                     dropped = next(i for i, r in enumerate(requests) if r["op"] == "compactsize.encode")

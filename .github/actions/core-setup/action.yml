@@ -1,0 +1,54 @@
+# The setup that the jobs of workflow core share: the Lean toolchain and
+# dogelib-oracle, and with `harness` the Core harness at the pinned commit.
+# Each job builds the oracle itself, which takes under a minute.
+
+name: core setup
+description: Build dogelib-oracle and, with harness, the Core harness at CORE_PIN.
+
+inputs:
+  harness:
+    description: Whether to build the Core harness. It needs the environment variable CORE_PIN.
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - if: ${{ inputs.harness == 'true' }}
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      with:
+        repository: dogecoin/dogecoin
+        ref: ${{ env.CORE_PIN }}
+        path: core-src
+        fetch-depth: 1
+        persist-credentials: false
+
+    - if: ${{ inputs.harness == 'true' }}
+      name: build tools
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends autoconf automake libtool pkg-config curl bzip2 libssl-dev libevent-dev
+
+    # The cache holds Boost 1.70.0 and Core's libraries. The build script
+    # checks its stamp (pin, scripts, compilers, flags) and rebuilds them
+    # when a restored cache does not match.
+    - if: ${{ inputs.harness == 'true' }}
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: build/core-harness
+        key: core-harness-${{ runner.os }}-${{ runner.arch }}-${{ env.CORE_PIN }}-${{ hashFiles('scripts/build_core_harness.sh', 'scripts/core_boost.sh') }}
+
+    - uses: leanprover/lean-action@50fcf42d2e460296f1a34b402e990d1b24f8b596 # v1.6.0
+      with:
+        auto-config: false
+        use-mathlib-cache: false
+        use-github-cache: false
+
+    - name: oracle
+      shell: bash
+      run: lake build dogelib-oracle
+
+    - if: ${{ inputs.harness == 'true' }}
+      name: harness
+      shell: bash
+      run: time JOBS=4 bash scripts/build_core_harness.sh --trap-overflow core-src build/core-harness

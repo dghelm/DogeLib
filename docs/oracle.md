@@ -2176,6 +2176,87 @@ Under these assumptions the sum is at most about 270 GB, so the pass fits the 90
 The assumptions are the number of coins of each set, the average script length and the overhead of the database.
 With 122 GB it fits only if the pass deletes each start snapshot after the oracle runs its range.
 
+#### The recorded Core pass
+
+This part records the run of [the Core pass](#the-core-pass) for stage 2 of [design record 0011](design/0011-mainnet-ranges.md).
+It is the gate *Core pass* of [AGENTS.md](../AGENTS.md#checks), and it is not in CI.
+
+| Input | Value |
+| --- | --- |
+| Harness | `core-oracle-trap`, built by `scripts/build_core_harness.sh --trap-overflow` from commit `46c8fa8` of pull request #185, with Core at `e0a1c157`. Its SHA-256 value is `bc49248d69c75f99b05ec8bc3c4484713edf9b126d7bd4eb4249f864aeaccd0f`. The harness of `main` at `df1b04c` differs from it only by the argument `force_csv_active` of #184, which the pass never sends |
+| Script | `scripts/core_pass.py` at commit `1deb9d1` of the same pull request. The script of `df1b04c` differs in two places. It opens the headers read-only beside a running pass, and it saves the state before it deletes an old restart snapshot. Neither changes a request or a check |
+| Blocks | Heights 0 to 145,000 from the fixtures of the [replay to height 145,000](#replay-of-mainnet-to-height-145000). Every later block from the maintainer's node, in segments of 100,000 blocks and at most 4 GB |
+| Command | `nice -n 19 taskset -c 8,9 python3 -I scripts/core_pass.py --state build/core-pass --cache-mb 6144 --local <genesis-10000> --local <range-10001-145000> build/core-harness/core-oracle-trap`, started at 2026-11-20T23:14Z |
+
+The pass has this snapshot at the start of each range.
+Each committed manifest in [`tests/block/mainnet-blocks/snapshots`](../tests/block/mainnet-blocks/snapshots) is the file that the pass wrote:
+
+| Snapshot | Coins | Bytes | Digest of the set | SHA-256 of the file |
+| --- | ---: | ---: | --- | --- |
+| Height 145,000, range A | 5,094,671 | 387,316,918 | `b28411dc46135fd0f85c954a664866d4f610803f7d667c9d2032ddfd6c58716d` | `0fa2f2a1e1aa43c54bf877e5aed1884cb9731412c45a06c9b8a9c84ad0b32012` |
+| Height 370,336, range B | 8,576,188 | 654,238,056 | `3d63c9adf6858f73548dd3f0028ae3b6fadc71e837d6107c22aa43afc003b957` | `f16e3bf23a92d5a8112bbfdd2d07c6ab21a6cdeb6e45c9a7c22d252f0c72be0c` |
+| Height 598,999, range C | 15,572,301 | 1,186,513,976 | `4355e90c77611cf22e2e1e70c4814f1d230481de5093c282a022388d66672856` | `234d2af5029ffea71986a2e18a5488515cb6bc8583ab29568c31562bd5211707` |
+| Height 1,033,382, range D | 16,869,346 | 1,285,351,570 | `dd23f0095e9dd8f43f86fcab3e1f704e487974a7c8643bb365e4673c2e07d0e2` | `2ef63d136fcb1b4a61b6bc86c9f67af1832575c740f4a8644af81f5db5fb34b6` |
+| Height 3,463,750, range F | 14,485,802 | 1,103,862,190 | `eaf159fc6ec3a7f8a2472271a8f162534f15c2166fd2400c7d37f1808a38a7b8` | `1043e1a13dca76e739dbb2f474594926ec57b604a5e1f928f6fec61bc1cf82c7` |
+| Height 5,049,000, range H | 87,775,851 | 6,695,944,802 | `667fad0814f4f37fd1a4ecc7b6276370ed3d3bcf7b169df0498dc67865f58ccc` | `cb0176075521b01e81d998b6ac05410f24a0952b64d816118c5ad525a27394a6` |
+
+The snapshot at height 145,000 is the file of [range S](#ranges-from-a-snapshot), with the digest of the recorded replay.
+So the pass reached the set that the oracle reached from the empty set.
+The pass also reached the recorded digests at heights 100,000 and 101,000, and it requires all three values.
+
+The pass checked the states of the CSV window with `--version-bits`, on the headers of the pass to height 1,709,999:
+
+```bash
+python3 -I scripts/core_pass.py --state build/core-pass --version-bits .lake/build/bin/dogelib-oracle build/core-harness-rebased/core-oracle
+```
+
+All 52 boundaries from 1,189,439 to 1,703,519 agree with both full walks.
+The CSV state is `defined` at 1,189,439, `started` from 1,199,519 to 1,693,439, and `failed` at 1,703,519.
+The SegWit state is `defined` up to 1,461,599 and `failed` from 1,471,679, the first boundary after its start time, because its timeout is 0.
+
+#### Ranges A to H
+
+`scripts/run_range.py` runs each range from the pass's snapshot at its start, in the oracle and in Core.
+A range agrees under section 3.4 of the design record when three things hold.
+Both programs report the start digest of the manifest, accept every block with equal block records, and report the pass's digest at the end.
+The block records must also equal those of the pass.
+Before the range, `block.check` with both flags accepts every block in both programs.
+Each range ran on one core at low priority, while the pass ran:
+
+```bash
+nice -n 19 taskset -c 10 python3 -I scripts/run_range.py --range <NAME> --pass build/core-pass --fixture build/ranges/<NAME> --output build/range-runs/<NAME> --write-hashes .lake/build/bin/dogelib-oracle build/core-harness-rebased/core-oracle
+```
+
+The oracle was built at `e927a4d`, whose Lean sources equal those of `main` at `df1b04c`.
+The harness `core-oracle` was built from `df1b04c`.
+Each fixture holds the blocks from `a + 1` to `b`, which `scripts/fetch_blocks.py --range` fetched from the node.
+`--write-hashes` wrote the committed [hash list](../tests/block/mainnet-blocks/README.md#range-hash-lists) of each range from the headers of the pass.
+
+| Range | Heights | Blocks | SHA-256 of `blocks.bin` | Start | End: coins and digest | Spent | Created | Core | Oracle |
+| --- | --- | ---: | --- | ---: | --- | ---: | ---: | ---: | ---: |
+| A | 145,001 to 155,000 | 10,000 | `c022bf754ddeb09663473add359918132d26b9fc0e742cb379cb50ac6635e82b` | 5,094,671 | 5,379,012, `fe00b205affdd2344d15cdeb073ad18a85ebfb2e8468e66c3ae96494631734c6` | 472,618 | 756,959 | 38 s | 1,426 s |
+| B | 370,337 to 372,336 | 2,000 | `83140d38ea1010f69412306b5be617017a1c314a27d18ee9e5fb9aae487f4db1` | 8,576,188 | 8,622,709, `9a2633ff9d56b1de6ef4bc82016d1b22e7c43c3c8f1140a3de782f8b2afca67c` | 90,664 | 137,185 | 23 s | 568 s |
+| C | 599,000 to 600,999 | 2,000 | `8594c4f65d706672e36c76db917cc0fb230fecdb7bf7a5d35cc6bd0acbdc08b9` | 15,572,301 | 15,588,181, `77b4529dad926f3bc516ee39d17b80955d4eea7e4234dcdd8b2a27271ae26179` | 173,936 | 189,816 | 67 s | 1,278 s |
+| D | 1,033,383 to 1,035,382 | 2,000 | `fe0a039a16f6075981e88f8ac40614f286e58f97e5f5fa245b31b6fa3526e2a1` | 16,869,346 | 16,874,755, `c7e86aed9d7606e98d5385dec25d5176f37b77a8609390b0da70df29582f0d20` | 61,002 | 66,411 | 32 s | 856 s |
+| F | 3,463,751 to 3,465,750 | 2,000 | `7b2b4b2fa443dbdbcbf4a9fa6f1188a51d30d3c8977b071a92ed282b2b154905` | 14,485,802 | 14,520,734, `a6b3bb146f7e3c41c97cdf63f699b5d50a47adc51b2e940b35980d37b8fc4849` | 154,273 | 189,205 | 36 s | 1,224 s |
+| H | 5,049,001 to 5,050,000 | 1,000 | `6e2d5d9e79a327d4e0855a989ee83d4503ac9e8fb8764fbc79d20c01c53c86a9` | 87,775,851 | 87,790,115, `e3d9dec9b3a6fdfcc0cd72a3812f0961ae7c06ebe9a475cdb873d1fba7f66cfb` | 224,569 | 238,833 | 220 s | 4,466 s |
+
+Every range agrees.
+The start of each range has the coins and the digest of its snapshot in the table above.
+The oracle's time includes its two reads of the snapshot.
+`block.check` took the oracle 63, 14, 42, 10, 18 and 37 seconds on the six ranges.
+On range H, the largest resident set of the run was 3.5 GB, which `/usr/bin/time -v` measured.
+The other runs were not measured.
+
+Each result is one run.
+It holds under the hypothesis of section 3.4: the snapshot at the start is Core's coin set at its height.
+
+Range A starts from the snapshot at 145,000, which has the digest that the oracle reached from the empty set.
+So range A chains to the genesis block with no assumed start state.
+The other ranges assume their start states.
+The oracle did not check the blocks between the ranges.
+[SOUNDNESS.md](../SOUNDNESS.md#b4-the-oracle-and-foreign-boundaries) states the hypothesis for each range.
+
 ### Block subsidy comparison evidence
 
 The harness calls Core's own `GetDogecoinBlockSubsidy` (D104), so the comparison tests Core's code and the Boost release of the harness build.

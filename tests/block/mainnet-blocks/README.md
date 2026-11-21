@@ -129,6 +129,10 @@ It runs every check of `--check`.
 | Range F | 34,189,002 | 34,205,002 | 21,062,340 | 306,930 | 82,672 |
 | Range H | 79,110,409 | 79,118,409 | 52,320,724 | 154,452 | 42,476 |
 
+The six range fixtures were packed with `--pack` in the same way.
+They are not yet assets of a release, and `release.json` does not name them.
+So `scripts/fetch_release_blocks.py` cannot restore them yet, and a range must be fetched from a node with `scripts/fetch_blocks.py --range`.
+
 The largest fixture that the repository holds is `mainnet-subsidy-prev-hashes`, with 4.64 MB.
 Genesis to 10,000 has 44 MB, and 31 MB with xz, so it is not committed.
 Under decision 2 of design record 0010, it and the recent range are assets of the GitHub release `fixtures-mainnet-blocks-2026-11-13`.

@@ -12,8 +12,8 @@ works in six steps:
 
 1. It checks the fixture as `scripts/fetch_blocks.py --check` does. Each block hash must equal the
    hash of the header that the pass kept at its height, and the committed list
-   `tests/block/mainnet-blocks/ranges/<NAME>/hashes.txt`. `--write-hashes` writes that list from
-   the pass's headers in the place of the comparison.
+   `tests/block/mainnet-blocks/ranges/<NAME>/hashes.txt`. `--write-hashes` writes that list and its
+   `SHA256SUMS` from the pass's headers in the place of the comparison.
 2. It checks the snapshot of the range start: its SHA-256 and length equal the pass's manifest,
    and the manifest names the block below the range.
 3. `block.check` with both flags on every block, in the oracle and in Core, before the range
@@ -111,6 +111,7 @@ def run_range(name: str, state_dir: Path, fixture: Path, output: Path, oracle: s
     if write_hashes:
         committed.parent.mkdir(parents=True, exist_ok=True)
         committed.write_text(listing)
+        (committed.parent / "SHA256SUMS").write_text(f"{hashlib.sha256(listing.encode()).hexdigest()}  hashes.txt\n")
     elif committed.read_text() != listing:
         raise ReplayError(f"the blocks differ from the committed list {committed}")
     blocks = Path(fixture) / fetch_blocks.BLOCKS_FILE

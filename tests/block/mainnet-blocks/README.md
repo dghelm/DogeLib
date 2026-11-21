@@ -62,6 +62,7 @@ The rule-change blocks use these pin sources:
 - [`mainnet-bip66-headers`](../mainnet-bip66-headers) for heights 1,034,382 to 1,034,384.
 - [`mainnet-bip65-headers`](../mainnet-bip65-headers) for heights 3,464,750 to 3,464,752.
 - Core's checkpoints at heights 145,000 and 371,337 (D9).
+- The [range hash lists](#range-hash-lists) of ranges A, B, C, D and F, for all 17 heights.
 
 A `pinned` block has a hash that a committed fixture or a Core checkpoint gives.
 With the Merkle check, that hash commits to every transaction ID of the block, if SHA-256 is collision resistant.
@@ -78,13 +79,40 @@ The highest checkpoint of Core at the pin is at height 5,050,000, below the rece
 
 The blocks at heights 599,998 to 600,001 match the committed pure-header fixture for that range.
 The node and two public TLS Electrum servers agreed on the header bytes.
-All three sources are untrusted, and no checkpoint connects to the range.
-The block run keeps `"previous": "node"` because no fixture pins height 599,997.
+All three sources are untrusted.
+The hash list of range C also holds those heights and height 599,997, and the Core pass connects it to a checkpoint ([range hash lists](#range-hash-lists)).
+So the block run records `"previous": "pinned"`.
 
 The comparison adds one check for every block, pinned or linked: Core's own `CheckBlock` accepts it with `fCheckPOW` true.
 So the header, or the parent header of the AuxPoW payload, has a scrypt digest that meets the target of the block's own `nBits`.
 No check compares that `nBits` with the difficulty that the chain requires at the height.
 [SOUNDNESS.md](../../../SOUNDNESS.md#d3-wrong-fixtures) states what the comparison shows for a linked block.
+
+### Range hash lists
+
+[`ranges`](ranges) holds one directory for each range of [design record 0011](../../../docs/design/0011-mainnet-ranges.md), section 4, that the Core pass reached.
+`ranges/<NAME>/hashes.txt` has one line for each height of the range, from `a + 1` to `b`: the height and the block hash in display order.
+`SHA256SUMS` gives the SHA-256 of that file.
+
+`scripts/run_range.py --write-hashes` wrote each list from the headers that the Core pass of `scripts/core_pass.py` kept ([docs/oracle.md](../../../docs/oracle.md#the-core-pass)).
+The pass read every block from the genesis block, checked each link, and required each checkpoint of Core.
+So each hash of a list is on the chain of the first checkpoint above the range, if SHA-256 is collision resistant:
+
+| Range | Heights | Checkpoint |
+| --- | --- | ---: |
+| A | 145,001 to 155,000 | 371,337 |
+| B | 370,337 to 372,336 | 450,000 |
+| C | 599,000 to 600,999 | 771,275 |
+| D | 1,033,383 to 1,035,382 | 1,250,000 |
+| F | 3,463,751 to 3,465,750 | 3,500,000 |
+
+The node gave the headers of the pass, and the claim does not rest on it.
+A reader can check a list again with the headers from the range to its checkpoint, from any source.
+
+`scripts/fetch_blocks.py` reads each list as a source of pinned hashes, so a block of a range is `pinned`.
+`python3 -I scripts/fetch_blocks.py --relabel DIR` writes the labels of a fixture again after a list is added.
+It changes only the labels, the sources of the pinned hashes, and a run's source of the hash below it from `node` to `pinned`.
+It runs every check of `--check`.
 
 ## Sizes and storage
 

@@ -231,23 +231,54 @@ class PinnedSources(Case):
                 seen[height] = pinned
         # Heights 0 to 12 and 144719 to 144999 of the header fixtures, the
         # checkpoints 0 and 104679 below 145,000, and the checkpoints 145000
-        # and 371337 inside two header fixtures.
-        self.assertEqual(compared, 13 + 281 + 2 + 2)
+        # and 371337 inside two header fixtures. Then the heights of the
+        # range hash lists inside the header fixtures: 145001 to 145030 (A),
+        # 371320 to 371340 (B), 599998 to 600001 (C), 1033383 to 1034390 (D)
+        # and 3464739 to 3464760 (F).
+        self.assertEqual(compared, 13 + 281 + 2 + 2 + 30 + 21 + 4 + 1008 + 22)
 
     def test_heights_of_the_sources(self):
         self.assertEqual(len(REAL_PINS.prev_hashes), 32 * 145000)
         self.assertEqual(REAL_PINS.lookup(145000 - 1)[0][0], fb.PREV_HASHES)
         names = lambda height: [name for name, _ in REAL_PINS.lookup(height)]
         self.assertEqual(names(145000), ["tests/work/mainnet-headers", fb.CHECKPOINT_SOURCE])
-        self.assertEqual(names(145001), ["tests/work/mainnet-headers"])
-        self.assertEqual(names(371336), ["tests/block/mainnet-auxpow-activation-headers"])
+        ranges = fb.RANGE_HASHES + "/"
+        self.assertEqual(names(145001), ["tests/work/mainnet-headers", ranges + "A"])
+        self.assertEqual(names(371336), ["tests/block/mainnet-auxpow-activation-headers", ranges + "B"])
         for height in range(599998, 600002):
-            self.assertEqual(names(height), ["tests/block/mainnet-600000-headers"])
-        self.assertEqual(names(1034383), ["tests/block/mainnet-bip66-headers"])
-        self.assertEqual(names(3464751), ["tests/block/mainnet-bip65-headers"])
-        for height in (599997, 600002, 10001 + 145030, BASE):
-            self.assertEqual(names(height), [])
+            self.assertEqual(names(height), ["tests/block/mainnet-600000-headers", ranges + "C"])
+        self.assertEqual(names(599997), [ranges + "C"])
+        self.assertEqual(names(1034383), ["tests/block/mainnet-bip66-headers", ranges + "D"])
+        self.assertEqual(names(3464751), ["tests/block/mainnet-bip65-headers", ranges + "F"])
+        for height in (155000, 370337, 372336, 599000, 600999, 1035382, 3463751, 3465750):
+            self.assertEqual(len(names(height)), 1, height)
+        for height in (155001, 370336, 372337, 598999, 601000, 1035383, 3463750, 3465751, BASE):
+            self.assertEqual(names(height), [], height)
         self.assertEqual(len(fb.CHECKPOINTS), 23)
+
+    def test_range_hash_lists(self):
+        for name, (first, last) in {"A": (145001, 155000), "B": (370337, 372336), "C": (599000, 600999),
+                                    "D": (1033383, 1035382), "F": (3463751, 3465750)}.items():
+            self.assertEqual(sorted(REAL_PINS.tables[fb.RANGE_HASHES + "/" + name]), list(range(first, last + 1)))
+
+    def test_malformed_range_hash_list(self):
+        directory = self.dir.parent / "ranges" / "X"
+        directory.mkdir(parents=True)
+        good = "5 " + "ab" * 32 + "\n"
+        for text, pattern in ((good, None), ("", "no line"), (good + good, "malformed"),
+                              ("5 " + "AB" * 32 + "\n", "malformed"), ("5 " + "ab" * 31 + "\n", "malformed"),
+                              ("x " + "ab" * 32 + "\n", "malformed")):
+            (directory / "hashes.txt").write_text(text)
+            (directory / "SHA256SUMS").write_text(f"{hashlib.sha256(text.encode()).hexdigest()}  hashes.txt\n")
+            with self.subTest(text=text):
+                if pattern is None:
+                    self.assertEqual(fb.read_range_hashes(directory), {5: bytes.fromhex("ab" * 32)})
+                else:
+                    with self.assertRaisesRegex(fb.FetchError, pattern):
+                        fb.read_range_hashes(directory)
+        (directory / "hashes.txt").write_text(good + "6 " + "cd" * 32 + "\n")
+        with self.assertRaisesRegex(fb.FetchError, "SHA256SUMS mismatch"):
+            fb.read_range_hashes(directory)
 
     def test_600000_fixture_has_exactly_the_rule_change_hashes(self):
         source = "tests/block/mainnet-600000-headers"
@@ -819,6 +850,60 @@ class CheckMode(Case):
         self.path.write_bytes(u32(0) + u32(len(other)) + other)
         write_sums(self.dir)
         self.assert_check_fails("height 0: the hash .* is not the pinned hash")
+
+
+class Relabel(Case):
+    def setUp(self):
+        super().setUp()
+        self.blocks = make_chain(4)
+        self.fetch_range(FakeNode(self.blocks), fb.Pins())
+        self.before = self.manifest()
+        self.pins = fb.Pins(tables={"range": {
+            BASE - 1: BEFORE_BASE, BASE + 1: block_hash(self.blocks[BASE + 1]), BASE + 2: block_hash(self.blocks[BASE + 2]),
+        }})
+
+    def test_relabel_adds_the_labels_of_a_new_source(self):
+        self.assertEqual([b["auth"] for b in self.before["blocks"]], ["linked"] * 4)
+        status, out, err = self.run_main(["--relabel", str(self.dir)], pins=self.pins)
+        self.assertEqual((status, err), (0, ""))
+        self.assertIn("pinned: 2, linked: 2\n", out)
+        self.assertIn("relabelled", out)
+        after = self.manifest()
+        self.assertEqual([b["auth"] for b in after["blocks"]], ["linked", "pinned", "pinned", "linked"])
+        self.assertEqual(after["pinned_by"], {"range": [[BASE + 1, BASE + 2]]})
+        self.assertEqual(after["runs"], [{"first": BASE, "last": BASE + 3, "previous": "pinned"}])
+        unchanged = lambda m: {k: v for k, v in m.items() if k not in ("blocks", "pinned_by", "runs")}
+        self.assertEqual(unchanged(after), unchanged(self.before))
+        fb.check_fixture(self.dir, self.pins)
+        self.assertEqual(dict(fb.read_blocks(self.dir / fb.BLOCKS_FILE)), self.blocks)
+        self.assertIn("unchanged", self.run_main(["--relabel", str(self.dir)], pins=self.pins)[1])
+
+    def test_relabel_refuses_a_label_from_pinned_to_linked(self):
+        fb.relabel_fixture(self.dir, self.pins)
+        text = (self.dir / fb.MANIFEST_FILE).read_text()
+        with self.assertRaisesRegex(fb.FetchError, f"height {BASE + 1} changes more than its label"):
+            fb.relabel_fixture(self.dir, fb.Pins())
+        self.assertEqual((self.dir / fb.MANIFEST_FILE).read_text(), text)
+
+    def test_relabel_refuses_another_change(self):
+        path = self.dir / fb.MANIFEST_FILE
+        for change in ({"count": 5}, {"first": BASE + 1}, {"runs": [{"first": BASE, "last": BASE + 2, "previous": "node"}]},
+                       {"blocks": [{**self.before["blocks"][0], "size": 1}] + self.before["blocks"][1:]}):
+            path.write_text(json.dumps({**self.before, **change}))
+            write_sums(self.dir)
+            with self.subTest(change=sorted(change)):
+                with self.assertRaisesRegex(fb.FetchError, "does not match|changes more than"):
+                    fb.relabel_fixture(self.dir, self.pins)
+        (self.dir / fb.BLOCKS_FILE).write_bytes((self.dir / fb.BLOCKS_FILE).read_bytes()[:-1])
+        with self.assertRaisesRegex(fb.FetchError, "SHA256SUMS mismatch"):
+            fb.relabel_fixture(self.dir, self.pins)
+
+    def test_relabel_refuses_a_pinned_hash_that_differs(self):
+        self.pins.tables["range"][BASE + 3] = b"\x01" * 32
+        with self.assertRaisesRegex(fb.FetchError, "is not the pinned hash"):
+            fb.relabel_fixture(self.dir, self.pins)
+        self.assertEqual(self.manifest(), self.before)
+
 
 
 class Password(Case):

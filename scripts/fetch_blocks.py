@@ -6,6 +6,7 @@ Usage:
   python3 -I scripts/fetch_blocks.py --recent N [--confirmations M] --output DIR
   python3 -I scripts/fetch_blocks.py --heights H1,H2,... --output DIR
   python3 -I scripts/fetch_blocks.py --check DIR
+  python3 -I scripts/fetch_blocks.py --relabel DIR
 
 The fetch modes read blocks over JSON-RPC with `getblockcount`,
 `getblockhash`, `getblock <hash> false` and `getnetworkinfo`. The password
@@ -31,6 +32,10 @@ The pinned values of check 5 come from three kinds of source:
   144,999.
 - The committed header fixtures that `HEADER_FIXTURES` lists.
 - The mainnet checkpoints of Dogecoin Core, in `CHECKPOINTS`.
+- The block hashes of the mainnet ranges of design record 0011, in
+  `tests/block/mainnet-blocks/ranges/<NAME>/hashes.txt`. The Core pass of
+  `scripts/core_pass.py` reached a checkpoint of Core above each of them
+  from the genesis block, so each hash is on the chain of that checkpoint.
 
 The manifest gives each block one of two labels in `auth`:
 
@@ -65,6 +70,12 @@ Output in DIR:
 `SHA256SUMS`, repeats checks 1 to 5, and compares the result with the
 manifest. Check 2 then compares each hash with the manifest. Check 4 cannot
 repeat a comparison that the manifest records as `"previous": "node"`.
+
+`--relabel DIR` writes the manifest of a fixture again after a pinned source
+is added. It runs the checks of `--check`. The new manifest may differ from
+the old one only in the labels, the sources of the pinned hashes and the
+source of the hash below each run. A label may change only from `linked` to
+`pinned`, and the source below a run only from `node` to `pinned`.
 """
 
 import argparse
@@ -104,6 +115,10 @@ HEADER_FIXTURES = (
     "tests/block/mainnet-bip66-headers",  # heights 1032483 to 1034390
     "tests/block/mainnet-bip65-headers",  # heights 3464739 to 3464760
 )
+# Each subdirectory NAME has `hashes.txt`, with a height and a block hash in
+# display order on each line, and a `SHA256SUMS` file. `scripts/run_range.py
+# --write-hashes` writes the list from the headers of the Core pass.
+RANGE_HASHES = "tests/block/mainnet-blocks/ranges"
 CHECKPOINT_SOURCE = "core-checkpoints"
 # The `checkpointData` of the main network, in display order. Source:
 # Dogecoin Core v1.14.9, commit e0a1c157791544e818c901bd9341896965afbf9d,
@@ -342,6 +357,10 @@ class Pins:
                     raise FetchError(f"{directory}: malformed line for height {height!r}")
                 table[int(height)] = sha256d(bytes.fromhex(header))
             tables[name] = table
+        ranges = root / RANGE_HASHES
+        for directory in sorted(ranges.iterdir() if ranges.is_dir() else ()):
+            if directory.is_dir():
+                tables[f"{RANGE_HASHES}/{directory.name}"] = read_range_hashes(directory)
         tables[CHECKPOINT_SOURCE] = {
             height: bytes.fromhex(value)[::-1] for height, value in CHECKPOINTS.items()
         }
@@ -535,8 +554,76 @@ def selection_fields(selection: dict, heights: list[int]) -> dict:
     return fields
 
 
+def read_range_hashes(directory: Path) -> dict[int, bytes]:
+    """The table of a directory of `RANGE_HASHES`, after a check of its `SHA256SUMS`."""
+    check_sums(directory, ("hashes.txt",))
+    table = {}
+    for line in (directory / "hashes.txt").read_text().splitlines():
+        height, _, value = line.partition(" ")
+        if (not height.isdecimal() or int(height) in table or len(value) != 64
+                or value.strip("0123456789abcdef")):
+            raise FetchError(f"{directory}: malformed line for height {height!r}")
+        table[int(height)] = bytes.fromhex(value)[::-1]
+    if not table:
+        raise FetchError(f"{directory}: hashes.txt has no line")
+    return table
+
+
 def check_fixture(directory, pins: Pins) -> Verifier:
     """Check a fixture directory without a network connection."""
+    manifest, verifier = read_fixture(directory, pins)
+    for key, value in expected_fields(directory, manifest, verifier).items():
+        if manifest.get(key) != value:
+            detail = ""
+            if key == "blocks" and isinstance(manifest.get(key), list):
+                differing = [b["height"] for a, b in zip(manifest[key], value) if a != b]
+                detail = f" (first at height {differing[0]})" if differing else " (the counts differ)"
+            raise FetchError(
+                f"{Path(directory) / MANIFEST_FILE}: the field {key!r} does not match the blocks{detail}"
+            )
+    return verifier
+
+
+def relabel_fixture(directory, pins: Pins) -> tuple[Verifier, bool]:
+    """Write the manifest of a fixture again with the labels of `pins`.
+
+    Only `pinned_by`, the label `auth` of a block and the source `previous`
+    of a run may change: a label only from `linked` to `pinned`, and a source
+    only from `node` to `pinned`. The result says whether the manifest
+    changed."""
+    directory = Path(directory)
+    manifest, verifier = read_fixture(directory, pins)
+    expected = expected_fields(directory, manifest, verifier)
+    old_blocks = manifest.get("blocks")
+    if not isinstance(old_blocks, list) or len(old_blocks) != len(expected["blocks"]):
+        raise FetchError(f"{directory / MANIFEST_FILE}: the field 'blocks' does not match the blocks (the counts differ)")
+    for old, new in zip(old_blocks, expected["blocks"]):
+        if (not isinstance(old, dict) or {k: v for k, v in old.items() if k != "auth"} != {k: v for k, v in new.items() if k != "auth"}
+                or (old.get("auth"), new["auth"]) not in (("pinned", "pinned"), ("linked", "linked"), ("linked", "pinned"))):
+            raise FetchError(f"{directory / MANIFEST_FILE}: the block of height {new['height']} changes more than its label")
+    old_runs = manifest.get("runs")
+    if not isinstance(old_runs, list) or len(old_runs) != len(expected["runs"]) or any(
+            not isinstance(old, dict) or {k: v for k, v in old.items() if k != "previous"} != {k: v for k, v in new.items() if k != "previous"}
+            or (old.get("previous"), new["previous"]) not in ((new["previous"], new["previous"]), ("node", "pinned"))
+            for old, new in zip(old_runs, expected["runs"])):
+        raise FetchError(f"{directory / MANIFEST_FILE}: a run changes more than the source of its previous hash")
+    for key, value in expected.items():
+        if key not in ("blocks", "pinned_by", "runs") and manifest.get(key) != value:
+            raise FetchError(f"{directory / MANIFEST_FILE}: the field {key!r} does not match the blocks")
+    relabelled = {**manifest, "pinned_by": expected["pinned_by"], "runs": expected["runs"], "blocks": expected["blocks"]}
+    if relabelled == manifest:
+        return verifier, False
+    text = manifest_text(relabelled).encode()
+    sums = (directory / SUMS_FILE).read_text().splitlines()
+    lines = [f"{hashlib.sha256(text).hexdigest()}  {MANIFEST_FILE}" if line.endswith(f"  {MANIFEST_FILE}") else line
+             for line in sums]
+    write_atomic(directory / MANIFEST_FILE, text)
+    write_atomic(directory / SUMS_FILE, ("\n".join(lines) + "\n").encode())
+    return check_fixture(directory, pins), True
+
+
+def read_fixture(directory, pins: Pins) -> tuple[dict, Verifier]:
+    """The manifest of a fixture, and the verifier after checks 1 to 5 of its blocks."""
     directory = Path(directory)
     check_sums(directory, (BLOCKS_FILE, MANIFEST_FILE))
     try:
@@ -550,6 +637,11 @@ def check_fixture(directory, pins: Pins) -> Verifier:
         verifier.add(height, raw)
     if not verifier.blocks:
         raise FetchError(f"{directory / BLOCKS_FILE}: no block")
+    return manifest, verifier
+
+
+def expected_fields(directory, manifest: dict, verifier: Verifier) -> dict:
+    """The manifest fields that the blocks and the selection of `manifest` decide."""
     heights = [block["height"] for block in verifier.blocks]
     expected = dict(verifier.derived())
     kind = manifest.get("selection")
@@ -560,17 +652,8 @@ def check_fixture(directory, pins: Pins) -> Verifier:
         if len(verifier.runs) != 1:
             raise FetchError(f"{directory}: a {kind} selection has a gap in its heights")
     else:
-        raise FetchError(f"{directory / MANIFEST_FILE}: unknown selection {kind!r}")
-    for key, value in expected.items():
-        if manifest.get(key) != value:
-            detail = ""
-            if key == "blocks" and isinstance(manifest.get(key), list):
-                differing = [b["height"] for a, b in zip(manifest[key], value) if a != b]
-                detail = f" (first at height {differing[0]})" if differing else " (the counts differ)"
-            raise FetchError(
-                f"{directory / MANIFEST_FILE}: the field {key!r} does not match the blocks{detail}"
-            )
-    return verifier
+        raise FetchError(f"{Path(directory) / MANIFEST_FILE}: unknown selection {kind!r}")
+    return expected
 
 
 # JSON-RPC
@@ -825,6 +908,7 @@ def main(argv=None, env=None, transport=None, pins=None, password_file=None, out
     mode.add_argument("--recent", type=int, metavar="N", help="the N blocks that end below the tip")
     mode.add_argument("--heights", type=parse_heights, metavar="H1,H2,...")
     mode.add_argument("--check", metavar="DIR", help="check a fixture without a network connection")
+    mode.add_argument("--relabel", metavar="DIR", help="write the labels of the pinned sources into a fixture")
     parser.add_argument("--output", metavar="DIR")
     parser.add_argument(
         "--confirmations", type=int, default=DEFAULT_CONFIRMATIONS,
@@ -840,6 +924,11 @@ def main(argv=None, env=None, transport=None, pins=None, password_file=None, out
             verifier = check_fixture(args.check, pins or Pins.load())
             print(verifier.summary(), file=out)
             print(f"checked {args.check}", file=out)
+            return 0
+        if args.relabel is not None:
+            verifier, changed = relabel_fixture(args.relabel, pins or Pins.load())
+            print(verifier.summary(), file=out)
+            print(f"{'relabelled' if changed else 'unchanged'} {args.relabel}", file=out)
             return 0
         if args.output is None:
             parser.error("a fetch needs --output DIR")

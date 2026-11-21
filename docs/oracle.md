@@ -795,6 +795,16 @@ The sum can exceed `2^63`, so it is not a JSON number.
 The oracle reports `CoinSet.totalValue` of `Block.Proofs.ConnectProperties`, the quantity of `chain_issuance_bound`.
 The harness adds the amounts of the coins of its own `CCoins` entries, in 128-bit arithmetic.
 
+The harness's sum is an `unsigned __int128`, and it cannot wrap.
+Before it adds an amount, the harness requires `MoneyRange`, so each amount is at most `MAX_MONEY`, 10^18 koinu, which is below 2^60.
+The number of coins is a `uint64_t`, so it is below 2^64.
+So the sum is below 2^124.
+
+The harness writes it with its own decimal conversion, and the oracle writes an `Int`, which has no bound.
+The scripts read `set_value` as a string and convert it with Python's `int`, which has no bound.
+The mainnet set exceeds 2^63 - 1, the largest `CAmount`: at height 6,465,793 it holds 15,683,043,286,016,806,072 koinu.
+Part 7 of `scripts/test_core_pass.py` tests a set of 10^19 koinu in both programs.
+
 For a request that starts at the genesis block, with the empty chain and no coins, the comparators also check the bound of `chain_issuance_bound`.
 Both programs answer `block.subsidy` for each accepted height from 1, with the hash of the accepted block before it, and the subsidies must agree.
 Each `set_value` must be at most the sum of the subsidies of the heights from 1 to its height.
@@ -1395,7 +1405,9 @@ Its `--version` output has `"trap_overflow": true`.
 - Each small request of the [full comparison](#block-validation-comparison-evidence) gives one response with `coins_db` and a cache of 1 MB, and with the map. The digests of the block records are not compared.
 - The pass of heights 0 to 10,000 runs in segments of 2,500 blocks. It reaches the digest of the map at heights 9,000 and 10,000, and so does its restart from the snapshot at 9,000. A wrong best block gives `coins_db_best_block`.
 - `hash_serialized` and `transactions` at height 9,000 equal the values that the test computes from the snapshot file by the definition of `GetUTXOStats`.
+- `scripts/run_range.py` runs heights 9,001 to 9,200 from the pass's snapshot at 9,000 in both programs, which reach the pass's digest at 9,200. A changed hash list and a changed committed manifest each fail.
 - The trap build stops on the two requests of the arithmetic-domain cases whose sums leave the `int64_t` range, once in `validation.cpp` and once in `coins.cpp`. It gives the response of the ordinary build on the other requests of those cases.
+- Ten supplied coins of `MAX_MONEY` each give a set of 10^19 koinu, above 2^63 - 1. Both programs give that exact `set_value` with the coins in the request and in `coins_file`. The harness also gives it with `coins_db` and in the manifest of a written snapshot. The comparator accepts both responses, and they agree with its model.
 
 The harness reads the changes of an accepted block from a second `CCoinsViewCache` over the set before the block.
 For each transaction in order, it reads the entry of each input, calls Core's `UpdateCoins`, and reads the new entry.
@@ -2210,6 +2222,31 @@ It is the gate *Core pass* of [AGENTS.md](../AGENTS.md#checks), and it is not in
 | Blocks | Heights 0 to 145,000 from the fixtures of the [replay to height 145,000](#replay-of-mainnet-to-height-145000). Every later block from the maintainer's node, in segments of 100,000 blocks and at most 4 GB |
 | Command | `nice -n 19 taskset -c 8,9 python3 -I scripts/core_pass.py --state build/core-pass --cache-mb 6144 --local <genesis-10000> --local <range-10001-145000> build/core-harness/core-oracle-trap`, started at 2026-11-20T23:14Z |
 
+The pass ended at 2026-11-21T16:02Z, at height 6,465,793 with the block `9ebb986b0b16a65680c5f3447baca7154e2999680c76c97f24c4441897bc7385`.
+It accepted all 6,465,794 blocks, 182,679,205,792 bytes, in 84 segments.
+The segments took 60,266 seconds together, and the longest took 1,928 seconds.
+Every checkpoint of Core held, and the trap build reported no signed overflow.
+
+At height 6,465,793, three values of the pass equal those of the node's `gettxoutsetinfo` in the [measurements of stage 0](#measurements-for-the-core-pass) (decision 7):
+
+| Value | The pass and the node |
+| --- | ---: |
+| `hash_serialized` | `a053d324494c91478b7e8525f52b062b56e976c61ef856509d59d33360048680` |
+| `transactions` | 181,209,861 |
+| `txouts`, the coins | 202,470,869 |
+
+The script requires all three.
+`hash_serialized` covers the best block, and the ID, the index, the amount and the script of each coin.
+So the pass's set at the tip is the node's set, if double SHA-256 is collision resistant.
+It does not cover the height or the coinbase flag of a coin, which the digest of the set covers.
+The node is not the reference software revision: it is `/Shibetoshi:1.14.9/`, and the harness is Core at `e0a1c157`.
+
+At that height the set has the digest `6ff386f2a37464a65e11a9e48673c602e2a4f1a707040e12a7c4d06751cb90b5` and a `set_value` of 15,683,043,286,016,806,072 koinu.
+The value exceeds 2^63 - 1, the largest `CAmount`, and the harness's 128-bit sum holds it exactly ([total value](#total-value)).
+The node's `total_amount` was 156,830,432,860.16806 DOGE in the record of stage 0, which agrees with the pass to the digits that the record kept.
+Core at `e0a1c157` sums `total_amount` in an `arith_uint256` (`rpc/blockchain.cpp`, lines 868 and 885), so that sum does not wrap either.
+The script does not compare `total_amount`.
+
 The pass has this snapshot at the start of each range.
 Each committed manifest in [`tests/block/mainnet-blocks/snapshots`](../tests/block/mainnet-blocks/snapshots) is the file that the pass wrote:
 
@@ -2221,9 +2258,12 @@ Each committed manifest in [`tests/block/mainnet-blocks/snapshots`](../tests/blo
 | Height 1,033,382, range D | 16,869,346 | 1,285,351,570 | `dd23f0095e9dd8f43f86fcab3e1f704e487974a7c8643bb365e4673c2e07d0e2` | `2ef63d136fcb1b4a61b6bc86c9f67af1832575c740f4a8644af81f5db5fb34b6` |
 | Height 3,463,750, range F | 14,485,802 | 1,103,862,190 | `eaf159fc6ec3a7f8a2472271a8f162534f15c2166fd2400c7d37f1808a38a7b8` | `1043e1a13dca76e739dbb2f474594926ec57b604a5e1f928f6fec61bc1cf82c7` |
 | Height 5,049,000, range H | 87,775,851 | 6,695,944,802 | `667fad0814f4f37fd1a4ecc7b6276370ed3d3bcf7b169df0498dc67865f58ccc` | `cb0176075521b01e81d998b6ac05410f24a0952b64d816118c5ad525a27394a6` |
+| Height 6,455,301, range G (stage 3) | 202,740,183 | 15,407,228,563 | `5fde11f23206730ea665463a2035fd59cf55305fca973c8071dc997555869096` | `1cf629daa4fea574a32ebb80b09584df5a91a0a92a6f407a56d0916ef843375a` |
 
 The snapshot at height 145,000 is the file of [range S](#ranges-from-a-snapshot), with the digest of the recorded replay.
 So the pass reached the set that the oracle reached from the empty set.
+The pass's block at height 6,456,301 is the last block of the recent range of the [released fixtures](../tests/block/mainnet-blocks/README.md).
+That range starts after the snapshot of range G.
 The pass also reached the recorded digests at heights 100,000 and 101,000, and it requires all three values.
 
 The pass checked the states of the CSV window with `--version-bits`, on the headers of the pass to height 1,709,999:

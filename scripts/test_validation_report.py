@@ -205,6 +205,12 @@ class Reports(unittest.TestCase):
                               '(cd tests/block/mainnet-bip65-full-headers && sha256sum -c SHA256SUMS) && '
                               '(cd tests/block/mainnet-bip66-full-headers && sha256sum -c SHA256SUMS) && '
                               '(cd tests/block/mainnet-subsidy-prev-hashes && sha256sum -c SHA256SUMS) && '
+                              '(cd tests/block/mainnet-blocks/ranges/A && sha256sum -c SHA256SUMS) && '
+                              '(cd tests/block/mainnet-blocks/ranges/B && sha256sum -c SHA256SUMS) && '
+                              '(cd tests/block/mainnet-blocks/ranges/C && sha256sum -c SHA256SUMS) && '
+                              '(cd tests/block/mainnet-blocks/ranges/D && sha256sum -c SHA256SUMS) && '
+                              '(cd tests/block/mainnet-blocks/ranges/F && sha256sum -c SHA256SUMS) && '
+                              '(cd tests/block/mainnet-blocks/ranges/H && sha256sum -c SHA256SUMS) && '
                               '(cd tests/block/mainnet-blocks/rule-changes && sha256sum -c SHA256SUMS) && '
                               '(cd tests/block/mainnet-blocks/version-bits-headers && sha256sum -c SHA256SUMS) && '
                               '(cd tests/block/regtest-header-sequences && sha256sum -c SHA256SUMS) && '
@@ -261,6 +267,8 @@ class Reports(unittest.TestCase):
                                    'build/core-harness/core-oracle-trap build/mainnet-blocks/genesis-10000',
             'core-pass': 'python3 -I scripts/core_pass.py --state build/core-pass --local build/mainnet-blocks/genesis-10000 '
                          '--local build/mainnet-blocks/range-10001-145000 build/core-harness/core-oracle-trap',
+            'mainnet-range': 'python3 -I scripts/run_range.py --range A --pass build/core-pass --fixture build/ranges/A '
+                             '--output build/range-runs/A .lake/build/bin/dogelib-oracle build/core-harness/core-oracle',
             'lane-tool': 'bash scripts/test_lane.sh',
         }
         self.assertEqual({g['slug']: g['command'] for g in gates}, expected)

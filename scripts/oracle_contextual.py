@@ -40,14 +40,15 @@ def fixture_cases():
                       'block/mainnet-bip65-headers']:
         rows = [(int(h), bytes.fromhex(raw)) for h, raw in
                 (line.split() for line in (ROOT / 'tests' / directory / 'headers.txt').read_text().splitlines())]
+        # The views of one directory share these entries. Every change of a request copies it first.
+        entries = [dict(height=h, time=struct.unpack_from('<I', r, 68)[0],
+                        bits=struct.unpack_from('<I', r, 72)[0]) for h, r in rows]
         for i, (height, raw) in enumerate(rows):
             if i == 0 or (rows[0][0] != 0 and i < 11):
                 continue
             # Existing fixtures already pin anchors. Check predecessor links here too.
             assert raw[4:36] == hashlib.sha256(hashlib.sha256(rows[i-1][1]).digest()).digest()
-            view = [dict(height=h, time=struct.unpack_from('<I', r, 68)[0],
-                         bits=struct.unpack_from('<I', r, 72)[0]) for h, r in reversed(rows[:i])]
-            cases.append((request(raw, view), None))
+            cases.append((request(raw, entries[i-1::-1]), None))
     assert len(cases) == 2231
     return cases
 

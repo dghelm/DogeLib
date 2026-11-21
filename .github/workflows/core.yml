@@ -26,48 +26,45 @@ env:
   # Dogecoin Core v1.14.9, the commit that SOURCES.md pins.
   CORE_PIN: e0a1c157791544e818c901bd9341896965afbf9d
 
+# The checks run in three jobs at the same time, each on its own runner. Each
+# job builds the oracle, and the jobs compare and csv-forced build the harness
+# from the shared cache.
 jobs:
-  compare:
+  # The comparator's own failure paths. It needs the oracle, not the harness.
+  self-test:
     runs-on: ubuntu-24.04
-    # A run with an empty cache took 40 minutes: 5 for Boost and Core's
-    # libraries, and 32 for the comparator self-test.
-    timeout-minutes: 90
+    # The comparator self-test took 10 to 19 minutes on four cores.
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - uses: ./.github/actions/core-setup
+        with:
+          harness: false
+
+      # The comparison must be able to fail: a passing control on the full
+      # stream, then one case for each planted mutation on a reduced stream.
+      # The cases run four at a time, and each line gives the case's time.
+      - name: comparator self-test
+        if: ${{ !cancelled() }}
+        run: python3 -I scripts/test_compare_core.py .lake/build/bin/dogelib-oracle
+
+      # The all-seeds run is outside CI. Its failure paths are tested here.
+      - name: subsidy seeds self-test
+        if: ${{ !cancelled() }}
+        run: python3 -I scripts/test_compare_subsidy_seeds.py .lake/build/bin/dogelib-oracle
+
+  compare:
+    runs-on: ubuntu-24.04
+    # A run with an empty cache takes about 5 more minutes for Boost and
+    # Core's libraries.
+    timeout-minutes: 60
+
+    steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          repository: dogecoin/dogecoin
-          ref: ${{ env.CORE_PIN }}
-          path: core-src
-          fetch-depth: 1
-          persist-credentials: false
 
-      - name: build tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends autoconf automake libtool pkg-config curl bzip2 libssl-dev libevent-dev
-
-      # The cache holds Boost 1.70.0 and Core's libraries. The build script
-      # checks its stamp (pin, scripts, compilers, flags) and rebuilds them
-      # when a restored cache does not match.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: build/core-harness
-          key: core-harness-${{ runner.os }}-${{ runner.arch }}-${{ env.CORE_PIN }}-${{ hashFiles('scripts/build_core_harness.sh', 'scripts/core_boost.sh') }}
-
-      - uses: leanprover/lean-action@50fcf42d2e460296f1a34b402e990d1b24f8b596 # v1.6.0
-        with:
-          auto-config: false
-          use-mathlib-cache: false
-          use-github-cache: false
-
-      - name: oracle
-        run: lake build dogelib-oracle
-
-      - name: harness
-        run: time JOBS=4 bash scripts/build_core_harness.sh --trap-overflow core-src build/core-harness
+      - uses: ./.github/actions/core-setup
 
       - name: signed-spend regeneration
         run: python3 -I scripts/check_signed_spends.py build/core-harness/core-signer
@@ -83,18 +80,6 @@ jobs:
       - name: harness state between requests
         if: ${{ !cancelled() }}
         run: python3 -I scripts/test_core_harness.py .lake/build/bin/dogelib-oracle build/core-harness/core-oracle
-
-      # The comparison must be able to fail: a passing control on the full
-      # stream, then one case for each planted mutation on a reduced stream.
-      # The cases run four at a time, and each line gives the case's time.
-      - name: comparator self-test
-        if: ${{ !cancelled() }}
-        run: python3 -I scripts/test_compare_core.py .lake/build/bin/dogelib-oracle
-
-      # The all-seeds run is outside CI. Its failure paths are tested here.
-      - name: subsidy seeds self-test
-        if: ${{ !cancelled() }}
-        run: python3 -I scripts/test_compare_subsidy_seeds.py .lake/build/bin/dogelib-oracle
 
       - name: native Rust CompactSize adapter
         run: |
@@ -119,20 +104,6 @@ jobs:
           time python3 -I scripts/fetch_release_blocks.py
           time python3 -I scripts/compare_core.py --mainnet-blocks build/mainnet-blocks .lake/build/bin/dogelib-oracle build/core-harness/core-oracle
 
-      # Design record 0012, stage 1: the proposed revision RelativeLockTime against
-      # Core's own dormant code. The harness seeds THRESHOLD_ACTIVE for CSV, a state
-      # that no mainnet chain reaches (csv_never_lockedIn), so this step is not a
-      # Core comparison of the baseline. The first command checks the committed
-      # candidate list of the cutoff count. Stage 3 adds block.validate with the
-      # seed on made blocks for the sequence locks of BIP 68, and on mainnet
-      # heights 0 to 10,000 in one request, which takes about 15 minutes.
-      - name: CSV forced active, against the proposed revision
-        if: ${{ !cancelled() }}
-        run: |
-          lake build dogelib-proposal-oracle
-          python3 -I scripts/relative_lock_time_candidates.py --check
-          time python3 -I scripts/compare_csv_forced.py .lake/build/bin/dogelib-oracle .lake/build/bin/dogelib-proposal-oracle build/core-harness/core-oracle
-
       # The replay to height 145,000 is outside CI. Its tool runs here on
       # heights 0 to 200 of the downloaded range, with planted faults, and
       # both programs read small files through blocks_file.
@@ -156,3 +127,31 @@ jobs:
       - name: Core pass self-test
         if: ${{ !cancelled() }}
         run: time python3 -I scripts/test_core_pass.py .lake/build/bin/dogelib-oracle build/core-harness/core-oracle build/core-harness/core-oracle-trap build/mainnet-blocks/genesis-10000
+
+  # The proposed revision against Core's dormant code. The replay of mainnet
+  # heights 0 to 10,000 through the proposal oracle is most of this job.
+  csv-forced:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: ./.github/actions/core-setup
+
+      - name: fetch the mainnet block ranges
+        run: time python3 -I scripts/fetch_release_blocks.py
+
+      # Design record 0012, stage 1: the proposed revision RelativeLockTime against
+      # Core's own dormant code. The harness seeds THRESHOLD_ACTIVE for CSV, a state
+      # that no mainnet chain reaches (csv_never_lockedIn), so this step is not a
+      # Core comparison of the baseline. The first command checks the committed
+      # candidate list of the cutoff count. Stage 3 adds block.validate with the
+      # seed on made blocks for the sequence locks of BIP 68, and on mainnet
+      # heights 0 to 10,000 in one request, which takes about 15 minutes.
+      - name: CSV forced active, against the proposed revision
+        if: ${{ !cancelled() }}
+        run: |
+          lake build dogelib-proposal-oracle
+          python3 -I scripts/relative_lock_time_candidates.py --check
+          time python3 -I scripts/compare_csv_forced.py .lake/build/bin/dogelib-oracle .lake/build/bin/dogelib-proposal-oracle build/core-harness/core-oracle

@@ -729,77 +729,113 @@ QUICK_SETS = (CHECK_QUICK_SET, *VALIDATE_QUICK_SETS, "subsidy boundaries and fix
               "Script tx spends accept transaction", "Script tx spends unknown transaction")
 
 
-def request_sets() -> tuple[list[tuple[str, list[dict]]], list[str]]:
-    rng = random.Random(SEED)
-    fixtures, excluded = load_fixtures()
-    records = sighash_records()
-    corpus = corpus_txs()
-    sighash_txs = [bytes.fromhex(r[0]) for r in records]
-    all_txs = corpus + sighash_txs
-    witness_corpus = corpus_txs(True)
-    extended = [b for b in witness_corpus if b[4] == 0]
-    sets = [
-        ("fixtures", [r for r in fixtures if not str(r.get("id", "")).startswith(("work-d16-", "work-d7-"))]),
-        ("work D16 bignum_SetCompact", [r for r in fixtures if str(r.get("id", "")).startswith("work-d16-")]),
-        ("work D7 get_next_work", [r for r in fixtures if str(r.get("id", "")).startswith("work-d7-")]),
-        ("sighash.json", set_sighash_corpus(records)),
-        ("corpus", set_corpus(corpus)),
-        ("prefixes", set_prefixes(all_txs)),
-        ("suffixes", set_suffixes(all_txs)),
-        ("count and fixed fields", set_fields(corpus + sighash_txs[:100])),
-        ("shapes", set_shapes(corpus + sighash_txs[:100])),
-        ("compactsize", set_compactsize()),
-        ("sighash endpoints", set_sighash_endpoints(records)),
-        ("sighash random", set_sighash_random(records, rng, 2000)),
-        ("byte flips", set_flips(all_txs, rng, 5000)),
-        ("witness corpus (all records)", set_corpus(witness_corpus, True)),
-        ("witness corpus (extended records)", set_corpus(extended, True)),
-        ("witness prefixes", set_prefixes(extended, True)),
-        ("witness suffixes", set_suffixes(extended, True)),
-        ("witness counts, lengths and stacks", set_fields(witness_corpus, True)),
-        ("witness flags and stacks", set_witness_cases()),
-        ("witness byte flips", set_flips(witness_corpus, rng, 5000, True)),
-        ("large structured base", set_large_base()),
-        ("work compact boundaries", set_work_compact()),
-        ("work retarget boundaries", set_work_retarget()),
-        ("regtest legacy wrap case", [calculate_request("regtest", 0, 1, 901, 0, 0x207fffff)]),
-        ("work network chains", set_work_next()),
-        ("work testnet recovery", set_work_recovery()),
-        ("work mainnet headers", set_work_headers()),
+def quick_wanted(name: str) -> bool:
+    """Whether --quick keeps the set `name`, whole or as a sample."""
+    return (name in QUICK_SETS or name.startswith("Script targeted ") or
+            name in (f"header sequence mutations seed {SEQUENCE_SEED}", f"contextual mutations seed {CONTEXT_SEED}"))
+
+
+def request_sets(wanted=None) -> tuple[list[tuple[str, list[dict]]], list[str]]:
+    """The named request sets of the full run, in stream order, and the fixtures left out.
+
+    With `wanted`, a predicate on a set's name, the result has only the sets that it keeps, and the
+    sets that it drops are not built when that is possible. A builder of several sets runs whole.
+    Each kept set has the requests of the full run."""
+    keep = wanted or (lambda name: True)
+    cache = {}
+
+    def once(function):
+        def value():
+            if function not in cache:
+                cache[function] = function()
+            return cache[function]
+        return value
+
+    loaded = once(load_fixtures)
+    fixtures = lambda: loaded()[0]
+    records = once(sighash_records)
+    corpus = once(corpus_txs)
+    sighash_txs = once(lambda: [bytes.fromhex(r[0]) for r in records()])
+    all_txs = lambda: corpus() + sighash_txs()
+    witness_corpus = once(lambda: corpus_txs(True))
+    extended = once(lambda: [b for b in witness_corpus() if b[4] == 0])
+    # Three sets draw from one generator in this order, so they are built together or not at all.
+    def random_sets():
+        rng = random.Random(SEED)
+        return {"sighash random": set_sighash_random(records(), rng, 2000),
+                "byte flips": set_flips(all_txs(), rng, 5000),
+                "witness byte flips": set_flips(witness_corpus(), rng, 5000, True)}
+
+    drawn = once(random_sets)
+    # Each entry is a pair of a name and the function that builds its set, or a function that
+    # builds several named sets.
+    entries = [
+        ("fixtures", lambda: [r for r in fixtures() if not str(r.get("id", "")).startswith(("work-d16-", "work-d7-"))]),
+        ("work D16 bignum_SetCompact", lambda: [r for r in fixtures() if str(r.get("id", "")).startswith("work-d16-")]),
+        ("work D7 get_next_work", lambda: [r for r in fixtures() if str(r.get("id", "")).startswith("work-d7-")]),
+        ("sighash.json", lambda: set_sighash_corpus(records())),
+        ("corpus", lambda: set_corpus(corpus())),
+        ("prefixes", lambda: set_prefixes(all_txs())),
+        ("suffixes", lambda: set_suffixes(all_txs())),
+        ("count and fixed fields", lambda: set_fields(corpus() + sighash_txs()[:100])),
+        ("shapes", lambda: set_shapes(corpus() + sighash_txs()[:100])),
+        ("compactsize", set_compactsize),
+        ("sighash endpoints", lambda: set_sighash_endpoints(records())),
+        ("sighash random", lambda: drawn()["sighash random"]),
+        ("byte flips", lambda: drawn()["byte flips"]),
+        ("witness corpus (all records)", lambda: set_corpus(witness_corpus(), True)),
+        ("witness corpus (extended records)", lambda: set_corpus(extended(), True)),
+        ("witness prefixes", lambda: set_prefixes(extended(), True)),
+        ("witness suffixes", lambda: set_suffixes(extended(), True)),
+        ("witness counts, lengths and stacks", lambda: set_fields(witness_corpus(), True)),
+        ("witness flags and stacks", set_witness_cases),
+        ("witness byte flips", lambda: drawn()["witness byte flips"]),
+        ("large structured base", set_large_base),
+        ("work compact boundaries", set_work_compact),
+        ("work retarget boundaries", set_work_retarget),
+        ("regtest legacy wrap case", lambda: [calculate_request("regtest", 0, 1, 901, 0, 0x207fffff)]),
+        ("work network chains", set_work_next),
+        ("work testnet recovery", set_work_recovery),
+        ("work mainnet headers", set_work_headers),
         # Height 256 has no skip destination in this suffix. GetAncestor(239) crosses it.
-        ("work missing skip traversal", [next_request("mainnet", work_chain(479), 1028800)]),
+        ("work missing skip traversal", lambda: [next_request("mainnet", work_chain(479), 1028800)]),
+        ("header fixtures", lambda: [r for r, _ in header_fixtures()]),
+        ("header truncated prefixes", set_header_prefixes),
+        ("header field boundaries", set_header_boundaries),
+        ("Merkle fixtures", lambda: [r for r, _ in merkle_fixtures()]),
+        ("Merkle generated", set_merkle_generated),
+        ("RIPEMD-160 and Hash160 fixtures", lambda: [r for r, _ in hash_fixtures()]),
+        ("RIPEMD-160 padding boundaries", lambda: set_hash_boundaries("ripemd160")),
+        ("Hash160 padding boundaries", lambda: set_hash_boundaries("hash160")),
+        ("SHA-1 fixtures", lambda: [r for r, _ in sha1_fixtures()]),
+        ("SHA-1 padding boundaries", lambda: set_hash_boundaries("sha1")),
+        header_pow_sets,
+        contextual_sets,
+        contextual_body_sets,
+        sequence_sets,
+        subsidy_sets,
+        block_check_sets,
+        block_validate_sets,
+        ("tx.check corpus", lambda: check_corpus_requests(corpus(), witness_corpus())),
+        pubkey_sets,
+        ("Script signature verdict", signature_spends),
+        ("Script fixed-digest spends", fixed_digest_spends),
+        ("Script campaign fixtures", campaign_fixtures),
+        script_sets,
+        legacy_sets,
+        tx_spend_sets,
+        locktime_sets,
+        ("Script refusal precedence", refusal_precedence_set),
+        ("Script harness refusal domain", refused_set),
     ]
-    sets.extend([
-        ("header fixtures", [r for r, _ in header_fixtures()]),
-        ("header truncated prefixes", set_header_prefixes()),
-        ("header field boundaries", set_header_boundaries()),
-        ("Merkle fixtures", [r for r, _ in merkle_fixtures()]),
-        ("Merkle generated", set_merkle_generated()),
-        ("RIPEMD-160 and Hash160 fixtures", [r for r, _ in hash_fixtures()]),
-        ("RIPEMD-160 padding boundaries", set_hash_boundaries("ripemd160")),
-        ("Hash160 padding boundaries", set_hash_boundaries("hash160")),
-        ("SHA-1 fixtures", [r for r, _ in sha1_fixtures()]),
-        ("SHA-1 padding boundaries", set_hash_boundaries("sha1")),
-    ])
-    sets.extend(header_pow_sets())
-    sets.extend(contextual_sets())
-    sets.extend(contextual_body_sets())
-    sets.extend(sequence_sets())
-    sets.extend(subsidy_sets())
-    sets.extend(block_check_sets())
-    sets.extend(block_validate_sets())
-    sets.append(("tx.check corpus", check_corpus_requests(corpus, witness_corpus)))
-    sets.extend(pubkey_sets())
-    sets.append(("Script signature verdict", signature_spends()))
-    sets.append(("Script fixed-digest spends", fixed_digest_spends()))
-    sets.append(("Script campaign fixtures", campaign_fixtures()))
-    sets.extend(script_sets())
-    sets.extend(legacy_sets())
-    sets.extend(tx_spend_sets())
-    sets.extend(locktime_sets())
-    sets.append(("Script refusal precedence", refusal_precedence_set()))
-    sets.append(("Script harness refusal domain", refused_set()))
-    return sets, excluded
+    sets = []
+    for entry in entries:
+        if callable(entry):
+            sets.extend((name, reqs) for name, reqs in entry() if keep(name))
+        elif keep(entry[0]):
+            sets.append((entry[0], entry[1]()))
+    # load_fixtures also records the fixtures left out, which every run prints.
+    return sets, loaded()[1]
 
 
 # ---------------------------------------------------------------------------
@@ -1237,7 +1273,7 @@ def main() -> int:
             return 1
         print(f"Mainnet block ranges only: block.check, block.contextual_check_body and block.validate on the fixtures under {args.mainnet_blocks}")
     else:
-        sets, excluded = request_sets()
+        sets, excluded = request_sets(quick_wanted if args.quick else None)
     if args.quick:
         # The first few seeded sequence and contextual mutations have no fixture expectation, so
         # the self-test can reach the Lean and Core cross-comparison without streaming all of them.

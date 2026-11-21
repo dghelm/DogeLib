@@ -970,6 +970,7 @@ No known request gives that error: a [run outside CI](#block-subsidy-comparison-
 It is built against Core v1.14.9 at commit `e0a1c15`, the pin in [SOURCES.md](../SOURCES.md).
 `scripts/compare_core.py` runs the harness and the oracle on one stream of requests and requires their responses to agree.
 CI runs the comparison in workflow `core`, job `compare`.
+The same workflow runs the comparator self-test in job `self-test` and the comparison of the proposed revision `RelativeLockTime` in job `csv-forced`, at the same time.
 
 ```bash
 lake build dogelib-oracle

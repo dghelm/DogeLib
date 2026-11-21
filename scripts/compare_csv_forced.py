@@ -63,6 +63,7 @@ The run has these parts:
 With --made-only the run skips parts 4, 5 and 9, and needs no downloaded block.
 """
 import argparse
+import concurrent.futures
 import json
 import pathlib
 import sys
@@ -344,8 +345,10 @@ def mainnet_run(directory, proposal: str, harness: str, timeout: float) -> list[
     summary = []
     for name, rows in lister.block_groups(directory):
         requests = [body_request(raw, chain) for _, raw, chain in rows]
-        lean = run_batches(proposal, with_ids([dict(r, revision=REVISION) for r in requests]), timeout)
-        core = run_batches(harness, with_ids([dict(r, force_csv_active=True) for r in requests]), timeout)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            theirs = pool.submit(run_batches, harness, with_ids([dict(r, force_csv_active=True) for r in requests]), timeout)
+            lean = run_batches(proposal, with_ids([dict(r, revision=REVISION) for r in requests]), timeout)
+            core = theirs.result()
         accepted, rejected, changed = 0, 0, []
         for (record, _, _), ours, theirs in zip(rows, lean, core):
             fault = compare_forced(ours, theirs)
@@ -914,11 +917,24 @@ def sequence_run(proposal: str, harness: str, timeout: float) -> tuple[int, dict
     return len(cases), results, planted
 
 
-def mainnet_validate_run(directory: str, proposal: str, harness: str, timeout: float) -> dict[str, int]:
-    """Heights 0 to 10,000 of mainnet in one request, with CSV forced active for each block (section 10.2, item 1)."""
+def start_mainnet_validate(directory: str, proposal: str, harness: str, timeout: float,
+                           pool: concurrent.futures.Executor) -> tuple[dict, concurrent.futures.Future, concurrent.futures.Future]:
+    """Start the two runs of part 9 in `pool`: the request and the futures of the two responses.
+
+    The replay takes the proposal executable most of the time of the whole script, so it runs
+    beside parts 4 and 5."""
     [(_, [req])] = mainnet_validate_sets(directory)
-    lean = run_batches(proposal, with_ids([dict(req, revision=REVISION)]), timeout)[0]
-    core = run_batches(harness, with_ids([dict(req, force_csv_active=True)]), timeout)[0]
+    lean = pool.submit(lambda: run_batches(proposal, with_ids([dict(req, revision=REVISION)]), timeout)[0])
+    core = pool.submit(lambda: run_batches(harness, with_ids([dict(req, force_csv_active=True)]), timeout)[0])
+    return req, lean, core
+
+
+def mainnet_validate_run(started: tuple[dict, concurrent.futures.Future, concurrent.futures.Future]) -> dict[str, int]:
+    """Heights 0 to 10,000 of mainnet in one request, with CSV forced active for each block (section 10.2, item 1).
+
+    `started` is the result of start_mainnet_validate."""
+    req, lean, core = started
+    lean, core = lean.result(), core.result()
     ours = lean.get("ok", {}).get("blocks") if isinstance(lean.get("ok"), dict) else None
     theirs = core.get("ok", {}).get("blocks") if isinstance(core.get("ok"), dict) else None
     check(isinstance(ours, list) and isinstance(theirs, list) and len(ours) == len(theirs) == len(req["blocks_hex"]),
@@ -978,6 +994,9 @@ def main() -> int:
               + ", ".join(f"{name} {count}" for name, count in sorted(results.items())) + ")")
         print(f"sequence locks, self-test: the comparison fails on {planted} planted faults")
         if not args.made_only:
+            # A failure of part 4 or 5 waits for these runs to end before the script exits.
+            pool = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+            started = start_mainnet_validate(args.mainnet_blocks, args.proposal, args.harness, args.timeout, pool)
             total = 0
             for group in mainnet_run(args.mainnet_blocks, args.proposal, args.harness, args.timeout):
                 total += group["blocks"]
@@ -985,7 +1004,8 @@ def main() -> int:
                       f"forced rejected {group['forced_rejected']}, changed {group['changed']}, "
                       f"candidates {group['candidates']}, cutoff transactions {group['cutoff_transactions']}")
             print(f"mainnet blocks: {total} agree, and the changed blocks are the committed candidates")
-            counts = mainnet_validate_run(args.mainnet_blocks, args.proposal, args.harness, args.timeout)
+            counts = mainnet_validate_run(started)
+            pool.shutdown()
             print(f"block.validate, mainnet heights 0 to {counts['blocks'] - 1}: {counts['blocks']} forced results agree; "
                   f"accepted {counts['forced_accepted']}, rejected {counts['forced_rejected']}, "
                   f"outside the model {counts['forced_unsupported']}, changed {counts['changed']}")

@@ -1211,11 +1211,12 @@ The test does not run a revision on the mainnet ranges of design record 0011. Th
 This evidence has its own label: Core at `e0a1c15` with the CSV state forced to `ACTIVE`.
 It is about the proposed revision `RelativeLockTime` alone. It is not a Core comparison of the baseline, and it is not evidence about mainnet.
 
-Dogecoin Core 1.14.9 holds the code of BIP 113 and BIP 112, and its version-bits state for CSV never becomes `ACTIVE` on mainnet (`csv_never_lockedIn`).
+Dogecoin Core 1.14.9 holds the code of BIP 113, BIP 112 and BIP 68, and its version-bits state for CSV never becomes `ACTIVE` on mainnet (`csv_never_lockedIn`).
 `block.contextual_check_body` and `block.validate` of the Core harness take one more argument, the Boolean `force_csv_active` ([design record 0012](design/0012-relative-lock-time.md), section 10.2 and decision 12).
 With the value true, the harness seeds `THRESHOLD_ACTIVE` for CSV in Core's version-bits cache, at the boundary that the block reads.
 Core's own `ContextualCheckBlock` then takes the median time past of the predecessor as the lock-time cutoff (D110, lines 3134 and 3135).
 In `block.validate`, Core's own `ConnectBlock` also sets `SCRIPT_VERIFY_CHECKSEQUENCEVERIFY` (D114, lines 1906 to 1911), so opcode `0xb2` is `OP_CHECKSEQUENCEVERIFY`.
+It also passes `LOCKTIME_VERIFY_SEQUENCE` to `SequenceLocks` (lines 1948 to 1959), so each transaction that is not a coinbase has the sequence locks of BIP 68.
 No line of Core's source changes.
 
 The harness seeds nothing for a block that is not applicable: one without a predecessor, or one whose header has the hash of the genesis block.
@@ -1240,10 +1241,13 @@ It compares the forced result of Core with the `revised` object: verdict, reject
 | Harness state | 74 | After each made block with the argument, the same request without it and with the value false. Each gets the hand-derived baseline verdict |
 | Mainnet blocks | 11,018 | Heights 0 to 10,000, heights 6,455,302 to 6,456,301 and the 17 rule-change blocks, each with the argument |
 | Self-test | 32 | For 16 made blocks with two verdicts, the comparison fails with the revision inactive, and fails against a harness run without the seed |
-| `block.validate` refusals | 6 | Each program refuses the argument that it does not have. The harness refuses a value that is not a Boolean, a forced time lock that reads outside the chain, and a forced height lock on a coin at height 2^31 - 65535 |
+| `block.validate` refusals | 4 | Each program refuses the argument that it does not have, and the harness refuses a value that is not a Boolean |
 | `block.validate` made blocks | 36 | 18 spends of one supplied coin, at heights 1,034,382 and 3,464,751. A height operand met exactly and one short. Versions 1, 2 and -1. A sequence with bit 31, and with bits outside the mask. Time and height types. An operand with bit 31, a negative operand, one of six bytes, and an empty stack. The opcode in a skipped branch, in the `scriptSig` and in a P2SH redeem script. A script with a false result. Each verdict is derived by hand from D3, lines 392 to 427 and 1310 to 1354, and from D101, lines 1488 to 1512 |
 | `block.validate` harness state | 72 | After each made block with the argument, the same request without it and with the value false. The response with the argument, without its objects `forced`, equals the response without the argument |
 | `block.validate` self-test | 40 | For 20 made blocks with two verdicts, the comparison fails with the revision inactive. It also fails when the harness record without the seed stands in the place of `forced`. Each failure is a difference of verdicts |
+| Sequence locks, made blocks | 46 | 23 blocks at heights 1,034,382 and 3,464,751, each with the argument and then without it. A height lock met exactly, and one block short. Versions 1, 2 and -1. Bit 31, and bits outside the mask. A coin that the block itself creates, with a height lock and a time lock of 0 and of 1. The largest time lock that is met on a coin 20 blocks below, and one unit more. A height lock on a coin above the block. Five blocks at each height are outside the model, for the three reasons. Each result is derived by hand from D114, lines 309 to 384, and from BIP 68. The script computes the median times past from the header times of the request |
+| Sequence locks, self-test | 52 | For the 26 made blocks that the forced run does not accept, the comparison fails with the revision inactive. It also fails when the harness record without the seed stands in the place of `forced` |
+| `block.validate` on mainnet | 1 | Heights 0 to 10,000 in one request from the empty coin set, with the argument. The harness runs each block with the seed and without it, and the run without the seed carries the state |
 
 Every forced result agrees with its `revised` object.
 The made blocks reach `bad-txns-nonfinal` from the cutoff 20 times.
@@ -1251,7 +1255,8 @@ One made block has a time below the median, which `ContextualCheckBlockHeader` r
 
 The forced run accepts each of the 11,018 mainnet blocks, so no block is changed.
 That count equals the committed candidate list, [`tests/proposals/relative-lock-time/cutoff-candidates.json`](../tests/proposals/relative-lock-time/README.md), which has no candidate block.
-One recorded run on a development machine takes about one minute.
+In `block.validate`, the forced run also accepts each block of heights 0 to 10,000, with the changes of the run without the seed, and the proposal executable gives the same result for each. No block of that range is changed or outside the model.
+One recorded run of the whole script on a development machine takes about 16 minutes, most of it for that replay, and the proposal executable uses about 1.8 GB of memory.
 
 With `force_csv_active` true, `block.validate` of the harness runs each block twice on the state before it.
 The first run has the seed, and its result is the object `forced` of the block record.
@@ -1262,22 +1267,38 @@ So the response without its objects `forced` is the response of the request with
 | --- | --- |
 | `valid`, `reject_reason`, `dos`, `reject_code` | The verdict of the five checks with the CSV state forced to `ACTIVE`, as in the block record. |
 | `changes_digest_hex`, `spent`, `created` | For an accepted block, the digest and the counts of its coin changes. Null otherwise. |
+| `unsupported` | Null, or one of `ancestorOutsideView`, `coinAboveBlock` and `heightOutOfDomain`: a read of `SequenceLocks` that is outside the model of the revision. Every other field is then null. |
 
 A block that is not applicable gets no seed, and its `forced` object is the result without it.
 The comparison reads `forced` against the `revised` object of the proposal executable: verdict, reject reason, score, reject code and the digest of the changes.
 The 36 made blocks reach `non-mandatory-script-verify-flag` through the opcode 20 times, and `mandatory-script-verify-flag-failed` twice, for a script that also fails without the flag.
 
 With the forced state, Core's `ConnectBlock` also runs `SequenceLocks` of BIP 68 (D114, lines 1948 to 1959), which the revision has as `sequenceLocks`.
-Each made block passes that test, in Core and in the revision: its coin is far below the block, or its lock is 0.
-For a time lock, Core reads the median time past of an ancestor at the height of the spent coin.
-The harness refuses a forced request when that ancestor or one of its ten predecessors is outside the supplied chain.
-For a height lock, Core adds up to 65,534 to the height of the coin in `int`. The harness refuses a forced request with a coin height from 2^31 - 65535.
-The test reads the block and the carried set alone, and it does not follow the early exits of `ConnectBlock`. So it can refuse a block that Core would reject before the sequence locks.
+Each of the 36 made blocks of the opcode passes that test, in Core and in the revision: its coin is far below the block, or its lock is 0.
+The 46 made blocks of the sequence locks reach `bad-txns-nonfinal` of `ConnectBlock` 16 times, with the score 100.
+
+Three reads of `SequenceLocks` are outside the model of the revision (design record 0012, section 6.3), and the harness does not let Core make them.
+
+| `unsupported` | Read |
+| --- | --- |
+| `heightOutOfDomain` | An input with a lock spends a coin at a height from 2^31 - 65535. Core computes `c + n - 1` from the left in `int`, and `c + 65535` can then overflow. |
+| `coinAboveBlock` | A time lock on a coin above the block. For a coin one block above, Core reads the median time past of the block itself. For a higher coin, `GetAncestor` returns null, and Core dereferences it. |
+| `ancestorOutsideView` | A time lock whose ancestor, or one of its ten predecessors, is below the supplied chain. |
+
+Before the forced `ConnectBlock`, the harness scans the block in the order of the revision: the transactions in block order, the inputs in input order, and for one input the order of the table.
+On the first such read it does not run `ConnectBlock` with the seed. The object `forced` then has that name in `unsupported`, and no verdict.
+The comparison requires the verdict `unsupported` of the `revised` object, with the same reason.
+So for these blocks the comparison checks that the two programs draw the limit of the model at the same place. It is no comparison of a verdict, because Core gives none.
+For a coin one block above the block, Core has a defined result, which neither program gives.
+
+The scan follows the lookup of the inputs on a second cache, and it ends at a transaction whose inputs are missing.
+It does not follow the other exits of `ConnectBlock`: BIP30, the scripts, the count of signature operations and the amounts of an earlier transaction.
+So it can name a read on a block that Core would reject before that read, where the revision gives the rejection. The comparison then fails, and it sends no such block.
 
 Agreement shows that the Lean rule equals Core's dormant code on these requests.
 It does not show that the rule is right for Dogecoin, and a count says nothing about other heights or about unconfirmed transactions.
-The comparison covers the rule of BIP 113 through `ContextualCheckBlock`, and the rule of BIP 112 through `block.validate` on made blocks.
-No forced run of `block.validate` covers a mainnet block yet. None covers a rejection through a sequence lock or one of its results outside the model.
+The comparison covers the rule of BIP 113 through `ContextualCheckBlock`, and the rules of BIP 112 and BIP 68 through `block.validate`, on made blocks and on mainnet heights 0 to 10,000.
+No forced run of `block.validate` covers a mainnet block above height 10,000. No made block has a time lock that is one second short: a block on real headers cannot place that boundary, and the known answers of `lake test` cover it.
 This state does not occur on mainnet (`csv_never_lockedIn`).
 
 ### Block validation in the harness

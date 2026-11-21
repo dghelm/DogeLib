@@ -40,7 +40,7 @@ The three activities give different information when they fail:
 | Property check | Does this behaviour satisfy the stated property? | The property is false for this input, or its input domain needs a correction |
 | Lean proof | Does the property hold on every input in its domain? | Nothing by itself: a proof attempt that does not succeed is not evidence of a bug |
 
-The sections below apply these activities to a proposed revision, to a known property of the baseline and to a comparison with Core.
+The sections below apply these activities to an invented revision with a planted fault, to a revision with a public proposal, to a known property of the baseline and to a comparison with Core.
 
 ## Vetting a proposed soft fork: a planted fault
 
@@ -181,6 +181,98 @@ ExampleFaultyLocktime: 13 verifyScript cases and 4 spend cases, 0 failures
 ```
 
 The module is also a test of the framework: if a change to the framework stops it from refuting the faulty rule, the build fails.
+
+## Vetting a public proposal: relative lock time
+
+The planted fault is an invented rule. This section applies the same activities to rules with a public proposal for Dogecoin.
+`DogeLib.Proposals.RelativeLockTime` states the three rules that Bitcoin deployed together as CSV: BIP 113, BIP 112 and BIP 68 ([design record 0012](design/0012-relative-lock-time.md)).
+Discussion 3509 of `dogecoin/dogecoin` proposed their activation (SOURCES.md, P4).
+DogeLib takes no position on that proposal.
+
+Dogecoin Core 1.14.9 holds the code of the three rules, and their version-bits deployment cannot activate on mainnet (`csv_never_lockedIn`).
+So the revision defines no new rule text. It turns on Core's dormant branches:
+
+| Rule | What the revision changes at the block level |
+| --- | --- |
+| BIP 113 | The lock-time cutoff of a block is the median time past of its predecessor, not the time of the block. |
+| BIP 112 | The script flags of a block have `SCRIPT_VERIFY_CHECKSEQUENCEVERIFY`, so opcode `0xb2` is `OP_CHECKSEQUENCEVERIFY` and not `OP_NOP3`. |
+| BIP 68 | Each transaction that is not a coinbase passes `sequenceLocks`: the sequence of an input can state a relative lock time. |
+
+### One coin, three blocks
+
+The witnesses of the revision use one coin script, `01 01 b2`: a push of the operand 1, then opcode `0xb2`.
+Under the baseline the opcode does nothing, the script leaves the true item `01`, and any transaction can spend the coin.
+Under the revision the script says: the spending input has a relative height lock of at least 1 block.
+
+Each block below is a made block at height 145,000, and none is a block of mainnet.
+Its second transaction spends the coin with an empty `scriptSig`.
+
+| Block | Coin height | Version | Sequence | Baseline | Active revision |
+| --- | ---: | ---: | ---: | --- | --- |
+| `opcodeBlock 1` | 1 | 1 | 1 | Accepted | Rejected by the opcode: `UNSATISFIED_LOCKTIME`, a failure that is not mandatory |
+| `opcodeBlock 2` | 1 | 2 | 1 | Accepted | Accepted |
+| `lockBlock` | 144,999 | 2 | 2 | Accepted | Rejected by the sequence lock: `bad-txns-nonfinal` |
+
+Trace the three rows through Core's code (SOURCES.md, D3 and D114):
+
+1. **Version 1.** `CheckSequence` fails when the transaction version is below 2. The second script run, without the flags that are not mandatory, passes. So Core's reason is `non-mandatory-script-verify-flag`.
+2. **Version 2, sequence 1, coin at height 1.** The opcode compares the operand 1 with the sequence 1, and passes. The sequence lock asks for `1 + 1 ≤ 145000`, and passes.
+3. **Version 2, sequence 2, coin at height 144,999.** The opcode would pass, because the operand 1 is at most the sequence 2. The sequence lock runs first, and it asks for `144999 + 2 ≤ 145000`. That is false, so the lock is one block short.
+
+The kernel checks each row: `opcode_strict`, `opcode_use` and `sequence_strict` are theorems about `validateBlock` and the revision on these blocks.
+
+### The three activities
+
+**A proof for every block.** `relativeLockTime_softFork` states the soft-fork claim at the level of one block, with four parts:
+
+- With the revision inactive, the result equals the baseline result, for every block and context.
+- Every block that the revision accepts, `validateBlock` accepts, with the same coin set.
+- For each rule, one block that the baseline accepts and the revision rejects.
+- For each rule, one block that the revision accepts and on which the rule runs.
+
+The last two parts matter. A revision that rejects every block also restricts acceptance.
+
+**A property that a user wants.** The soft-fork claim says nothing about what a lock achieves.
+`relativeLock_enforced` states it for the coin script above, and for every script of that form.
+Suppose that the active revision accepts an applicable block, and that an input spends a coin whose script is a height operand `d`, then `0xb2`, then a script without `0xb2`.
+Then the block is at least `d` blocks above the coin.
+
+For `01 01 b2` that means: no accepted block spends the coin in the block that creates it.
+The proof joins two rules. The opcode bounds the sequence of the input, and the sequence lock bounds the depth of the coin.
+Neither rule gives the property alone: without BIP 68, a sequence is a number that nothing compares with the chain.
+`relativeLock_enforced_time` is the same property for a time operand.
+
+**A comparison with Core's own code.** No Core behaviour exists for an invented rule. For this revision Core's code exists, and only its activation state never occurs.
+The Core harness can seed that state, and Core's own `ContextualCheckBlock` and `ConnectBlock` then run the three rules.
+This evidence has its own label, and it is not a comparison of the baseline:
+
+```bash
+python3 -I scripts/compare_csv_forced.py --made-only .lake/build/bin/dogelib-oracle .lake/build/bin/dogelib-proposal-oracle build/core-harness/core-oracle
+```
+
+```text
+Core at e0a1c15 with the CSV state forced to ACTIVE, against the proposed revision RelativeLockTime (the BIP 113 cutoff, the BIP 112 opcode and the BIP 68 sequence locks).
+sequence locks, made blocks: 46 agree with the hand-derived results (ancestorOutsideView 2, bad-txns-nonfinal 16, coinAboveBlock 4, heightOutOfDomain 4, valid 20)
+This state does not occur on mainnet (csv_never_lockedIn).
+```
+
+The known answers of `lake test` are a third source: a person derived each of them from the text of the BIPs and from Core's code, on each side of every boundary.
+
+### A result outside the model
+
+The specification does not give a verdict on every input.
+`sequenceLocks` returns one of three reasons where it cannot follow Core: `ancestorOutsideView`, `coinAboveBlock` and `heightOutOfDomain`.
+For example, a time lock on a coin above the block makes Core read the median time of the block itself, or dereference a null pointer.
+Such a result is never a rejection. The restriction theorem reads accepted blocks alone, so it says nothing about these inputs.
+In the comparison, the harness does not let Core make such a read, and both programs must name the same reason.
+
+### What the example establishes
+
+Every theorem here is *block-level*: it is about one block, or a supplied list of blocks, on a supplied coin set and chain view ([SOUNDNESS.md](../SOUNDNESS.md#proposed-revisions-relativelocktime)).
+None is a soft-fork claim about the network, and none says anything about fork choice, convergence or liveness.
+The comparison shows that the Lean rules equal Core's dormant code on its requests.
+It does not show that the rules are right for Dogecoin, and it is not evidence about mainnet.
+A count of changed blocks on mainnet history is another activity, with its own limits (design record 0012, section 10.3).
 
 ## A property that the baseline violates: the duplicate Merkle leaf
 

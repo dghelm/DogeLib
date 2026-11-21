@@ -54,6 +54,10 @@
 // state: only the run without the seed carries the coin set and the chain to
 // the next block. A block without a predecessor, and a block with the genesis
 // hash, get no seed, and their `forced` object is the result without it.
+// The field `unsupported` of `forced` is null, or the name of a read of
+// SequenceLocks that is outside the model of the proposed revision
+// (sequenceLockOutsideModel). ConnectBlock then does not run with the seed,
+// and the verdict fields of `forced` are null.
 // No mainnet chain reaches the state ACTIVE (csv_never_lockedIn). The object
 // shows what Core's code does in a state that Core never enters. It is not
 // mainnet behavior, and it is not a Core comparison of the baseline.
@@ -494,48 +498,55 @@ void readCoins(const UniValue& req, CarriedSet& store)
 
 // With CSV forced active, ConnectBlock runs SequenceLocks (D114, lines 1948 to
 // 1959) on each transaction that is not a coinbase and has a version of at
-// least 2 as an unsigned value. CalculateSequenceLocks (D110, lines 309 to
-// 359) reads each input whose sequence has bit 31 clear, with the height c of
-// its coin:
-// - A height lock adds c + 65535 - 1 at most, in `int`. The harness refuses a
-//   coin height from 2^31 - 65535, where that sum can overflow (design record
-//   0012, section 7.2).
-// - A time lock reads the median time past of the ancestor at max(c - 1, 0)
-//   (line 348). That ancestor and its ten predecessors must be inside the
-//   supplied chain, and at or below the predecessor of the block. The harness
-//   refuses another read, because GetAncestor would return null or leave the
-//   chain.
-// The scan changes nothing and calls no Core function that can assert. The
-// coin of an input is the entry of the carried set, or an earlier transaction
-// of the block, whose coins have the height of the block. When both exist the
-// scan tests both heights. It does not follow ConnectBlock's early exits, so
-// it can refuse a request that Core would reject before SequenceLocks.
-void refuseSequenceLockOutsideDomain(const CBlock& block, CCoinsView& store, const CBlockIndex* tip, int oldest, int height)
+// least 2 as an unsigned value. CalculateSequenceLocks (D114, lines 309 to
+// 367) reads each input whose sequence has bit 31 clear, with the height c of
+// its coin. Three reads are outside the model of the proposed revision
+// RelativeLockTime (design record 0012, section 6.3), and the harness does
+// not let Core make them:
+// - heightOutOfDomain: c is at least 2^31 - 65535. Core computes c + n - 1
+//   from the left in `int`, and c + 65535 can then overflow.
+// - coinAboveBlock: a time lock on a coin above the block. For a coin one
+//   block above, Core reads the median time past of the block itself. For a
+//   higher coin, GetAncestor returns null, and Core dereferences it (line 348).
+// - ancestorOutsideView: a time lock whose ancestor at max(c - 1, 0), or one
+//   of its ten predecessors, is below the supplied chain. GetAncestor would
+//   leave the chain, or GetMedianTimePast would stop early.
+// The function returns the name of the first such read, or null. The order is
+// that of the revision: the transactions in block order, the inputs in input
+// order, and for one input the order of the list above.
+//
+// The scan follows the lookup of ConnectBlock on a second cache. A
+// transaction whose inputs are missing ends it with null: Core rejects that
+// transaction before its SequenceLocks call, and every earlier transaction
+// was inside the model. The coin of an input is the entry of the cache, so a
+// coin that an earlier transaction of the block created has the height of the
+// block. The scan does not follow the other exits of ConnectBlock: BIP30, the
+// scripts, the count of signature operations and the amounts of an earlier
+// transaction. So it can name a read on a block that Core would reject before
+// that read. The scan calls no Core function that can assert on these inputs:
+// CheckBlock has passed, so no transaction names one outpoint twice.
+const char* sequenceLockOutsideModel(const CBlock& block, CCoinsView& store, const CBlockIndex* tip, int oldest, int height)
 {
-    if (!tip) return;
-    std::set<uint256> created;
-    auto test = [&](int coinHeight, bool timeLock) {
-        if (!timeLock) {
-            if (coinHeight > std::numeric_limits<int>::max() - 65535)
-                throw RequestError{"a forced height lock reads a coin height outside the int domain"};
-            return;
-        }
-        const int at = std::max(coinHeight - 1, 0);
-        if (at > tip->nHeight || at - std::min(10, at) < oldest)
-            throw RequestError{"a forced time lock reads an ancestor outside the chain"};
-    };
+    if (!tip) return nullptr;
+    CCoinsViewCache shadow(&store);
     for (const auto& tx : block.vtx) {
-        if (!tx->IsCoinBase() && static_cast<uint32_t>(tx->nVersion) >= 2) {
-            for (const auto& in : tx->vin) {
-                if (in.nSequence & CTxIn::SEQUENCE_LOCKTIME_DISABLE_FLAG) continue;
-                const bool timeLock = (in.nSequence & CTxIn::SEQUENCE_LOCKTIME_TYPE_FLAG) != 0;
-                CCoins entry;
-                if (store.GetCoins(in.prevout.hash, entry)) test(entry.nHeight, timeLock);
-                if (created.count(in.prevout.hash)) test(height, timeLock);
+        if (!tx->IsCoinBase()) {
+            if (!shadow.HaveInputs(*tx)) return nullptr;
+            if (static_cast<uint32_t>(tx->nVersion) >= 2) {
+                for (const auto& in : tx->vin) {
+                    if (in.nSequence & CTxIn::SEQUENCE_LOCKTIME_DISABLE_FLAG) continue;
+                    const int coinHeight = shadow.AccessCoins(in.prevout.hash)->nHeight;
+                    if (coinHeight > std::numeric_limits<int>::max() - 65535) return "heightOutOfDomain";
+                    if (!(in.nSequence & CTxIn::SEQUENCE_LOCKTIME_TYPE_FLAG)) continue;
+                    if (coinHeight > height) return "coinAboveBlock";
+                    const int at = std::max(coinHeight - 1, 0);
+                    if (at - std::min(10, at) < oldest) return "ancestorOutsideView";
+                }
             }
         }
-        created.insert(tx->GetHash());
+        UpdateCoins(*tx, shadow, height);
     }
+    return nullptr;
 }
 
 UniValue blockValidate(const UniValue& req)
@@ -840,6 +851,7 @@ UniValue blockValidate(const UniValue& req)
             std::string function = "CheckBlockHeader";
             uint256 changes;
             uint64_t spent = 0, created = 0;
+            const char* unsupported = nullptr;
         };
         auto runChecks = [&](Run& run, bool forced) {
             bool& valid = run.valid;
@@ -870,7 +882,10 @@ UniValue blockValidate(const UniValue& req)
                 candidate.pprev = tip;
                 candidate.nHeight = height;
                 candidate.phashBlock = &hash;
-                if (forced) refuseSequenceLockOutsideDomain(block, store.view(), tip, oldest, height);
+                if (forced) {
+                    run.unsupported = sequenceLockOutsideModel(block, store.view(), tip, oldest, height);
+                    if (run.unsupported) return;
+                }
                 valid = ConnectBlock(block, state, &candidate, view, Params(), true);
                 if (valid) {
                     // The changes, read from a second cache that repeats Core's
@@ -935,11 +950,19 @@ UniValue blockValidate(const UniValue& req)
                 if (seeded) csv[boundary] = before;
                 else csv.erase(boundary);
             }
-            pushVerdict(forcedRecord, forced.valid, forced.state, forced.function);
-            forcedRecord.pushKV("changes_digest_hex",
-                                forced.valid ? UniValue(hex(forced.changes.begin(), forced.changes.end())) : UniValue());
-            forcedRecord.pushKV("spent", forced.valid ? UniValue(forced.spent) : UniValue());
-            forcedRecord.pushKV("created", forced.valid ? UniValue(forced.created) : UniValue());
+            if (forced.unsupported) {
+                // No verdict: the read is outside the model, and ConnectBlock did not run.
+                for (const char* key : {"valid", "reject_reason", "dos", "reject_code", "changes_digest_hex", "spent", "created"})
+                    forcedRecord.pushKV(key, UniValue());
+                forcedRecord.pushKV("unsupported", forced.unsupported);
+            } else {
+                pushVerdict(forcedRecord, forced.valid, forced.state, forced.function);
+                forcedRecord.pushKV("changes_digest_hex",
+                                    forced.valid ? UniValue(hex(forced.changes.begin(), forced.changes.end())) : UniValue());
+                forcedRecord.pushKV("spent", forced.valid ? UniValue(forced.spent) : UniValue());
+                forcedRecord.pushKV("created", forced.valid ? UniValue(forced.created) : UniValue());
+                forcedRecord.pushKV("unsupported", UniValue());
+            }
         }
 
         Run plain;

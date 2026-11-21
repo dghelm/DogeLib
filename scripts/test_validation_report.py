@@ -27,8 +27,10 @@ def registry(rows):
 class WorkflowDependencies(unittest.TestCase):
     def test_core_packages_match_validation(self):
         packages = {}
-        for workflow in ('core', 'validation'):
-            text = (ROOT / f'.github/workflows/{workflow}.yml').read_text()
+        # The jobs of workflow core install their packages in the shared setup action.
+        for workflow, path in (('core', '.github/actions/core-setup/action.yml'),
+                               ('validation', '.github/workflows/validation.yml')):
+            text = (ROOT / path).read_text()
             installs = [shlex.split(line.strip()) for line in text.splitlines()
                         if line.strip().startswith('sudo apt-get install ')]
             self.assertEqual(len(installs), 1, workflow)

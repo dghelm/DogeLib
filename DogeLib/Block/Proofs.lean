@@ -14,8 +14,9 @@ public import DogeLib.Block.Proofs.HeaderSequence
 public import DogeLib.Block.Proofs.Merkle
 public import DogeLib.Block.Proofs.ProofOfWork
 public import DogeLib.Block.Proofs.Restrict
+public import DogeLib.Block.Proofs.SigOpCost
 public import DogeLib.Block.Proofs.Subsidy
 public import DogeLib.Block.Proofs.VersionBits
 public import DogeLib.Block.Proofs.VersionGate
 
-/-! # Properties of block headers, AuxPoW payloads, transaction Merkle roots, header proof of work, version gating, version bits, contextual parameters and checkpoints, contextual header validation, the body of `ContextualCheckBlock`, the block-index model, the block subsidy, the block codec, `CheckBlock`, `CheckTxInputs`, `ConnectBlock`, and the total value of the coin set -/
+/-! # Properties of block headers, AuxPoW payloads, transaction Merkle roots, header proof of work, version gating, version bits, contextual parameters and checkpoints, contextual header validation, the body of `ContextualCheckBlock`, the block-index model, the block subsidy, the block codec, `CheckBlock`, the linear readers of the signature-operation cost, `CheckTxInputs`, `ConnectBlock`, and the total value of the coin set -/

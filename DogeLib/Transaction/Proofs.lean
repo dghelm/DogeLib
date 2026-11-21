@@ -1,5 +1,6 @@
 module
 
+public import DogeLib.Transaction.Proofs.Check
 public import DogeLib.Transaction.Proofs.LegacySighash
 public import DogeLib.Transaction.Proofs.LegacySighashCommitment
 public import DogeLib.Transaction.Proofs.LegacySighashReader

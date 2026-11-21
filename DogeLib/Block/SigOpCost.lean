@@ -74,13 +74,18 @@ def accurateSigOps (last : UInt8) : List UInt8 → Nat
   | [] => 0
   | opcode :: rest => opcodeSigOpsAccurate last opcode + accurateSigOps opcode rest
 
+/-- One step of the accurate count: the state holds the opcode before `opcode` and the count so far, and the step adds `opcodeSigOpsAccurate`. -/
+def accurateStep (p : UInt8 × Nat) (opcode : UInt8) : UInt8 × Nat :=
+  (opcode, p.2 + opcodeSigOpsAccurate p.1 opcode)
+
 /--
 Core's `CScript::GetSigOpCount(true)` (D107, lines 156 to 177), as a natural number.
-It reads the instructions that `scanOps` gives, as the inaccurate count does, and stops at the first failed read.
+It reads the instructions with `foldOps`, as the inaccurate count does, and stops at the first failed read.
+`getSigOpCountAccurate_eq_scanOps` proves it equal to `accurateSigOps` over the opcodes of `scanOps`.
 Core's result is this number modulo `2^32`.
 -/
 def getSigOpCountAccurate (script : List UInt8) : Nat :=
-  accurateSigOps opInvalidOpcode ((scanOps script).1.map Prod.fst)
+  (foldOps accurateStep (opInvalidOpcode, 0) script).2
 
 /--
 The loop of `CScript::GetSigOpCount(const CScript& scriptSig)` (D115, lines 189 to 196) from cursor `pc`.
@@ -98,12 +103,25 @@ termination_by script.length - pc
 decreasing_by omega
 
 /--
+The loop of `lastPushFrom` with the reader `nextOp`, from the bytes `bs` after the cursor.
+`readInstruction` drops the bytes before the cursor and measures the rest at each instruction, so `lastPushFrom` is quadratic in the length of the script.
+This loop is linear, and `lastPushFrom_eq_lastPushLoop` proves the two equal.
+-/
+def lastPushLoop (bs : List UInt8) (data : List UInt8) : Option (List UInt8) :=
+  match _h : nextOp bs with
+  | none => if bs.isEmpty then some data else none
+  | some s => if s.opcode > op16 then none else lastPushLoop s.rest s.data
+termination_by bs.length
+decreasing_by exact nextOp_rest_length ‹_›
+
+/--
 Core's `CScript::GetSigOpCount(const CScript& scriptSig)` (D115, lines 180 to 201) for a P2SH `scriptPubKey`.
 A `scriptSig` with a failed read or an opcode above `OP_16` counts 0.
 Otherwise the result is the accurate count of the data that the last instruction of `scriptSig` pushes.
+It reads `scriptSig` with `lastPushLoop`. `p2shSigOpCount_eq_lastPushFrom` proves it equal to the same count with `lastPushFrom`.
 -/
 def p2shSigOpCount (scriptSig : List UInt8) : Nat :=
-  match lastPushFrom scriptSig 0 [] with
+  match lastPushLoop scriptSig [] with
   | none => 0
   | some redeem => getSigOpCountAccurate redeem
 

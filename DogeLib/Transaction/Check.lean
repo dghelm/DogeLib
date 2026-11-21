@@ -1,6 +1,7 @@
 module
 
 public import DogeLib.Transaction.Serialization
+public import Std.Data.TreeSet
 
 /-!
 # `Transaction.Check`
@@ -117,14 +118,42 @@ def checkOutputs (nValueOut : Int) : List TxOut → Except CheckTransactionError
     else checkOutputs (nValueOut + o.amount.toInt) rest
 
 /--
-Whether two entries of the list are equal.
+Whether two entries of the list are equal, by comparing each entry with every later one.
 Core inserts each outpoint of `vin` into a `std::set<COutPoint>`, and fails at the first insertion that finds an equal member (D106, lines 553 to 558).
 An insertion fails exactly when some earlier outpoint has the same hash and the same index (`operator<`, D4, lines 43 to 47).
 The number of comparisons is quadratic in the length of the list.
+`hasDuplicate` gives the same result in `O(n log n)` comparisons. `hasDuplicate_eq_hasDuplicateScan` proves the two equal.
 -/
-def hasDuplicate : List OutPoint → Bool
+def hasDuplicateScan : List OutPoint → Bool
   | [] => false
-  | o :: rest => rest.contains o || hasDuplicate rest
+  | o :: rest => rest.contains o || hasDuplicateScan rest
+
+/-- The value of a list of bytes in little-endian order: the first byte is the least significant. -/
+def bytesValue : List UInt8 → Nat
+  | [] => 0
+  | b :: bs => b.toNat + 2 ^ 8 * bytesValue bs
+
+/-- An outpoint as one natural number: the 32 bytes of the hash, in little-endian order, then the index above them. Different outpoints give different numbers. -/
+def OutPoint.key (o : OutPoint) : Nat := bytesValue o.hash.val + 2 ^ 256 * o.n.toNat
+
+/--
+The loop of `CheckTransaction` over the keys of the outpoints (D106, lines 553 to 558): true at the first key that is already in `seen`.
+Each other key goes into `seen` before the next one is tested, as Core inserts each outpoint into a `std::set<COutPoint>`.
+Each test and each insertion takes `O(log m)` comparisons for a set of `m` keys.
+-/
+def hasDuplicateFrom (seen : Std.TreeSet Nat) : List Nat → Bool
+  | [] => false
+  | k :: ks => seen.contains k || hasDuplicateFrom (seen.insert k) ks
+
+/--
+Whether two entries of the list are equal.
+Core inserts each outpoint of `vin` into a `std::set<COutPoint>`, and fails at the first insertion that finds an equal member (D106, lines 553 to 558).
+An insertion fails exactly when some earlier outpoint has the same hash and the same index (`operator<`, D4, lines 43 to 47).
+The definition runs `hasDuplicateFrom` on the keys of the outpoints, from the empty set, in `O(n log n)` comparisons.
+`hasDuplicate_eq_hasDuplicateScan` proves it equal to `hasDuplicateScan`, the test of every pair.
+-/
+def hasDuplicate (l : List OutPoint) : Bool :=
+  hasDuplicateFrom ∅ (l.map OutPoint.key)
 
 /--
 Core's `CheckTransaction` (D106, lines 527 to 574), with the first failing check as its error.

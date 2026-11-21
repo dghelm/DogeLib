@@ -1,6 +1,7 @@
 module
 
 public import DogeLib.Block.Proofs.Connect
+public import DogeLib.Transaction.Proofs.Check
 public import DogeLib.Proofs.TheoremTag
 meta import DogeLib.Proofs.TheoremTag
 
@@ -454,12 +455,9 @@ theorem CoinSet.coin_spend_of_ne (s : CoinSet) {o o' : OutPoint} (hne : o' ≠ o
 /-! ## Inputs and spends -/
 
 /-- When `hasDuplicate` is false, the outpoints of the list are pairwise different. -/
-theorem nodup_of_hasDuplicate : ∀ {l : List OutPoint}, hasDuplicate l = false → l.Nodup
-  | [], _ => List.nodup_nil
-  | o :: rest, h => by
-    simp only [hasDuplicate, Bool.or_eq_false_iff] at h
-    rw [List.nodup_cons]
-    exact ⟨by simpa using h.1, nodup_of_hasDuplicate h.2⟩
+theorem nodup_of_hasDuplicate {l : List OutPoint} (h : hasDuplicate l = false) : l.Nodup := by
+  rw [hasDuplicate_eq_not_nodup] at h
+  simpa using h
 
 /-- A transaction that `checkTransaction` accepts with the duplicate-input check has pairwise different outpoints in its inputs. -/
 theorem checkTransaction_ok_nodup {tx : Transaction} (h : checkTransaction tx true = .ok ()) :

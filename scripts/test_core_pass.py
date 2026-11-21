@@ -45,7 +45,9 @@ test has seven parts:
    accept both responses and agree with the expectation of its model.
 """
 
+import contextlib
 import hashlib
+import io
 import json
 import shutil
 import subprocess
@@ -276,7 +278,7 @@ def rewrite_sums(directory: Path) -> None:
 
 
 def test_restricted(oracle: str, harness: str, fixture: Path, run_dir: Path, out: Path, summary: dict) -> None:
-    """scripts/restrict_coins.py and scripts/compare_range.py on range T, with three planted faults."""
+    """scripts/restrict_coins.py and scripts/compare_range.py on range T, with four planted faults."""
     check(restrict_coins.main(["--run", str(run_dir), "--output", str(out), "--check", oracle]) == 0,
           "range T: restrict_coins.py failed")
     request = json.loads((out / "request.json").read_text())
@@ -306,8 +308,22 @@ def test_restricted(oracle: str, harness: str, fixture: Path, run_dir: Path, out
             print(f"restricted coins: a changed {name} fails: {str(error)[:160]}")
         (out / name).write_text(original)
         rewrite_sums(out)
+    # A source request that changed after scripts/run_range.py wrote the summary.
+    source = run_dir / "range-request.json"
+    original = source.read_text()
+    changed_source = json.loads(original)
+    changed_source["adjusted_time"] += 1
+    source.write_text(json.dumps(changed_source) + "\n")
+    printed = io.StringIO()
+    with contextlib.redirect_stdout(printed):
+        status = restrict_coins.main(["--run", str(run_dir), "--output", str(out.parent / "restricted-changed")])
+    source.write_text(original)
+    check(status == 1 and "does not have the SHA-256 of the recorded run" in printed.getvalue()
+          and not (out.parent / "restricted-changed").exists(),
+          f"range T: a changed source request gave {status}: {printed.getvalue()[:300]}")
+    print(f"restricted coins: a changed source request fails: {printed.getvalue().strip()[:160]}")
     print(f"restricted coins: range T with {restricted} of {summary['snapshot']['coins']} coins gives the records of the "
-          f"snapshot run in both programs, and three planted faults fail")
+          f"snapshot run in both programs, and four planted faults fail")
     print("range: heights 9,001 to 9,200 from the snapshot at 9,000 agree with the pass; a changed list and manifest fail")
 
 

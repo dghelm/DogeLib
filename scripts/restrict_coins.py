@@ -7,8 +7,9 @@ Usage:
 DIR is the output directory of scripts/run_range.py for one range, after the range agreed. The
 script works in four steps:
 
-1. It reads `range-request.json` and `summary.json` of DIR. The blocks file of the request must
-   have the SHA-256 of the summary.
+1. It reads `range-request.json` and `summary.json` of DIR. The request must have the SHA-256
+   `request_sha256` of the summary, and its blocks file must have the SHA-256 `blocks_sha256`.
+   So the range request keeps the context of the recorded run.
 2. It collects `T`, the transaction IDs that the blocks name: the ID of each transaction, and the
    ID in the outpoint of each input. That is the `T` of the oracle's snapshot path
    (docs/oracle.md, the snapshot path).
@@ -119,8 +120,11 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     run, output = Path(args.run), Path(args.output)
     try:
-        request = json.loads((run / "range-request.json").read_text())
         summary = json.loads((run / "summary.json").read_text())
+        source = run / "range-request.json"
+        if file_sha256(source) != summary["request_sha256"]:
+            raise RestrictError(f"{source} does not have the SHA-256 of the recorded run")
+        request = json.loads(source.read_text())
         blocks, snapshot = Path(request["blocks_file"]), Path(request["coins_file"])
         if file_sha256(blocks) != summary["blocks_sha256"]:
             raise RestrictError(f"{blocks} does not have the SHA-256 of the recorded run")

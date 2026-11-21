@@ -14,17 +14,18 @@ None is a claim about a block, a chain or the network.
 - `sequenceLocks_empty_view`: the test accepts on an empty view.
 - `medianTimePast_range`: a median time past of a view is a 32-bit value that is not negative.
 - `LockMet`: the lock of one input is met.
-- `sequenceLocks_iff`: the characterization. On a view that is not empty, for a version of at least 2 and a result that is not outside the model, the test accepts exactly when each input meets its lock.
+- `sequenceLocks_iff`: the characterization. For a version of at least 2 and a result that is not outside the model, the test accepts exactly when the view is empty, or the view has a median time past and each input meets its lock.
+- `sequenceLocks_iff_of_view`: the same on a view that is not empty, where the test accepts exactly when each input meets its lock.
 - `sequenceLocks_fits`: each sum of `CalculateSequenceLocks` fits its C++ type.
 - `sequenceLocks_of_disabled`: a transaction whose inputs all have bit 31 set passes, when the view gives a median time past.
-- `sequenceLocks_height_lock`: the height lock of one input of an accepted transaction.
+- `sequenceLocks_height_lock`, `sequenceLocks_time_lock`: the height lock and the time lock of one input of an accepted transaction.
 
 ## Hypotheses and where Core enforces them
 
 | Hypothesis | Used by | Where Core enforces it |
 | --- | --- | --- |
 | The result is not outside the model. | `sequenceLocks_iff` | The three reasons are limits of the specification (design record 0012, section 6.3). Core has no such result. |
-| A coin height is below `2^31 - 65535`. | `sequenceLocks_fits` | Not enforced as a rule. `inputLock` returns `heightOutOfDomain` for a larger height, so the theorem needs no hypothesis. |
+| `calculateSequenceLocks` or `inputLock` has a result. | `sequenceLocks_fits`, `inputLock_fits` | Not a rule. A result implies that each coin height with a lock is below `2^31 - 65535`, because `inputLock` returns `heightOutOfDomain` for a larger height. So neither theorem has a separate hypothesis on the heights. |
 | A block time is a 32-bit value. | `sequenceLocks_fits` | The type of `nTime`. |
 -/
 
@@ -162,7 +163,7 @@ theorem calculateSequenceLocks_evaluate_iff {view : List BlockIndex} {height : N
         exact ⟨fun ⟨⟨a, b, l⟩, r⟩ => ⟨⟨a, b⟩, l, r⟩, fun ⟨⟨a, b⟩, l, r⟩ => ⟨⟨a, b, l⟩, r⟩⟩
 
 /--
-The target `sequenceLocks_iff` of design record 0012, section 9.2: the characterization of sequence locks.
+The characterization of sequence locks on a view that is not empty.
 Take `active` true, a view that is not empty, and a transaction whose version is at least 2 as an unsigned value.
 Let the result of `sequenceLocks` not be outside the model.
 Then the view has a median time past `median`, and `sequenceLocks` accepts exactly when each input meets its lock (`LockMet`).
@@ -170,7 +171,7 @@ Each input is paired with the coin at its position in `coins`.
 With bit 31 set an input has no lock. With bit 22 clear the lock is `c + n ≤ height`. With bit 22 set it is `t + 512 * n ≤ median`.
 For every height, index and list of coins.
 -/
-theorem sequenceLocks_iff {view : List BlockIndex} (hview : view ≠ []) {tx : Transaction} (hv : 2 ≤ tx.version.toNat)
+theorem sequenceLocks_iff_of_view {view : List BlockIndex} (hview : view ≠ []) {tx : Transaction} (hv : 2 ≤ tx.version.toNat)
     {height index : Nat} {coins : List Coin}
     (hs : ∀ r, sequenceLocks true view height index tx coins ≠ .unsupported r) :
     ∃ median, medianTimePast view = .ok median ∧
@@ -208,6 +209,35 @@ theorem sequenceLocks_iff {view : List BlockIndex} (hview : view ≠ []) {tx : T
           simp only [hstart, true_and] at hiff
           rw [← hiff]
           cases he : evaluateSequenceLocks height median pair <;> simp [he]
+
+/--
+The target `sequenceLocks_iff` of design record 0012, section 9.2: the characterization of sequence locks.
+Take `active` true, and a transaction whose version is at least 2 as an unsigned value.
+Let the result of `sequenceLocks` not be outside the model.
+Then `sequenceLocks` accepts exactly when one of two conditions holds.
+The view is empty: the block has no predecessor, and the rule does not apply to it (design record 0012, section 5).
+Or the view has a median time past `median`, and each input meets its lock (`LockMet`), with the coin at its position in `coins`.
+With bit 31 set an input has no lock. With bit 22 clear the lock is `c + n ≤ height`. With bit 22 set it is `t + 512 * n ≤ median`.
+The statement has no hypothesis on the view. For every view, height, index and list of coins.
+-/
+theorem sequenceLocks_iff {view : List BlockIndex} {tx : Transaction} (hv : 2 ≤ tx.version.toNat)
+    {height index : Nat} {coins : List Coin}
+    (hs : ∀ r, sequenceLocks true view height index tx coins ≠ .unsupported r) :
+    sequenceLocks true view height index tx coins = .ok () ↔
+      view = [] ∨ ∃ median, medianTimePast view = .ok median ∧
+        ∀ p ∈ tx.inputs.val.zip coins, LockMet view height median p.1.sequence p.2.height := by
+  cases view with
+  | nil => simp [sequenceLocks_empty_view]
+  | cons prev rest =>
+    obtain ⟨median, hmed, hiff⟩ := sequenceLocks_iff_of_view (List.cons_ne_nil prev rest) hv hs
+    constructor
+    · intro h
+      exact .inr ⟨median, hmed, hiff.mp h⟩
+    · rintro (h | ⟨m, hm, hall⟩)
+      · cases h
+      · rw [hmed] at hm
+        cases hm
+        exact hiff.mpr hall
 
 /-! ## The sums of Core -/
 
@@ -289,7 +319,7 @@ Take a transaction for which `calculateSequenceLocks` has a result from Core's s
 Then `nMinHeight` fits `int` and `nMinTime` fits `int64_t`, after every input.
 `inputLock_fits` gives the same for each term of the two maxima, and for the sums before the subtraction of 1.
 
-The theorem has no hypothesis on the heights or the times.
+Its one hypothesis is that `calculateSequenceLocks` has a result. It has no separate hypothesis on the heights or the times.
 `inputLock` returns `heightOutOfDomain` for a coin height of at least `2^31 - 65535`, so a result implies the height bound of design record 0012, section 7.2.
 A median time past is the time of a view entry, which is a 32-bit value.
 The height of the block is an argument of `EvaluateSequenceLocks` alone, and enters no sum.
@@ -347,11 +377,34 @@ theorem sequenceLocks_height_lock {view : List BlockIndex} (hview : view ≠ [])
     (hd : input.sequence.toNat &&& sequenceLockTimeDisableFlag = 0)
     (ht : input.sequence.toNat &&& sequenceLockTimeTypeFlag = 0) :
     coin.height + (input.sequence.toNat &&& sequenceLockTimeMask) ≤ height := by
-  obtain ⟨median, -, hiff⟩ := sequenceLocks_iff hview hv (index := index) (height := height) (coins := coins)
+  obtain ⟨median, -, hiff⟩ := sequenceLocks_iff_of_view hview hv (index := index) (height := height) (coins := coins)
     (fun r hr => by rw [hok] at hr; cases hr)
   have hmem : (input, coin) ∈ tx.inputs.val.zip coins := by
     apply List.mem_of_getElem? (i := j)
     simp [List.getElem?_zip_eq_some, hin, hcoin]
   exact ((hiff.mp hok) (input, coin) hmem hd).1 ht
+
+/--
+The time lock of one input of an accepted transaction.
+Take `active` true, a view that is not empty, and a transaction with a version of at least 2 that `sequenceLocks` accepts.
+Let the input at position `j` have a sequence with bit 31 clear and bit 22 set, and let `coin` be the coin at position `j`.
+Then the view has a median time past `median`, and the ancestor of the coin has a median time past `t` (`ancestorMedianTimePast`).
+`t` plus 512 times the low 16 bits of the sequence is at most `median`.
+-/
+theorem sequenceLocks_time_lock {view : List BlockIndex} (hview : view ≠ []) {tx : Transaction}
+    (hv : 2 ≤ tx.version.toNat) {height index : Nat} {coins : List Coin}
+    (hok : sequenceLocks true view height index tx coins = .ok ()) {j : Nat} {input : TxIn} {coin : Coin}
+    (hin : tx.inputs.val[j]? = some input) (hcoin : coins[j]? = some coin)
+    (hd : input.sequence.toNat &&& sequenceLockTimeDisableFlag = 0)
+    (ht : input.sequence.toNat &&& sequenceLockTimeTypeFlag ≠ 0) :
+    ∃ median t, medianTimePast view = .ok median ∧ ancestorMedianTimePast view height coin.height = .ok t ∧
+      t + 512 * ((input.sequence.toNat &&& sequenceLockTimeMask : Nat) : Int) ≤ median := by
+  obtain ⟨median, hmed, hiff⟩ := sequenceLocks_iff_of_view hview hv (index := index) (height := height)
+    (coins := coins) (fun r hr => by rw [hok] at hr; cases hr)
+  have hmem : (input, coin) ∈ tx.inputs.val.zip coins := by
+    apply List.mem_of_getElem? (i := j)
+    simp [List.getElem?_zip_eq_some, hin, hcoin]
+  obtain ⟨t, hanc, hle⟩ := ((hiff.mp hok) (input, coin) hmem hd).2 ht
+  exact ⟨median, t, hmed, hanc, hle⟩
 
 end DogeLib.Proposals.RelativeLockTime

@@ -9,12 +9,11 @@ public import DogeLib.Proposals.RelativeLockTime.Proofs.SequenceLocks
 /-!
 # Proofs: `Proposals.RelativeLockTime` at the block level
 
-The block-level theorems of design record 0012 for the two rules that `blockRevision` has: the lock-time cutoff of BIP 113 and the script flag of BIP 112.
-The revision is partial: it has no rule of BIP 68 (`DogeLib.Proposals.RelativeLockTime`).
-No theorem here is a claim about the three rules together.
+Block-level theorems of design record 0012 for the three rules of `blockRevision`: the lock-time cutoff of BIP 113, the script flag of BIP 112 and the sequence locks of BIP 68.
+`DogeLib.Proposals.RelativeLockTime.Proofs.SoftFork` has the theorems that join the rules: the soft fork, the list of blocks and the enforced lock.
 
-Each block-level theorem is about `validateBlock` for one block on a supplied coin set and view.
-None is a claim about a chain or about the network.
+Each block-level theorem here is about `validateBlock` for one block on a supplied coin set and view.
+None is a claim about the network.
 Every theorem holds for every signature verifier, and none assumes a property of the verifier.
 
 ## Rule level
@@ -28,23 +27,24 @@ Every theorem holds for every signature verifier, and none assumes a property of
 - `scriptFlags_inactive`, `scriptFlags_p2sh`: the script flags of the revision are `connectScriptFlags` with `active` false, and agree with them on `SCRIPT_VERIFY_P2SH` for every `active`.
 - `spend_restricts`: an input that `verifyLegacySpend` accepts under the script flags of the revision, it accepts under `connectScriptFlags`.
 - `checkInputScriptWith_withCsvFlag`: on an input whose spend check does not read the CSV flag, both runs of the script check give one outcome with the flag and without it.
+- `txTest_inactive`, `txTest_eq_ok_iff`, `txTest_of_sequence_untouched`: the transaction test of the revision accepts with `active` false or a version below 2, accepts exactly when `sequenceLocks` accepts, and accepts a transaction that is not an object of the rule of BIP 68.
 
 ## Block level
 
 - `relativeLockTime_inactive_eq`: with `active` false, the revision equals the embedded result of `validateBlock`, for every context.
 - `relativeLockTime_activation`, `_of_lt`, `_of_none`: where an activation is inactive at the height of the block, `validateBlockWith` with the revision equals the embedded result of `validateBlock`.
-- `relativeLockTime_restricts`: a block that the revision accepts, `validateBlock` accepts, with the same coin set and the same changes. For every `active` and every context. The statement covers the cutoff and the flag.
+- `relativeLockTime_restricts`: a block that the revision accepts, `validateBlock` accepts, with the same coin set and the same changes. For every `active` and every context. The statement covers the three rules.
 - `relativeLockTime_eq_of_not_applicable`: on a block that is not applicable, the revision equals the embedded result of `validateBlock`, for every `active`.
 - `contextualBody_eq_of_cutoff_untouched`: on a block with no cutoff transaction, the body check of the revision equals that of the baseline.
-- `relativeLockTime_eq_of_cutoff_opcode_untouched`: on a block with no cutoff transaction and no instruction `0xb2` in a script of a spend, the revision equals the embedded result of `validateBlock`.
+- `relativeLockTime_eq_of_untouched`: on a block with no cutoff transaction, no transaction that is an object of the rule of BIP 68 (`SequenceUntouched`) and no instruction `0xb2` in a script of a spend, the revision equals the embedded result of `validateBlock`.
 
 ## Hypotheses and where Core enforces them
 
 | Hypothesis | Used by | Where Core enforces it |
 | --- | --- | --- |
 | The median time past of the predecessor is below the time of the block. | `lockTimeCutoff_le` | `ContextualCheckBlockHeader`, with the reason `time-too-old` (SOURCES.md, D33, line 3104). `validateBlock` runs it first, so `relativeLockTime_restricts` does not assume it. |
-| The block is applicable. | The revised cutoff | It is part of the definition, and no theorem assumes it. Core reads the median only with a predecessor (D110, line 3135). |
-| `csvActive` of the context is false. | `relativeLockTime_eq_of_cutoff_opcode_untouched` | The field is the version-bits state of the pin, which is never active on a mainnet chain whose headers passed the header checks (`csv_never_lockedIn`). |
+| The block is applicable. | The revised cutoff | It is part of the definition, and no theorem of this module assumes it. Core reads the median only with a predecessor (D110, line 3135). |
+| `csvActive` of the context is false. | `relativeLockTime_eq_of_untouched` | The field is the version-bits state of the pin, which is never active on a mainnet chain whose headers passed the header checks (`csv_never_lockedIn`). |
 
 `relativeLockTime_restricts` needs no hypothesis on `csvActive`.
 With that field true, `connectBlockWith` returns the result `csvActive` for every block but one with the genesis hash, and such a block is not applicable.

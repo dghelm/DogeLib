@@ -3527,8 +3527,12 @@ So the revision gives no verdict on those inputs, where Core has one or has unde
 - `opcode_softFork`: the framework's `SoftFork` with those two witnesses. It is block-level.
 - `sequenceLocks_inactive`, `sequenceLocks_iff`: the rule for one transaction, on a supplied view and supplied coins.
   With `active` false, or with a version below 2, the test accepts.
-  With `active` true, a view that is not empty, a version of at least 2 and a result that is not outside the model, the test accepts exactly when each input with bit 31 clear meets its lock.
-- `sequenceLocks_fits`: each sum of `CalculateSequenceLocks` fits `int` or `int64_t`. The theorem has no hypothesis, because `heightOutOfDomain` excludes the coin heights at which a sum can overflow.
+  Take `active` true, a version of at least 2 and a result that is not outside the model. The test accepts exactly when the view is empty, or each input with bit 31 clear meets its lock.
+  The case of an empty view is the block without a predecessor, to which the rule does not apply. `sequenceLocks_iff_of_view` states the characterization without that case.
+- `sequenceLocks_fits`, `inputLock_fits`: the sums of `CalculateSequenceLocks` fit `int` and `int64_t`.
+  The first theorem takes a result of `calculateSequenceLocks` from Core's start, and bounds the pair after the last input.
+  The second takes a result of `inputLock` for one input, and bounds its term, with the sum before the subtraction of 1.
+  Neither has a separate hypothesis on the heights: a result implies the height bound, because `heightOutOfDomain` excludes the coin heights at which a sum can overflow.
 - `sequence_strict` and `sequence_use`: two made blocks at height 145,000.
   The first spends a coin at height 144,999 with the sequence 2, from a transaction of version 2. `validateBlock` accepts it, and the active revision rejects it with `RevisionError.sequenceLocks`.
   The second is the block of `opcode_use`: its input has a met height lock of one block on a coin at height 1.
@@ -3544,13 +3548,15 @@ So the revision gives no verdict on those inputs, where Core has one or has unde
   Let the operand have bits 31 and 22 clear, with the low 16 bits `d`. Then the height of the block is at least the height of the coin plus `d`.
   The opcode bounds the sequence of the input, and the sequence lock bounds the depth of the coin.
   The coin is that of the set just before the transaction, so it can be a coin that the same block created.
+- `relativeLock_enforced_time`: the time form, for an operand with bit 31 clear and bit 22 set.
+  The view has a median time past `m`, and the ancestor of the coin at height `max (c - 1) 0` has a median time past `t`. Then `t + 512 * d ≤ m`.
 
 | Hypothesis | Used by | Where Core enforces it |
 | --- | --- | --- |
 | The median time past of the predecessor is below the time of the block. | `lockTimeCutoff_le` | `ContextualCheckBlockHeader`, `time-too-old` (D33, line 3104). `validateBlock` runs it first, so `relativeLockTime_restricts` does not assume it. |
-| The block is applicable. | The revised rule | It is part of the definition, and no theorem assumes it. Core reads the median only with a predecessor (D110, line 3135). |
+| The block is applicable. | The revised rule, `relativeLock_enforced`, `relativeLock_enforced_time` | It is part of the definition. The two theorems about an enforced lock assume it, because no rule runs on another block. No other theorem assumes it. Core reads the median only with a predecessor (D110, line 3135). |
 | `csvActive` of the context is false. | `relativeLockTime_eq_of_untouched` | The field is the version-bits state of the pin. `csv_never_lockedIn` shows that it is never active on a mainnet header chain whose headers passed `checkBlockHeader`. No theorem shows that the real chain meets that hypothesis. |
-| The height bound of the sequence locks: a coin height below `2^31 - 65535`. | `sequenceLocks_fits` | Not enforced as a rule. A coin height is at most the height of a block of its chain, and mainnet heights are far below the bound. The definition returns `heightOutOfDomain` above it, so no theorem assumes the bound. |
+| The height bound of the sequence locks: a coin height below `2^31 - 65535`. | `sequenceLocks_fits`, `inputLock_fits` | Not enforced as a rule. A coin height is at most the height of a block of its chain, and mainnet heights are far below the bound. The definition returns `heightOutOfDomain` above it. Each theorem assumes a result of the definition, which implies the bound. |
 | The height of a coin is at most the height of the block. | Time locks of `sequenceLocks` | Not enforced as a rule. It holds for a coin set that a replay built. A supplied coin set can break it, and the result is then `coinAboveBlock`. Core has a defined result for a coin one block above, which the revision does not give. |
 | The view is the view of the predecessor, down to the ancestors that the time locks read. | `sequenceLocks` | Core walks its own block index. The revision returns `ancestorOutsideView` when the view is too short or starts at another height. No definition checks that the times of the view are those of the real chain: the view is an input, as for `validateBlock`. |
 | The result of the sequence locks is not outside the model. | `sequenceLocks_iff` | The three reasons are limits of the specification. Core has no such result. |
@@ -3573,7 +3579,6 @@ The targets add no axiom and no trust assumption: each depends on `propext`, `Cl
 
 The theorems do not say:
 
-- The time form of `relativeLock_enforced`, for an operand with bit 22 set. `sequenceLocks_iff` states the time lock of one input, and no theorem joins it with the opcode.
 - That a lock with `n` equal to 0 always passes. For a time lock that needs a median time past that does not decrease along the view, which no theorem here states.
 - Anything about a block on which the sequence locks give a result outside the model. The restriction reads accepted blocks alone.
 - That `relativeLock_enforced` holds without its conditions. On a block that is not applicable, or for another form of script, no check of the rule need run.

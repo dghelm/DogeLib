@@ -51,7 +51,8 @@ A reason is never a rejection.
 | `coinAboveBlock` | A time lock reads a coin whose height is above the height of the block. For a coin one block above, Core reads the median time of the block itself. For a higher coin, `GetAncestor` returns null and Core dereferences it. |
 | `ancestorOutsideView` | The view does not give a median time past that the test reads. The first entry of the view is not at the height below the block, or `Work.medianTimePast` returns an adapter error for the view or for the view from the ancestor of a time lock. |
 
-The reasons are checked in input order, and for one input in the order of the table.
+The test first checks the height of the first view entry and the median time past of the predecessor. A failure of either gives `ancestorOutsideView`, before the test reads an input.
+The reasons of the inputs are then checked in input order, and for one input in the order of the table.
 The test reads the median time past of the predecessor for every transaction that the rule applies to, as `EvaluateSequenceLocks` does.
 It reads an ancestor time only for an input with a time lock.
 

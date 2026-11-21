@@ -14,6 +14,7 @@ The block-level targets of design record 0012, section 9.3, that join the three 
 - `relativeLockTime_softFork`: the framework's `SoftFork` for the revision and `validateBlock`, with the witnesses of each rule.
 - `relativeLockTime_chain`: a list of blocks that the revised connection accepts is accepted by `connectChain`, to the same final coin set. For connection alone.
 - `relativeLock_enforced`: in an accepted applicable block, a spend of a coin whose script starts with a height operand and `OP_CHECKSEQUENCEVERIFY` is at least that many blocks above the coin.
+- `relativeLock_enforced_time`: the time form, for an operand with bit 22 set, with median times past in the place of heights.
 
 ## Label
 
@@ -27,9 +28,9 @@ The revision is active on no network (`csv_never_lockedIn` for the deployment of
 
 | Hypothesis | Used by | Where Core enforces it |
 | --- | --- | --- |
-| The block is applicable. | `relativeLock_enforced` | It is a limit of the revision (design record 0012, section 5). Core reaches the code of the rules only with a predecessor. |
-| The spent `scriptPubKey` is `operandScript b S`, and `S` and the `scriptSig` have no instruction `0xb2`. | `relativeLock_enforced` | Not a rule. It is the form of script that the theorem is about, as in `csv_accepted_iff`. |
-| The operand has bits 31 and 22 clear. | `relativeLock_enforced` | Not a rule. With bit 31 set the opcode is a NOP, and with bit 22 set the operand is a time lock, which the theorem does not state. |
+| The block is applicable. | `relativeLock_enforced`, `relativeLock_enforced_time` | It is a limit of the revision (design record 0012, section 5). Core reaches the code of the rules only with a predecessor. |
+| The spent `scriptPubKey` is `operandScript b S`, and `S` and the `scriptSig` have no instruction `0xb2`. | `relativeLock_enforced`, `relativeLock_enforced_time` | Not a rule. It is the form of script that the theorem is about, as in `csv_accepted_iff`. |
+| The operand has bit 31 clear. | `relativeLock_enforced`, `relativeLock_enforced_time` | Not a rule. With bit 31 set the opcode is a NOP. Bit 22 selects the height form or the time form. |
 
 `relativeLockTime_chain` has no hypothesis on the contexts or the views of the blocks.
 A list with an unlinked context or a wrong view is still covered: the conclusion is about `connectChain` on the same contexts.
@@ -219,21 +220,34 @@ theorem lookupInputs_coin {s : CoinSet} {inputs : List TxIn} {coins : List Coin}
         exact ih htail hin
 
 /--
-The target `relativeLock_enforced` of design record 0012, section 9.3. Block-level.
-Suppose that the active revision accepts an applicable block.
-Take an input of a transaction of the block that is not a coinbase, and the coin that it spends in the set just before its transaction (`coinsBefore`).
-Let the script of the coin be `operandScript bytes S`: a push of an operand of at most 5 bytes, then opcode `0xb2`, then `S`.
-Let `S` and the `scriptSig` of the input have no instruction `0xb2`.
-Let the operand `n = ScriptNum.value bytes` have bits 31 and 22 clear, and let `d` be its low 16 bits.
-Then the height of the block is at least the height of the coin plus `d`.
-
-The proof joins two rules.
-The opcode of BIP 112 bounds the sequence of the input: it has bits 31 and 22 clear, the version is at least 2, and `d` is at most its low 16 bits (`csv_accepted_iff`).
-The sequence lock of BIP 68 then bounds the depth of the coin (`sequenceLocks_iff`).
-For every pair of embeddings, verifier, pair of flags, context and coin set.
-The theorem does not state the time form, for an operand with bit 22 set.
+`CheckSequence` for a time operand.
+Let `sequenceSatisfied version sequence n` hold, and let `n` have bit 22 set.
+Then the version is at least 2, the sequence has bit 31 clear and bit 22 set, and the low 16 bits of `n` are at most those of the sequence.
 -/
-theorem relativeLock_enforced {ρ' μ' : Type} {V : ValidateEmbedding ConnectRejection ConnectReason ρ' μ'}
+theorem sequenceSatisfied_time {version sequence : UInt32} {n : Int}
+    (h : sequenceSatisfied version sequence n = true) (h22 : n.toNat &&& sequenceLockTimeTypeFlag ≠ 0) :
+    2 ≤ version.toNat ∧ sequence.toNat &&& sequenceLockTimeDisableFlag = 0 ∧
+      sequence.toNat &&& sequenceLockTimeTypeFlag ≠ 0 ∧
+        n.toNat &&& sequenceLockTimeMask ≤ sequence.toNat &&& sequenceLockTimeMask := by
+  have hn22 : n.toNat &&& sequenceLockTimeTypeFlag = sequenceLockTimeTypeFlag := by
+    rcases and_typeFlag n.toNat with h0 | h1
+    · exact absurd h0 h22
+    · exact h1
+  simp only [sequenceSatisfied, Bool.and_eq_true, Bool.or_eq_true, decide_eq_true_eq, beq_iff_eq,
+    and_mask_split, hn22] at h
+  obtain ⟨⟨⟨hv, hd⟩, hor⟩, hle⟩ := h
+  have hflag : sequenceLockTimeTypeFlag = 4194304 := rfl
+  have hs16 : sequence.toNat &&& sequenceLockTimeMask ≤ 65535 := Nat.and_le_right
+  rcases and_typeFlag sequence.toNat with hs | hs
+  · omega
+  · exact ⟨hv, hd, by omega, by omega⟩
+
+/--
+What an accepted applicable block ran for one spend of a coin with the script of `csv_accepted_iff`.
+Under the conditions of `relativeLock_enforced` without those on the type bit of the operand:
+the view is not empty, `sequenceSatisfied` holds for the version, the sequence and the operand, and `sequenceLocks` accepted the transaction with a list of coins that has the coin at the position of the input.
+-/
+theorem enforced_checks {ρ' μ' : Type} {V : ValidateEmbedding ConnectRejection ConnectReason ρ' μ'}
     {E : ConnectEmbedding ScriptError Unsupported ConnectRejection ConnectReason} {verify : SignatureVerifier}
     {fCheckPOW fCheckMerkleRoot : Bool} {ctx : ValidateContext} {s : CoinSet} {b : Block} {r : ConnectResult}
     (h : validateBlockWithActive V E (blockRevision verify ctx.view) true fCheckPOW fCheckMerkleRoot ctx s b = .ok r)
@@ -242,9 +256,9 @@ theorem relativeLock_enforced {ρ' μ' : Type} {V : ValidateEmbedding ConnectRej
     (hcoin : (coinsBefore s ctx.height b.transactions i).coin input.prevout = some coin) {bytes S : List UInt8}
     (hb : bytes.length ≤ 5) (hsig : opcodeFree isCsvOpcode input.scriptSig.bytes.val = true)
     (hS : opcodeFree isCsvOpcode S = true) (hscript : coin.out.scriptPubKey.bytes.val = operandScript bytes S)
-    (h31 : (ScriptNum.value bytes).toNat &&& sequenceLockTimeDisableFlag = 0)
-    (h22 : (ScriptNum.value bytes).toNat &&& sequenceLockTimeTypeFlag = 0) :
-    coin.height + ((ScriptNum.value bytes).toNat &&& sequenceLockTimeMask) ≤ ctx.height := by
+    (h31 : (ScriptNum.value bytes).toNat &&& sequenceLockTimeDisableFlag = 0) :
+    ctx.view ≠ [] ∧ sequenceSatisfied tx.version input.sequence (ScriptNum.value bytes) = true ∧
+      ∃ coins, sequenceLocks true ctx.view ctx.height i tx coins = .ok () ∧ coins[j]? = some coin := by
   have hview : ctx.view ≠ [] := by
     intro hnil
     simp [applicable, hnil] at happ
@@ -267,9 +281,67 @@ theorem relativeLock_enforced {ρ' μ' : Type} {V : ValidateEmbedding ConnectRej
   rcases hor with hor | hor
   · exact absurd h31 hor
   · rw [htx, hinput] at hor
-    obtain ⟨hv, hd, ht, hle⟩ := sequenceSatisfied_height hor h22
-    have hlock := sequenceLocks_height_lock hview hv (txTest_eq_ok_iff.mp htest) hin hj hd ht
-    have hheight : (connectContextOf ctx b).height = ctx.height := rfl
-    omega
+    exact ⟨hview, hor, coins, txTest_eq_ok_iff.mp htest, hj⟩
+
+/--
+The target `relativeLock_enforced` of design record 0012, section 9.3, in its height form. Block-level.
+Suppose that the active revision accepts an applicable block.
+Take an input of a transaction of the block that is not a coinbase, and the coin that it spends in the set just before its transaction (`coinsBefore`).
+Let the script of the coin be `operandScript bytes S`: a push of an operand of at most 5 bytes, then opcode `0xb2`, then `S`.
+Let `S` and the `scriptSig` of the input have no instruction `0xb2`.
+Let the operand `n = ScriptNum.value bytes` have bits 31 and 22 clear, and let `d` be its low 16 bits.
+Then the height of the block is at least the height of the coin plus `d`.
+
+The proof joins two rules.
+The opcode of BIP 112 bounds the sequence of the input: it has bits 31 and 22 clear, the version is at least 2, and `d` is at most its low 16 bits (`csv_accepted_iff`).
+The sequence lock of BIP 68 then bounds the depth of the coin (`sequenceLocks_iff`).
+For every pair of embeddings, verifier, pair of flags, context and coin set.
+`relativeLock_enforced_time` is the time form, for an operand with bit 22 set.
+-/
+theorem relativeLock_enforced {ρ' μ' : Type} {V : ValidateEmbedding ConnectRejection ConnectReason ρ' μ'}
+    {E : ConnectEmbedding ScriptError Unsupported ConnectRejection ConnectReason} {verify : SignatureVerifier}
+    {fCheckPOW fCheckMerkleRoot : Bool} {ctx : ValidateContext} {s : CoinSet} {b : Block} {r : ConnectResult}
+    (h : validateBlockWithActive V E (blockRevision verify ctx.view) true fCheckPOW fCheckMerkleRoot ctx s b = .ok r)
+    (happ : applicable ctx b = true) {i : Nat} {tx : Transaction} (hi : b.transactions[i]? = some tx)
+    (hcb : tx.isCoinBase = false) {j : Nat} {input : TxIn} (hin : tx.inputs.val[j]? = some input) {coin : Coin}
+    (hcoin : (coinsBefore s ctx.height b.transactions i).coin input.prevout = some coin) {bytes S : List UInt8}
+    (hb : bytes.length ≤ 5) (hsig : opcodeFree isCsvOpcode input.scriptSig.bytes.val = true)
+    (hS : opcodeFree isCsvOpcode S = true) (hscript : coin.out.scriptPubKey.bytes.val = operandScript bytes S)
+    (h31 : (ScriptNum.value bytes).toNat &&& sequenceLockTimeDisableFlag = 0)
+    (h22 : (ScriptNum.value bytes).toNat &&& sequenceLockTimeTypeFlag = 0) :
+    coin.height + ((ScriptNum.value bytes).toNat &&& sequenceLockTimeMask) ≤ ctx.height := by
+  obtain ⟨hview, hsat, coins, hok, hj⟩ := enforced_checks h happ hi hcb hin hcoin hb hsig hS hscript h31
+  obtain ⟨hv, hd, ht, hle⟩ := sequenceSatisfied_height hsat h22
+  have hlock := sequenceLocks_height_lock hview hv hok hin hj hd ht
+  omega
+
+/--
+The time form of the target `relativeLock_enforced` of design record 0012, section 9.3. Block-level.
+Take the conditions of `relativeLock_enforced`, with one change: the operand `n` has bit 31 clear and bit 22 set. Let `d` be its low 16 bits.
+Then the view of the context has a median time past `median`, which is that of the predecessor of the block.
+The ancestor of the coin has a median time past `t` (`ancestorMedianTimePast`): the ancestor at height `max (c - 1) 0`, for the height `c` of the coin.
+And `t + 512 * d ≤ median`.
+
+The statement has the shape of the height form, with median times past in the place of heights.
+For every pair of embeddings, verifier, pair of flags, context and coin set.
+-/
+theorem relativeLock_enforced_time {ρ' μ' : Type} {V : ValidateEmbedding ConnectRejection ConnectReason ρ' μ'}
+    {E : ConnectEmbedding ScriptError Unsupported ConnectRejection ConnectReason} {verify : SignatureVerifier}
+    {fCheckPOW fCheckMerkleRoot : Bool} {ctx : ValidateContext} {s : CoinSet} {b : Block} {r : ConnectResult}
+    (h : validateBlockWithActive V E (blockRevision verify ctx.view) true fCheckPOW fCheckMerkleRoot ctx s b = .ok r)
+    (happ : applicable ctx b = true) {i : Nat} {tx : Transaction} (hi : b.transactions[i]? = some tx)
+    (hcb : tx.isCoinBase = false) {j : Nat} {input : TxIn} (hin : tx.inputs.val[j]? = some input) {coin : Coin}
+    (hcoin : (coinsBefore s ctx.height b.transactions i).coin input.prevout = some coin) {bytes S : List UInt8}
+    (hb : bytes.length ≤ 5) (hsig : opcodeFree isCsvOpcode input.scriptSig.bytes.val = true)
+    (hS : opcodeFree isCsvOpcode S = true) (hscript : coin.out.scriptPubKey.bytes.val = operandScript bytes S)
+    (h31 : (ScriptNum.value bytes).toNat &&& sequenceLockTimeDisableFlag = 0)
+    (h22 : (ScriptNum.value bytes).toNat &&& sequenceLockTimeTypeFlag ≠ 0) :
+    ∃ median t, medianTimePast ctx.view = .ok median ∧
+      ancestorMedianTimePast ctx.view ctx.height coin.height = .ok t ∧
+        t + 512 * (((ScriptNum.value bytes).toNat &&& sequenceLockTimeMask : Nat) : Int) ≤ median := by
+  obtain ⟨hview, hsat, coins, hok, hj⟩ := enforced_checks h happ hi hcb hin hcoin hb hsig hS hscript h31
+  obtain ⟨hv, hd, ht, hle⟩ := sequenceSatisfied_time hsat h22
+  obtain ⟨median, t, hmed, hanc, hlock⟩ := sequenceLocks_time_lock hview hv hok hin hj hd ht
+  exact ⟨median, t, hmed, hanc, by omega⟩
 
 end DogeLib.Proposals.RelativeLockTime

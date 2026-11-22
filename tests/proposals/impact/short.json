@@ -1,0 +1,37 @@
+{
+  "blocks": 1000,
+  "blocks_sha256": "ad5553cf0b0b4c68553124497cddaa4310359025c69204116c84a8c664da4c5b",
+  "counts": {
+    "cutoff_transactions": 0,
+    "inputs": 47185,
+    "missing_coins": 0,
+    "opcode_spends": 0,
+    "outputs": 76580,
+    "sequence_candidates": 0,
+    "time_lock_transactions": 0,
+    "transactions": 35548
+  },
+  "first": 9001,
+  "format": "dogelib-impact-candidates/1",
+  "last": 10000,
+  "opcode_outputs": [],
+  "range": "short",
+  "revisions": {
+    "ExampleFaultyLocktime": {
+      "candidate_blocks": 0,
+      "candidates": [],
+      "opcode": "0xb3"
+    },
+    "ExampleVersionVerify": {
+      "candidate_blocks": 0,
+      "candidates": [],
+      "opcode": "0xb9"
+    },
+    "RelativeLockTime": {
+      "candidate_blocks": 0,
+      "candidates": [],
+      "opcode": "0xb2"
+    }
+  },
+  "snapshot": "coins-9000.bin"
+}

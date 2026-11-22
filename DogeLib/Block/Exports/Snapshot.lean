@@ -277,11 +277,17 @@ The result has the fields of `blockValidate`, with `start_set_digest_hex` and `s
 No block record has a digest of the whole set.
 `set_digest_hex`, `set_coins` and `set_value` are those of the whole set after the last record.
 The function writes the progress of its reads to standard error.
+`extraArgs` and `hookOf` are the added arguments and the hook of `blockValidateFileWith`.
+The hook runs on the same restricted coin set as the baseline step.
 -/
-def blockValidateSnapshot (fields : Args) : IO (Except Failure Json) := do
+def blockValidateSnapshotWith (extraArgs : List String) (hookOf : HookReader) (fields : Args) :
+    IO (Except Failure Json) := do
   for (key, _) in fields do
-    unless snapshotArgs.contains key do
+    unless snapshotArgs.contains key || extraArgs.contains key do
       return .error (.request s!"unknown argument {key} for operation block.validate with coins_file")
+  let hook ← match hookOf fields with
+    | .ok hook => pure hook
+    | .error f => return .error f
   unless fields.contains "blocks_file" do return .error (.request "coins_file needs blocks_file")
   let .ok (.str blocks) := arg fields "blocks_file" | return .error (.request "blocks_file must be a string")
   let .ok (.str path) := arg fields "coins_file" | return .error (.request "coins_file must be a string")
@@ -307,7 +313,7 @@ def blockValidateSnapshot (fields : Args) : IO (Except Failure Json) := do
       | .ok b =>
         if (blockKeys b).all names.contains then .ok ()
         else .error (validateFailure "blocks_file_changed" [("index", natJson index)])
-  let run ← match ← validateFileRun blocks options { start with coins := snapshot.coins } none check with
+  let run ← match ← validateFileRun blocks options { start with coins := snapshot.coins } hook check with
     | .ok run => pure run
     | .error f => return .error f
   let startFields := [("start_set_digest_hex", Json.str (hexOf snapshot.digest.toList)),
@@ -320,5 +326,8 @@ def blockValidateSnapshot (fields : Args) : IO (Except Failure Json) := do
   return .ok (Json.mkObj ([("blocks", .arr run.records), ("out_of_domain_at", (run.outOfDomain.map natJson).getD .null),
     ("set_digest_hex", .str (hexOf totals.digest.1.toList)), ("set_coins", natJson totals.digest.2),
     ("set_value", valueJson totals.value)] ++ startFields ++ versionBitsField run))
+
+/-- `block.validate` with `coins_file` of `dogelib-oracle`: `blockValidateSnapshotWith` with no added argument and no hook. -/
+def blockValidateSnapshot (fields : Args) : IO (Except Failure Json) := blockValidateSnapshotWith [] noHook fields
 
 end DogeLib.Block.Exports

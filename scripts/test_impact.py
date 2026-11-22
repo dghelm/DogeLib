@@ -16,9 +16,14 @@ It needs no Dogecoin Core and no download. The checks:
    that differs with no activation, a block that the baseline rejects, another baseline response,
    and a candidate with another expected verdict.
 3. A list that git does not track is refused.
-4. The proposal executable on a made block whose coin holds `OP_1NEGATE OP_NOP10 OP_1`, the
-   negative operand of `ExampleVersionVerify`. The candidate scan lists the block. The run check
-   passes with that list, and fails with the empty list. With no activation height, case 1 passes.
+4. The proposal executable, through its snapshot path, on five made blocks: one change of each
+   kind of candidate. They are a negative operand of `OP_NOP10`, of `OP_NOP4` and of `OP_CSV`, a
+   sequence lock that is one block short, and a lock time at the median time past. The candidate
+   scan lists each block. The run check passes with that list, and fails with the empty list.
+   With no activation height, case 1 passes.
+
+Every made block is a range request with a `blocks_file` and a `coins_file`, so the scan reads it
+through `listing`, the code path of the ranges.
 """
 
 import json
@@ -32,7 +37,7 @@ import impact_candidates as cands
 import impact_run
 import replay_blocks
 from oracle_block_check import transaction, txin, txout
-from oracle_block_validate import Base, Coins, coin_id, file_record, p2sh, push, spend
+from oracle_block_validate import Base, Coins, coin_id, file_record, p2sh, push, snapshot_of, snapshot_request, spend
 
 OP_0, OP_1, OP_1NEGATE, OP_NOP10, OP_NOP4, OP_CSV, OP_DROP = 0x00, 0x51, 0x4f, 0xb9, 0xb3, 0xb2, 0x75
 VV, FL, RLT = "ExampleVersionVerify", "ExampleFaultyLocktime", "RelativeLockTime"
@@ -47,36 +52,40 @@ def check(condition: bool, message: str) -> bool:
     return condition
 
 
-def made(directory: Path, name: str, txs: list[bytes], coins: Coins, height: int = HEIGHT) -> tuple[dict, dict]:
-    """A request with one block of the transactions on the rule-change block at `height`, and its coin map."""
+def made(directory: Path, name: str, txs: list[bytes], coins: Coins, height: int = HEIGHT,
+         version: int | None = None) -> dict:
+    """A range request with one block of the transactions on the rule-change block at `height`.
+
+    The request has the form of a range request of scripts/impact_run.py: the block in a
+    `blocks_file`, the coins in a `dogelib-coins/1` snapshot as `coins_file`, and the chain view of
+    the committed block. So the scan reads it through `listing`, the code path of the ranges."""
     base = Base(height)
     raw = base.block([base.coinbase()] + txs)
     blocks = directory / f"{name}.bin"
     blocks.write_bytes(file_record(height, raw))
-    request = {k: v for k, v in base.request([raw], coins).items() if k != "blocks_hex"}
-    request["blocks_file"] = str(blocks)
-    coin_map = {bytes.fromhex(e["txid_hex"]) + o["n"].to_bytes(4, "little"): bytes.fromhex(o["script_hex"])
-                for e in request["coins"] for o in e["outputs"]}
-    return request, coin_map
+    snapshot = directory / f"{name}.coins"
+    snapshot.write_bytes(snapshot_of(coins.json()))
+    return snapshot_request(base.request([raw], coins), blocks, snapshot)
 
 
-def candidate_rules(request: dict, coin_map: dict) -> dict:
-    """The rules of the candidate reasons of the block, for each revision."""
-    result = cands.scan(request, coin_map)
-    return {name: sorted({r["rule"] for c in found for r in c["reasons"]}) for name, found in result["candidates"].items()}
+def candidate_rules(request: dict) -> dict:
+    """The rules of the candidate reasons of the block, for each revision, from `listing`."""
+    value = cands.listing("made", request)
+    return {name: sorted({r["rule"] for c in entry["candidates"] for r in c["reasons"]})
+            for name, entry in value["revisions"].items()}
 
 
 def candidate_cases(directory: Path) -> None:
     def case(name, expected, script_sig=b"", script=bytes([OP_1]), *, coin=True, version=1, lock=0,
-             sequence=0xffffffff, extra=None):
+             sequence=0xffffffff):
         coins = Coins()
         point = coins.add(coin_id(1), 0, 1000, script) if coin else coin_id(2) + bytes(4)
+        if not coin:
+            coins.add(coin_id(3), 0, 1000)
         tx = transaction([txin(point, script_sig, sequence)], [txout(1)], version=version, lock=lock)
-        request, coin_map = made(directory, name.replace(" ", "-"), [tx] + (extra or []), coins)
-        got = candidate_rules(request, coin_map)
+        got = candidate_rules(made(directory, name.replace(" ", "-").replace(",", ""), [tx], coins))
         want = {VV: [], FL: [], RLT: [], **expected}
         check(got == want, f"candidates: {name}: {got}")
-        return request, coin_map
 
     case("no rule", {})
     case("OP_NOP10 in the scriptSig", {VV: ["opcode 0xb9"]}, script_sig=bytes([OP_1, OP_NOP10]))
@@ -109,11 +118,10 @@ def candidate_cases(directory: Path) -> None:
     first = spend([coins.add(coin_id(1), 0, 1000)], [txout(1, bytes([OP_1, OP_CSV]))])
     created = cands.parse_tx(first)["txid"] + bytes(4)
     second = spend([created], [txout(1)])
-    request, coin_map = made(directory, "opcode-output", [first, second], coins)
-    result = cands.scan(request, coin_map)
+    result = cands.listing("made", made(directory, "opcode-output", [first, second], coins))
     outputs = result["opcode_outputs"]
     check(len(outputs) == 1 and outputs[0]["spent_at"] == HEIGHT and result["counts"]["opcode_spends"] == 1
-          and [c["height"] for c in result["candidates"][RLT]] == [HEIGHT],
+          and [c["height"] for c in result["revisions"][RLT]["candidates"]] == [HEIGHT],
           f"candidates: an opcode output that the block spends: {outputs}, {result['counts']['opcode_spends']} spends")
 
 
@@ -182,22 +190,44 @@ def tracked_check(directory: Path) -> None:
 
 
 def proposal_run(directory: Path, proposal: str) -> None:
-    coins = Coins()
-    point = coins.add(coin_id(1), 0, 1000, bytes([OP_1NEGATE, OP_NOP10, OP_1]))
-    request, coin_map = made(directory, "negative-operand", [spend([point], [txout(1)])], coins)
-    listing = cands.scan(request, coin_map)["candidates"][VV]
-    check([c["height"] for c in listing] == [HEIGHT], f"proposal run: the scan lists the made block: {listing}")
-    for activation, candidates, passes, what in ((0, listing, True, "the made block is a listed change"),
-                                                 (0, [], False, "the same change without the list fails"),
-                                                 (None, [], True, "case 1 with no activation height")):
-        revision = {"name": VV, "variant": None, "activation_height": activation}
-        answer, _ = replay_blocks.run(proposal, {**request, "id": "made", "revision": revision},
-                                      directory / "response.json", 600)
-        try:
-            report = impact_run.check_response(answer, request, revision, {"candidates": candidates}, None)
-            check(passes and report["changed_blocks"] == (1 if activation is not None else 0), f"proposal run: {what}")
-        except impact_run.ImpactError as error:
-            check(not passes, f"proposal run: {what} ({error})")
+    """Each kind of candidate in a made block that the revision rejects, through the snapshot path of the proposal executable.
+
+    Each expected change is stated by hand from the rule. `OP_1NEGATE OP_NOP10 OP_1` and
+    `OP_1NEGATE OP_NOP4 OP_1` give the negative operand of each example. `OP_1NEGATE OP_CSV OP_1`
+    gives the negative operand of BIP 112. A version-2 spend with the sequence 2 of a coin at the
+    height below the block is one block short of its lock (BIP 68). A lock time at the median time
+    past, with an input that is not final, is final at the baseline cutoff, the block time, and not
+    final at the revised cutoff, the median (BIP 113)."""
+    base = Base(HEIGHT)
+    median = cands.median_time_past([e["time"] for e in sorted(base.chain, key=lambda e: e["height"])])
+
+    def planted(name, revision, script=bytes([OP_1]), *, version=1, lock=0, sequence=0xffffffff, coin_height=100000):
+        coins = Coins()
+        point = coins.add(coin_id(1), 0, 1000, script, height=coin_height)
+        tx = transaction([txin(point, b"", sequence)], [txout(1)], version=version, lock=lock)
+        return name, revision, made(directory, name, [tx], coins)
+
+    cases = [planted("nop10", VV, bytes([OP_1NEGATE, OP_NOP10, OP_1])),
+             planted("nop4", FL, bytes([OP_1NEGATE, OP_NOP4, OP_1])),
+             planted("csv", RLT, bytes([OP_1NEGATE, OP_CSV, OP_1])),
+             planted("sequence", RLT, version=2, sequence=2, coin_height=HEIGHT - 1),
+             planted("cutoff", RLT, lock=median, sequence=0)]
+    variants = {VV: None, FL: "corrected", RLT: None}
+    for name, revision_name, request in cases:
+        listing = cands.listing(name, request)["revisions"][revision_name]["candidates"]
+        check([c["height"] for c in listing] == [HEIGHT], f"proposal run {name}: the scan lists the made block")
+        for activation, candidates, passes, what in ((0, listing, True, "a listed change"),
+                                                     (0, [], False, "the same change without the list fails"),
+                                                     (None, [], True, "case 1 with no activation height")):
+            revision = {"name": revision_name, "variant": variants[revision_name], "activation_height": activation}
+            answer, _ = replay_blocks.run(proposal, {**request, "id": "made", "revision": revision},
+                                          directory / "response.json", 600)
+            try:
+                report = impact_run.check_response(answer, request, revision, {"candidates": candidates}, None)
+                check(passes and report["changed_blocks"] == (1 if activation is not None else 0),
+                      f"proposal run {name}: {what}: {report['changed']}")
+            except impact_run.ImpactError as error:
+                check(not passes, f"proposal run {name}: {what} ({error})")
 
 
 def main() -> int:

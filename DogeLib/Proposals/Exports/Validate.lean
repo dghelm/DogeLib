@@ -343,7 +343,7 @@ def revisionArgs : List String := ["revision"]
 /-- `block.validate` of the proposal executable: the baseline operation with the argument `revision`. -/
 def blockValidate : Operation := blockValidateWith revisionArgs revisionHook
 
-/-- `block.validate` with `blocks_file` of the proposal executable. -/
+/-- `block.validate` with `blocks_file` of the proposal executable. A request that also has `coins_file` goes to `Block.Exports.blockValidateSnapshotWith` with the same argument and hook. -/
 def blockValidateFile (fields : Args) : IO (Except Failure Json) :=
   blockValidateFileWith revisionArgs revisionHook fields
 
@@ -382,7 +382,9 @@ def operations : List Operation :=
 
 /-- Answer a line in `IO`, as the `dogelib-proposal-oracle` executable does. -/
 def respondIO (line : String) : IO (Option Json) :=
-  respondM (runRequestIOWith operations blockValidateFile) line
+  respondM (runRequestIOWith operations (fun fields =>
+    if fields.contains "coins_file" then Block.Exports.blockValidateSnapshotWith revisionArgs revisionHook fields
+    else blockValidateFile fields)) line
 
 /-- The name of the executable. -/
 def programName : String := "dogelib-proposal-oracle"

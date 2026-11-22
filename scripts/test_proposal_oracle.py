@@ -1,6 +1,6 @@
 """Test of `dogelib-proposal-oracle`, the proposal executable of design record 0011, section 10.2.
 
-Usage: python3 -I scripts/test_proposal_oracle.py [--mainnet-blocks DIR] [--timeout SECONDS]
+Usage: python3 -I scripts/test_proposal_oracle.py [--mainnet-blocks DIR] [--snapshot-request FILE] [--timeout SECONDS]
            <dogelib-oracle> <dogelib-proposal-oracle>
 
 It needs no Dogecoin Core. The checks:
@@ -8,7 +8,11 @@ It needs no Dogecoin Core. The checks:
 1. Baseline. Without the argument `revision`, the proposal executable writes the bytes that
    `dogelib-oracle` writes, on every `block.validate` request of the full comparison
    (`block_validate_sets` of scripts/oracle_block_validate.py), and on the same requests with
-   `blocks_file` (stage 6, exit condition 2). With --mainnet-blocks it adds the replay of mainnet
+   `blocks_file` (stage 6, exit condition 2), and on the requests with one record for each block
+   with their coins in a `coins_file`. A request with a revision gives the same `revised` objects
+   with `coins_file` as with `coins`. With --snapshot-request it adds one range request with
+   `coins_file`, such as the short range of scripts/impact_run.py, heights 9,001 to 10,000 from the
+   snapshot at 9,000. With --mainnet-blocks it adds the replay of mainnet
    from the genesis block to height 10,000, which takes each program several minutes.
 2. `dogelib-oracle` refuses the argument `revision` with a request error.
 3. Request errors of the argument: each malformed `revision` gives a request error.
@@ -52,7 +56,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from oracle_block_check import transaction, txin, txout
 from oracle_contextual_body import contextual_body_sets
 from oracle_block_validate import (EVAL_FALSE, Base, Coins, block_validate_sets, coin_id, file_twins,
-                                   mainnet_validate_sets, script_reason, spend)
+                                   mainnet_validate_sets, script_reason, snapshot_twins, spend)
 
 # The number of `block.validate` requests of the full comparison (EXPECTED_COUNTS of scripts/compare_core.py).
 FULL_COMPARISON_REQUESTS = 42
@@ -204,6 +208,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--mainnet-blocks", metavar="DIR",
                         help="also compare the replay of mainnet to height 10,000 from the fixtures under DIR")
+    parser.add_argument("--snapshot-request", metavar="FILE",
+                        help="also compare one range request with coins_file, such as the short range")
     parser.add_argument("--timeout", type=float, default=3600.0)
     parser.add_argument("oracle")
     parser.add_argument("proposal_oracle")
@@ -238,6 +244,24 @@ def main() -> int:
         if check(file_response == hex_response and block_records(hex_response)[0].get("revised") is not None,
                  "blocks_file and blocks_hex differ on a request with a revision"):
             print("ok:   a request with a revision has one response for blocks_file and blocks_hex")
+        # The snapshot path: the requests with their coins in a `coins_file` (design record 0011, section 3.3).
+        snapshots = numbered([req for req, _ in snapshot_twins(requests, baseline, directory)], "snapshot")
+        if check(snapshots and run(oracle, snapshots, timeout) == run(proposal, snapshots, timeout),
+                 "the two programs differ on a coins_file request"):
+            print(f"ok:   {len(snapshots)} coins_file requests: the same bytes")
+        twin = snapshot_twins([req], [without_revised(hex_response)], directory)[0][0]
+        snap_response = responses(proposal, [{**twin, "id": "made-file", "revision": revision(*rev, 0)}], timeout)[0]
+        if check([b.get("revised") for b in block_records(snap_response)] ==
+                 [b.get("revised") for b in block_records(hex_response)],
+                 "coins_file and coins give other revised objects on a request with a revision"):
+            print("ok:   a request with a revision has the same revised objects with coins_file and with coins")
+    if args.snapshot_request:
+        # A range request with `coins_file`, such as the short range of scripts/impact_run.py.
+        ranged = json.loads(pathlib.Path(args.snapshot_request).read_text())
+        ranged = {**{k: v for k, v in ranged.items() if k != "expected_end"}, "id": "snapshot-range"}
+        if check("coins_file" in ranged and run(oracle, [ranged], timeout) == run(proposal, [ranged], timeout),
+                 f"the two programs differ on the coins_file request {args.snapshot_request}"):
+            print(f"ok:   the coins_file range request {args.snapshot_request}: the same bytes")
     if args.mainnet_blocks:
         replay = numbered([r for _, group in mainnet_validate_sets(args.mainnet_blocks) for r in group], "mainnet")
         if check(run(oracle, replay, timeout) == run(proposal, replay, timeout),

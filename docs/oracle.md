@@ -1262,12 +1262,14 @@ It implements the self-test of [design record 0011](design/0011-mainnet-ranges.m
 | --- | --- | --- |
 | `genesis-10000`, `genesis-145000` | 0 to 10,000, and 0 to 145,000 | The empty set |
 | `short`, `S` | 9,001 to 10,000, and 100,001 to 101,000 | The snapshot that the harness writes at 9,000 or 100,000, with its committed manifest |
-| `A` to `H`, `E1`, `E2` | Section 4 of design record 0011 | The Core pass's snapshot at the range start, with its committed manifest. The request equals the request of `scripts/run_range.py` |
+| The configured ranges of design record 0011 | Section 4 of design record 0011 | The Core pass's snapshot at the range start, with its committed manifest. The request equals the request of `scripts/run_range.py` |
 
 `scripts/impact_candidates.py` lists the candidate blocks of each range from that request, without DogeLib code ([the lists](../tests/proposals/impact/README.md)).
 A candidate covers spends only.
 The scripts of a spend are its `scriptSig`, the spent `scriptPubKey` and the P2SH redeem script.
-A block is a candidate when a script of one of its spends holds the opcode of the revision, or when the coin of a spend is missing.
+A block is a candidate when a script of one of its spends holds the opcode of the revision.
+A missing coin of a spend also makes a candidate.
+
 For `RelativeLockTime`, a cutoff transaction of BIP 113 and a sequence candidate of BIP 68 also make a candidate.
 A created `scriptPubKey` does not make its block a candidate.
 The list is committed before the runs of its range.
@@ -1275,11 +1277,15 @@ The list is committed before the runs of its range.
 `impact_run.py run` sends the request with `revision` and checks the response:
 
 - The candidate list is committed, and it names the blocks file of the request by SHA-256.
+- The response has one block record for each block of the blocks file, with its height and its hash, and `out_of_domain_at` is null.
 - The baseline accepts every block. With `--baseline`, the response without the `revised` objects equals that response of `dogelib-oracle` to the same request.
 - Case 1, with no activation height: each `revised` object has `active` false. It has the verdict, the reject reason and the changes digest of its block record.
 - Case 2, from an activation height: every changed block is a candidate, and every change goes from accepted to rejected. An accepted block has the changes digest of the baseline.
 
 A changed block is a block whose two verdicts differ. An unsupported result is not a change.
+
+`impact_run.py check` runs the same checks on a saved response of `impact_run.py run`.
+
 `scripts/test_impact.py` plants one candidate of each kind in a made block, in the form of a range request.
 The kinds are `0xb9`, `0xb3`, `0xb2`, a sequence lock that is one block short, and a lock time at the median time past.
 The scan lists each block, and the proposal executable rejects each one, which the baseline accepts.

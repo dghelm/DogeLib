@@ -7,6 +7,8 @@ Usage:
       [--fixture DIR ...]
   python3 -I scripts/impact_run.py run --range NAME --request FILE --revision NAME[/VARIANT]
       --activation HEIGHT|none --output DIR [--baseline FILE] <dogelib-proposal-oracle>
+  python3 -I scripts/impact_run.py check --range NAME --request FILE --revision NAME[/VARIANT]
+      --activation HEIGHT|none --output DIR --response FILE [--baseline FILE] <dogelib-proposal-oracle>
 
 **Ranges.**
 
@@ -16,7 +18,7 @@ Usage:
 | `genesis-145000` | 0 to 145,000 | The empty set | `--fixture` of heights 0 to 10,000 and 10,001 to 145,000 |
 | `short` | 9,001 to 10,000 | The snapshot at 9,000 | `--fixture` of heights 0 to 10,000 and `--harness` |
 | `S` | 100,001 to 101,000 | The snapshot at 100,000 | `--fixture` of heights 0 to 145,000 and `--harness` |
-| `A` to `H`, `E1`, `E2` | Design record 0011, section 4 | The Core pass's snapshot | `--pass` and `--fixture` of the range |
+| The configured ranges of design record 0011 | Design record 0011, section 4 | The Core pass's snapshot | `--pass` and `--fixture` of the range |
 
 `request` writes `request.json` to DIR: the range request of `block.validate`, without `revision`.
 For `short` and `S`, the harness first replays the blocks from the genesis block and writes the
@@ -45,6 +47,10 @@ fixture, and each block of a range must have the committed hash of its height.
    accepted block has the changes digest of the baseline (`connectBlockWith_restricts`,
    `relativeLockTime_restricts`). A candidate with a verdict in `expected` of the list has that
    verdict.
+
+`check` runs checks 1 to 4 on a saved response of `run`, given with `--response`, and writes the
+same files. The response must have one block record for each block of the blocks file, with its
+height and its hash, and `out_of_domain_at` null.
 
 It writes `summary.json` and `report.json` to DIR: the counts, the changed blocks with their heights,
 hashes, verdicts and reasons, and the unsupported results by reason. A changed block is a block
@@ -198,25 +204,43 @@ def make_request(args, log) -> int:
 
 
 def committed(path: Path) -> str:
-    """The commit of `HEAD` when git tracks `path` and `path` has no change against it."""
+    """The last commit that changed `path`, when git tracks `path` and `path` has no change against `HEAD`."""
     tracked = subprocess.run(["git", "-C", str(ROOT), "ls-files", "--error-unmatch", str(path)], capture_output=True)
     clean = subprocess.run(["git", "-C", str(ROOT), "diff", "--quiet", "HEAD", "--", str(path)], capture_output=True)
     if tracked.returncode != 0 or clean.returncode != 0:
         raise ImpactError(f"{path} is not committed: commit the candidate list before the run")
-    return subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True,
-                          check=True).stdout.strip()
+    return subprocess.run(["git", "-C", str(ROOT), "log", "-1", "--format=%H", "--", str(path)], capture_output=True,
+                          text=True, check=True).stdout.strip()
 
 
 def changed(record: dict) -> bool:
     return record["valid"] != (record["revised"]["verdict"] == "accepted") and record["revised"]["verdict"] != "unsupported"
 
 
-def check_response(answer: dict, request: dict, revision: dict, candidates: dict, baseline: dict | None) -> dict:
-    """Checks 2 to 4 of a run, and the report. Raise `ImpactError` on a failed check."""
+def requested_blocks(request: dict) -> list[tuple[int, str]]:
+    """The height and the block hash, in display order, of each block of the request's `blocks_file`."""
+    return [(height, display(fetch_blocks.sha256d(raw[:80])))
+            for height, raw in fetch_blocks.read_blocks(Path(request["blocks_file"]))]
+
+
+def check_response(answer: dict, request: dict, revision: dict, candidates: dict, baseline: dict | None,
+                   blocks: list[tuple[int, str]]) -> dict:
+    """Checks 2 to 4 of a run, and the report. Raise `ImpactError` on a failed check.
+
+    `blocks` is the height and the hash of each requested block. The response must have one block
+    record for each of them, in order, and `out_of_domain_at` null, so an empty or a truncated
+    response fails."""
     ok = answer.get("ok")
     if not isinstance(ok, dict):
         raise ImpactError(f"the proposal executable returned {json.dumps(answer)[:300]}")
     records = ok["blocks"]
+    if ok.get("out_of_domain_at") is not None:
+        raise ImpactError(f"the run left the arithmetic domain at {ok['out_of_domain_at']}")
+    if len(records) != len(blocks):
+        raise ImpactError(f"{len(records)} block records for {len(blocks)} requested blocks")
+    for r, (height, block_hash) in zip(records, blocks):
+        if (r.get("height"), r.get("hash_display")) != (height, block_hash):
+            raise ImpactError(f"the block record of height {r.get('height')} is not the requested block {height} {block_hash}")
     if any(not isinstance(r.get("revised"), dict) for r in records):
         raise ImpactError("a block record has no revised object")
     invalid = [r["height"] for r in records if not r["valid"]]
@@ -271,6 +295,7 @@ def check_response(answer: dict, request: dict, revision: dict, candidates: dict
 
 
 def run(args, log) -> int:
+    """`run`, and `check` on a saved response with `--response`."""
     output = Path(args.output)
     output.mkdir(parents=True, exist_ok=True)
     name = args.revision.split("/")[0]
@@ -290,15 +315,23 @@ def run(args, log) -> int:
     body = {**body, "id": f"impact-{args.range}", "revision": revision}
     log(f"{args.range}: {args.revision}, activation {args.activation}, {candidates['revisions'][name]['candidate_blocks']} "
         f"candidate blocks in {path.relative_to(ROOT)} at {commit[:12]}")
-    answer, seconds = replay_blocks.run(args.proposal_oracle, body, output / "response.json", None)
-    log(f"{args.range}: the proposal executable took {seconds:.0f} seconds")
-    report = check_response(answer, request, revision, candidates["revisions"][name], baseline)
+    if getattr(args, "response", None):
+        answer, seconds = json.loads(Path(args.response).read_text()), None
+        if answer.get("id") != body["id"]:
+            raise ImpactError(f"{args.response} is not a response to this request")
+        log(f"{args.range}: checking the saved response {args.response}")
+    else:
+        answer, seconds = replay_blocks.run(args.proposal_oracle, body, output / "response.json", None)
+        log(f"{args.range}: the proposal executable took {seconds:.0f} seconds")
+    report = check_response(answer, request, revision, candidates["revisions"][name], baseline,
+                            requested_blocks(request))
     summary = {"range": args.range, "revision": revision, "first": candidates["first"], "last": candidates["last"],
                "blocks_sha256": blocks_sha256, "coins_file": Path(request["coins_file"]).name if request.get("coins_file") else None,
                "candidate_list": str(path.relative_to(ROOT)), "candidate_list_sha256": file_sha256(path),
                "candidate_list_commit": commit, "proposal_oracle_sha256": file_sha256(Path(args.proposal_oracle)),
                "baseline_compared": args.baseline is not None, "set_digest_hex": answer["ok"]["set_digest_hex"],
-               "set_coins": answer["ok"]["set_coins"], "seconds": round(seconds),
+               "set_coins": answer["ok"]["set_coins"], "seconds": None if seconds is None else round(seconds),
+               "saved_response": getattr(args, "response", None),
                **{k: report[k] for k in ("blocks", "candidate_blocks", "changed_blocks", "unsupported", "rejected_by_step")}}
     (output / "report.json").write_text(json.dumps(report, indent=2) + "\n")
     (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
@@ -326,6 +359,12 @@ def main(argv=None) -> int:
     go.add_argument("--output", required=True, metavar="DIR")
     go.add_argument("--baseline", metavar="FILE")
     go.add_argument("proposal_oracle")
+    again = sub.add_parser("check")
+    for flag, extra in (("--range", {"choices": RANGES}), ("--request", {}), ("--revision", {"choices": sorted(REVISIONS)}),
+                        ("--activation", {}), ("--output", {}), ("--response", {})):
+        again.add_argument(flag, required=True, **extra)
+    again.add_argument("--baseline", metavar="FILE")
+    again.add_argument("proposal_oracle", help="the executable that wrote the response, for its SHA-256")
     args = parser.parse_args(argv)
     log = lambda text: print(text, flush=True)
     try:

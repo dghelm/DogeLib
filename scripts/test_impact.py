@@ -14,7 +14,9 @@ It needs no Dogecoin Core and no download. The checks:
    fails. The faults are a changed block outside the list, a change from rejected to accepted, an
    acceptance with other coin changes, a revised object with the wrong `active`, a revised object
    that differs with no activation, a block that the baseline rejects, another baseline response,
-   and a candidate with another expected verdict.
+   and a candidate with another expected verdict. A response must also cover the requested blocks:
+   an empty response, a truncated one, a record of another height or another block, and a response
+   that leaves the arithmetic domain fail.
 3. A list that git does not track is refused.
 4. The proposal executable, through its snapshot path, on five made blocks: one change of each
    kind of candidate. They are a negative operand of `OP_NOP10`, of `OP_NOP4` and of `OP_CSV`, a
@@ -145,9 +147,12 @@ def run_checks() -> None:
     empty = {"candidates": []}
     request = {}
 
-    def outcome(answer, revision, candidates, baseline=None):
+    def outcome(answer, revision, candidates, baseline=None, blocks=None):
+        # The checks above the coverage checks request exactly the blocks of their response.
+        if blocks is None:
+            blocks = [(r["height"], r["hash_display"]) for r in answer["ok"]["blocks"]]
         try:
-            impact_run.check_response(answer, request, revision, candidates, baseline)
+            impact_run.check_response(answer, request, revision, candidates, baseline, blocks)
             return None
         except impact_run.ImpactError as error:
             return str(error)
@@ -174,6 +179,21 @@ def run_checks() -> None:
     check(outcome(good, active, listed, changed_baseline) is not None, "run check: another baseline response fails")
     expected = {"candidates": [{"height": 2, "hash": "", "reasons": [], "expected": {"verdict": "accepted"}}]}
     check(outcome(good, active, expected) is not None, "run check: a candidate with another expected verdict fails")
+    # The response must cover the requested blocks: one record for each, with its height and hash.
+    requested = [(1, f"{1:064x}"), (2, f"{2:064x}")]
+    plain_ok = response([record(1), record(2)])
+    check(outcome(plain_ok, active, empty, blocks=requested) is None, "run check: a complete response passes")
+    check(outcome(response([]), active, empty, blocks=requested) is not None, "run check: an empty response fails")
+    check(outcome(response([record(1)]), active, empty, blocks=requested) is not None,
+          "run check: a truncated response fails")
+    check(outcome(response([record(1), record(3)]), active, empty, blocks=requested) is not None,
+          "run check: a record of another height fails")
+    wrong_hash = response([record(1), {**record(2), "hash_display": "ff" * 32}])
+    check(outcome(wrong_hash, active, empty, blocks=requested) is not None, "run check: a record of another block fails")
+    early = response([record(1), record(2)])
+    early["ok"]["out_of_domain_at"] = 2
+    check(outcome(early, active, empty, blocks=requested) is not None,
+          "run check: a response that leaves the arithmetic domain fails")
 
 
 def tracked_check(directory: Path) -> None:
@@ -223,7 +243,8 @@ def proposal_run(directory: Path, proposal: str) -> None:
             answer, _ = replay_blocks.run(proposal, {**request, "id": "made", "revision": revision},
                                           directory / "response.json", 600)
             try:
-                report = impact_run.check_response(answer, request, revision, {"candidates": candidates}, None)
+                report = impact_run.check_response(answer, request, revision, {"candidates": candidates}, None,
+                                                   impact_run.requested_blocks(request))
                 check(passes and report["changed_blocks"] == (1 if activation is not None else 0),
                       f"proposal run {name}: {what}: {report['changed']}")
             except impact_run.ImpactError as error:

@@ -1,6 +1,7 @@
 # Candidate lists of the historical impact runs
 
-Each file `<NAME>.json` lists the candidate blocks of one range for the historical impact runs of [design record 0011](../../../docs/design/0011-mainnet-ranges.md), section 10.3, case 2, and [design record 0012](../../../docs/design/0012-relative-lock-time.md), section 10.3.
+Each file `<NAME>.json` lists the candidate blocks of one range for the historical impact runs.
+The runs are case 2 of [design record 0011](../../../docs/design/0011-mainnet-ranges.md), section 10.3, and the counts of [design record 0012](../../../docs/design/0012-relative-lock-time.md), section 10.3.
 The lists are expectations for `scripts/impact_run.py`, and each list is committed before the runs of its range.
 
 ## Content
@@ -22,7 +23,8 @@ For `RelativeLockTime` the list counts each created output that holds `0xb2`, an
 
 Each file also has the counts of the range.
 They are the transactions, the inputs, the outputs and the missing coins, and the counts of `RelativeLockTime`.
-Those are the time lock times with an input that is not final, the cutoff transactions, the sequence candidates, the opcode spends, and each created output that holds `0xb2`.
+Those are the time lock times with an input that is not final, the cutoff transactions and the sequence candidates.
+They also include the opcode spends, and each created output that holds `0xb2`.
 
 | File | Heights | Start of the coins |
 | --- | --- | --- |
@@ -30,7 +32,7 @@ Those are the time lock times with an input that is not final, the cutoff transa
 | `genesis-145000.json` | 0 to 145,000 | The empty set |
 | `short.json` | 9,001 to 10,000 | The snapshot at 9,000 |
 | `S.json` | 100,001 to 101,000 | The snapshot at 100,000 |
-| `A.json` to `H.json`, `E1.json`, `E2.json` | The ranges of design record 0011, section 4 | The snapshot of the Core pass at the range start |
+| `<NAME>.json` for the configured ranges of design record 0011 | Section 4 of design record 0011 | The snapshot of the Core pass at the range start |
 
 Every list has 0 candidate blocks for each of the three revisions, and 0 missing coins.
 

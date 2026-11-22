@@ -29,7 +29,11 @@ test has seven parts:
    GetUTXOStats.
 5. The range script. scripts/run_range.py runs heights 9,001 to 9,200 from the pass's snapshot at
    9,000 in both programs, and they agree with each other and with the pass. A changed hash list
-   and a committed snapshot manifest that differs from the pass's both fail.
+   and a committed snapshot manifest that differs from the pass's both fail. Then
+   scripts/restrict_coins.py writes the restricted coins of that run, and the oracle gives the
+   recorded block records on them. scripts/compare_range.py runs both programs on them, and they
+   agree. A missing coin entry, changed expected records, and a file without the hash of its
+   SHA256SUMS each fail.
 6. The overflow trap. On the two requests of the arithmetic-domain cases that leave the int64_t
    range, the trap build stops with a signed-overflow report, one in validation.cpp and one in
    coins.cpp. On the other requests of those cases it gives the response of the ordinary build.
@@ -41,7 +45,9 @@ test has seven parts:
    accept both responses and agree with the expectation of its model.
 """
 
+import contextlib
 import hashlib
+import io
 import json
 import shutil
 import subprocess
@@ -54,6 +60,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import core_pass
 import fetch_blocks
 import oracle_block_validate as validate
+import compare_range
+import restrict_coins
 import run_range
 from replay_blocks import ReplayError
 from oracle_block_check import compact_size
@@ -261,6 +269,61 @@ def test_range(oracle: str, harness: str, blocks: Path, state_dir: Path, scratch
         check(False, "range T: a changed committed manifest did not fail")
     except ReplayError as error:
         check("differs from the committed" in str(error), f"range T: a changed manifest gave {error}")
+    test_restricted(oracle, harness, fixture, scratch / "out", scratch / "restricted", summary)
+
+
+def rewrite_sums(directory: Path) -> None:
+    (directory / "SHA256SUMS").write_text("".join(
+        f"{hashlib.sha256((directory / name).read_bytes()).hexdigest()}  {name}\n" for name in ("expected.json", "request.json")))
+
+
+def test_restricted(oracle: str, harness: str, fixture: Path, run_dir: Path, out: Path, summary: dict) -> None:
+    """scripts/restrict_coins.py and scripts/compare_range.py on range T, with four planted faults."""
+    check(restrict_coins.main(["--run", str(run_dir), "--output", str(out), "--check", oracle]) == 0,
+          "range T: restrict_coins.py failed")
+    request = json.loads((out / "request.json").read_text())
+    restricted = sum(len(entry["outputs"]) for entry in request["coins"])
+    check(0 < restricted < summary["snapshot"]["coins"], f"range T: {restricted} restricted coins")
+    result = compare_range.compare_range(out, fixture, oracle, harness, log=lambda text: None)
+    check(result["set_digest_hex"] != summary["set_digest_hex"], "range T: the restricted set has the digest of the whole set")
+    faults = []
+    # An entry that a block spends is missing.
+    missing = {**request, "coins": request["coins"][1:]}
+    faults.append(("request.json", json.dumps(missing) + "\n", True))
+    # The recorded records differ.
+    expected = json.loads((out / "expected.json").read_text())
+    changed = {**expected, "records_sha256": "00" * 32}
+    faults.append(("expected.json", json.dumps(changed, indent=2) + "\n", True))
+    # A file without the hash of SHA256SUMS.
+    faults.append(("request.json", json.dumps({**request, "adjusted_time": request["adjusted_time"] + 1}) + "\n", False))
+    for name, text, sums in faults:
+        original = (out / name).read_text()
+        (out / name).write_text(text)
+        if sums:
+            rewrite_sums(out)
+        try:
+            compare_range.compare_range(out, fixture, oracle, harness, log=lambda text: None)
+            check(False, f"range T: a changed {name} did not fail")
+        except compare_range.RangeError as error:
+            print(f"restricted coins: a changed {name} fails: {str(error)[:160]}")
+        (out / name).write_text(original)
+        rewrite_sums(out)
+    # A source request that changed after scripts/run_range.py wrote the summary.
+    source = run_dir / "range-request.json"
+    original = source.read_text()
+    changed_source = json.loads(original)
+    changed_source["adjusted_time"] += 1
+    source.write_text(json.dumps(changed_source) + "\n")
+    printed = io.StringIO()
+    with contextlib.redirect_stdout(printed):
+        status = restrict_coins.main(["--run", str(run_dir), "--output", str(out.parent / "restricted-changed")])
+    source.write_text(original)
+    check(status == 1 and "does not have the SHA-256 of the recorded run" in printed.getvalue()
+          and not (out.parent / "restricted-changed").exists(),
+          f"range T: a changed source request gave {status}: {printed.getvalue()[:300]}")
+    print(f"restricted coins: a changed source request fails: {printed.getvalue().strip()[:160]}")
+    print(f"restricted coins: range T with {restricted} of {summary['snapshot']['coins']} coins gives the records of the "
+          f"snapshot run in both programs, and four planted faults fail")
     print("range: heights 9,001 to 9,200 from the snapshot at 9,000 agree with the pass; a changed list and manifest fail")
 
 

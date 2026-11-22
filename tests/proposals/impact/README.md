@@ -20,7 +20,9 @@ For `RelativeLockTime` the list counts each created output that holds `0xb2`, an
 | `ExampleFaultyLocktime` | `0xb3` | A missing coin |
 | `RelativeLockTime` | `0xb2` | A missing coin, a cutoff transaction, a sequence candidate |
 
-Each file also has the counts of the range: transactions, inputs, outputs, missing coins, time lock times with an input that is not final, cutoff transactions, sequence candidates, opcode spends, and each created output that holds `0xb2`.
+Each file also has the counts of the range.
+They are the transactions, the inputs, the outputs and the missing coins, and the counts of `RelativeLockTime`.
+Those are the time lock times with an input that is not final, the cutoff transactions, the sequence candidates, the opcode spends, and each created output that holds `0xb2`.
 
 | File | Heights | Start of the coins |
 | --- | --- | --- |

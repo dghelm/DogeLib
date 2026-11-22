@@ -155,3 +155,52 @@ jobs:
           lake build dogelib-proposal-oracle
           python3 -I scripts/relative_lock_time_candidates.py --check
           time python3 -I scripts/compare_csv_forced.py .lake/build/bin/dogelib-oracle .lake/build/bin/dogelib-proposal-oracle build/core-harness/core-oracle
+
+  # The historical impact runs of design record 0011, section 10.3, and design
+  # record 0012, section 10.3. The candidate lists are committed before the
+  # runs, and scripts/impact_run.py refuses a list that is not committed. Every
+  # list of these ranges is empty, so no block may change. The revised verdicts
+  # have no Core comparison: the harness only writes the snapshot at 9,000.
+  impact:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: ./.github/actions/core-setup
+
+      - name: fetch the mainnet block ranges
+        run: time python3 -I scripts/fetch_release_blocks.py
+
+      # Made blocks with a planted candidate of each kind, through the code
+      # path of the ranges, and planted faults of the run check.
+      - name: impact tools self-test
+        if: ${{ !cancelled() }}
+        run: |
+          lake build dogelib-proposal-oracle
+          python3 -I scripts/test_impact.py .lake/build/bin/dogelib-proposal-oracle
+
+      # Design record 0012, stage 4, exit condition 2: RelativeLockTime active
+      # from height 1 on heights 0 to 10,000, from the empty set.
+      - name: impact run, heights 0 to 10,000
+        if: ${{ !cancelled() }}
+        run: |
+          python3 -I scripts/impact_run.py request --range genesis-10000 --fixture build/mainnet-blocks/genesis-10000 --output build/impact/requests/genesis-10000
+          python3 -I scripts/impact_candidates.py --range genesis-10000 --request build/impact/requests/genesis-10000/request.json --check
+          time python3 -I scripts/impact_run.py run --range genesis-10000 --request build/impact/requests/genesis-10000/request.json --revision RelativeLockTime --activation 1 --output build/impact/runs/genesis-10000 .lake/build/bin/dogelib-proposal-oracle
+
+      # Design record 0011, stage 6, cases 1 and 2 of section 10.3 for both
+      # examples on the short range, heights 9,001 to 10,000 from the snapshot
+      # at 9,000. Without revision the proposal executable writes the bytes of
+      # dogelib-oracle on that coins_file request.
+      - name: impact runs, short range
+        if: ${{ !cancelled() }}
+        run: |
+          python3 -I scripts/impact_run.py request --range short --fixture build/mainnet-blocks/genesis-10000 --harness build/core-harness/core-oracle --output build/impact/requests/short
+          python3 -I scripts/impact_candidates.py --range short --request build/impact/requests/short/request.json --check
+          time python3 -I scripts/test_proposal_oracle.py --snapshot-request build/impact/requests/short/request.json .lake/build/bin/dogelib-oracle .lake/build/bin/dogelib-proposal-oracle
+          for run in "ExampleVersionVerify none" "ExampleVersionVerify 0" "ExampleFaultyLocktime/corrected none" "ExampleFaultyLocktime/corrected 0"; do
+            set -- $run
+            time python3 -I scripts/impact_run.py run --range short --request build/impact/requests/short/request.json --revision "$1" --activation "$2" --output "build/impact/runs/short/${1%%/*}-$2" .lake/build/bin/dogelib-proposal-oracle
+          done

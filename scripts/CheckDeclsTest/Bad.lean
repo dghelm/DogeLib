@@ -8,6 +8,7 @@ public import CheckDeclsForeign
 One declaration for each finding the declaration check must report.
 
 Adapted from EthLib, `scripts/CheckDeclsTest/Bad.lean` at commit `bb6dfe5`, dedicated to the public domain under CC0 1.0.
+`usesCycle` and `usesLeft` are adapted from EthLib commit `1f13f422`, also under CC0 1.0.
 -/
 
 @[expose] public section
@@ -70,6 +71,14 @@ unsafe def reinterpret (n : Nat) : Nat := unsafeCast n
 The type and its constructor each inherit the axiom from the other, so it is reported at the type. -/
 inductive Carrier where
   | mk : CheckDeclsForeign.T → Carrier
+
+/-- A theorem that uses a dependency's inductive type, whose constructor carries an axiom.
+Its proof names no axiom, so only the walk through the type and its constructor finds it. -/
+theorem usesCycle : Nonempty (CheckDeclsForeign.Cycle → CheckDeclsForeign.Cycle) := ⟨id⟩
+
+/-- A theorem that uses one type of a dependency's mutual declaration.
+The other type's constructor carries an axiom, and the kernel checked both types as one. -/
+theorem usesLeft : Nonempty CheckDeclsForeign.Left := ⟨.a⟩
 
 /-- A panic whose fallback is a dependency's opaque constant.
 The kernel sees the fallback, `CheckDeclsForeign.hiddenNat`, so this cannot unfold. -/

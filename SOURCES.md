@@ -30,6 +30,8 @@ The revision includes ECDSA signing as a reference for later work, without addin
 Its HMAC-SHA-256 files are adapted in `Cryptography.Hash.Hmac` and `Cryptography.Proofs.Hash.Hmac`.
 
 The declaration check includes `10bc74ba`, which recognizes recursive formatting functions.
+It also includes `1f13f422`, which walks the axiom dependencies itself instead of calling `Lean.collectAxioms`.
+So it finds an axiom of an imported inductive type that only a constructor, or another type of the same mutual declaration, carries.
 The writing checker includes selected parsing fixes from `ad1185d6`, with DogeLib's rules and vocabulary retained.
 SHA-256 documentation includes the length bound and shared round constants clarified in `35f58834`.
 

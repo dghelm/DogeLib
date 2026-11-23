@@ -4162,6 +4162,12 @@ Unsafe declarations are reported separately.
 Detection does not require attribution to a declaration that uses the axiom directly.
 It does not check the kernel, and it does not show that the axioms are consistent.
 
+The check walks the dependencies itself and does not use `Lean.collectAxioms`.
+In Lean `v4.35.0`, `collectAxioms` can miss an axiom of an imported inductive type that only one of its constructors carries.
+It can also miss one that only another type of the same mutual declaration carries.
+The check walks an inductive type, the other types of its declaration and all their constructors as one group.
+The self-test plants both cases.
+
 The named platform-size exception permits exactly `System.Platform.getNumBits` as a reachable opaque from `Refinement` modules.
 This Lean core parameter supplies the word size of Rust `usize`.
 The exception does not permit an opaque declaration in either library, another reachable opaque, or this parameter in a `DogeLib` specification definition.

@@ -1,10 +1,19 @@
 #!/usr/bin/env python3
-"""Run the gates in AGENTS.md and preserve their commands, results and logs."""
+"""Run the gates in AGENTS.md and preserve their commands, results and logs.
+
+With --release MANIFEST the script runs the gates that the manifest lists under
+`run`, in that order, and reports each gate under `not_run` as not run with the
+manifest's reason. scripts/release_gates.json is the manifest of the release
+workflow. The script refuses a manifest that leaves out a gate, that runs a gate
+which needs the maintainer's node or its fixtures, or that runs a gate before the
+gate that builds or fetches its inputs.
+"""
 
 import argparse
 from collections import deque
 from datetime import datetime, timezone
 import hashlib
+import json
 import os
 from pathlib import Path
 import platform
@@ -34,8 +43,64 @@ def read_gates(path):
             raise ValueError(f'{name}: command cell must have a code span')
         if any(g['slug'] == slug for g in gates):
             raise ValueError(f'duplicate gate: {slug}')
-        gates.append(dict(slug=slug, name=name, command=None if manual else spans[0], description=cell))
+        gates.append(dict(slug=slug, name=name, command=None if manual else spans[0], description=cell,
+                          exists=exists))
     return gates
+
+
+# A gate whose cells match this pattern needs the maintainer's node, the fixtures
+# fetched from it, or the Core pass. A GitHub runner cannot run it.
+NODE_ONLY = re.compile(r"\bthe node\b|maintainer's node|build/core-node|build/core-pass|build/ranges/|"
+                       r"build/range-runs|range-10001-145000|genesis-145000|more than a day")
+
+# Inputs that a gate reads, from its command and its Exists cell, and the command
+# that makes each input. A release run must make an input in the same gate or in
+# an earlier one.
+INPUTS = {
+    'release blocks': (r'build/mainnet-blocks|scripts/fetch_release_blocks\.py', r'scripts/fetch_release_blocks\.py'),
+    'harness': (r'build/core-harness/|harness build', r'build_core_harness\.sh'),
+    'overflow-trap harness': (r'core-oracle-trap|--trap-overflow', r'build_core_harness\.sh --trap-overflow'),
+    'oracle': (r'\.lake/build/bin/dogelib-oracle|oracle build', r'lake build [^&]*\bdogelib-oracle\b'),
+    'proposal oracle': (r'dogelib-proposal-oracle|proposal oracle build',
+                        r'lake build [^&]*\bdogelib-proposal-oracle\b'),
+    'proposal-replay': (r'proposal-replay', r'^lake build --wfail\b'),
+}
+
+
+def node_only(gate):
+    """Return whether a gate needs what only the maintainer's machine has."""
+    return bool(NODE_ONLY.search(' '.join(filter(None, (gate['command'], gate['description'], gate['exists'])))))
+
+
+def check_release(gates, manifest):
+    """Return the ordered gates and the reasons of a release manifest, or raise ValueError."""
+    if set(manifest) != {'run', 'not_run'}:
+        raise ValueError('manifest must have exactly the keys run and not_run')
+    run, not_run = manifest['run'], manifest['not_run']
+    by_slug = {g['slug']: g for g in gates}
+    listed = run + list(not_run)
+    unknown = sorted(set(listed) - set(by_slug))
+    if unknown:
+        raise ValueError(f'manifest names unknown gates: {unknown}')
+    if len(set(listed)) != len(listed):
+        raise ValueError('manifest names a gate more than once')
+    automated = {g['slug'] for g in gates if g['command'] is not None}
+    if set(listed) != automated:
+        raise ValueError(f'manifest must list each automated gate once: missing {sorted(automated - set(listed))}, '
+                         f'manual {sorted(set(listed) - automated)}')
+    made = set()
+    for slug in run:
+        gate = by_slug[slug]
+        if node_only(gate):
+            raise ValueError(f'{slug}: needs the maintainer\'s node or its fixtures, and cannot run on a runner')
+        text = gate['command'] + ' ' + gate['exists']
+        made |= {name for name, (_, maker) in INPUTS.items() if re.search(maker, gate['command'])}
+        missing = sorted(name for name, (reader, _) in INPUTS.items() if re.search(reader, text) and name not in made)
+        if missing:
+            raise ValueError(f'{slug}: runs before a gate that makes its inputs: {missing}')
+    if any(not isinstance(reason, str) or not reason.strip() for reason in not_run.values()):
+        raise ValueError('each gate under not_run needs a reason')
+    return run, not_run
 
 
 def capture(command):
@@ -91,6 +156,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--registry', type=Path, default=ROOT / 'AGENTS.md')
     parser.add_argument('--gates', help='comma-separated gate slugs (default: all)')
+    parser.add_argument('--release', type=Path, metavar='MANIFEST',
+                        help='run the gates of a release manifest, such as scripts/release_gates.json, in its order')
     parser.add_argument('--core-clone', type=Path)
     parser.add_argument('--output', type=Path, help='report path in an ignored directory')
     parser.add_argument('--list', action='store_true')
@@ -99,6 +166,12 @@ def main(argv=None):
         gates = read_gates(args.registry)
     except (ValueError, OSError) as error:
         parser.error(str(error))
+    order, skipped = [g['slug'] for g in gates], {}
+    if args.release:
+        try:
+            order, skipped = check_release(gates, json.loads(args.release.read_text()))
+        except (ValueError, OSError, TypeError, AttributeError) as error:
+            parser.error(f'{args.release}: {error}')
     selected = set(args.gates.split(',')) if args.gates else {g['slug'] for g in gates}
     unknown = selected - {g['slug'] for g in gates}
     if unknown:
@@ -135,6 +208,9 @@ def main(argv=None):
         f'Invocation: {shlex.join([sys.executable, "-I", *sys.argv])}', f'Working directory: {ROOT}', 'Shell wrapper: bash -o pipefail -c <command>',
         f'Registry: {args.registry.resolve()}',
         f'Registry SHA-256: {hashlib.sha256(args.registry.read_bytes()).hexdigest()}',
+        f'Release manifest: {args.release.resolve() if args.release else "none"}',
+        *([f'Release manifest SHA-256: {hashlib.sha256(args.release.read_bytes()).hexdigest()}']
+          if args.release else []),
         f'lean-toolchain: {(ROOT / "lean-toolchain").read_text().strip()}',
         f'Core pin: {pin[1] if pin else "not found"}', f'Core clone: {args.core_clone}',
         f'Python: {sys.version}', f'OS: {platform.platform()}', f'Machine: {platform.machine()}',
@@ -149,9 +225,13 @@ def main(argv=None):
                               [os.environ.get('CXX', 'g++'), '--version']]]])
     results = {}
     failed = False
+    for slug, reason in skipped.items():
+        if slug in selected:
+            results[slug] = dict(status='not run', reason=f'Not in the release run: {reason}')
     write_report(output, metadata, gates, results, dirty)
-    for gate in gates:
-        slug = gate['slug']
+    by_slug = {g['slug']: g for g in gates}
+    for slug in order:
+        gate = by_slug[slug]
         if slug not in selected:
             continue
         command = gate['command']

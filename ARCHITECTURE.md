@@ -53,6 +53,7 @@ The oracle lives in `Exports`, so a Lean project that imports the specification 
 The `Refinement` library belongs to a separate Lake package under `Refinement/`, which requires DogeLib, Aeneas and Mathlib.
 The root DogeLib package has no Lake dependencies.
 The specification, `Proofs` and `Exports` import neither dependency, and neither do `Proposals`, `ProposalProofs` and `ProposalExports`.
+The specification, `Exports` and `ProposalExports` import no module of a proof library.
 `scripts/CheckRefinementImports.lean` checks those transitive import boundaries.
 Heavy mathematical and probabilistic dependencies stay outside the specification.
 
@@ -138,7 +139,7 @@ No module of `DogeLib`, `Proofs` or `Exports` imports one of the three.
 So a consumer of the specification gets no proposal code, and no proposal can change a baseline result.
 Two checks enforce this direction:
 
-- `scripts/CheckRefinementImports.lean` rejects `DogeLib.Proposals` in the transitive imports of the baseline libraries. `scripts/test_import_boundaries.sh` plants such an import, of `DogeLib.Proposals` and of `DogeLib.Proposals.Exports`, and requires the failure.
+- `scripts/CheckRefinementImports.lean` rejects `DogeLib.Proposals` in the transitive imports of the baseline libraries. `scripts/test_import_boundaries.sh` plants such an import, of `DogeLib.Proposals` and of `DogeLib.Proposals.Exports`, and requires the failure. It also plants an import of a proof module in a specification module.
 - `lake exe check-decls` loads `DogeLib.Proposals`, `DogeLib.Proposals.Proofs` and `DogeLib.Proposals.Exports` among its default roots. It checks every proposal declaration, and it reports a proposal file that the roots do not reach.
 
 `DogeLib.Proposals.Framework` holds four parts:

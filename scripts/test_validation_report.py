@@ -2,6 +2,7 @@
 """Check report evidence, gate execution and the repository's registry."""
 
 import importlib.util
+import json
 import os
 import re
 import shlex
@@ -24,6 +25,11 @@ def registry(rows):
             ''.join(f'| {name} | {command} | {exists} | No |\n' for name, command, exists in rows))
 
 
+def pinned_directories(text):
+    """Return the directories of each `(cd DIR && sha256sum -c SHA256SUMS)` in order."""
+    return re.findall(r'\(cd (\S+) && sha256sum -c SHA256SUMS\)', text)
+
+
 class WorkflowDependencies(unittest.TestCase):
     def test_core_packages_match_validation(self):
         packages = {}
@@ -37,6 +43,69 @@ class WorkflowDependencies(unittest.TestCase):
             packages[workflow] = {word for word in installs[0][3:] if not word.startswith('-')}
             self.assertIn('libevent-dev', packages[workflow], workflow)
         self.assertEqual(packages['core'], packages['validation'])
+
+    def test_ci_pinned_vectors_match_registry(self):
+        workflow = (ROOT / '.github/workflows/ci.yml').read_text()
+        step = re.search(r'- name: pinned vectors\n(?:.*\n)*?        run: \|\n((?: {10}.*\n)+)', workflow)
+        self.assertIsNotNone(step)
+        gates = {g['slug']: g for g in runner.read_gates(ROOT / 'AGENTS.md')}
+        registry_dirs = pinned_directories(gates['pinned-vectors']['command'])
+        self.assertEqual(pinned_directories(step[1]), registry_dirs)
+        # Every committed SHA256SUMS file is in the list.
+        sums = sorted(str(p.parent.relative_to(ROOT)) for p in (ROOT / 'tests').rglob('SHA256SUMS'))
+        self.assertEqual(sorted(registry_dirs), sums)
+
+    def test_validation_workflow_runs_release_manifest(self):
+        text = (ROOT / '.github/workflows/validation.yml').read_text()
+        self.assertIn('scripts/validation_report.py --release scripts/release_gates.json', text)
+
+
+class Release(unittest.TestCase):
+    def setUp(self):
+        self.gates = runner.read_gates(ROOT / 'AGENTS.md')
+        self.manifest = json.loads((ROOT / 'scripts/release_gates.json').read_text())
+
+    def test_real_manifest(self):
+        run, not_run = runner.check_release(self.gates, self.manifest)
+        node_only = {g['slug'] for g in self.gates if g['command'] and runner.node_only(g)}
+        self.assertEqual(node_only, {
+            'campaign-regtest-replay', 'version-bits-walk', 'impact-runs-on-the-ranges', 'impact-run-to-145-000',
+            'mainnet-replay-to-145-000', 'snapshot-range-s', 'core-pass', 'mainnet-range'})
+        self.assertLessEqual(node_only, set(not_run))
+        self.assertIn('subsidy-seeds', not_run)
+        self.assertFalse(node_only & set(run))
+
+    def test_node_only_row_cannot_be_selected(self):
+        for gate in self.gates:
+            if gate['command'] and runner.node_only(gate):
+                manifest = dict(run=self.manifest['run'] + [gate['slug']],
+                                not_run={k: v for k, v in self.manifest['not_run'].items() if k != gate['slug']})
+                with self.assertRaisesRegex(ValueError, 'node', msg=gate['slug']):
+                    runner.check_release(self.gates, manifest)
+
+    def test_order_follows_inputs(self):
+        run = self.manifest['run']
+        for consumer, maker in (('snapshot-range-short-form', 'mainnet-block-ranges'),
+                                ('core-pass-self-test', 'core-comparison'),
+                                ('core-harness-state', 'core-comparison'),
+                                ('impact-tools-self-test', 'proposal-oracle'),
+                                ('comparator-self-test', 'proposal-oracle'),
+                                ('campaign-proposal-search', 'build')):
+            moved = [s for s in run if s != consumer]
+            moved.insert(moved.index(maker), consumer)
+            with self.assertRaisesRegex(ValueError, 'inputs', msg=consumer):
+                runner.check_release(self.gates, dict(run=moved, not_run=self.manifest['not_run']))
+
+    def test_manifest_must_list_each_gate(self):
+        bad = [dict(run=self.manifest['run'][1:], not_run=self.manifest['not_run']),
+               dict(run=self.manifest['run'] + ['build'], not_run=self.manifest['not_run']),
+               dict(run=self.manifest['run'] + ['soundness-review'], not_run=self.manifest['not_run']),
+               dict(run=self.manifest['run'] + ['no-such-gate'], not_run=self.manifest['not_run']),
+               dict(run=self.manifest['run'], not_run={**self.manifest['not_run'], 'subsidy-seeds': ' '}),
+               dict(run=self.manifest['run'])]
+        for manifest in bad:
+            with self.assertRaises(ValueError):
+                runner.check_release(self.gates, manifest)
 
 
 class Reports(unittest.TestCase):
@@ -92,6 +161,30 @@ class Reports(unittest.TestCase):
         self.assertEqual(text.count('**not run**'), 3)
         self.assertIn('Unresolved placeholder', text)
         self.assertNotIn('**passed**', text)
+
+    def test_release_order_and_reasons(self):
+        manifest = self.root / 'build/manifest.json'
+        manifest.parent.mkdir()
+        manifest.write_text(json.dumps(dict(run=['third', 'first'], not_run={'second': 'Needs a fixture.'})))
+        code, text = self.run_report([
+            ('First', '`echo first >> build/order`', 'Yes'),
+            ('Second', '`exit 9`', 'Yes'),
+            ('Third', '`echo third >> build/order`', 'Yes'),
+            ('Manual review', 'Review sources', 'Manual')], '--release', str(manifest))
+        self.assertEqual(code, 0)
+        self.assertEqual((self.root / 'build/order').read_text(), 'third\nfirst\n')
+        self.assertIn('Not in the release run: Needs a fixture.', text)
+        self.assertEqual(text.count('**passed**'), 2)
+        self.assertEqual(text.count('**not run**'), 2)
+        self.assertIn('Release manifest SHA-256:', text)
+
+    def test_release_refuses_node_only_gate(self):
+        manifest = self.root / 'build/manifest.json'
+        manifest.parent.mkdir()
+        manifest.write_text(json.dumps(dict(run=['node'], not_run={})))
+        with self.assertRaises(SystemExit) as error:
+            self.run_report([('Node', '`fetch --from the node`', 'Yes')], '--release', str(manifest))
+        self.assertEqual(error.exception.code, 2)
 
     def test_core_path_is_shell_quoted(self):
         path = self.root / 'clone with spaces; exit 8'
@@ -225,7 +318,7 @@ class Reports(unittest.TestCase):
             'oracle': 'bash scripts/test_oracle.sh',
             'proposal-oracle': 'lake build dogelib-oracle dogelib-proposal-oracle && '
                                'python3 -I scripts/test_proposal_oracle.py .lake/build/bin/dogelib-oracle .lake/build/bin/dogelib-proposal-oracle',
-            'core-comparison': 'scripts/build_core_harness.sh <dogecoin-git-clone> build/core-harness && '
+            'core-comparison': 'scripts/build_core_harness.sh --trap-overflow <dogecoin-git-clone> build/core-harness && '
                                'python3 -I scripts/compare_core.py .lake/build/bin/dogelib-oracle build/core-harness/core-oracle',
             'rust-compactsize-comparison': 'cargo +nightly-2026-09-17 build --locked --manifest-path Refinement/Rust/Cargo.toml --example compactsize_oracle --jobs 4 && '
                                            'scripts/build_core_harness.sh <dogecoin-git-clone> build/core-harness && '

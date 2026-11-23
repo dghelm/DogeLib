@@ -47,9 +47,6 @@ open DogeLib.Script
 
 /-! ## Definitions -/
 
-/-- The value of an entry: the sum of the amounts of its outputs that are not null, as an integer. -/
-def TxCoins.value (c : TxCoins) : Int := ((c.outputs.filterMap id).map fun o => o.amount.toInt).sum
-
 /-- The value of an optional entry: `TxCoins.value` of the entry, or 0 without an entry. -/
 def entryValue : Option TxCoins → Int
   | none => 0
@@ -99,23 +96,11 @@ def chainSubsidy (prev : Block) (height : Nat) : List Block → Int
 
 /-! ## The coin set as a map
 This section is the only part of the module that reads `CoinSet.entries`.
-It has the definition of `CoinSet.totalValue` and the lemmas that depend on the map.
+It has the lemmas that depend on the map. `DogeLib.Block.Coins` defines `CoinSet.totalValue`.
 The later sections use the set through seven of its statements:
 `CoinSet.totalValue_empty`, `CoinSet.empty_valuesInRange`, `CoinSet.entryValue_nonneg`, `CoinSet.totalValue_spend`, `CoinSet.totalValue_addTx`, `CoinSet.coin_spend_self` and `CoinSet.coin_spend_of_ne`.
 A change of the representation of `CoinSet` needs new proofs of these statements, and of no later theorem.
 -/
-
-/--
-The total value of a coin set: the sum of `TxCoins.value` over its entries, in the integers.
-
-It counts every output that an entry of the set holds.
-So it counts each coin that `CoinSet.coin` returns once.
-It also counts an output that `CoinSet.coin` cannot return.
-Such an output is in an entry whose key is not `txidKey` of a transaction ID, or it has an index of `2^32` or more.
-`CoinSet.addTx` stores each entry under `txidKey` of its transaction ID, and no theorem states that a set has only such entries.
-The sum has no bound, because the supply of Dogecoin is above `2^63` koinu (design record 0010, section 3).
--/
-def CoinSet.totalValue (s : CoinSet) : Int := s.entries.foldl (fun acc _ c => acc + c.value) 0
 
 /-- A left fold that adds the entry values equals the start value plus the sum of the values. -/
 private theorem foldl_add_value : ∀ (l : List (Nat × TxCoins)) (acc : Int),

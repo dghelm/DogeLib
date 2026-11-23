@@ -176,6 +176,8 @@ lake env lean --run scripts/CheckRefinementImports.lean
 
 The last command rejects Aeneas, Mathlib or `Refinement` in the specification, proof and oracle libraries' transitive imports.
 It also rejects `DogeLib.Proposals` in those imports, and the refinement dependencies in the imports of the `Proposals`, `ProposalProofs` and `ProposalExports` libraries.
+It rejects a proof module in the imports of the specification and of the `Exports` and `ProposalExports` libraries.
+A proof module has `Proofs` as a component of its name.
 After a change to the check, run its self-test:
 
 ```bash
@@ -348,12 +350,36 @@ Each gate records its exact command, exit status, duration, final output lines a
 The Core stamp records existing libraries.
 The Core result records whether the harness step and comparison succeeded, possibly with reuse of existing libraries.
 
+With `--release scripts/release_gates.json`, the runner runs the gates of that manifest in its order:
+
+```bash
+python3 -I scripts/validation_report.py --release scripts/release_gates.json --core-clone <dogecoin-git-clone>
+```
+
+The manifest has two keys.
+`run` lists the gates that a GitHub runner can run, in an order that builds or fetches each gate's inputs before the gate.
+For example, the Core comparison builds the harness with `--trap-overflow` before the gates that read it.
+The gate *Mainnet block ranges* fetches `build/mainnet-blocks` before the gates that read the blocks.
+`not_run` gives each other automated gate with the reason that it does not run.
+The report marks those gates **not run** with that reason, and marks the manual gates **not run** as well.
+
+The runner refuses a manifest before it runs a gate in three cases:
+
+- The manifest leaves out an automated gate of the table, names one twice, or names a manual gate.
+- A gate under `run` needs the maintainer's node, a fixture from it, or the Core pass. The runner finds such a gate by its cells. They name the node, `build/core-node`, `build/core-pass`, `build/ranges/`, `build/range-runs`, the blocks above height 10,000, or a run of more than a day.
+- A gate under `run` reads an input that neither the gate nor an earlier gate makes. The inputs are the downloaded blocks, the harness, the harness with the overflow trap, the oracle, the proposal oracle and `proposal-replay`.
+
 The `validation` workflow runs on manual dispatch and tag pushes, and uploads the report and logs even after gate failures.
 It installs the pinned Rust extraction tools with `Refinement/Rust/setup-tools.sh`.
-It then runs the report with the pinned Core checkout as `--core-clone` and without `--gates`.
-So the runner runs every automated gate of the table, including both Rust gates and both Core comparisons.
-It records the two manual gates, source and coverage review and soundness review, as not run.
+It then runs the report with `--release scripts/release_gates.json` and the pinned Core checkout as `--core-clone`.
 The workflow builds the committed Lean model with the Mathlib cache.
+
+The manifest runs both Rust gates and both Core comparisons.
+It also runs the CSV comparison with the forced state, and the impact runs to height 10,000 and on the short range.
+It does not run the gates that need the maintainer's node, such as the Core pass and the replay above height 10,000.
+It also leaves out the regtest replay of the campaign, which needs a node build.
+The subsidy seeds take about 85 minutes on a runner, so they do not run either.
+Run those gates on a contributor's machine, and keep their reports with the release.
 
 A report records checks on one machine at one commit.
 It is not a proof, and CI results on other commits are separate evidence.

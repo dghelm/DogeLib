@@ -2,7 +2,8 @@
 # The import check must pass on the libraries as they are, and fail when a
 # module under DogeLib imports DogeLib.Proposals (design record 0007,
 # section 12, stage 1), or the proposal exports (design record 0011,
-# stage 6, condition 3). Run from anywhere, after `lake build`.
+# stage 6, condition 3), or when it imports a proof module (ARCHITECTURE.md).
+# Run from anywhere, after `lake build`.
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 FAIL=0
@@ -62,6 +63,23 @@ elif grep -qx 'forbidden import in a baseline library: DogeLib.Proposals.Exports
   echo "ok:   a baseline module that imports DogeLib.Proposals.Exports fails, and the check names the proposal modules"
 else
   echo "FAIL: the planted import of the proposal exports was not named"; cat "$WORK/planted-exports"; FAIL=1
+fi
+
+# A specification module that imports a proof module (ARCHITECTURE.md).
+cat >"$PLANTED" <<'EOF'
+module
+public import DogeLib.Block.Proofs.ConnectProperties
+EOF
+if ! lake env lean -o "$OUT.olean" "$PLANTED" >"$WORK/build-proofs" 2>&1; then
+  echo "FAIL: the planted module with a proof import does not compile"; cat "$WORK/build-proofs"; exit 1
+fi
+if check DogeLib.ImportBoundaryPlanted >"$WORK/planted-proofs" 2>&1; then
+  echo "FAIL: a specification module that imports a proof module passed"; cat "$WORK/planted-proofs"; FAIL=1
+elif grep -qx 'forbidden proof import in the specification or an export library: DogeLib.Block.Proofs.ConnectProperties' "$WORK/planted-proofs" \
+    && grep -qx 'forbidden proof import in the specification or an export library: DogeLib.Block.Proofs.Connect' "$WORK/planted-proofs"; then
+  echo "ok:   a specification module that imports a proof module fails, and the check names the proof modules"
+else
+  echo "FAIL: the planted proof import was not named"; cat "$WORK/planted-proofs"; FAIL=1
 fi
 
 exit "$FAIL"

@@ -166,6 +166,21 @@ def CoinSet.addTx (s : CoinSet) (tx : Transaction) (height : Nat) : CoinSet :=
   let c := TxCoins.ofTx tx height
   if c.isPruned then ⟨s.entries.erase (txidKey c.txid)⟩ else ⟨s.entries.insert (txidKey c.txid) c⟩
 
+/-- The value of an entry: the sum of the amounts of its outputs that are not null, as an integer. -/
+def TxCoins.value (c : TxCoins) : Int := ((c.outputs.filterMap id).map fun o => o.amount.toInt).sum
+
+/--
+The total value of a coin set: the sum of `TxCoins.value` over its entries, in the integers.
+
+It counts every output that an entry of the set holds.
+So it counts each coin that `CoinSet.coin` returns once.
+It also counts an output that `CoinSet.coin` cannot return.
+Such an output is in an entry whose key is not `txidKey` of a transaction ID, or it has an index of `2^32` or more.
+`CoinSet.addTx` stores each entry under `txidKey` of its transaction ID, and no theorem states that a set has only such entries.
+The sum has no bound, because the supply of Dogecoin is above `2^63` koinu (design record 0010, section 3).
+-/
+def CoinSet.totalValue (s : CoinSet) : Int := s.entries.foldl (fun acc _ c => acc + c.value) 0
+
 /-- The coins that a new entry adds, each with its outpoint, in the order of the outputs. `index` is the index of the first output of the list. -/
 def createdCoins (txid : Hash256) (height : Nat) (coinbase : Bool) (index : Nat) :
     List (Option TxOut) → List (OutPoint × Coin)

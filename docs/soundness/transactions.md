@@ -1,7 +1,7 @@
 # Soundness: Transactions and Legacy Signature Hashing
 
 This file states what the transaction reader and legacy signature-hash proofs establish, under which hypotheses, and what remains unproved.
-See [SOUNDNESS.md](../../SOUNDNESS.md) for the trust model and Gaps A to D, and [COVERAGE.md](../../COVERAGE.md#operations) for per-operation evidence.
+See [SOUNDNESS.md](../../SOUNDNESS.md) for the trust model and Gaps A to D, and [docs/coverage/serialization-and-transactions.md](../coverage/serialization-and-transactions.md) for per-operation evidence.
 
 - **Scope**: Base-mode and packed-slice transaction readers, witness-allowed serialization, legacy signature hashing, transformation reference equivalence, and `SIGHASH_ALL` commitments.
 - **Specification modules**: `DogeLib.Transaction.Types`, `Serialization`, `Txid`, `Witness`, `LegacySighash`, and `LegacySighashReference`.

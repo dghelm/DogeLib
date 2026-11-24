@@ -1,7 +1,7 @@
 # Soundness: Script Execution and Worked Properties
 
 This file states what the Script interpreter, encoding, signature-opcode, lock-time, `VerifyScript`, and worked-property proofs establish, under which hypotheses, and what remains unproved.
-See [SOUNDNESS.md](../../SOUNDNESS.md) for the trust model and Gaps A to D, and [COVERAGE.md](../../COVERAGE.md#operations) for per-operation evidence.
+See [SOUNDNESS.md](../../SOUNDNESS.md) for the trust model and Gaps A to D, and [docs/coverage/script.md](../coverage/script.md) for per-operation evidence.
 
 - **Scope**: Instruction reading, execution state, signature-code preparation, script numbers, `EvalScript`, DER and key encodings, signature and lock-time opcodes, `VerifyScript`, and worked properties.
 - **Specification modules**: `DogeLib.Script.*` (`Instruction`, `State`, `SignatureCode`, `Number`, `Error`, `Flags`, `Eval`, `SignatureEncoding`, `Signature`, `Verify`, `MultisigRecovery`).

@@ -1,7 +1,7 @@
 # Soundness: Proof of Work, Retarget, and Chain Work
 
 This file states what the proof-of-work, retarget arithmetic, 256-bit word-model, next-work, median-time-past, and chain-work proofs establish.
-See [SOUNDNESS.md](../../SOUNDNESS.md) for the trust model and Gaps A to D, and [COVERAGE.md](../../COVERAGE.md#operations) for per-operation evidence.
+See [SOUNDNESS.md](../../SOUNDNESS.md) for the trust model and Gaps A to D, and [docs/coverage/work.md](../coverage/work.md) for per-operation evidence.
 
 - **Scope**: Compact target encoding, DigiShield and legacy retargets, supplied-hash proof of work, 256-bit word models, next-work selection, median time past, and chain work.
 - **Specification modules**: `DogeLib.Work.*`.

@@ -20,7 +20,7 @@ DogeLib already specifies three parts of the function:
 - `CheckBlockHeader`, as `Block.checkBlockHeader` (design record 0004, stage 4a).
 
 The remaining checks are the comparison of `nBits` with the required work, the checkpoint check, the two time checks and the rejection of outdated versions.
-No theorem or comparison covers them, and [SOUNDNESS.md](../soundness/headers.md#version-gating) records that gap.
+No theorem or comparison covers them, and [docs/soundness/headers.md](../soundness/headers.md#version-gating) records that gap.
 This record sets out how to close it.
 The theorems in section 11 are targets, not implemented results.
 

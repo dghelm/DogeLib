@@ -19,7 +19,7 @@ DogeLib answers the first question with three kinds of evidence:
 
 - Comparisons with Dogecoin Core run the oracle and Core's own code at the pinned revision on the same requests ([docs/core-harness.md](core-harness.md#the-core-harness)).
 - Known answers from independent sources run through the compiled specification (`lake test`).
-- Refinement theorems relate another implementation to the specification, such as `decode_refines` for the Rust CompactSize reader ([SOUNDNESS.md](soundness/serialization.md#rust-bounded-compactsize-reader)).
+- Refinement theorems relate another implementation to the specification, such as `decode_refines` for the Rust CompactSize reader ([docs/soundness/serialization.md](soundness/serialization.md#rust-bounded-compactsize-reader)).
 
 These kinds of evidence compare two descriptions of the same rule.
 So agreement between Lean and Core is a compatibility claim, not a safety property.
@@ -163,13 +163,13 @@ It rejects `0102b37551` with lock time 2, because the pop leaves an empty stack 
 Activation has two levels in the framework.
 At the rule level, each theorem holds for every value of `active`, so it holds whatever the activation mechanism is.
 At the block level, `Activation` gives each network one activation height or none.
-`Activation.isActive_lt` and `Activation.isActive_mono` prove that the activation is false below that height and monotone above it ([SOUNDNESS.md](soundness/proposals.md#proposed-revisions-the-framework)).
+`Activation.isActive_lt` and `Activation.isActive_mono` prove that the activation is false below that height and monotone above it ([docs/soundness/proposals.md](soundness/proposals.md#proposed-revisions-the-framework)).
 The example defines no `Activation` value, because no network activates it.
 
 ### What the example establishes
 
 Most theorems of the example are *Script-local*: each is about one call of `verifyScript` or `verifyLegacySpend`.
-`block_inactive`, `block_congr` and `corrected_block_restricts` are block-level: each is about one block on a supplied coin set and chain view ([SOUNDNESS.md](soundness/proposals.md#proposed-revisions-the-block-level)).
+`block_inactive`, `block_congr` and `corrected_block_restricts` are block-level: each is about one block on a supplied coin set and chain view ([docs/soundness/proposals.md](soundness/proposals.md#proposed-revisions-the-block-level)).
 A soft-fork claim about the network also needs a statement about a chain and a legacy projection, which DogeLib does not have (design record 0007, section 8.3).
 
 The known answers run both variants through the compiled code on 13 `verifyScript` cases and 4 spends.
@@ -271,7 +271,7 @@ In the comparison, the harness does not let Core make such a read, and both prog
 
 ### What the example establishes
 
-Every theorem here is *block-level*: it is about one block, or a supplied list of blocks, on a supplied coin set and chain view ([SOUNDNESS.md](soundness/proposals.md#proposed-revisions-relativelocktime)).
+Every theorem here is *block-level*: it is about one block, or a supplied list of blocks, on a supplied coin set and chain view ([docs/soundness/proposals.md](soundness/proposals.md#proposed-revisions-relativelocktime)).
 None is a soft-fork claim about the network, and none says anything about fork choice, convergence or liveness.
 The comparison shows that the Lean rules equal Core's dormant code on its requests.
 It does not show that the rules are right for Dogecoin, and it is not evidence about mainnet.
@@ -340,7 +340,7 @@ Instead, `CheckBlock` rejects a block whose computation sets the mutation flag, 
 Let `checkBlock` accept a block with the Merkle check.
 Let a second block have the same header.
 Let its transaction IDs come from those of the first by one or more duplications of a trailing subtree (`MerkleDuplication`).
-Then `checkBlock` rejects the second block with `bad-txns-duplicate` ([SOUNDNESS.md](soundness/blocks.md#block-codec-checktransaction-and-checkblock)).
+Then `checkBlock` rejects the second block with `bad-txns-duplicate` ([docs/soundness/blocks.md](soundness/blocks.md#block-codec-checktransaction-and-checkblock)).
 The theorem is about the Lean definition, and it does not show that Core's `CheckBlock` has the property.
 
 `computeMerkleRoot_duplicate_last` is about one duplicated leaf.
@@ -427,8 +427,8 @@ This direction is not implemented:
 - **Resource bounds for proposals.** A proposal record could state a bound on the work of validation, such as the number of bytes hashed. The bound would be a claim beside compatibility, strictness and use.
 
 Properties of a whole block, such as "no block spends one outpoint twice", need a model of the coin set, because per-input Script verification does not describe them.
-`connectBlock` models Core's `ConnectBlock` on mainnet, over a coin set ([SOUNDNESS.md](soundness/blocks.md#the-coin-set-checktxinputs-and-connectblock)).
+`connectBlock` models Core's `ConnectBlock` on mainnet, over a coin set ([docs/soundness/blocks.md](soundness/blocks.md#the-coin-set-checktxinputs-and-connectblock)).
 Take a block that `connectBlock` accepts, whose hash is not the mainnet genesis hash.
 `connect_spends_available` states that each input of a transaction of that block other than the coinbase spends a present coin.
 It also states that the inputs of one such transaction name pairwise different outpoints.
-The pairwise different outpoints exclude the bug class of CVE-2018-17144 ([SOUNDNESS.md](soundness/blocks.md#connect_spends_available-each-input-spends-a-present-coin)).
+The pairwise different outpoints exclude the bug class of CVE-2018-17144 ([docs/soundness/blocks.md](soundness/blocks.md#connect_spends_available-each-input-spends-a-present-coin)).

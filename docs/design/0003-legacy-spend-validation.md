@@ -24,7 +24,7 @@ The execution and spend theorems proposed here are targets, not implemented resu
 
 The milestone excludes witness execution, witness signature hashing, activation calculation, transaction finality, relative sequence locks against chain history and block sigop limits.
 Core's `IsWitnessEnabled` returns false on every network at the reference software revision [C6].
-The separate witness-serialization definitions do not establish witness consensus acceptance, as [SOUNDNESS.md](../soundness/transactions.md#transactions-the-witness-allowed-format) explains.
+The separate witness-serialization definitions do not establish witness consensus acceptance, as [docs/soundness/transactions.md](../soundness/transactions.md#transactions-the-witness-allowed-format) explains.
 Bytes that resemble witness programs retain their ordinary legacy meaning when witness flags are absent.
 
 ## 2. Reference software revision

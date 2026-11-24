@@ -2,7 +2,7 @@
 
 This document describes the differential campaign driver, the signed-spend generator, the planted proposal search, the reducer, L1 and L3 production replay and campaign regression fixtures.
 See [docs/oracle.md](oracle.md) for the `dogelib-oracle/1` wire format and [docs/core-harness.md](core-harness.md) for the Core harness build.
-See [design record 0009](design/0009-bug-finding-campaign.md) for the campaign design and [COVERAGE.md](../COVERAGE.md#campaign-infrastructure) for recorded status.
+See [design record 0009](design/0009-bug-finding-campaign.md) for the campaign design and [COVERAGE.md](../COVERAGE.md#campaign-infrastructure) for the campaign status summary.
 
 ## Campaign runs and replay
 
@@ -425,3 +425,87 @@ The README of the directory records the property, the plan, the run, both revisi
 `lake test` checks the expected values, and `scripts/compare_core.py` sends the requests to both programs as the set `Script campaign fixtures`.
 A person reviews a candidate before it becomes a fixture.
 A candidate that can be a vulnerability becomes a fixture only after its report is resolved ([section 9.4](design/0009-bug-finding-campaign.md#94-a-real-finding)).
+
+## Recorded campaign results
+
+At seed `20261108`, the default campaign compares 1,897 requests with Core at `e0a1c15`, with zero in all six outcome classes.
+The optional signed-digest group compares 25 requests at the same seed, also with zero in all six classes.
+The campaign self-test also checks M1 to M6 with semantic triggers and fixed budgets, signer determinism, refusal replay and malformed-response replay.
+
+At seed `20261108`, the generated campaign completes 3,000 cases with 9,408 assessed Q6 requests and zero disagreements or process failures.
+It records 2,930 passes, 67 known behaviours and 3 unsupported cases. The unsupported cases are labelled Q6.
+The known counts are 38 fixed-digest cases and 29 early recoveries with CLTV disabled.
+
+The 2,043 generated plans cover both branches, all eleven selected hash-type bytes, input positions 0 to 3 and output counts 0 to 5.
+They reach Q1 to Q5 and Q7, both mutation modes and every operator in the field table.
+The field boundaries move the signed input in all six directions among positions 0 to 2. Under SINGLE, with and without ANYONECANPAY, they change an output before and an output after the signed input.
+
+The self-test passes 40 cases. Each mutant is detected within 3,000 cases and 120 seconds, with a three-second invocation timeout.
+
+`campaign.py reduce` reduces the plan of a saved generated or proposal failure, in the order of design record 0009, section 7.4.
+After each mutant detection, the self-test reduces the saved failure through the same wrapper.
+Each of the six reductions ends with the label `minimal`, after 14 to 25 candidates.
+Each keeps the property, class and failing side, keeps the mutant's trigger in its requests, and reproduces on replay.
+
+Each reduced plan also keeps the P2SH flag and a selector of its branch's truth value.
+A planted Core fault that flips the verdict of spends with a hash type `0x82` signature is detected and reduced three times.
+Each reduced plan keeps a `0x82` signature, and the unmodified harness accepts its spend, so the template runs.
+These results test the reducer and the campaign, and they add no theorem.
+
+`run --campaign proposal` compares `dogelib-oracle` with the test executable `proposal-replay` on the search space of section 8.1.
+It is a self-test of the campaign, not a comparison with Core.
+Against the active faulty rule of `ExampleFaultyLocktime`, the first 5,840 cases give 16 violations of `RestrictsAcceptance`.
+All 16 have three instructions, such as `51 00 b3`, and the 720 cases of one or two instructions give none.
+The reducer takes `51 52 b3 51 87`, at lock time 2 and sequence `0xfffffffe`, to `51 00 b3` at lock time 0 and sequence 0, with the label `minimal`.
+
+Against the active corrected rule, all 374,480 cases give no violation, as `corrected_restrictsAcceptance` requires.
+A response without a Script verdict is a failure, so a stand-in replay that answers with errors fails the search.
+Every case of this space is supported, so an `unsupported` result also makes the search exit with status 1.
+
+### Production replay results
+
+`scripts/test_campaign_production.py` runs the exit check of stage 4 with the planted harness fault M3.
+The generated campaign at seed `20261108` detects M3 at case 1,907 as a Q3 `verdict` failure on the Core side.
+The reducer reduces it with the label `minimal` to one input, no outputs, lock time 500,000,000 and flags 513.
+
+The unchanged harness at `e0a1c15` does not reproduce it at L1.
+L3 adds one zero-value output, because Core rejects a transaction without outputs.
+The node at `e0a1c15` then rejects the re-signed spend with `UNSATISFIED_LOCKTIME` in its mempool and in a block.
+The planted harness accepts the same bytes.
+The classification is `harness-fault`.
+
+The same check shows four production verdicts at L3 that agree with their properties.
+The node accepts an ordinary 2-of-3 spend (Q1). It rejects an early recovery spend at lock time 1,000 with `UNSATISFIED_LOCKTIME` (Q3).
+It rejects a commitment-mode spend whose version changed after signing (Q4).
+A high-S signature fails LOW_S in the mempool and passes in a block, so the replay reports the rejection as policy only.
+
+On 2026-11-08, the branch `1.14-maint` of `dogecoin/dogecoin` was at the pin `e0a1c15`, so the upstream check used builds of that commit.
+A separate harness build with `--revision` gave the same L1 result for the planted candidate, and the same L3 result with `--target upstream`.
+It also gave the same responses as the pin harness to all 2,046 requests of 500 generated cases.
+
+After funding, the tip is at height 1,353, and L3 compares only spends that are final in the next block, height 1,354.
+A valid recovery spend (Q2) is never final there, because the template's operand is height 1,000,000.
+The generator's acceptance cases use lock time 1,000,000 with a nonfinal sequence, so most generated Q1, Q4 and Q5 cases are not final either.
+For these spends the node reports `non-final`, and the replay labels the case `not-comparable`.
+With the L1 part of stage 4, `scripts/test_campaign.py` passes 47 cases.
+These results test the replay procedure, and they add no theorem.
+
+### Regression fixture results
+
+[`tests/script/campaign/`](../tests/script/campaign/README.md) keeps the two understood counterexamples of the campaign, as design record 0009, section 10, requires.
+Both come from planted faults. The campaign found no fault in Core or in DogeLib.
+
+- `proposal-faulty-locktime-5100b3`: the stage 3 search finds `51 00 b3` at lock time 2 and sequence `0xfffffffe`. The faulty rule of `ExampleFaultyLocktime` accepts it, and the baseline rejects it with `EVAL_FALSE`.
+- `harness-fault-m3-locktime-500000000`: the reduced M3 candidate of stage 4, labelled `harness-fault`. The baseline rejects it with `UNSATISFIED_LOCKTIME`.
+
+Each expected value comes from its property and a hand check against pinned `interpreter.cpp`, which the fixture README cites by line.
+`lake test` checks `verifyLegacySpend` and both revised variants against these values.
+`scripts/compare_core.py` compares the oracle with the Core harness on the same requests, as the set `Script campaign fixtures`.
+The two checks together require the Core harness to give the baseline values.
+The known behaviours of design record 0009, section 7.5, get no fixture, because no property of section 11 has them as a counterexample.
+
+The `core` workflow runs the generated campaign at the reviewed seed `20261108` with 3,000 cases.
+On the development machine, that run took 8.7 seconds, with the counts above.
+The regtest replay of stage 4 stays a local gate.
+Its node build took 3 minutes and 51 seconds with 8 jobs, and it downloads Boost 1.70.0.
+These checks are finite regression evidence, and they add no theorem.

@@ -115,5 +115,5 @@ A check of F3 against Core at the pin, by the model that prepared this record, f
 `CScript` is a `prevector` with a `uint32_t` size and an `int32_t` iterator difference (`src/prevector.h`, line 34).
 So the input of F3, a script of 2^32 + 1 bytes, has no `CScript`, and the boundary is lower than F3 states.
 The correspondence with `GetOp2` covers a script of fewer than 2^31 bytes.
-The doc comments of `Transaction.readOp`, `readInstruction` and `isPushOnly` state that bound, as do [SOUNDNESS.md](../soundness/script.md#script-instruction-reader-and-execution-state) and the *Script instruction reader* row of [COVERAGE.md](../../COVERAGE.md).
+The doc comments of `Transaction.readOp`, `readInstruction` and `isPushOnly` state that bound, as do [docs/soundness/script.md](../soundness/script.md#script-instruction-reader-and-execution-state) and the *Script instruction reader* row of [COVERAGE.md](../../COVERAGE.md).
 This check also read the source only and executed nothing.

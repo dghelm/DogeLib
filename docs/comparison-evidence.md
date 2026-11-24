@@ -918,7 +918,7 @@ Each result is one run.
 It holds under the hypothesis of section 3.4: the snapshot at the start is Core's coin set at its height.
 Both snapshots come from Core's replay from the genesis block: the first pass to 1,033,382, and the second pass from there.
 The oracle did not check the blocks between the ranges.
-On mainnet the CSV state is never active, so the walk changes no verdict of the ranges ([SOUNDNESS.md](soundness/blocks.md#version-bits)).
+On mainnet the CSV state is never active, so the walk changes no verdict of the ranges ([docs/soundness/blocks.md](soundness/blocks.md#version-bits)).
 The ranges compare the states that the walk reports, in the oracle and in Core.
 
 ## Block subsidy comparison evidence

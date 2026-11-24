@@ -326,7 +326,7 @@ A view outside the domain gives the existing `work_view` error, or an additional
 
 `ContextualCheckBlockHeader` is in `validation.cpp`, in `libdogecoin_server.a`.
 That object defines globals with constructors, such as `mempool`, and includes Boost Filesystem and Boost Thread [C4].
-The harness links no Boost library and does not compile `validation.cpp` ([docs/oracle.md](../oracle.md#the-core-harness)).
+The harness links no Boost library and does not compile `validation.cpp` ([docs/core-harness.md](../core-harness.md#the-core-harness)).
 Two approaches are possible:
 
 - **H1: link Core's function.** The harness links `validation.cpp` and its dependencies, fills `mapBlockIndex`, sets `fCheckpointsEnabled` and calls `ContextualCheckBlockHeader` directly.

@@ -161,11 +161,24 @@ class WritingRuleTests(unittest.TestCase):
         self.assertEqual(findings("The bound is tight. This lemma is the main result."), [])
 
     def test_history_words_apply_to_library_text_only(self) -> None:
-        for path in ["README.md", "SOUNDNESS.md", "docs/soundness/blocks.md", "DogeLib/Serialization/CompactSize/README.md"]:
+        for path in [
+            "README.md",
+            "SOUNDNESS.md",
+            "docs/soundness/blocks.md",
+            "docs/oracle.md",
+            "docs/core-harness.md",
+            "DogeLib/Serialization/CompactSize/README.md",
+        ]:
             self.assertEqual(findings("The lemma is no longer needed.", path), ["C3"], path)
         self.assertEqual(findings("/-- The lemma is no longer needed. -/\ndef x := 1\n",
                                   "DogeLib/Serialization/CompactSize/Decode.lean"), ["C3"])
-        for path in ["body.md", "CONTRIBUTING.md", "tests/cryptography/README.md"]:
+        for path in [
+            "body.md",
+            "CONTRIBUTING.md",
+            "docs/comparison-evidence.md",
+            "docs/campaign.md",
+            "tests/cryptography/README.md",
+        ]:
             self.assertEqual(findings("The lemma is no longer needed.", path), [], path)
         self.assertEqual(findings("The new code is now linear.", "README.md"), [])
 

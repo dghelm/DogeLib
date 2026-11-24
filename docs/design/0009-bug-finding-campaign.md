@@ -15,7 +15,7 @@ Each counterexample that the campaign finds becomes a small input that a person 
 [DogeLib in practice](../in-practice.md#two-questions) separates two questions.
 The first asks whether an implementation behaves as the specification says.
 The second asks whether the specified behaviour gives a stated property.
-The existing comparison answers the first question on a fixed stream of requests ([docs/oracle.md](../oracle.md#the-comparison)).
+The existing comparison answers the first question on a fixed stream of requests ([docs/comparison-evidence.md](../comparison-evidence.md#the-comparison)).
 The campaign adds generated cases, properties that the campaign states independently of both implementations, and the tools that make a failure useful:
 
 - Structured generation of signed spends in two mutation modes (section 6).
@@ -138,7 +138,7 @@ The generator, the properties and the reducer must keep each behaviour.
 5. **The lock-time check.** `CheckLockTime` (C4) succeeds only when three conditions hold. The operand and `nLockTime` lie on the same side of 500,000,000. The operand is at most `nLockTime`. The sequence of input `n` is not `0xffffffff`. Without the flag `CHECKLOCKTIMEVERIFY`, the opcode is `OP_NOP2` (C5, lines 352–358).
 6. **Fields that execution reads.** Apart from the signature hash, the template reads two transaction fields: `nLockTime` and the sequence of input `n`, through C4. Every hash type commits to both (item 1). Execution also reads the `scriptSig` of input `n`, which no digest commits to (C1). Its pushes form the unlocking stack: the dummy, the signatures with their encodings, the selector and the redeem script. A change of that `scriptSig` can change the branch or the verdict with both digests unchanged. For example, the fixture `multisig-selector` keeps `digest_hex` equal to `spend_digest_hex` and gets `EVAL_FALSE`. No other open field of section 6.3 changes the execution of the template.
 7. **Flag assertions.** `VerifyScript` asserts that `WITNESS` implies `P2SH` and that `CLEANSTACK` implies both (C7). The harness refuses those combinations, and the comparator classifies them (section 3.3).
-8. **The production caller.** A node calls `VerifyScript` through `CScriptCheck` with `CachingTransactionSignatureChecker` (C8). The harness calls it with `TransactionSignatureChecker` ([docs/oracle.md](../oracle.md#what-the-harness-runs)). The two differ in the signature cache, and in the precomputed hashes, which only `SIGVERSION_WITNESS_V0` reads (C2, line 1180).
+8. **The production caller.** A node calls `VerifyScript` through `CScriptCheck` with `CachingTransactionSignatureChecker` (C8). The harness calls it with `TransactionSignatureChecker` ([docs/core-harness.md](../core-harness.md#what-the-harness-runs)). The two differ in the signature cache, and in the precomputed hashes, which only `SIGVERSION_WITNESS_V0` reads (C2, line 1180).
 
 ## 5. Options
 
@@ -251,7 +251,7 @@ Some parts are enumerated in full at their boundaries, as `locktime_sets` does:
 - Each flag of the supported set `1567` set and clear, with `P2SH` set. A few cases set an unsupported flag, so the unsupported class stays visible.
 
 The search has no coverage feedback.
-The driver reports the branches, hash types, error names and mutation operators that each run reached. The targeted streams report their opcodes in the same way ([docs/oracle.md](../oracle.md#the-comparison)).
+The driver reports the branches, hash types, error names and mutation operators that each run reached. The targeted streams report their opcodes in the same way ([docs/comparison-evidence.md](../comparison-evidence.md#the-comparison)).
 
 ### 6.5 Expected results
 
@@ -444,7 +444,7 @@ The record proposes three levels:
 
 | Level | What runs | Use |
 | --- | --- | --- |
-| L1 | The harness function is the production function. | `script.verify_legacy` calls `VerifyScript`, and `sighash.legacy` calls `SignatureHash` ([docs/oracle.md](../oracle.md#what-the-harness-runs)). |
+| L1 | The harness function is the production function. | `script.verify_legacy` calls `VerifyScript`, and `sighash.legacy` calls `SignatureHash` ([docs/core-harness.md](../core-harness.md#what-the-harness-runs)). |
 | L2 | A program in the shape of Core's unit tests calls the production function on a scratch state. | `BasicTestingSetup` or `TestingSetup` (C10), with the production function in `validation.cpp`. |
 | L3 | A regtest node. | `sendrawtransaction` or `submitblock` (C11), or a `headers` message through the functional test framework (C11). |
 

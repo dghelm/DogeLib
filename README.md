@@ -15,7 +15,7 @@ AI models wrote the definitions from the pinned source, and the recorded reviews
 Three kinds of evidence connect the definitions to Core:
 
 - The theorems, which the Lean kernel checks. A theorem about a definition that differs from Core still holds ([A1](SOUNDNESS.md#a1-a-wrong-definition)).
-- The comparison with Core's code on a finite set of requests, which CI runs on every pull request ([docs/oracle.md](docs/oracle.md#the-comparison)).
+- The comparison with Core's code on a finite set of requests, which CI runs on every pull request ([docs/comparison-evidence.md](docs/comparison-evidence.md#the-comparison)).
 - Those reviews of the pull requests.
 
 [docs/reviews/](docs/reviews/README.md) also records ten reads of the definitions against Core's source by an AI model.
@@ -69,19 +69,19 @@ The oracle uses `coreVerifier` for its transaction checker and exposes single-si
 
 The `dogelib-oracle` program runs the specification on JSON requests, and a harness runs the pinned Core code on the same requests ([docs/oracle.md](docs/oracle.md)).
 A full comparison sends 389,785 stream requests, and it passes only with zero failures.
-The comparator also fails if the number of requests for any operation differs from its table ([counts](docs/oracle.md#the-comparison)).
+The comparator also fails if the number of requests for any operation differs from its table ([counts](docs/comparison-evidence.md#the-comparison)).
 The four transaction-reader operations receive 263,929 of the requests, Script evaluation and verification 17,019, and header sequences 257.
 The total includes requests with an unsupported Lean result and 12 checked harness refusals.
 The comparison counts these requests separately, as neither agreement nor disagreement.
 
 For one operation, the harness does not run Core's function.
 The version gates compare with a transcription of two branches of `src/validation.cpp`, written by hand in the harness.
-Contextual header validation and header sequences run Core's own functions on a block index that the harness builds in memory ([contextual evidence](docs/oracle.md#contextual-header-comparison-evidence), [sequence evidence](docs/oracle.md#header-sequence-comparison-evidence)).
+Contextual header validation and header sequences run Core's own functions on a block index that the harness builds in memory ([contextual evidence](docs/comparison-evidence.md#contextual-header-comparison-evidence), [sequence evidence](docs/comparison-evidence.md#header-sequence-comparison-evidence)).
 
 For example, Core's `script_tests.json` has 925 records with no witness and only the seven supported flags ([corpus](tests/script/corpus/README.md)).
 Through `script.verify_legacy`, these records give 925 agreements with the base checker and 925 with the transaction checker.
 All 159 eligible transaction inputs and 598 public-key inputs agree with Core.
-For header proof of work, Core and the oracle agree on all 321 recorded mainnet headers, 207 version-gate boundaries and 1,075 seeded mutations ([header evidence](docs/oracle.md#header-proof-of-work-evidence)).
+For header proof of work, Core and the oracle agree on all 321 recorded mainnet headers, 207 version-gate boundaries and 1,075 seeded mutations ([header evidence](docs/comparison-evidence.md#header-proof-of-work-evidence)).
 A comparison covers its requests and no other inputs.
 
 DogeLib has no definition of chain validity.

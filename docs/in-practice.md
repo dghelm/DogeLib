@@ -17,7 +17,7 @@ Security work on a consensus rule asks two different questions:
 
 DogeLib answers the first question with three kinds of evidence:
 
-- Comparisons with Dogecoin Core run the oracle and Core's own code at the pinned revision on the same requests ([docs/oracle.md](oracle.md#the-core-harness)).
+- Comparisons with Dogecoin Core run the oracle and Core's own code at the pinned revision on the same requests ([docs/core-harness.md](core-harness.md#the-core-harness)).
 - Known answers from independent sources run through the compiled specification (`lake test`).
 - Refinement theorems relate another implementation to the specification, such as `decode_refines` for the Rust CompactSize reader ([SOUNDNESS.md](soundness/serialization.md#rust-bounded-compactsize-reader)).
 
@@ -118,7 +118,7 @@ lake build proposal-replay
 ```
 
 The active faulty rule accepts `5152b35187` and rejects `0102b37551` with `INVALID_STACK_OPERATION`.
-The campaign uses this program to search for the counterexample without the hand-written case ([docs/oracle.md](oracle.md#the-planted-proposal-search)).
+The campaign uses this program to search for the counterexample without the hand-written case ([docs/campaign.md](campaign.md#the-planted-proposal-search)).
 
 ### The theorems that refute the claim
 
@@ -349,7 +349,7 @@ Core's comment gives a second shape, in which the last two leaves of six repeat.
 
 ## Comparing with Core and reading a disagreement
 
-[BUILDING.md](../BUILDING.md#comparison-with-dogecoin-core) gives the commands of the full comparison, and [docs/oracle.md](oracle.md#the-comparison) describes its streams:
+[BUILDING.md](../BUILDING.md#comparison-with-dogecoin-core) gives the commands of the full comparison, and [docs/comparison-evidence.md](comparison-evidence.md#the-comparison) describes its streams:
 
 ```bash
 lake build dogelib-oracle
@@ -385,8 +385,8 @@ Investigate each of these causes:
 For most operations, the harness calls Core's own function.
 That includes the two header operations, which earlier revisions answered from transcriptions (option H2 of design records 0006 and 0008):
 
-- `block.contextual_check` calls `ContextualCheckBlockHeader` ([evidence](oracle.md#contextual-header-comparison-evidence)).
-- `block.header_sequence` calls `AcceptBlockHeader`, which calls `AddToBlockIndex` ([evidence](oracle.md#header-sequence-comparison-evidence)).
+- `block.contextual_check` calls `ContextualCheckBlockHeader` ([evidence](comparison-evidence.md#contextual-header-comparison-evidence)).
+- `block.header_sequence` calls `AcceptBlockHeader`, which calls `AddToBlockIndex` ([evidence](comparison-evidence.md#header-sequence-comparison-evidence)).
 
 For both, the harness builds the block index in memory from the request.
 A mistake in that construction gives Core a context other than the one that the request describes.
@@ -409,11 +409,11 @@ A theorem establishes a claim about the Lean definitions, under its hypotheses a
 ## Searching with the campaign
 
 `scripts/campaign.py` searches for counterexamples to stated properties, under [design record 0009](design/0009-bug-finding-campaign.md).
-[docs/oracle.md](oracle.md#campaign-runs-and-replay) gives its commands, budgets and limits:
+[docs/campaign.md](campaign.md#campaign-runs-and-replay) gives its commands, budgets and limits:
 
 - **Signed-spend generation.** The generator mutates a spend of the multisig-with-recovery template in two modes. One mode mutates the transaction and then signs it with Core's signer, so each signature is over the mutated transaction. The other mode signs first and keeps the signatures, so it tests what a signature commits to. Some cases also change a signature after the signer returns it. They change it to a high S value, or change its hash-type byte, the order of the signatures or the DER padding. Those cases do not keep the signer's signatures.
-- **Saved failures and reduction.** The campaign saves each failure as a record that `campaign.py replay` can run again. `campaign.py reduce` reduces the plan of a saved generated failure to a smaller plan that still fails ([reduction](oracle.md#reduction)).
-- **Production replay.** `campaign.py replay --level` sends a saved signed-spend failure to a harness build again, or submits the spend to a regtest node ([production replay](oracle.md#production-replay)).
+- **Saved failures and reduction.** The campaign saves each failure as a record that `campaign.py replay` can run again. `campaign.py reduce` reduces the plan of a saved generated failure to a smaller plan that still fails ([reduction](campaign.md#reduction)).
+- **Production replay.** `campaign.py replay --level` sends a saved signed-spend failure to a harness build again, or submits the spend to a regtest node ([production replay](campaign.md#production-replay)).
 
 The campaign found no fault in Core or in DogeLib.
 Its two regression fixtures come from planted faults ([fixtures](../COVERAGE.md#campaign-regression-fixtures)).

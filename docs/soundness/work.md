@@ -458,7 +458,7 @@ No theorem says that a supplied chain work is the value that a node holds.
 - 300 mainnet headers from 144730: five sums of block proofs, computed with Python integers from the fixture's `nBits` fields.
 
 These known-answer checks do not run Core.
-The [header-sequence comparison](../oracle.md#header-sequence-comparison-evidence) supplies separate finite evidence from Core's `AcceptBlockHeader`.
+The [header-sequence comparison](../comparison-evidence.md#header-sequence-comparison-evidence) supplies separate finite evidence from Core's `AcceptBlockHeader`.
 
 By `#print axioms` with Lean `v4.35.0`:
 

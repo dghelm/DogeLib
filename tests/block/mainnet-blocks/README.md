@@ -94,7 +94,7 @@ No check compares that `nBits` with the difficulty that the chain requires at th
 `ranges/<NAME>/hashes.txt` has one line for each height of the range, from `a + 1` to `b`: the height and the block hash in display order.
 `SHA256SUMS` gives the SHA-256 of that file.
 
-`scripts/run_range.py --write-hashes` wrote each list from the headers that the Core pass of `scripts/core_pass.py` kept ([docs/oracle.md](../../../docs/oracle.md#the-core-pass)).
+`scripts/run_range.py --write-hashes` wrote each list from the headers that the Core pass of `scripts/core_pass.py` kept ([docs/core-harness.md](../../../docs/core-harness.md#the-core-pass)).
 The pass read every block from the genesis block, checked each link, and required each checkpoint of Core.
 So each hash of a list is on the chain of the first checkpoint above the range, if SHA-256 is collision resistant:
 
@@ -109,7 +109,7 @@ So each hash of a list is on the chain of the first checkpoint above the range, 
 | F | 3,463,751 to 3,465,750 | 3,500,000 |
 | H | 5,049,001 to 5,050,000 | 5,050,000 |
 
-The lists of E1 and E2 come from the headers of the second pass of stage 4, which started from the snapshot of range D ([docs/oracle.md](../../../docs/oracle.md#the-csv-window-ranges-e1-and-e2)).
+The lists of E1 and E2 come from the headers of the second pass of stage 4, which started from the snapshot of range D ([docs/comparison-evidence.md](../../../docs/comparison-evidence.md#the-csv-window-ranges-e1-and-e2)).
 Those headers equal the first pass's byte for byte up to 1,704,519, and the first pass reached the checkpoint at 1,750,000.
 
 The node gave the headers of the pass, and the claim does not rest on it.
@@ -189,7 +189,7 @@ One coin set has one byte sequence as its snapshot, so a second replay must writ
 The script fails when a manifest of its run differs from the committed one.
 
 The values of a manifest come from the Core harness, and the script computes each of them again from the file.
-The snapshot at height 145,000 has the digest of the [recorded replay](../../../docs/oracle.md#replay-of-mainnet-to-height-145000), which the oracle reached from the empty set.
+The snapshot at height 145,000 has the digest of the [recorded replay](../../../docs/comparison-evidence.md#replay-of-mainnet-to-height-145000), which the oracle reached from the empty set.
 A manifest does not show that its snapshot is the coin set of mainnet at its height.
 That claim rests on the blocks of the replay and on the harness ([design record 0011](../../../docs/design/0011-mainnet-ranges.md), section 3.4).
 
@@ -216,7 +216,7 @@ Both programs must return a valid verdict, and the hash, the number of transacti
 
 The same run replays the genesis-to-10,000 range through `block.validate`, in one request from the empty coin set (design record 0010, section 5).
 `scripts/oracle_block_validate.py` builds that request and the 42 requests of the full comparison, which change the committed rule-change blocks.
-[docs/oracle.md](../../../docs/oracle.md#block-validation-comparison-evidence) records the results.
+[docs/comparison-evidence.md](../../../docs/comparison-evidence.md#block-validation-comparison-evidence) records the results.
 `scripts/replay_blocks.py` continues that replay to height 145,000 on blocks from a node, which are not release assets, in a gate outside CI.
 
 Three blocks of the recent range, at heights 6,455,642, 6,456,071 and 6,456,247, have a base size 36 bytes below their size.

@@ -143,7 +143,7 @@ It also runs the 247 integers of the `creation` test of `scriptnum_tests.cpp` (D
 That test compares Core with its own 0.10.0 copy, so it gives the integers but no expected bytes.
 Core itself does not run in these tests.
 
-The Core comparison of `script.eval` and `script.verify_legacy` reaches these definitions only through the numeric opcodes and conditionals of the scripts that it sends ([docs/oracle.md](../oracle.md#the-comparison)).
+The Core comparison of `script.eval` and `script.verify_legacy` reaches these definitions only through the numeric opcodes and conditionals of the scripts that it sends ([docs/comparison-evidence.md](../comparison-evidence.md#the-comparison)).
 No request compares them directly, and the comparison covers only the requests that it sends.
 
 `OP_PICK`, `OP_ROLL` and the numeric opcodes in `Script.execOpcode` map a decode failure to `SCRIPT_ERR_UNKNOWN_ERROR`, as the `catch` of `EvalScript` does (D3, lines 1037 to 1040).
@@ -288,7 +288,7 @@ That the definitions are Core's rests on a reading of D3, D50 to D53 (A1), and o
 The test takes each record's signature from the top of the stack after the specified `evalScript` runs `scriptSig`.
 Core itself does not run in these tests.
 
-The Core comparison of `script.eval` and `script.verify_legacy` reaches these checks only through the signature opcodes of the scripts that it sends ([docs/oracle.md](../oracle.md#the-comparison)).
+The Core comparison of `script.eval` and `script.verify_legacy` reaches these checks only through the signature opcodes of the scripts that it sends ([docs/comparison-evidence.md](../comparison-evidence.md#the-comparison)).
 No request compares an encoding check directly, and the comparison covers only the requests that it sends.
 The definitions add no hypothesis, axiom or execution boundary.
 By `#print axioms` with Lean `v4.35.0`:

@@ -155,7 +155,7 @@ This closes the deferred byte-transcription check of stage 3 from pull request #
 The 16 boundary cases take their expectations from the author's reading of D55, and the comparator checks Core's verdict on each payload.
 Both implementations also accept the six historical mainnet payloads with their own child hashes and mainnet strictness.
 These finite checks do not establish all-input equivalence with Core.
-[The comparison report](../oracle.md#header-proof-of-work-evidence) describes the streams and mutation seed.
+[The comparison report](../comparison-evidence.md#header-proof-of-work-evidence) describes the streams and mutation seed.
 
 By `#print axioms`, the search and `getExpectedIndex_mod64` theorems depend on `propext` and `Quot.sound`, and the others on `propext`, `Classical.choice` and `Quot.sound`.
 
@@ -207,7 +207,7 @@ No theorem relies on that argument.
 
 The `block.check_pow` comparison checks all 321 headers against Core's `CheckAuxPowProofOfWork` and its real selected parameters.
 The [fixture report](../../tests/block/core-header-pow.json) records the byte identities, network, parameters and Core verdicts.
-The [comparison](../oracle.md#header-proof-of-work-evidence) also changes parent and child targets, nonces and version bits.
+The [comparison](../comparison-evidence.md#header-proof-of-work-evidence) also changes parent and child targets, nonces and version bits.
 Lean diagnostics stay outside the compared verdict.
 
 The Core harness ports `mineBlock` and `auxpow_pow` and mines their nonces again on every comparison.
@@ -346,7 +346,7 @@ These theorems establish the behaviour of DogeLib's definitions.
 `block.contextual_check` compares the compiled specification with Core's `ContextualCheckBlockHeader` (D33, lines 3066 to 3119).
 The harness calls that function on index entries that it builds from the request.
 It compares `valid` and the first `reject_reason`, excluding Lean diagnostics.
-The [comparison stream](../oracle.md#contextual-header-comparison-evidence) includes 2231 real mainnet candidates, hand-derived boundaries and 500 mutations with seed `20261109`.
+The [comparison stream](../comparison-evidence.md#contextual-header-comparison-evidence) includes 2231 real mainnet candidates, hand-derived boundaries and 500 mutations with seed `20261109`.
 The comparison gives finite evidence, not an equivalence theorem with compiled Core.
 
 The in-memory index is an evidence boundary (A1).
@@ -457,7 +457,7 @@ The expected verdict of the contextual check comes from chain acceptance and D33
 A candidate with fewer than 11 entries above an anchor gives `shortView`, and a candidate below the last checkpoint gives `bad-fork-prior-to-checkpoint`.
 An anchor at 144720 gives `nextWork missingAncestor` at the retarget 144960.
 These known-answer checks do not run Core.
-The [header-sequence comparison](../oracle.md#header-sequence-comparison-evidence) supplies separate finite evidence from Core's `AcceptBlockHeader`.
+The [header-sequence comparison](../comparison-evidence.md#header-sequence-comparison-evidence) supplies separate finite evidence from Core's `AcceptBlockHeader`.
 
 By `#print axioms` with Lean `v4.35.0`:
 
@@ -573,7 +573,7 @@ No theorem says that they are the state and the context that a node holds.
   Five cases of `checkWellFormed` accept and reject small indexes.
 
 These known-answer checks do not run Core.
-The [header-sequence comparison](../oracle.md#header-sequence-comparison-evidence) supplies separate finite evidence from Core's `AcceptBlockHeader`.
+The [header-sequence comparison](../comparison-evidence.md#header-sequence-comparison-evidence) supplies separate finite evidence from Core's `AcceptBlockHeader`.
 
 By `#print axioms` with Lean `v4.35.0`:
 
@@ -680,7 +680,7 @@ The specification does not use them.
     A version change at each activation height gives `high-hash` at its position: step 2 runs before the contextual check.
 
 These known-answer checks do not run Core.
-The [header-sequence comparison](../oracle.md#header-sequence-comparison-evidence) supplies separate finite evidence from Core's `AcceptBlockHeader`.
+The [header-sequence comparison](../comparison-evidence.md#header-sequence-comparison-evidence) supplies separate finite evidence from Core's `AcceptBlockHeader`.
 
 By `#print axioms` with Lean `v4.35.0`:
 

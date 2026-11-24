@@ -39,7 +39,7 @@ They also include the opcode spends, and each created output that holds `0xb2`.
 
 Every list has 0 candidate blocks for each of the three revisions, and 0 missing coins.
 
-The directory `runs/` has the records of the recorded runs, with an index and `SHA256SUMS` ([docs/oracle.md](../../../docs/oracle.md#historical-impact-runs)).
+The directory `runs/` has the records of the recorded runs, with an index and `SHA256SUMS` ([docs/comparison-evidence.md](../../../docs/comparison-evidence.md#historical-impact-runs)).
 
 ## Provenance
 

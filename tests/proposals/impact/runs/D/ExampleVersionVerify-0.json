@@ -46,10 +46,10 @@
   "range": "D",
   "recheck": {
     "changed_blocks": 0,
-    "command": "impact_run.py check",
+    "command": "python3 -I scripts/impact_run.py check --range D --request build/impact/requests/D/request.json --revision ExampleVersionVerify --activation 0 --baseline build/range-runs/D/range-oracle-response.json --response build/impact/runs/D/ExampleVersionVerify-0/response.json --output build/impact/recheck/D/ExampleVersionVerify-0 build/bin-6ef0e12/dogelib-proposal-oracle",
     "summary": {
       "bytes": 956,
-      "sha256": "53a5c3dcb94a154b592538f8a6e3171a5cae005063effceb220e1503333f117f"
+      "sha256": "440b5d8db4ddf5074ef9d804f0794efe70c1a74b586da7d26ed4cfd4967e84e4"
     }
   },
   "result": {
@@ -68,6 +68,7 @@
   },
   "run": "ExampleVersionVerify-0",
   "time": {
+    "elapsed": "21:00.67",
     "finished_utc": "2026-11-22T02:20:32Z",
     "max_rss_kib": 465160,
     "seconds": 1260

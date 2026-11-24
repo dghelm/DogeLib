@@ -46,10 +46,10 @@
   "range": "E2",
   "recheck": {
     "changed_blocks": 0,
-    "command": "impact_run.py check",
+    "command": "python3 -I scripts/impact_run.py check --range E2 --request build/impact/requests/E2/request.json --revision ExampleFaultyLocktime/corrected --activation 0 --baseline build/impact/runs/E2/baseline-response.json --response build/impact/runs/E2/ExampleFaultyLocktime-corrected-0/response.json --output build/impact/recheck/E2/ExampleFaultyLocktime-corrected-0 build/bin-6ef0e12/dogelib-proposal-oracle",
     "summary": {
       "bytes": 978,
-      "sha256": "4d8893766a641932fa1ba1149e729bd1eec0ca85efd3cc739c9492fb16f9bb5a"
+      "sha256": "a0e5d75e0ed19e32621f4f9a413f9f01e2edc862a858d1d9e6d031d38078e19a"
     }
   },
   "result": {
@@ -68,6 +68,7 @@
   },
   "run": "ExampleFaultyLocktime-corrected-0",
   "time": {
+    "elapsed": "19:22.57",
     "finished_utc": "2026-11-22T06:13:28Z",
     "max_rss_kib": 986828,
     "seconds": 1162

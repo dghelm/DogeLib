@@ -46,10 +46,10 @@
   "range": "S",
   "recheck": {
     "changed_blocks": 0,
-    "command": "impact_run.py check",
+    "command": "python3 -I scripts/impact_run.py check --range S --request build/impact/requests/S/request.json --revision RelativeLockTime --activation 1 --baseline build/impact/runs/S/baseline-response.json --response build/impact/runs/S/RelativeLockTime-1/response.json --output build/impact/recheck/S/RelativeLockTime-1 build/bin-6ef0e12/dogelib-proposal-oracle",
     "summary": {
       "bytes": 944,
-      "sha256": "1eb084cfe242f0cea9115a456d6e4e553ed4e170878b59e602824874c69f6cbe"
+      "sha256": "754f083fa5dd1e365a7a1d2fdafb426e17c05edfbc86ed278b170aa506332553"
     }
   },
   "result": {
@@ -68,6 +68,7 @@
   },
   "run": "RelativeLockTime-1",
   "time": {
+    "elapsed": "12:50.75",
     "finished_utc": "2026-11-22T07:44:14Z",
     "max_rss_kib": 421444,
     "seconds": 771

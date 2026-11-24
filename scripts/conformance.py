@@ -245,6 +245,14 @@ def compare(name: str, directory: Path, oracle: str, harness: str, recorded: Pat
         if not all(r["valid"] for r in responses[side]["ok"]["blocks"]):
             raise CorpusError(f"range {name}: {side} rejected a block")
     parsed = [check_range_results.read_results(str(directory / f"{side}-results.jsonl")) for side in ("oracle", "core")]
+    heights = range_results.block_heights(blocks)
+    for side, results in zip(("oracle", "core"), parsed):
+        try:
+            check_range_results.check_complete(results)
+        except check_range_results.Malformed as error:
+            raise CorpusError(f"range {name}: the {side} results: {error}") from None
+        if [r["height"] for r in results[1]] != heights:
+            raise CorpusError(f"range {name}: the {side} results do not have one record for each block of {blocks}")
     difference = check_range_results.first_difference(*parsed)
     if difference is not None:
         raise CorpusError(f"range {name}: the checker fails on the oracle's results: {difference}")

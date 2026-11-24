@@ -13,12 +13,13 @@ The script works in four steps:
 
 1. It reads the range request FILE and the blocks FILE, and computes the SHA-256 of each.
    The request must be a `block.validate` request with `coins`, and without `id`, `blocks_hex`,
-   `blocks_file` and `coins_file`.
+   `blocks_file` and `coins_file`. The heights of the blocks must follow each other.
 2. It sends PROGRAM the range request with an empty blocks file. The result has no block record,
    and its `set_digest_hex` and `set_coins` are the digest and the number of the coins of the
    request: the start of the results.
-3. It sends PROGRAM the range request with the blocks file. Each block record and the digest and
-   number of the coins after the last record go into the results.
+3. It sends PROGRAM the range request with the blocks file. The response must have one block
+   record for each block of the file, in order. Each block record and the digest and number of
+   the coins after the last record go into the results.
 4. It writes the results file: one JSON line for the start, one for each block record, and one
    for the end.
 
@@ -126,6 +127,8 @@ def results(range_name: str, request_file: Path, blocks_file: Path, program: lis
     if any(key in request for key in REFUSED_KEYS):
         raise ResultsError(f"{request_file}: a range request has none of {', '.join(REFUSED_KEYS)}")
     heights = block_heights(blocks_file)
+    if heights != list(range(heights[0], heights[-1] + 1)):
+        raise ResultsError(f"{blocks_file}: the heights of the blocks do not follow each other")
     head = {"format": FORMAT, "range": range_name, "first": heights[0], "last": heights[-1],
             "request_sha256": file_sha256(request_file), "blocks_sha256": file_sha256(blocks_file)}
     with tempfile.TemporaryDirectory() as scratch:
@@ -139,8 +142,13 @@ def results(range_name: str, request_file: Path, blocks_file: Path, program: lis
     records = ok.get("blocks")
     if not isinstance(records, list):
         raise ResultsError("the range response has no list of block records")
+    lines = [block_line(r) for r in records]
+    got = [line["height"] for line in lines]
+    if got != heights:
+        raise ResultsError(f"the range response has {len(got)} block records, not one for each of the "
+                           f"{len(heights)} blocks of {blocks_file} in order")
     end_digest, end_coins = set_fields(ok, "range")
-    return [head, *(block_line(r) for r in records),
+    return [head, *lines,
             {"end_set_digest_hex": end_digest, "end_set_coins": end_coins}]
 
 

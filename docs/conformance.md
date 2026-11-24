@@ -131,7 +131,7 @@ Each request is one line of JSON on standard input, and the response is one line
 
 ## The blocks: `dogelib-blocks/1`
 
-`blocks.bin` holds the blocks of the range in height order, one record for each block:
+`blocks.bin` holds the blocks of the range in height order, one record for each height of the range:
 
 1. The height, as a 4-byte little-endian integer.
 2. The length of the block in bytes, as a 4-byte little-endian integer. The length is at most 33,554,432, Core's `MAX_SIZE`.
@@ -228,7 +228,14 @@ On mainnet, CSV never reaches `LOCKED_IN`, and SegWit is never active.
 | `outputs` | The unspent outputs of the transaction, in index order. Each is `{n, value, script_hex}`: the output index, the amount in koinu as a string of decimal digits, and the script |
 
 A transaction ID occurs once, and each entry has at least one output.
-No script of the coins starts with `OP_RETURN` or has more than 10,000 bytes, because Core's coin set never holds such an output.
+The coins obey the bounds of the snapshot format ([the snapshot](#the-snapshot-dogelib-coins1)):
+
+- The height is from 0 to 2,147,483,646.
+- The output index `n` is from 0 to 1,048,575, and one entry has each index at most once.
+- The amount is from 0 to `MAX_MONEY`, 1,000,000,000,000,000,000 koinu.
+- No script starts with `OP_RETURN` or has more than 10,000 bytes, because Core's coin set never holds such an output.
+
+The oracle and the Core harness both refuse a request whose coins break one of these rules.
 The order of the entries does not matter.
 
 The coins of a range request are its *restricted coins*.
@@ -290,7 +297,8 @@ The start line has these keys:
 | `start_set_digest_hex` | The digest of the set of the coins of the request |
 | `start_set_coins` | The number of coins of the request: the sum of the numbers of outputs of its entries |
 
-Each block line has these keys, for the blocks of `blocks.bin` in order:
+Each block line has these keys, for the blocks of `blocks.bin` in order.
+A results file has exactly one block line for each block, so the heights run from `first` to `last` without a gap.
 
 | Key | Value |
 | --- | --- |
@@ -310,6 +318,7 @@ The end line has these keys:
 
 The checker compares the values of each line with the expected results, in order.
 It reports a missing block, an added block, and each field that differs.
+It also refuses a file whose block lines do not cover the heights from `first` to `last` once each, in order.
 A script reason of `ConnectBlock` has the form `mandatory-script-verify-flag-failed (<text>)`, with the text of Core's `ScriptErrorString` ([docs/oracle.md](oracle.md#block-validation) lists the reasons).
 
 ## The snapshot: `dogelib-coins/1`

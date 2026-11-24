@@ -12,7 +12,8 @@ The check reads both files strictly. Each must be a start line, one line for eac
 and an end line, each a JSON object with exactly the keys of its kind. The check then requires
 that RESULTS has the values of EXPECTED: every field of the start line, then each block record in
 order, then every field of the end line. It compares values, not bytes, so the order of the keys
-and the white space of a line do not matter.
+and the white space of a line do not matter. Last, each file must have one block record for each
+height from `first` to `last` of its start line, in order.
 
 The script prints `PASS` and exits with status 0 when the files agree. Otherwise it prints the
 first difference and exits with status 1. A file that does not read is status 2. The script uses
@@ -109,6 +110,15 @@ def read_results(path: str) -> tuple[dict, list[dict], dict]:
     return head, blocks, end
 
 
+def check_complete(parsed) -> None:
+    """Require one block record for each height from `first` to `last` of the start line, in order."""
+    head, blocks, _ = parsed
+    heights = [block["height"] for block in blocks]
+    if heights != list(range(head["first"], head["last"] + 1)):
+        raise Malformed(f"the {len(heights)} block records do not cover heights {head['first']} to {head['last']} "
+                        "once each, in order")
+
+
 def describe(block: dict) -> str:
     return f"height {block['height']}, hash {block['hash_display']}"
 
@@ -154,6 +164,12 @@ def main(argv=None) -> int:
     if difference is not None:
         print(f"FAIL: {argv[0]}: {difference}")
         return 1
+    for path, results in zip(argv, parsed):
+        try:
+            check_complete(results)
+        except Malformed as error:
+            print(f"ERROR: {path}: {error}")
+            return 2
     head, blocks, _ = parsed[0]
     print(f"PASS: range {head['range']}, heights {head['first']} to {head['last']}, "
           f"{len(blocks)} block records agree with {argv[1]}")

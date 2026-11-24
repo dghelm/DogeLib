@@ -2,12 +2,20 @@
 """Self-test of scripts/check_range_results.py on the committed expected results.
 
 Usage:
-  python3 -I scripts/test_check_range_results.py
+  python3 -I scripts/test_conformance.py
 
 For each committed `tests/conformance/ranges/<range>/expected.jsonl`, the checker must pass on
 the file itself and on a copy with other key orders and white space. On a copy of the results of
 the short range, each planted fault below must fail with its status and its message. The test
 runs the checker as a separate program, as a user runs it, and needs no other program.
+
+Two results files that agree, but whose block records do not cover the heights of their start
+line, must fail with status 2: a file with no block record, and a file without its last record.
+
+The wrapper `scripts/range_results.py` and the comparison of `scripts/conformance.py` run a made
+responder program on three made blocks. Both must accept a response with one record for each
+block, and refuse a response with no record, a response without the last record, and one with
+the records in another order.
 
 The committed `tests/conformance/release.json` must pass the checks of
 `scripts/conformance.py`, and each planted fault of a copy must fail them.
@@ -22,6 +30,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 import conformance  # noqa: E402
+import range_results  # noqa: E402
 
 CHECKER = ROOT / "scripts/check_range_results.py"
 RANGES = ROOT / "tests/conformance/ranges"
@@ -135,6 +144,82 @@ def release_faults(release: dict) -> list[tuple[str, dict]]:
     return cases
 
 
+RESPONDER = """#!/usr/bin/env python3
+import json, sys
+MODE, ORACLE = %r, %r
+request = json.loads(sys.stdin.readline())
+heights = []
+with open(request["blocks_file"], "rb") as stream:
+    while head := stream.read(8):
+        heights.append(int.from_bytes(head[:4], "little"))
+        stream.seek(int.from_bytes(head[4:], "little"), 1)
+if MODE == "empty":
+    heights = []
+elif MODE == "truncated":
+    heights = heights[:-1]
+elif MODE == "reordered":
+    heights = heights[::-1]
+blocks = [{"height": h, "hash_hex": "%%064x" %% h, "hash_display": "%%064x" %% h, "valid": True,
+           "reject_reason": None, "dos": None, "reject_code": None, "changes_digest_hex": "11" * 32,
+           "spent": 0, "created": 1, "set_digest_hex": None, "set_value": None} for h in heights]
+if ORACLE:
+    blocks = [{**block, "diagnostic": None} for block in blocks]
+print(json.dumps({"id": request["id"], "ok": {"blocks": blocks, "out_of_domain_at": None,
+                                               "set_digest_hex": "22" * 32, "set_coins": len(blocks),
+                                               "set_value": "0"}}))
+"""
+MADE_HEIGHTS = (1001, 1002, 1003)
+
+
+def responder(scratch: Path, mode: str, oracle: bool = False) -> str:
+    """A made program that answers a block.validate request with the records of `mode`, in the
+    form of the oracle or of the Core harness. The full comparison accepts each form."""
+    path = scratch / f"responder-{mode}-{'oracle' if oracle else 'core'}.py"
+    path.write_text(RESPONDER % (mode, oracle))
+    path.chmod(0o755)
+    return str(path)
+
+
+def made_range(directory: Path) -> tuple[Path, Path]:
+    """A range directory with a range request and a blocks file of three made blocks."""
+    (directory / "fixture").mkdir(parents=True, exist_ok=True)
+    request = directory / conformance.REQUEST_FILE
+    request.write_text(json.dumps({"op": "block.validate", "coins": []}))
+    blocks = directory / "fixture" / "blocks.bin"
+    blocks.write_bytes(b"".join(h.to_bytes(4, "little") + (1).to_bytes(4, "little") + b"\0" for h in MADE_HEIGHTS))
+    return request, blocks
+
+
+def test_incomplete(scratch: Path) -> None:
+    """Results that agree with each other but do not cover their heights, then the wrapper and the comparison."""
+    base = read(BASE)
+    for name, lines in (("no block record", [base[0], base[-1]]), ("no last record", base[:-2] + base[-1:])):
+        path = write(scratch / "incomplete.jsonl", lines)
+        status, output = run(path, path)
+        check(status == 2 and "do not cover" in output, f"two files with {name}: status {status}, output {output.strip()!r}")
+        print(f"two files with {name}: status {status}")
+    request, blocks = made_range(scratch / "made")
+    lines = range_results.results("made", request, blocks, [responder(scratch, "full")])
+    check([line["height"] for line in lines[1:-1]] == list(MADE_HEIGHTS), "the wrapper does not accept a full response")
+    out = conformance.compare("made", scratch / "made", responder(scratch, "full", oracle=True),
+                              responder(scratch, "full"), None, False, log=lambda _: None)
+    check(out["blocks"] == len(MADE_HEIGHTS), "the comparison does not accept two full responses")
+    for mode in ("empty", "truncated", "reordered"):
+        try:
+            range_results.results("made", request, blocks, [responder(scratch, mode)])
+            check(False, f"the wrapper accepts a response with the records {mode}")
+        except range_results.ResultsError as error:
+            check("block records" in str(error), f"the wrapper refuses a {mode} response with {error}")
+            print(f"wrapper, response {mode}: refused")
+        try:
+            conformance.compare("made", scratch / "made", responder(scratch, mode, oracle=True),
+                                responder(scratch, mode), None, False, log=lambda _: None)
+            check(False, f"the comparison accepts two responses with the records {mode}")
+        except (range_results.ResultsError, conformance.CorpusError) as error:
+            check("block records" in str(error), f"the comparison refuses a {mode} response with {error}")
+            print(f"comparison, two responses {mode}: refused")
+
+
 def test_release(scratch: Path) -> None:
     release = conformance.load_release()
     check(release["tag"].startswith("conformance-corpus-"), f"the tag {release['tag']} does not name the corpus")
@@ -154,6 +239,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as scratch:
         scratch = Path(scratch)
         test_release(scratch)
+        test_incomplete(scratch)
         for path in files:
             status, output = run(path, path)
             check(status == 0 and output.startswith("PASS"), f"{path}: the checker does not pass on the file itself: {output}")

@@ -155,6 +155,7 @@ The theorems do not say:
 - Anything about a revision of the count of signature operations, of the amounts or of a header check. Those parts are the baseline's.
 - Anything about Core. No Core behaviour exists for an example, so no comparison supports its revised verdict. [The lock-time cutoff of `RelativeLockTime`](#proposed-revisions-relativelocktime) has a comparison with Core's dormant code, under its own label.
 - That the proposal executable computes these definitions correctly beyond its test. The agreement theorems are about the Lean definitions, and `dogelib-proposal-oracle` is compiled code ([docs/oracle.md](../oracle.md#the-proposal-executable)).
+- Anything about a `revised` verdict on a coin set other than the one it ran on. A request with `coins_file` runs the revision on the coins whose transaction IDs the blocks name. `validateBlock_restrict` shows that the baseline gives the same result on that set as on the whole set, and no theorem states it for `validateBlockWith`. So a `revised` verdict of a [historical impact run](../oracle.md#historical-impact-runs) from a snapshot is a test on the restricted set.
 
 The proof of `validateBlockWith_ofBaseline` does not unfold `validateBlock` with the `unfold` tactic.
 The kernel compares a definition with its unfolded body by reduction.

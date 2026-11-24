@@ -1334,7 +1334,42 @@ The scan lists each block, and the test build of the proposal executable rejects
 The run check fails when the list leaves the block out.
 
 The `revised` verdicts have no Core comparison, and an empty report is not a compatibility proof (design record 0011, section 10.4).
-The recorded runs on the ranges and on heights 0 to 145,000 follow in a later change.
+
+The recorded runs used `dogelib-proposal-oracle` and `dogelib-oracle` as built at `6ef0e12`, a commit of pull request #195.
+Their SHA-256 values are `220a29cdff67c47bb80541fb7cbf75098b9965f68837b56155216b47c24d4548` and `32b9fc94235fe8408d0bd06d3bc90945d0314057e037d68fb8db50647cf1a025`.
+That build of the proposal executable also named the two examples, which only `proposal-test-oracle` names since pull request #200.
+The code of `RelativeLockTime` and of the block level of the framework has no difference between `6ef0e12` and `33f5c82`.
+On the short range, `dogelib-proposal-oracle` built at `33f5c82` writes the same bytes for `RelativeLockTime` from height 1.
+Each run had one core at low priority, and each candidate list has the SHA-256 of its file on `main`.
+
+| Range | Heights | Blocks | Transactions | Inputs | Seconds, `RelativeLockTime` | Memory |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| `genesis-145000` | 0 to 145,000 | 145,001 | 8,629,425 | 15,048,625 | 148,352 | 7.5 GiB |
+| `short` | 9,001 to 10,000 | 1,000 | 35,548 | 47,185 | 181 | 0.1 GiB |
+| `S` | 100,001 to 101,000 | 1,000 | 67,318 | 121,665 | 771 | 0.4 GiB |
+| `A` | 145,001 to 155,000 | 10,000 | 149,903 | 472,618 | 2,702 | 1.1 GiB |
+| `B` | 370,337 to 372,336 | 2,000 | 37,646 | 90,664 | 750 | 0.5 GiB |
+| `C` | 599,000 to 600,999 | 2,000 | 72,751 | 173,936 | 1,456 | 0.5 GiB |
+| `D` | 1,033,383 to 1,035,382 | 2,000 | 21,630 | 61,002 | 1,263 | 0.4 GiB |
+| `E1` | 1,198,520 to 1,200,519 | 2,000 | 21,465 | 57,055 | 995 | 0.3 GiB |
+| `E2` | 1,702,520 to 1,704,519 | 2,000 | 21,558 | 68,452 | 871 | 0.9 GiB |
+| `F` | 3,463,751 to 3,465,750 | 2,000 | 57,886 | 154,273 | 1,287 | 0.5 GiB |
+| `H` | 5,049,001 to 5,050,000 | 1,000 | 102,617 | 224,569 | 5,054 | 0.6 GiB |
+
+Every candidate list has 0 candidate blocks, so case 2 expects no changed block.
+`RelativeLockTime` from height 1 changed no block, and gave no unsupported result, on each range.
+So each count of design record 0012, section 10.3, is 0 on these ranges.
+The counts are the cutoff transactions, the sequence candidates and failures, the opcode spends and outputs, and the unsupported blocks.
+
+On each range but `genesis-145000`, the response without the `revised` objects equals a response of `dogelib-oracle`.
+It is the recorded response of `scripts/run_range.py`, or for `short`, `S`, `E1` and `E2`, a response of the build above.
+The run of heights 0 to 145,000 ends with the digest `b28411dc…` of 5,094,671 coins, the digest of the [recorded replay](#replay-of-mainnet-to-height-145000).
+It took 41 hours and 13 minutes on one core.
+A power loss stopped its first start at about height 46,000, and it ran again from the empty set with the same command and build.
+
+Before pull request #200, both examples ran on every range of the table except `genesis-145000`, with no activation height and from height 0.
+Every `revised` object without an activation height equalled its block record, and no block changed from height 0.
+After all runs, `impact_run.py check` as merged in pull request #195 passed on each of the 51 saved responses.
 
 #### Core with the CSV state forced to `ACTIVE`
 

@@ -1371,6 +1371,12 @@ Before pull request #200, both examples ran on every range of the table except `
 Every `revised` object without an activation height equalled its block record, and no block changed from height 0.
 After all runs, `impact_run.py check` as merged in pull request #195 passed on each of the 51 saved responses.
 
+[`tests/proposals/impact/runs/`](../tests/proposals/impact/runs/index.json) has one record for each run, which `scripts/impact_records.py write` made from the saved outputs.
+A record has the revision, the activation and the SHA-256 of the executable. It also has the SHA-256 of the request, the blocks file, the coins file, the baseline, the response, the report and the summary.
+It has the counts, the digest at the end, the time, the memory and the recheck.
+The maintainer's machine keeps the requests, responses and logs under `build/impact/`, outside Git and outside any release asset.
+`scripts/impact_records.py --check` checks the records against their index and `SHA256SUMS`, and with `--outputs build/impact` against the saved files.
+
 #### Core with the CSV state forced to `ACTIVE`
 
 This evidence has its own label: Core at `e0a1c15` with the CSV state forced to `ACTIVE`.

@@ -1,0 +1,75 @@
+{
+  "executable": {
+    "commit": "6ef0e12f8ace3a7576216f9ef2c1bf11d7fb095f",
+    "name": "dogelib-proposal-oracle",
+    "sha256": "220a29cdff67c47bb80541fb7cbf75098b9965f68837b56155216b47c24d4548"
+  },
+  "first": 1702520,
+  "format": "dogelib-impact-run/1",
+  "inputs": {
+    "baseline_response": {
+      "bytes": 823104,
+      "sha256": "63831d364ad951363ffff39d40e7eed9efcf9fedb8dd9bf1e1a13072aade0ed3"
+    },
+    "blocks_file": {
+      "bytes": 14275722,
+      "sha256": "95e0f69d1565f412da666ec68b6b4669d9a280849e12225c1964c8e4f9177225"
+    },
+    "candidate_list": "tests/proposals/impact/E2.json",
+    "candidate_list_sha256": "cb8fef05495e2f9a3d03036105f03792bccccc21336ef0aa6679818426abccfd",
+    "coins_file": {
+      "bytes": 883951730,
+      "name": "coins-1702519.bin",
+      "sha256": "12b2d2d8a8b81aec535952fa613631c7120c0ccf4e0e0e1a460924680d52f7b3"
+    },
+    "expected_end": "99dfcecda777971dff54621b7eb9b177781abe34d9194aa78a242679cc4070f0",
+    "request": {
+      "bytes": 41047939,
+      "sha256": "fca3a3812b7dd5263b774dbc1cc008e01c90bb6ea91adc35768e5a910fa29783"
+    }
+  },
+  "last": 1704519,
+  "outputs": {
+    "report": {
+      "bytes": 133,
+      "sha256": "71cb00532225119182fcc306a191ad44027cd3d1c31ff6ab17c3cbddf9a3bdab"
+    },
+    "response": {
+      "bytes": 1367104,
+      "sha256": "5004b6f5585044b2bee096102b4c5411f97bad4ac75f8d487ff2e09260ea6a44"
+    },
+    "summary": {
+      "bytes": 912,
+      "sha256": "25ea55cf7027ba13f64144e8c988e5a5ecbfeba9682c9c3b155bfd3de68762e1"
+    }
+  },
+  "range": "E2",
+  "recheck": {
+    "changed_blocks": 0,
+    "command": "impact_run.py check",
+    "summary": {
+      "bytes": 978,
+      "sha256": "4d8893766a641932fa1ba1149e729bd1eec0ca85efd3cc739c9492fb16f9bb5a"
+    }
+  },
+  "result": {
+    "blocks": 2000,
+    "candidate_blocks": 0,
+    "changed_blocks": 0,
+    "rejected_by_step": {},
+    "set_coins": 11581142,
+    "set_digest_hex": "99dfcecda777971dff54621b7eb9b177781abe34d9194aa78a242679cc4070f0",
+    "unsupported": {}
+  },
+  "revision": {
+    "activation_height": 0,
+    "name": "ExampleFaultyLocktime",
+    "variant": "corrected"
+  },
+  "run": "ExampleFaultyLocktime-corrected-0",
+  "time": {
+    "finished_utc": "2026-11-22T06:13:28Z",
+    "max_rss_kib": 986828,
+    "seconds": 1162
+  }
+}

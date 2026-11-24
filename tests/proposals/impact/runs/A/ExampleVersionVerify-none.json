@@ -1,0 +1,75 @@
+{
+  "executable": {
+    "commit": "6ef0e12f8ace3a7576216f9ef2c1bf11d7fb095f",
+    "name": "dogelib-proposal-oracle",
+    "sha256": "220a29cdff67c47bb80541fb7cbf75098b9965f68837b56155216b47c24d4548"
+  },
+  "first": 145001,
+  "format": "dogelib-impact-run/1",
+  "inputs": {
+    "baseline_response": {
+      "bytes": 4108221,
+      "sha256": "cccabf2ed68d26c559fc0643360468ee0a180981e12898b5aee467af020dba39"
+    },
+    "blocks_file": {
+      "bytes": 99053165,
+      "sha256": "c022bf754ddeb09663473add359918132d26b9fc0e742cb379cb50ac6635e82b"
+    },
+    "candidate_list": "tests/proposals/impact/A.json",
+    "candidate_list_sha256": "ddda97c586be2da4f9ed968248c51aea4fd1baf75ba2c01b3eb5fda8a6d1a5f8",
+    "coins_file": {
+      "bytes": 387316918,
+      "name": "coins-145000.bin",
+      "sha256": "0fa2f2a1e1aa43c54bf877e5aed1884cb9731412c45a06c9b8a9c84ad0b32012"
+    },
+    "expected_end": "fe00b205affdd2344d15cdeb073ad18a85ebfb2e8468e66c3ae96494631734c6",
+    "request": {
+      "bytes": 610614,
+      "sha256": "870a2f08513400e80a2e33f5aa9ece2e2aa37573a6db84cb870bb690734a1c58"
+    }
+  },
+  "last": 155000,
+  "outputs": {
+    "report": {
+      "bytes": 134,
+      "sha256": "992803646cce6e21785ca53ed9d9416e564af42d9555ff406584cb25c08f9cf7"
+    },
+    "response": {
+      "bytes": 6838222,
+      "sha256": "f9255989498c196e4d0e0fc3d7e4fcacb0cc756c0d1ce0c6c0b3a6eeb6dc677b"
+    },
+    "summary": {
+      "bytes": 902,
+      "sha256": "683a6057507bb6dc75f7409dc7419197de1155e812b850a084b226b17d70fdba"
+    }
+  },
+  "range": "A",
+  "recheck": {
+    "changed_blocks": 0,
+    "command": "impact_run.py check",
+    "summary": {
+      "bytes": 959,
+      "sha256": "183563ffef00e0567711000067083d918b404a7b24b29f06da9fb7f3b7403202"
+    }
+  },
+  "result": {
+    "blocks": 10000,
+    "candidate_blocks": 0,
+    "changed_blocks": 0,
+    "rejected_by_step": {},
+    "set_coins": 5379012,
+    "set_digest_hex": "fe00b205affdd2344d15cdeb073ad18a85ebfb2e8468e66c3ae96494631734c6",
+    "unsupported": {}
+  },
+  "revision": {
+    "activation_height": null,
+    "name": "ExampleVersionVerify",
+    "variant": null
+  },
+  "run": "ExampleVersionVerify-none",
+  "time": {
+    "finished_utc": "2026-11-22T01:38:21Z",
+    "max_rss_kib": 1180176,
+    "seconds": 2647
+  }
+}

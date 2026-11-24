@@ -47,7 +47,8 @@
     "csv-forced-active",
     "impact-tools-self-test",
     "impact-run-to-10-000",
-    "impact-runs-short-range"
+    "impact-runs-short-range",
+    "impact-run-records"
   ],
   "not_run": {
     "campaign-regtest-replay": "Needs the regtest node of scripts/build_core_node.sh in build/core-node, which the workflow does not build.",

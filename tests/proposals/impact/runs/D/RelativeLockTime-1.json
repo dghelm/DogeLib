@@ -1,0 +1,75 @@
+{
+  "executable": {
+    "commit": "6ef0e12f8ace3a7576216f9ef2c1bf11d7fb095f",
+    "name": "dogelib-proposal-oracle",
+    "sha256": "220a29cdff67c47bb80541fb7cbf75098b9965f68837b56155216b47c24d4548"
+  },
+  "first": 1033383,
+  "format": "dogelib-impact-run/1",
+  "inputs": {
+    "baseline_response": {
+      "bytes": 822881,
+      "sha256": "faccd95fd8ae640c9ea86946bc7f71adcf43c1033bb75b50b67ca466d094c11a"
+    },
+    "blocks_file": {
+      "bytes": 13928903,
+      "sha256": "fe0a039a16f6075981e88f8ac40614f286e58f97e5f5fa245b31b6fa3526e2a1"
+    },
+    "candidate_list": "tests/proposals/impact/D.json",
+    "candidate_list_sha256": "b636da0e27441f379c22ce53b6bb4b19ab6ff42d26ed93d57edebdec76eb681d",
+    "coins_file": {
+      "bytes": 1285351570,
+      "name": "coins-1033382.bin",
+      "sha256": "2ef63d136fcb1b4a61b6bc86c9f67af1832575c740f4a8644af81f5db5fb34b6"
+    },
+    "expected_end": "c7e86aed9d7606e98d5385dec25d5176f37b77a8609390b0da70df29582f0d20",
+    "request": {
+      "bytes": 620956,
+      "sha256": "ab00cd8b59ee2301a2ba1774a185831b1b20f1c7d9317476ce2ba3f61059b78b"
+    }
+  },
+  "last": 1035382,
+  "outputs": {
+    "report": {
+      "bytes": 133,
+      "sha256": "71cb00532225119182fcc306a191ad44027cd3d1c31ff6ab17c3cbddf9a3bdab"
+    },
+    "response": {
+      "bytes": 1366882,
+      "sha256": "ce16893408db9bb39a4d804774edc173b40b4d0c7f27ac91f909b5ac4b940c91"
+    },
+    "summary": {
+      "bytes": 898,
+      "sha256": "7608e38c0377e7c74d476416cb46b8b52383bba21f3b3994e96ee8d05213abba"
+    }
+  },
+  "range": "D",
+  "recheck": {
+    "changed_blocks": 0,
+    "command": "impact_run.py check",
+    "summary": {
+      "bytes": 948,
+      "sha256": "799ea6ef9462dc0bbff36a4cd0bed7a3831f1f4d78124f84ee8b735d43a37435"
+    }
+  },
+  "result": {
+    "blocks": 2000,
+    "candidate_blocks": 0,
+    "changed_blocks": 0,
+    "rejected_by_step": {},
+    "set_coins": 16874755,
+    "set_digest_hex": "c7e86aed9d7606e98d5385dec25d5176f37b77a8609390b0da70df29582f0d20",
+    "unsupported": {}
+  },
+  "revision": {
+    "activation_height": 1,
+    "name": "RelativeLockTime",
+    "variant": null
+  },
+  "run": "RelativeLockTime-1",
+  "time": {
+    "finished_utc": "2026-11-22T03:13:55Z",
+    "max_rss_kib": 463576,
+    "seconds": 1263
+  }
+}

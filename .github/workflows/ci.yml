@@ -208,9 +208,14 @@ jobs:
           (cd tests/block/mainnet-blocks/rule-changes && sha256sum -c SHA256SUMS)
           (cd tests/block/mainnet-blocks/version-bits-headers && sha256sum -c SHA256SUMS)
           (cd tests/block/regtest-header-sequences && sha256sum -c SHA256SUMS)
+          (cd tests/proposals/impact/runs && sha256sum -c SHA256SUMS)
           (cd tests/script/campaign && sha256sum -c SHA256SUMS)
           (cd tests/script/corpus && sha256sum -c SHA256SUMS)
           (cd tests/script/signed-spends && sha256sum -c SHA256SUMS)
+
+      - name: impact run records
+        if: ${{ !cancelled() }}
+        run: python3 -I scripts/impact_records.py --check && python3 -I scripts/impact_records.py --self-test
 
       - name: full-header fixture check
         if: ${{ !cancelled() }}

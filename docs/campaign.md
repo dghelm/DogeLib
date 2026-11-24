@@ -431,6 +431,8 @@ A candidate that can be a vulnerability becomes a fixture only after its report 
 At seed `20261108`, the default campaign compares 1,897 requests with Core at `e0a1c15`, with zero in all six outcome classes.
 The optional signed-digest group compares 25 requests at the same seed, also with zero in all six classes.
 The campaign self-test also checks M1 to M6 with semantic triggers and fixed budgets, signer determinism, refusal replay and malformed-response replay.
+`scripts/test_campaign.py` checks process wrappers for all six classes and replay of each saved class.
+It also checks malformed output, missing responses, wrong identifiers, batch-only failures and an exhausted budget.
 
 At seed `20261108`, the generated campaign completes 3,000 cases with 9,408 assessed Q6 requests and zero disagreements or process failures.
 It records 2,930 passes, 67 known behaviours and 3 unsupported cases. The unsupported cases are labelled Q6.

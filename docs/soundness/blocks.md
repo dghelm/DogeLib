@@ -1,7 +1,7 @@
 # Soundness: Block Validation, Subsidy, and Coin Sets
 
 This file states what the subsidy, `CheckTransaction`, `CheckBlock`, version-bits, contextual-body, `ConnectBlock`, and block-restriction proofs establish.
-See [SOUNDNESS.md](../../SOUNDNESS.md) for the trust model and Gaps A to D, and [COVERAGE.md](../../COVERAGE.md#operations) for per-operation evidence.
+See [SOUNDNESS.md](../../SOUNDNESS.md) for the trust model and Gaps A to D, and [docs/coverage/blocks.md](../coverage/blocks.md) for per-operation evidence.
 
 - **Scope**: Block subsidy, block codec, `CheckTransaction`, `CheckBlock`, version bits, `ContextualCheckBlock`, `ConnectBlock`, `validateBlock`, issuance bounds, and coin-set restriction.
 - **Specification modules**: `DogeLib.Block.Subsidy`, `Block`, `Check`, `VersionBits`, `ContextualBody`, `Coins`, `TxInputs`, `SigOpCost`, `Connect`, `Validate`, and `DogeLib.Transaction.Check` and `SigOps`.

@@ -861,7 +861,7 @@ Let `T` be the transaction IDs that the blocks of the request name: the ID of ea
 3. It runs the blocks on the kept coins. Before each block, it requires that `T` holds every ID that the block names. A block that names another ID is the error `blocks_file_changed`, which can occur only if the file changes between the two reads.
 4. It reads the snapshot again, and computes `set_digest_hex`, `set_coins` and `set_value` of the set after the last record. That set is the records of the file whose ID is not in `T`, merged in order with the entries of the run. A file with another number of records than in step 2 is the error `coins_file_changed`.
 
-The theorem `validateBlock_restrict` is the reason for step 4 ([SOUNDNESS.md](soundness/blocks.md#validateblock_restrict-a-block-on-the-coins-that-it-names)).
+The theorem `validateBlock_restrict` is the reason for step 4 ([docs/soundness/blocks.md](soundness/blocks.md#validateblock_restrict-a-block-on-the-coins-that-it-names)).
 On a coin set and on its restriction to `T`, `validateBlock` gives the same error, or the same coin changes.
 The new set then has the entries of the restricted run at the IDs of `T`, and the entries of the old set at every other ID.
 No theorem covers the reads of the two files or the merge of step 4.
@@ -1019,7 +1019,7 @@ An unsupported result is not a rejection, and its block is not a changed block.
 The run answers one question for each block: what does the revision say about this block on the baseline chain below it?
 It does not build the chain that revised nodes would build after a changed block.
 No Core behaviour exists for an example, so no comparison supports its `revised` objects.
-The theorems of `DogeLib.Proposals.Framework.Proofs.Block` relate the two verdicts ([SOUNDNESS.md](soundness/proposals.md#proposed-revisions-the-block-level)).
+The theorems of `DogeLib.Proposals.Framework.Proofs.Block` relate the two verdicts ([docs/soundness/proposals.md](soundness/proposals.md#proposed-revisions-the-block-level)).
 
 With the argument, `block.contextual_check_body` returns the response of the baseline operation with one more object, `revised`.
 The object is the result of `Proposals.Framework.contextualBodyWith`: `ContextualCheckBlock` with the lock-time arguments of the revision.

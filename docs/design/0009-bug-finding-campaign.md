@@ -75,7 +75,7 @@ A campaign lane repeats the check with a fresh fetch, because a later release ca
 ### 3.1 The signed-spend family
 
 The family is the multisig-with-recovery template of design record 0003, section 7.
-`DogeLib.Script.multisigRecoveryScript` defines it for `k` of `n` keys ([SOUNDNESS.md](../soundness/script.md#script-worked-property-multisig-with-recovery)).
+`DogeLib.Script.multisigRecoveryScript` defines it for `k` of `n` keys ([docs/soundness/script.md](../soundness/script.md#script-worked-property-multisig-with-recovery)).
 The fixtures and the signer use its 2-of-3 instance: `OP_IF OP_2 <K1> <K2> <K3> OP_3 OP_CHECKMULTISIG OP_ELSE <1000000> OP_CHECKLOCKTIMEVERIFY OP_DROP <K4> OP_CHECKSIG OP_ENDIF`, under P2SH.
 The keys are the private scalars 1, 2, 3 and 4, which are public test data ([recovery fixtures](../../tests/script/signed-spends/README.md#provenance)).
 
@@ -88,7 +88,7 @@ These parts exist:
 | Regeneration check | `scripts/check_signed_spends.py` | Requires the signer output to equal the fixture byte for byte | Checks the signer, not a property. |
 | Comparison | `scripts/oracle_pubkey.py`, `signature_spends` | Sends the 25 records through `script.verify_legacy` with `checker: "transaction"` | Fixed records. |
 | Lean property | `multisigRecovery_sound` and its converses | Characterize acceptance of the template for `1 ≤ k ≤ n ≤ 16` | Relative to the verifier parameter, under the hypotheses of `MultisigRecoverySpend`. |
-| Commitment theorems | `legacySignatureHashPlan_allOnly_commits`, `legacySignatureHashPlan_eq_of_none` and its companions | State which fields the Lean preimage commits to, for each hash type | ANYONECANPAY combined with NONE or SINGLE has no theorem ([SOUNDNESS.md](../soundness/transactions.md#legacy-signature-hash-what-all-commits-to)). |
+| Commitment theorems | `legacySignatureHashPlan_allOnly_commits`, `legacySignatureHashPlan_eq_of_none` and its companions | State which fields the Lean preimage commits to, for each hash type | ANYONECANPAY combined with NONE or SINGLE has no theorem ([docs/soundness/transactions.md](../soundness/transactions.md#legacy-signature-hash-what-all-commits-to)). |
 
 ### 3.2 The Script generators
 
@@ -362,7 +362,7 @@ Some baseline behaviours violate a natural property, and the campaign must not r
 The driver keeps a list of them, each with its source:
 
 - The fixed digest of section 4, item 2 (C2). A signature over the value one stays valid for every change that keeps SINGLE with `n` at least the number of outputs.
-- The recovery branch without `CHECKLOCKTIMEVERIFY` accepts at every lock time (C5, lines 352–358). A known answer in `lake test` already covers lock time 0 ([SOUNDNESS.md](../soundness/script.md#script-worked-property-multisig-with-recovery)).
+- The recovery branch without `CHECKLOCKTIMEVERIFY` accepts at every lock time (C5, lines 352–358). A known answer in `lake test` already covers lock time 0 ([docs/soundness/script.md](../soundness/script.md#script-worked-property-multisig-with-recovery)).
 - Duplicate keys and a match against them, which the template allows (same section).
 
 A failure that matches a known behaviour gets the label `known`, and the driver counts it separately.
@@ -521,7 +521,7 @@ Without `P2SH`, the output accepts any `scriptSig` that pushes the redeem script
 | Q6 Agreement | Lean and Core give the same response to each request of the campaign, under `compare` of `compare_core.py`. | The comparison itself | None. A compatibility claim |
 | Q7 The fixed digest | Take SINGLE with `n` at least the number of outputs. Both programs return plan `fixed_digest` and the digest one. Take a change that keeps the condition and the hash type of every signature. If it also keeps the fields of item 6, including the `scriptSig` of input `n`, the spend stays accepted. | Item 2 | `legacySignatureHashPlan_eq_fixedDigest_iff` |
 
-Q4 assumes that double SHA-256 has no collision on the inputs of the run, as the commitment checks of `lake test` do ([SOUNDNESS.md](../soundness/transactions.md#legacy-signature-hash-what-all-commits-to)).
+Q4 assumes that double SHA-256 has no collision on the inputs of the run, as the commitment checks of `lake test` do ([docs/soundness/transactions.md](../soundness/transactions.md#legacy-signature-hash-what-all-commits-to)).
 Its rejection also assumes that no one can forge a signature for the changed digest.
 So a Q4 failure on acceptance is a candidate, not a proof of a forgery.
 The preimage statement of Q4 is not a cryptographic security claim ([in-practice.md](../in-practice.md#what-a-theorem-does-and-does-not-establish)).

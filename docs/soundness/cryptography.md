@@ -1,7 +1,7 @@
 # Soundness: Cryptography
 
 This file states what the cryptographic proofs of DogeLib establish, under which hypotheses, and what remains unproved.
-See [SOUNDNESS.md](../../SOUNDNESS.md) for the trust model and Gaps A to D, and [COVERAGE.md](../../COVERAGE.md#operations) for per-operation evidence.
+See [SOUNDNESS.md](../../SOUNDNESS.md) for the trust model and Gaps A to D, and [docs/coverage/cryptography.md](../coverage/cryptography.md) for per-operation evidence.
 
 - **Scope**: SHA-1, SHA-256, HMAC-SHA-256, PBKDF2-HMAC-SHA-256, RFC 7914 scrypt, Dogecoin's scrypt digest, double SHA-256, RIPEMD-160, Hash160, and secp256k1 ECDSA verification.
 - **Specification modules**: `DogeLib.Cryptography.Hash.*`, `DogeLib.Cryptography.Secp256k1.*`, and `DogeLib.Script.CoreVerifier`.

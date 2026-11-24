@@ -1,7 +1,7 @@
 # Soundness: Proposed Revisions
 
 This file states what the proposal-framework, block-level, example, and `RelativeLockTime` proofs establish, under which hypotheses, and what remains unproved.
-See [SOUNDNESS.md](../../SOUNDNESS.md) for the trust model and Gaps A to D, and [COVERAGE.md](../../COVERAGE.md#proposed-revisions) for proposal coverage.
+See [SOUNDNESS.md](../../SOUNDNESS.md) for the trust model and Gaps A to D, and [docs/coverage/proposals.md](../coverage/proposals.md) for proposal coverage.
 
 - **Scope**: Script and block proposal frameworks, the public proposal `RelativeLockTime` (BIP 68, BIP 112, and BIP 113), and the test-only examples `ExampleVersionVerify` and `ExampleFaultyLocktime`.
 - **Specification modules**: `DogeLib.Proposals.Framework.*` and `DogeLib.Proposals.RelativeLockTime`. The examples are `ProposalExamples.ExampleVersionVerify` and `ProposalExamples.ExampleFaultyLocktime`, in the test-only `ProposalExamples` library under `tests/`.

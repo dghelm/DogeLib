@@ -1,7 +1,7 @@
 # Soundness: Serialization and Rust Refinement
 
 This file states what the codec, CompactSize, counted-list, and Rust refinement proofs establish, under which hypotheses, and what remains unproved.
-See [SOUNDNESS.md](../../SOUNDNESS.md) for the trust model and Gaps A to D, and [COVERAGE.md](../../COVERAGE.md#operations) for per-operation evidence.
+See [SOUNDNESS.md](../../SOUNDNESS.md) for the trust model and Gaps A to D, and [docs/coverage/serialization-and-transactions.md](../coverage/serialization-and-transactions.md) for per-operation evidence.
 
 - **Scope**: `LawfulCodec`, `LawfulPackedCodec`, CompactSize decoders, the Aeneas Rust refinement of `CompactSize.decodeBounded`, and counted lists.
 - **Specification and refinement modules**: `DogeLib.Serialization.*`, `Refinement.Rust.Generated.DogelibCompactsize`, and `Refinement.Rust.CompactSize` (from `Refinement/Rust/src/lib.rs`).

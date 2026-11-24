@@ -1,7 +1,7 @@
 # Soundness: Block Headers, AuxPoW, and Header Sequences
 
 This file states what the header, Merkle-root, AuxPoW, contextual-header, and header-sequence proofs establish, under which hypotheses, and what remains unproved.
-See [SOUNDNESS.md](../../SOUNDNESS.md) for the trust model and Gaps A to D, and [COVERAGE.md](../../COVERAGE.md#operations) for per-operation evidence.
+See [SOUNDNESS.md](../../SOUNDNESS.md) for the trust model and Gaps A to D, and [docs/coverage/blocks.md](../coverage/blocks.md) for per-operation evidence.
 
 - **Scope**: Pure and full header codecs, transaction Merkle roots, `CAuxPow::check`, header proof of work, version gating, contextual header checks, and `processNewBlockHeaders`.
 - **Specification modules**: `DogeLib.Block.Header`, `Merkle`, `AuxPow`, `AuxPowCheck`, `ProofOfWork`, `VersionGate`, `ContextualParams`, `ContextualCheck`, and `HeaderSequence`.

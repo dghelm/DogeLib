@@ -37,7 +37,7 @@ A clone's working tree can be at a different commit.
 
 ## Document roles
 
-[COVERAGE.md](COVERAGE.md) holds detailed evidence per operation.
+[COVERAGE.md](COVERAGE.md) summarizes evidence per operation, and `docs/coverage/` holds the full per-area detail.
 [SOUNDNESS.md](SOUNDNESS.md) explains the assumptions and meaning of the claims.
 [ROADMAP.md](ROADMAP.md) records completed milestones and next work.
 [README.md](README.md) gives a short overview, and [BUILDING.md](BUILDING.md) gives the check commands.
@@ -156,7 +156,7 @@ A gate under `run` comes after the gates that make its inputs, and a gate under 
 ## When a definition or proof lands
 
 1. Record the operation's source in [SOURCES.md](SOURCES.md): repository, commit, file, function.
-2. Update the operation's row in [COVERAGE.md](COVERAGE.md). Change only the columns your evidence supports.
+2. Update the operation's row in [COVERAGE.md](COVERAGE.md) and its entry in `docs/coverage/`. Change only the columns your evidence supports.
 3. Run `lake exe check-decls`, once it exists. It checks every compiled declaration, so there is no list of theorems to register.
 4. Add fixtures with recorded provenance. Never derive an expected value from the implementation under test.
 5. Record each new hypothesis, assumption or execution boundary under its gap in [SOUNDNESS.md](SOUNDNESS.md). Add a subsection to its *What the proofs say*.

@@ -1,11 +1,9 @@
 # Releases
 
-This checklist says how to cut a DogeLib release, starting with 0.1.0.
+This checklist says how to cut a DogeLib release.
 A release identifies one commit of `main`, the evidence for it, and the pins it depends on.
 The maintainer decides when to release and creates the tag.
-
-0.1.0 releases the capabilities that are complete on `main`.
-[ROADMAP.md](../ROADMAP.md#next-work) lists the work that the release does not wait for.
+[ROADMAP.md](../ROADMAP.md#next-work) lists open work that a release does not wait for.
 
 ## 1. Choose the release-candidate commit
 
@@ -100,8 +98,8 @@ The maintainer does these steps:
 1. Create an annotated tag on the candidate commit, and push it:
 
    ```bash
-   git tag -a v0.1.0 <candidate> -m "DogeLib 0.1.0"
-   git push origin v0.1.0
+   git tag -a v<version> <candidate> -m "DogeLib <version>"
+   git push origin v<version>
    ```
 
    A tag push starts the `validation` workflow again, on the tag.
@@ -110,7 +108,7 @@ The maintainer does these steps:
 
    ```bash
    tar -czf build/release/validation-<candidate>.tar.gz -C build/release validation-<candidate>
-   gh release create v0.1.0 --title "DogeLib 0.1.0" --notes-file docs/release-notes/0.1.0.md build/release/validation-<candidate>.tar.gz
+   gh release create v<version> --title "DogeLib <version>" --notes-file docs/release-notes/<version>.md build/release/validation-<candidate>.tar.gz
    ```
 
-At and after 0.1.0, the maintainer sets the compatibility policy for outside consumers of the oracle ([format stability](oracle.md#format-stability)).
+For 0.x releases, [docs/oracle.md](oracle.md#format-stability) records the oracle compatibility policy for outside consumers.

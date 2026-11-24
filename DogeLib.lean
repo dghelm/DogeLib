@@ -18,8 +18,9 @@ Each layer lives in its own subtree:
 - `DogeLib.Base` holds the byte representations that the other layers build on.
 - `DogeLib.Serialization` holds the codecs between values and bytes.
 - `DogeLib.Cryptography` holds the cryptographic primitives.
-- `DogeLib.Transaction` holds the transaction fields, their base serialization and the transaction ID.
-- `DogeLib.Work` holds the proof-of-work arithmetic: compact targets, the difficulty retarget and the work of one block.
-- `DogeLib.Block` holds pure headers, block hashes and transaction Merkle roots.
-- `DogeLib.Script` holds the instruction reader of the Script interpreter, the state of one `EvalScript` call, Script numbers and the truth value of a stack item. It also holds the interpreter's errors and flags, and one `EvalScript` call for the opcodes of stage 2, including the numeric and hash opcodes.
+- `DogeLib.Transaction` holds transaction types, base and witness serialization, transaction IDs, legacy signature hashing, `CheckTransaction`, and the legacy signature-operation count.
+- `DogeLib.Work` holds proof-of-work arithmetic: 256-bit word models, compact targets, difficulty retargets, next-work selection, median time past, and block proof.
+- `DogeLib.Block` holds pure and full headers, AuxPoW, Merkle roots, header proof of work, version gating, contextual headers, and header sequences.
+  It also holds mainnet block subsidy, version bits, block serialization, `CheckBlock`, `ContextualCheckBlock`, coin sets, `CheckTxInputs`, signature-operation cost, `ConnectBlock`, and `validateBlock`.
+- `DogeLib.Script` holds the instruction reader, execution state, Script numbers, `EvalScript`, encoding checks, signature checkers, `coreVerifier`, `VerifyScript`, and `verifyLegacySpend`.
 -/

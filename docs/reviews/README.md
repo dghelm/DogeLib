@@ -13,7 +13,7 @@ The [Script record](script.md#after-the-read) shows one finding whose stated mec
 
 Each record gives the reader, the date, the DogeLib and Core revisions, the scope, the findings, and what the read compared and did not compare.
 Line numbers in a record refer to those revisions.
-All reads but the last are by GPT-6 through Codex, and all are at Core `e0a1c157791544e818c901bd9341896965afbf9d`.
+All reads except the coin set and `ConnectBlock` read (`connect.md`, GPT-5) are by GPT-6 through Codex, at Core `e0a1c157791544e818c901bd9341896965afbf9d`.
 The first seven are of 2026-11-11, at DogeLib `865754b`.
 The block subsidy read is of 2026-11-13, at DogeLib `4cd73bc`, and it also reads Boost 1.70.0.
 The block check read is of 2026-11-13, at DogeLib `6ca6373`.

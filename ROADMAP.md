@@ -1,7 +1,7 @@
 # Roadmap
 
 This roadmap records completed milestones and next work.
-[COVERAGE.md](COVERAGE.md) holds detailed evidence, and [SOUNDNESS.md](SOUNDNESS.md) explains its assumptions and limits.
+[COVERAGE.md](COVERAGE.md) summarizes evidence (with full details in `docs/coverage/`), and [SOUNDNESS.md](SOUNDNESS.md) explains its assumptions and limits.
 The reasoning behind the work order is in [design record 0001](docs/design/0001-initial-handoff.md) and [design record 0002](docs/design/0002-btc-verified-reuse.md).
 Update the *Status* column when the pull request merges, not when work starts.
 
@@ -19,114 +19,35 @@ Update the *Status* column when the pull request merges, not when work starts.
 | 3 | Raw transaction types and base codecs | Exact field preservation, explicit parse mode, parser obligations | Fixed-length byte strings and `Hash256` done in `feat/fixed-bytes`. Transaction types, base codecs, Core's base-mode reader, the complete reader and the transaction ID done in `feat/transaction-base`. The base-mode records of Core's transaction corpus are known answers (issue #22). The witness-allowed format, as a serialization format only, done in `feat/transaction-witness-format`. The oracle exposes both witness readers, serialization and hashes. The Core comparison covers all 198 corpus records and malformed variants (issue #36). |
 | 4 | Legacy hash-plan specification | Declared lower-level modes and special cases are covered | Done in `feat/legacy-sighash`: `legacySignatureHashPlan` for `SIGVERSION_BASE`, Core's `sighash.json` corpus and hand-derived preimages as known answers. `Script.transactionChecker` uses the plan for the legacy signature checks. The witness v0 digest is not specified. |
 | 5 | Field-by-field preimage construction proved equal to the transaction-transformation reference | Exact plan equality on the recorded domain | Done in `proof/legacy-sighash-reference`. `legacySignatureHashPlan_eq_reference` proves the production plan equal to the `SignatureHashOld` transformation. It needs a fully parsed script code and counts below 2^32. The two differ on a script that ends in a short push. |
-| 6 | Rust refinement experiment | One extracted implementation matches an independent contract | Done in `feat/rust-compactsize-refinement` (#51). See [milestone D](#d-the-rust-refinement-path-step-6). |
+| 6 | Rust refinement experiment | One extracted implementation matches an independent contract | Done in `feat/rust-compactsize-refinement` (#51). See [milestone D](#milestones). |
 
 The steps are units of review, not one pull request each.
 Step 6 can start after step 2.
 
 Steps 0 and 0b follow design record 0002: the first contributions adopt audited codec foundations and then define Dogecoin's bounded decoding contract. They replace the original plan to build fixed-width encodings and CompactSize from scratch. Design record 0002 preferred a pinned btc-verified dependency first. The decisions below choose an adaptation instead, because btc-verified's toolchain, file structure and trust policy all differ from EthLib's.
 
-## Completed after the work order
+## Completed milestones
 
-Each item below is complete.
-[COVERAGE.md](COVERAGE.md#operations) records its evidence, and the linked section of [SOUNDNESS.md](SOUNDNESS.md) states its hypotheses and boundaries.
+Releases: `v0.1.0` at `7510cc9` ([docs/release-notes/0.1.0.md](docs/release-notes/0.1.0.md)) and `v0.2.0` at `ea335a0` ([docs/release-notes/0.2.0.md](docs/release-notes/0.2.0.md)).
+Each row below is complete. [COVERAGE.md](COVERAGE.md#operations) and `docs/coverage/` record per-operation evidence, and [SOUNDNESS.md](SOUNDNESS.md#what-the-proofs-say) links to theorem hypotheses and boundaries.
 
-- **Work arithmetic.** The DigiShield retarget, height-based parameter selection, `GetNextWorkRequired` on a checked finite view and the compact-target check of a supplied hash.
-  The 256-bit word paths of the retarget have arithmetic equivalence proofs ([target validity](docs/soundness/work.md#target-validity-and-supplied-hash-proof-of-work), [word division](docs/soundness/work.md#256-bit-word-division)).
-  This work ran in parallel with the transaction path, as design record 0001, section 10, requires.
-- **Blocks.** 80-byte pure headers, their double SHA-256 hashes, and transaction Merkle roots with mutation detection ([headers and Merkle roots](docs/soundness/headers.md#pure-headers-and-transaction-merkle-roots)).
-  Full headers with the AuxPoW payload, read and written in each read mode of the embedded transaction ([full headers](docs/soundness/headers.md#full-headers-and-the-auxpow-payload)).
-  This codec is stage 2 of [design record 0004](docs/design/0004-header-proof-of-work.md).
-  `CAuxPow::check`, stage 3, with its merged-mining search and expected index ([the AuxPoW check](docs/soundness/headers.md#the-auxpow-check)).
-  The Core harness reconstructs all 26 `check_auxpow` payloads with exact byte agreement and compares their verdicts.
-- **Header proof of work, [design record 0004](docs/design/0004-header-proof-of-work.md).** Stages 0, 1, 2, 3, 4a, 4b and 5 have their implementation evidence.
-  HMAC-SHA256, PBKDF2, the RFC 7914 scrypt model and the fixed Dogecoin executable have their models, agreement theorems and independent vectors.
-  The header codec, AuxPoW check, proof-of-work composition and two version gates have their stated theorems and compiled checks.
-  The oracle and Core comparison close the three deferred items: exact construction of 26 payloads, Core checks of all 321 historical headers and version-gate comparison.
-  The harness also re-mines all 12 `auxpow_pow` cases, including the in-memory flag/payload mismatches, and compares Lean on identical components.
-  [The comparison evidence](docs/comparison-evidence.md#header-proof-of-work-evidence) records the streams, seeds and limits.
-- **Signature verifier, [design record 0005](docs/design/0005-signature-verifier.md).** Stages 1 to 4 are complete.
-  Stage 1 adapts the secp256k1 curve arithmetic and scalar ECDSA verifier from EthLib, with independent Wycheproof known answers ([ECDSA](docs/soundness/cryptography.md#secp256k1-curve-and-ecdsa-scalar-verification)).
-  Stage 2 adds Core's public-key parser and `coreVerifier`, Core's `CPubKey::Verify`, and runs Core's Script and transaction corpora with it in `lake test` ([Core's verifier](docs/soundness/cryptography.md#secp256k1-public-key-parser-and-cores-verifier)).
-  Stage 3 connects the oracle: its verdicts agree with Core on 598 dedicated public-key inputs and on the Script and transaction corpora.
-  Stage 4 checks all 25 Core-signed recovery-template fixtures in `lake test`, and the oracle comparison rechecks them with live Core.
-  Agreement of the point arithmetic with Core's `secp256k1_ecmult` is finite comparison evidence, without an all-input theorem.
-- **SHA-1, RIPEMD-160 and Hash160.** The hash prerequisites of legacy Script, with known answers ([SHA-1](docs/soundness/cryptography.md#sha-1), [RIPEMD-160 and Hash160](docs/soundness/cryptography.md#ripemd-160-and-hash160)).
-- **Legacy Script, stages 1 to 5 of [design record 0003](docs/design/0003-legacy-spend-validation.md).** The instruction reader, Script numbers, one `EvalScript` call, signature-code preparation, encoding checks, the signature and lock-time opcodes, `VerifyScript` with P2SH, and `verifyLegacySpend` for one input.
-  Script verification takes a signature checker as a parameter, and `coreVerifier` supplies ECDSA verification ([the checker](docs/soundness/script.md#script-signature-opcodes-and-the-checker)).
-  The oracle exposes `script.read_op`, `script.eval` and `script.verify_legacy`, and the Core comparison covers them ([counts](docs/comparison-evidence.md#the-comparison)).
-- **Worked property of design record 0003, section 7.** `multisigRecovery_sound` and its two converses characterize acceptance of the multisig-with-recovery template for `k` of `n` keys with `1 ≤ k ≤ n ≤ 16` ([worked property](docs/soundness/script.md#script-worked-property-multisig-with-recovery)).
-  With 33-byte keys, the 520-byte push limit allows at most 13 keys for this template under P2SH.
-- **Guide to DogeLib in practice.** [docs/in-practice.md](docs/in-practice.md) gives worked examples for security work and for vetting a proposed revision.
-  Its deliberately faulty example `ExampleFaultyLocktime` is not a proposal. The framework refutes its soft-fork claim and proves the `SoftFork` of its corrected variant ([the faulty example](docs/soundness/proposals.md#proposed-revisions-the-deliberately-faulty-example)).
+| Milestone | Scope and recorded qualifiers | Evidence |
+| --- | --- | --- |
+| Work, pure headers, Merkle roots, and hashes | DigiShield retarget, height parameters, `GetNextWorkRequired` on a checked finite view, supplied-hash target check, and 256-bit word-to-arithmetic equivalences (parallel with transactions per 0001 §10). 80-byte pure headers, double SHA-256, Merkle roots with mutation detection, SHA-1, RIPEMD-160, and Hash160 with known answers. | [docs/soundness/work.md](docs/soundness/work.md#target-validity-and-supplied-hash-proof-of-work), [docs/soundness/headers.md](docs/soundness/headers.md#pure-headers-and-transaction-merkle-roots), [docs/soundness/cryptography.md](docs/soundness/cryptography.md#sha-1) |
+| Legacy Script and worked property ([0003](docs/design/0003-legacy-spend-validation.md), stages 1–5, §7) | Instruction reader, `CScriptNum`, `EvalScript`, signature code, encoding checks, signature and lock-time opcodes, `VerifyScript` with P2SH, and `verifyLegacySpend` with parameterized checker (`coreVerifier`). `multisigRecovery_sound` and converses cover `1 ≤ k ≤ n ≤ 16` (at most 13 33-byte keys under P2SH 520-byte limit). Oracle exposes `script.read_op`, `script.eval`, and `script.verify_legacy`. | [docs/soundness/script.md](docs/soundness/script.md#script-worked-property-multisig-with-recovery), [docs/comparison-evidence.md](docs/comparison-evidence.md#the-comparison) |
+| Header proof of work ([0004](docs/design/0004-header-proof-of-work.md), stages 0–5) | HMAC-SHA-256, PBKDF2, RFC 7914 scrypt model, and Dogecoin scrypt (`powHash_eq_spec` on 80-byte inputs). Full headers with AuxPoW, `CAuxPow::check`, `CheckAuxPowProofOfWork`, `CheckBlockHeader`, and version gates. Core harness reconstructs 26 payloads byte for byte, checks 321 historical headers, and re-mines 12 `auxpow_pow` cases including in-memory mismatches. | [docs/soundness/headers.md](docs/soundness/headers.md#header-proof-of-work), [docs/comparison-evidence.md](docs/comparison-evidence.md#header-proof-of-work-evidence) |
+| Signature verifier ([0005](docs/design/0005-signature-verifier.md), stages 1–4) | EthLib secp256k1 and ECDSA adaptation with Wycheproof vectors, Core's public-key parser, and `coreVerifier` (`CPubKey::Verify`). Oracle agrees with Core on 598 `pubkey.verify` inputs, Script and transaction corpora, and 25 Core-signed recovery spends. Agreement of `Point.mulAdd` with `secp256k1_ecmult` is finite comparison evidence, with no all-input theorem. | [docs/soundness/cryptography.md](docs/soundness/cryptography.md#secp256k1-public-key-parser-and-cores-verifier) |
+| Contextual header validation ([0006](docs/design/0006-contextual-header-validation.md), stages 1 to 4, adopted 2026-11-07, 9 decisions) | `Work.MedianTimePast` on a checked view with depth requirement, `Block.ContextualParams` (heights and checkpoints), and `Block.ContextualCheck` (section 11 theorems, five mainnet ranges, synthetic views). `block.contextual_check` calls Core's `ContextualCheckBlockHeader` on an in-memory index (fixture expectations, boundaries, seed `20261109` mutations, comparator self-tests). | [docs/soundness/headers.md](docs/soundness/headers.md#contextual-header-validation), [docs/comparison-evidence.md](docs/comparison-evidence.md#contextual-header-comparison-evidence) |
+| Proposed revisions framework and examples ([0007](docs/design/0007-proposed-revisions.md), stages 1 to 2, adopted 2026-11-07, decisions 1 to 10 accepted, 11 deferred) | `Proposals` and `ProposalProofs`, import check and self-test, and `DogeLib.Proposals.Framework` (section 11 targets except `checkBlockHeader_not_versionBitsCondition` per decision 11), plus [docs/in-practice.md](docs/in-practice.md). `ExampleVersionVerify` (section 10.3 targets and known answers) and deliberately faulty `ExampleFaultyLocktime` (false soft-fork claim refuted, corrected variant proved `SoftFork`) live in test-only `ProposalExamples` (`tests/ProposalExamples/`) with `proposal-test-oracle` (#200) as permanent framework tests. `dogelib-proposal-oracle` names only proposed revisions. | [docs/soundness/proposals.md](docs/soundness/proposals.md#proposed-revisions-the-framework), [COVERAGE.md](COVERAGE.md#proposed-revisions) |
+| Header-sequence validation ([0008](docs/design/0008-header-sequence-validation.md), stages 1 to 5, adopted 2026-11-07, all §13 decisions) | Explicit block-index model (`Block.HeaderSequence`), `ancestorView_congr`, `lastCheckpointInIndex_eq`, and `acceptBlockHeader` (section 11 targets, with `accept_genesis_known`, `accept_genesis_insert`, `accept_genesis_parent` per §13.1). `processNewBlockHeaders` (`process_linear`, section 11 targets, `process_complete` taking `n ≤ 2147483647` on an empty index per §13.2), `Work.blockProof` (`blockProof_eq`), and `IndexEntry.chainWork` (`chainWork_add`). Known answers cover 34 regtest cases, 11 compact values, and mainnet ranges. `block.header_sequence` calls Core's `AcceptBlockHeader` on an in-memory index (seeded mutations, self-tests). | [docs/soundness/headers.md](docs/soundness/headers.md#the-sequence-processnewblockheaders), [docs/comparison-evidence.md](docs/comparison-evidence.md#header-sequence-comparison-evidence) |
+| Bug-finding campaign ([0009](docs/design/0009-bug-finding-campaign.md), stages 1 to 5, adopted 2026-11-08, all §14 decisions) | `scripts/campaign.py`, `core-signer` request mode, two-mode generator for multisig-with-recovery, properties Q1 to Q7, reducer (`campaign.py reduce`), and `proposal-replay` search (`51 00 b3` minimal faulty violation, zero for corrected). L1 and L3 replay label M3 `harness-fault` (upstream `1.14-maint` matched pin on 2026-11-08), with regression fixtures and CI run at reviewed seed. All five §11 theorems are proved (`multisigRecovery_lockTime_ge_threshold`, `multisigRecovery_finalSequence`, `legacySignatureHashPlan_eq_of_none_anyoneCanPay`, `legacySignatureHashPlan_eq_of_single_anyoneCanPay`, `faulty_counterexample_short`). Found no fault in Core or DogeLib. | [docs/campaign.md](docs/campaign.md#campaign-runs-and-replay), [COVERAGE.md](COVERAGE.md#campaign-infrastructure), [COVERAGE.md](COVERAGE.md#production-replay-of-campaign-candidates), [COVERAGE.md](COVERAGE.md#campaign-regression-fixtures) |
+| Relative lock time ([0012](docs/design/0012-relative-lock-time.md), stages 1 to 4, adopted 2026-11-20) | `RelativeLockTime` specifies BIP 113 cutoff, BIP 112 CSV flag, and BIP 68 sequence locks at a fixed activation height (not part of baseline, no position on activation). Extensions E1 to E4, `connectChainWith_restricts`, block-level `relativeLockTime_softFork` on supplied state, `relativeLock_enforced`, and known answers. The comparison runs Core's code with the CSV state forced to `ACTIVE` on made blocks and mainnet heights 0 to 10,000 (a state never reached on mainnet, `csv_never_lockedIn`). Historical impact runs (#201) record zero candidates, changed blocks, or unsupported results on heights 0 to 145,000, short range, S, and configured ranges (CI runs 0 to 10,000). | [COVERAGE.md](COVERAGE.md#proposed-revisions), [docs/comparison-evidence.md](docs/comparison-evidence.md#historical-impact-runs) |
+| Kernel replay (#198) | `scripts/replay.sh` checks a planted unchecked theorem and replays each module of `DogeLib` and `ProposalExamples` into Lean's kernel on pushes to `main` and weekly (`Refinement/` is not replayed). | [SOUNDNESS.md](SOUNDNESS.md#c3-declarations-the-kernel-did-not-check), [BUILDING.md](BUILDING.md#kernel-replay) |
 
 ## Next work
 
-Release 0.2.0 is out, as tag `v0.2.0` at commit `ea335a0` ([notes](docs/release-notes/0.2.0.md)).
-Release 0.1.0 has tag `v0.1.0` at commit `7510cc9`.
-
-An earlier milestone was contextual header validation, under [design record 0006](docs/design/0006-contextual-header-validation.md).
-The maintainer adopted the record on 2026-11-07, with all nine decisions of its section 12.
-The milestone specifies the checks of `ContextualCheckBlockHeader` other than the version gates.
-They are `nBits` against `GetNextWorkRequired`, the checkpoints, the time checks and the rejection of outdated versions.
-Section 10 of the record gives four stages, and section 11 gives their theorem targets:
-
-| Stage | Deliverable | Status |
-| --- | --- | --- |
-| 1 | Median time past on a checked view, with its depth requirement | Specified in `Work.MedianTimePast`, with theorems and known answers |
-| 2 | Parameters by height: `fAllowLegacyBlocks`, `BIP65Height`, `BIP66Height` and the checkpoint tables | Specified in `Block.ContextualParams`, with theorems and known answers |
-| 3 | The composition `contextualCheckBlockHeader`, with its characterization theorems and known answers | Specified in `Block.ContextualCheck`, with the theorems of section 11 and known answers from five mainnet ranges and synthetic views |
-| 4 | The oracle operation `block.contextual_check`, the Core harness and the comparison | Implemented. The harness first used the H2 transcription and now calls Core's `ContextualCheckBlockHeader`. Independent fixture expectations, boundary cases, seed `20261109` mutations and comparator self-tests. [Evidence boundary](docs/soundness/headers.md#contextual-header-validation) and [streams](docs/comparison-evidence.md#contextual-header-comparison-evidence) |
-
-The adoption of the scope establishes no target theorem.
-Each stage reports its evidence in COVERAGE.md and SOUNDNESS.md when it merges.
-
-[Design record 0007](docs/design/0007-proposed-revisions.md) sets how DogeLib specifies proposed revisions and proves their compatibility with the baseline.
-The maintainer adopted the record on 2026-11-07.
-Decisions 1 to 10 of its section 13 are accepted, and decision 11 is deferred to a signalling record.
-Section 12 of the record gives two stages:
-
-| Stage | Deliverable | Status |
-| --- | --- | --- |
-| 1 | The `Proposals` and `ProposalProofs` libraries, the import check, the activation model and the Script loop with a step parameter | Specified in `DogeLib.Proposals.Framework`, with the framework targets of section 11 except `checkBlockHeader_not_versionBitsCondition` (decision 11), and the import-check self-test |
-| 2 | The worked example `ExampleVersionVerify`, with its theorem targets and known answers | Specified in `ProposalExamples.ExampleVersionVerify`, now a test-only library, with every target of section 10.3 and known answers through the compiled code |
-
-Header-sequence validation is implemented through stage 5, under [design record 0008](docs/design/0008-header-sequence-validation.md).
-The maintainer adopted the record on 2026-11-07, with every decision of its section 13.
-It specifies Core's `AcceptBlockHeader` and `ProcessNewBlockHeaders` over an explicit model of the block index.
-The model includes the duplicate test, the predecessor lookup, the failed-ancestor walk and the chain work of each entry.
-Section 10 of the record gives five stages, and section 11 gives their theorem targets:
-
-| Stage | Deliverable | Status |
-| --- | --- | --- |
-| 1 | The block-index model, the ancestor view and the checkpoint search over the index | Specified in `Block.HeaderSequence`, with the targets `ancestorView_congr` and `lastCheckpointInIndex_eq` and known answers from five mainnet ranges |
-| 2 | One step, `acceptBlockHeader`, with its characterization theorems | Specified in `Block.HeaderSequence`, with every step target of section 11. Section 13.1 of the record replaces `accept_genesis` with `accept_genesis_known`, `accept_genesis_insert` and `accept_genesis_parent`. Known answers from the regtest fixture and from mainnet full headers |
-| 3 | The sequence, `processNewBlockHeaders`, with the linear theorem `process_linear` | Specified in `Block.HeaderSequence`, with every sequence target of section 11. `process_complete` also takes `n ≤ 2147483647` for an index without entries (section 13.2 of the record). Known answers from all 34 regtest cases in full and from 14 mainnet sequences |
-| 4 | `GetBlockProof` and the chain work of each entry | Specified as `Work.blockProof` in `Work.ChainWork` and `IndexEntry.chainWork` in `Block.HeaderSequence`, with the targets `blockProof_eq` and `chainWork_add` and the chain work of `accept_genesis_insert` (section 13.1). Known answers of `GetBlockProof` for 11 compact values, the chain work of every added regtest entry, and two mainnet sequences |
-| 5 | The oracle operation `block.header_sequence`, the Core harness and the comparison | Implemented. The harness first used the H2 transcription and now calls Core's `AcceptBlockHeader` on an in-memory index. Fixture expectations, seeded mutations and comparator self-tests. [Comparison boundary and streams](docs/comparison-evidence.md#header-sequence-comparison-evidence) |
-
-The property-driven bug-finding campaign is implemented through stage 5, under [design record 0009](docs/design/0009-bug-finding-campaign.md).
-The maintainer adopted the record on 2026-11-08, with every decision of its section 14.
-It searches for counterexamples to stated properties of the multisig-with-recovery template, in signed spends that Core signs.
-Each failure gets a saved record, a replay command, a reducer and a replay through Core's production path before it counts as a finding.
-The planted fault of `ExampleFaultyLocktime` tests the campaign itself.
-Section 13 of the record gives five stages, and section 11 gives the properties and theorem targets:
-
-| Stage | Deliverable | Status |
-| --- | --- | --- |
-| 1 | The campaign driver, the saved-failure format, replay and the outcome classes | Implemented in `scripts/campaign.py` for existing signed spends and targeted timelocks, with process-wrapper self-tests and saved replay records. [Commands and boundary](docs/campaign.md#campaign-runs-and-replay) |
-| 2 | The signer's request mode, the generator in two mutation modes and the properties Q1 to Q7 | Implemented with a hand-derived commitment table, signing-digest preflight checks and separate known-behaviour counts. The self-test detects M1 to M6 and checks signer determinism and refusal replay. [Evidence](COVERAGE.md#campaign-infrastructure) |
-| 3 | The reducer, and the search for the planted fault through a test executable | Implemented: `campaign.py reduce`, the test executable `proposal-replay` and `run --campaign proposal`. The blind search finds three-instruction violations of the faulty rule and none shorter, and none for the corrected rule. The reducer takes `51 52 b3 51 87` to `51 00 b3` with the label `minimal`, and it keeps the trigger of M1 to M6. [Evidence](COVERAGE.md#campaign-infrastructure) |
-| 4 | Replay through Core's production path, and the check against current upstream Core | Implemented: `campaign.py replay --level` at L1 and L3, `build_core_harness.sh --revision` and `build_core_node.sh`. The planted harness fault M3 is found, reduced, replayed at L1 and on a regtest node, and labelled `harness-fault`. Upstream `1.14-maint` was the pin on 2026-11-08. [Evidence](COVERAGE.md#production-replay-of-campaign-candidates) |
-| 5 | Regression fixtures and theorem targets for understood counterexamples | Implemented. Fixtures keep the planted proposal fault `51 00 b3` and the reduced M3 harness fault. They have a comparison set and `lake test` known answers. The `core` workflow runs the generated campaign at the reviewed seed. The five theorem targets of section 11 are proved: `multisigRecovery_lockTime_ge_threshold`, `multisigRecovery_finalSequence`, `legacySignatureHashPlan_eq_of_none_anyoneCanPay`, `legacySignatureHashPlan_eq_of_single_anyoneCanPay` and `faulty_counterexample_short`. Evidence: [the fixtures](COVERAGE.md#campaign-regression-fixtures), [the template](docs/soundness/script.md#script-worked-property-multisig-with-recovery), [the digest](docs/soundness/transactions.md#legacy-signature-hash-what-all-commits-to) and [the faulty example](docs/soundness/proposals.md#proposed-revisions-the-deliberately-faulty-example) |
-
-The campaign found no fault in Core or in DogeLib.
-DogeLib specifies Dogecoin Core.
-A property of an application template belongs in a downstream project.
-
 ### Block validity
 
-The next milestone is block validity.
 Stages 0010a and 0010b define the checks of a block in its context, through `ConnectBlock`.
 Stage 0010c proves three properties of `connectBlock`.
 [Design record 0010](docs/design/0010-block-validity.md) defines the milestone. The maintainer adopted it on 2026-11-13.
@@ -157,19 +78,6 @@ Its section 11 gives the stages and their exit conditions:
 Adoption of the record establishes no result.
 Each stage reports its evidence in COVERAGE.md and SOUNDNESS.md when it merges.
 
-### Relative lock time as a proposed revision
-
-`RelativeLockTime` is the first proposed revision that has a public proposal for Dogecoin: BIP 68, BIP 112 and BIP 113 at a fixed activation height.
-[Design record 0012](docs/design/0012-relative-lock-time.md) defines the milestone. The maintainer adopted it on 2026-11-20.
-The revision is not part of the baseline, and DogeLib takes no position on its activation.
-
-| Stage | Deliverable | Status |
-| --- | --- | --- |
-| 1 | The extensions E1 to E4 of the block-level layer of design record 0011, and BIP 113, the median-time cutoff. The cutoff has its restriction theorem, known answers and the cutoff count. A comparison runs Core's code with the CSV state forced to `ACTIVE` | Implemented, exit conditions 1 to 6. `connectChainWith_restricts` waits for stage 3, as the record allows. The revision is partial until stage 3 ([COVERAGE.md](COVERAGE.md#proposed-revisions)) |
-| 2 | BIP 112: the CSV flag of a block, the Script-local theorems for `OP_CHECKSEQUENCEVERIFY` and the corpus records | Implemented, exit conditions 1 to 4. The opcode witnesses are block-level. The forced-active comparison of `block.validate` covers made blocks for the opcode. The revision has the rules of BIP 113 and BIP 112, and it is partial until stage 3 |
-| 3 | BIP 68: sequence locks with the ancestor median times, the block-level `SoftFork` with its witnesses, and `relativeLock_enforced` | Implemented, exit conditions 1 to 6, in two pull requests. The revision has the three rules, and `relativeLockTime_softFork` is block-level. The forced-active comparison covers made blocks for each rule and mainnet heights 0 to 10,000 |
-| 4 | The historical counts on heights 0 to 10,000 and 0 to 145,000, with a committed candidate list | Done, exit conditions 1 to 4. The candidate lists were committed before the runs, and each has 0 candidate blocks. CI runs heights 0 to 10,000. The runs changed no block and gave no unsupported result, so every count is 0. They cover heights 0 to 145,000, the short range, S and the configured ranges of design record 0011 ([recorded runs](docs/comparison-evidence.md#historical-impact-runs), [COVERAGE.md](COVERAGE.md#proposed-revisions)) |
-
 One other candidate is unscheduled, and it needs an approved scope before work starts:
 
 - **Arithmetic agreement with Core's verifier.** A Lean proof that `Point.mulAdd` computes Core's `secp256k1_ecmult` result ([design record 0005](docs/design/0005-signature-verifier.md), section 4.3).
@@ -177,42 +85,14 @@ One other candidate is unscheduled, and it needs an approved scope before work s
 
 ## Milestones
 
-### A: a small byte codec (steps 0, 0b and 2)
+Historical milestones A to D come from [design record 0001](docs/design/0001-initial-handoff.md) and landed in [0.1.0](docs/release-notes/0.1.0.md):
 
-A Dogecoin-compatible bounded CompactSize reader, separate from the generic canonical decoder. Its contract:
-
-```text
-dogeDecode(bytes) = success(value, remainder)
-  iff genericDecode(bytes) = success(value, remainder)
-      and value <= 0x02000000
-```
-
-The distinguishing input `fe 01 00 00 02` encodes `0x02000001`. The generic decoder accepts it, and the Core reader rejects it. Do not replace the decoder inside an unconditional `Codec UInt64` instance while keeping its old laws.
-
-### B: transaction encoding and legacy signing commitments (steps 3–4)
-
-Raw fields preserved without validation, base/no-witness parsing with prefix and complete-input forms kept apart, and a `LegacyHashPlan` that separates preimage construction from hashing. Includes the executable oracle.
-
-The oracle, `dogelib-oracle`, exists ([docs/oracle.md](docs/oracle.md)). The Core harness runs Dogecoin Core's code on the same requests, and CI compares the two ([docs/core-harness.md](docs/core-harness.md#the-core-harness)).
-
-The oracle also exposes pure headers, Merkle roots, RIPEMD-160, Hash160, SHA-1, the work operations and Script.
-The Core comparison covers their committed fixtures and generated boundaries ([format and comparison](docs/oracle.md)).
-
-### C: one meaningful implementation equivalence (step 5)
-
-The field-by-field preimage construction is proved equal to the transaction-transformation reference by `legacySignatureHashPlan_eq_reference`.
-The theorem requires fully parsed script code, fewer than 2^32 inputs and fewer than 2^32 outputs.
-It holds for every input index and hash type on that domain.
-The implementation constructs the whole preimage as a byte list before hashing.
-An incremental hash sink and measured memory or speed gains are later work.
-
-### D: the Rust refinement path (step 6)
-
-The bounded Rust CompactSize decoder and its extracted Lean model are in `Refinement/Rust/` and `Refinement/Refinement/Rust/` (#51).
-`decode_refines` proves complete-result agreement with the independent bounded-reader specification.
-[docs/soundness/serialization.md](docs/soundness/serialization.md#rust-bounded-compactsize-reader) explains the theorem's domain, complete-result equality and extraction boundaries.
-[COVERAGE.md](COVERAGE.md#operations) records its proof and fixture evidence.
-[Refinement/Rust/README.md](Refinement/Rust/README.md) gives the regeneration and test commands.
+| Milestone | Contract and qualifiers | Reference |
+| --- | --- | --- |
+| A: small byte codec (steps 0, 0b, 2) | Bounded CompactSize reader separate from generic canonical `Codec UInt64`: succeeds iff generic decode succeeds with value at most `0x02000000`. Input `fe 01 00 00 02` (`0x02000001`) distinguishes them. Do not replace the decoder inside an unconditional `Codec UInt64` instance while keeping its old laws. | [design record 0001](docs/design/0001-initial-handoff.md#4-milestone-a-prove-a-small-byte-codec), [docs/soundness/serialization.md](docs/soundness/serialization.md#compactsize) |
+| B: transaction encoding, legacy signing, and oracle (steps 3–4) | Raw fields preserved without validation, base/no-witness prefix and complete-input forms separated, and `LegacyHashPlan` separating preimage construction from hashing. `dogelib-oracle` exposes transactions, pure headers, Merkle roots, RIPEMD-160, Hash160, SHA-1, work, and Script for Core harness comparison in CI. | [docs/oracle.md](docs/oracle.md), [docs/core-harness.md](docs/core-harness.md#the-core-harness), [docs/comparison-evidence.md](docs/comparison-evidence.md#the-comparison) |
+| C: implementation equivalence (step 5) | `legacySignatureHashPlan_eq_reference` proves field-by-field preimage construction equal to the `SignatureHashOld` transformation for every input index and hash type. The theorem requires fully parsed script code and fewer than 2^32 inputs and outputs. The implementation builds the whole preimage as a byte list before hashing. An incremental sink is later work. | [docs/soundness/transactions.md](docs/soundness/transactions.md#legacy-signature-hash-transformation-reference) |
+| D: Rust refinement path (step 6, #51) | Bounded Rust CompactSize decoder in `Refinement/Rust/` and extracted Aeneas model in `Refinement/Refinement/Rust/`. `decode_refines` proves complete-result agreement with `decodeBounded` on Rust-representable slices, within stated extraction boundaries. | [docs/soundness/serialization.md](docs/soundness/serialization.md#rust-bounded-compactsize-reader), [Refinement/Rust/README.md](Refinement/Rust/README.md), [COVERAGE.md](COVERAGE.md#operations) |
 
 ## Release acceptance criteria
 

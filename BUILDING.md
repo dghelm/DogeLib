@@ -44,7 +44,7 @@ Aeneas and extraction tools need additional disk space ([Rust instructions](Refi
 The separate refinement build checks the generated model and its proof.
 An unfinished proof only warns, so `--wfail` turns every warning into an error.
 
-`lake exe check-decls` reads the compiled declarations of `DogeLib`, `Proofs`, `Exports` and `Refinement`.
+`lake exe check-decls` loads the seven default roots: `DogeLib`, `DogeLib.Proofs`, `DogeLib.Exports`, `DogeLib.Proposals`, `DogeLib.Proposals.Proofs`, `DogeLib.Proposals.Exports`, and `Refinement` ([ARCHITECTURE.md](ARCHITECTURE.md#lake-libraries)).
 It requires every `.lean` source under `DogeLib/` and `Refinement/Refinement/`, plus their roots, to be reachable.
 It names each unreachable module and fails the check.
 
@@ -59,20 +59,8 @@ Every other opaque dependency remains a finding ([SOUNDNESS.md](SOUNDNESS.md#c1-
 It is empty, and a new finding is fixed, never added to it.
 
 `lake test` runs known answers through the compiled specification.
-Eleven directories hold fixture files, each with a README that gives their provenance:
-
-- `tests/block/`: pure-header and Merkle-root known answers.
-- `tests/block/mainnet-auxpow-activation-headers/`: public mainnet headers at heights 371320–371340, for the contextual header check around AuxPoW activation.
-- `tests/block/mainnet-bip65-headers/`: public mainnet headers at heights 3464739–3464760, for the contextual header check around `BIP65Height`.
-- `tests/block/mainnet-bip66-headers/`: public mainnet headers at heights 1032483–1034390, for the contextual header check around `BIP66Height`.
-- `tests/cryptography/ripemd160/`: RIPEMD-160 vectors and Hash160 digests checked with hashlib and compiled Core.
-- `tests/cryptography/sha1/cavp/`: the NIST CAVP vectors, for SHA-1.
-- `tests/cryptography/sha256/cavp/`: the NIST CAVP vectors, for SHA-256.
-- `tests/transaction/sighash/`: Dogecoin Core's signature-hash corpus, for the legacy signature hash.
-- `tests/transaction/corpus/`: Dogecoin Core's transaction corpus, for the base-mode reader and codecs and the witness-allowed format.
-- `tests/work/mainnet-genesis-headers/`: public mainnet headers at heights 0–12, for the median time past near genesis.
-- `tests/work/mainnet-headers/`: public mainnet headers, for next-work selection across DigiShield activation.
-
+Fixture directories under `tests/` hold external test vectors and recorded fixtures, each with a README that records their provenance.
+The *Pinned vectors* gate in [AGENTS.md](AGENTS.md#checks) lists the pinned `SHA256SUMS` directories and their checksum command.
 The other known answers, and their provenance, are in the topic modules under `tests/KnownAnswers/`.
 
 `bash scripts/test_oracle.sh` builds the oracle, `dogelib-oracle`, and tests it through its standard input and output.

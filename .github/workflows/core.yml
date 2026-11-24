@@ -3,8 +3,7 @@
 # The harness, harness/core/core_oracle.cpp, is built against Core's own
 # libraries at the commit that SOURCES.md pins. It links Core's server library
 # and compiles Core's validation.cpp. scripts/compare_core.py runs
-# both programs and requires their responses to agree (docs/oracle.md, "The
-# Core harness").
+# both programs and requires their responses to agree (docs/core-harness.md).
 
 name: core
 
@@ -26,8 +25,8 @@ env:
   # Dogecoin Core v1.14.9, the commit that SOURCES.md pins.
   CORE_PIN: e0a1c157791544e818c901bd9341896965afbf9d
 
-# The checks run in three jobs at the same time, each on its own runner. Each
-# job builds the oracle, and the jobs compare and csv-forced build the harness
+# The checks run in four jobs at the same time, each on its own runner. Each
+# job builds the oracle, and compare, csv-forced, and impact build the harness
 # from the shared cache.
 jobs:
   # The comparator's own failure paths. It needs the oracle, not the harness.

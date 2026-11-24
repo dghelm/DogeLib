@@ -28,7 +28,8 @@ of each of the ten ranges from a snapshot, and `RelativeLockTime` from height 1 
 145,000. The index must name each once, with the revision and activation of the run and the
 SHA-256 of its record. Each record must have the response, the report and the summary, and its
 inputs and recheck, each with a SHA-256 and a size above 0, and an end digest equal to the expected
-end of its request. `SHA256SUMS` must list exactly the index and the records, with their SHA-256.
+end of its request. Each object of a record, at every level, has exactly the keys of
+`RECORD_SCHEMA`, and each value passes the test of its type. `SHA256SUMS` must list exactly the index and the records, with their SHA-256.
 With `--outputs DIR`, each saved file of a run must exist under DIR with the SHA-256 and size of its
 record: the response, report, summary, request, recheck, blocks file, coins file and baseline. The
 counts, digest and block count of each saved summary must equal the record. The check runs no
@@ -209,46 +210,116 @@ OUTPUT_NAMES = ("response", "report", "summary")
 HEX64 = re.compile(r"[0-9a-f]{64}")
 
 
-def require_entry(value, where: str) -> None:
-    """A file entry: exactly a SHA-256 of 64 lowercase hex digits and a size above 0."""
-    if (not isinstance(value, dict) or set(value) - {"name"} != {"sha256", "bytes"}
-            or not isinstance(value["sha256"], str) or not HEX64.fullmatch(value["sha256"])
-            or not isinstance(value["bytes"], int) or isinstance(value["bytes"], bool) or value["bytes"] <= 0):
-        raise RecordError(f"{where} is not a file entry with a SHA-256 and a size")
+def is_int(value) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def natural(value) -> bool:
+    return is_int(value) and value >= 0
+
+
+def positive(value) -> bool:
+    return is_int(value) and value > 0
+
+
+def text(value) -> bool:
+    return isinstance(value, str) and value != ""
+
+
+def hex64(value) -> bool:
+    return isinstance(value, str) and HEX64.fullmatch(value) is not None
+
+
+def utc_time(value) -> bool:
+    return isinstance(value, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", value) is not None
+
+
+def counts(value) -> bool:
+    """A map from a reason or a step to a count, as `unsupported` and `rejected_by_step` are."""
+    return isinstance(value, dict) and all(isinstance(k, str) and positive(v) for k, v in value.items())
+
+
+def optional(schema):
+    return ("optional", schema)
+
+
+# The exact key set of each object of `dogelib-impact-run/1`. A value is a test of a leaf, a nested
+# schema, or `optional(...)` for a value that may be null.
+ENTRY = {"sha256": hex64, "bytes": positive}
+COINS_ENTRY = {"name": text, "sha256": hex64, "bytes": positive}
+RECORD_SCHEMA = {
+    "format": text,
+    "range": text,
+    "run": text,
+    "first": natural,
+    "last": natural,
+    "revision": {"name": text, "variant": optional(text), "activation_height": optional(natural)},
+    "executable": {"name": text, "sha256": hex64, "commit": text},
+    "inputs": {
+        "request": ENTRY,
+        "blocks_file": ENTRY,
+        "coins_file": optional(COINS_ENTRY),
+        "expected_end": hex64,
+        "candidate_list": text,
+        "candidate_list_sha256": hex64,
+        "baseline_response": optional(ENTRY),
+    },
+    "outputs": {"response": ENTRY, "report": ENTRY, "summary": ENTRY},
+    "result": {
+        "blocks": positive,
+        "candidate_blocks": natural,
+        "changed_blocks": natural,
+        "unsupported": counts,
+        "rejected_by_step": counts,
+        "set_digest_hex": hex64,
+        "set_coins": natural,
+    },
+    "time": {"seconds": positive, "max_rss_kib": positive, "finished_utc": utc_time},
+    "recheck": {"command": text, "summary": ENTRY, "changed_blocks": natural},
+}
+RESULT_KEYS = tuple(RECORD_SCHEMA["result"])
+
+
+def check_schema(value, schema, where: str) -> None:
+    """VALUE has exactly the keys of SCHEMA, at every level, and each leaf passes its test."""
+    if isinstance(schema, tuple):
+        if value is not None:
+            check_schema(value, schema[1], where)
+        return
+    if isinstance(schema, dict):
+        if not isinstance(value, dict):
+            raise RecordError(f"{where} is not an object")
+        if set(value) != set(schema):
+            missing, extra = sorted(set(schema) - set(value)), sorted(set(value) - set(schema))
+            raise RecordError(f"{where} has other keys: missing {missing}, unknown {extra}")
+        for key, inner in schema.items():
+            check_schema(value[key], inner, f"{where}.{key}")
+        return
+    if not schema(value):
+        raise RecordError(f"{where} has an invalid value")
 
 
 def check_record(record: dict, range_name: str, run: str) -> None:
-    """The fields that every record must have, with valid hashes."""
+    """The record has the schema of `dogelib-impact-run/1`, and the values of its run."""
     where = f"{range_name}/{run}"
-    if record.get("format") != RUN_FORMAT or (record.get("range"), record.get("run")) != (range_name, run):
+    check_schema(record, RECORD_SCHEMA, where)
+    if (record["format"], record["range"], record["run"]) != (RUN_FORMAT, range_name, run):
         raise RecordError(f"{where}: the record has another format, range or run")
-    if record.get("revision") != EXPECTED[(range_name, run)]:
+    if record["revision"] != EXPECTED[(range_name, run)]:
         raise RecordError(f"{where}: the record has another revision or activation")
     if record["executable"] != {"name": "dogelib-proposal-oracle", "sha256": BUILD["dogelib-proposal-oracle_sha256"],
                                 "commit": BUILD["commit"]}:
         raise RecordError(f"{where}: the record names another executable")
-    outputs = record.get("outputs")
-    if not isinstance(outputs, dict) or set(outputs) != set(OUTPUT_NAMES):
-        raise RecordError(f"{where}: the outputs are not exactly {', '.join(OUTPUT_NAMES)}")
-    for name in OUTPUT_NAMES:
-        require_entry(outputs[name], f"{where}: output {name}")
     inputs = record["inputs"]
-    for name in ("request", "blocks_file"):
-        require_entry(inputs[name], f"{where}: input {name}")
     from_genesis = range_name == "genesis-145000"
     for name in ("coins_file", "baseline_response"):
-        if from_genesis:
-            if inputs[name] is not None:
-                raise RecordError(f"{where}: a range from the empty set has a {name}")
-        else:
-            require_entry(inputs[name], f"{where}: input {name}")
-    if not HEX64.fullmatch(str(inputs["candidate_list_sha256"])) or inputs["candidate_list"] != f"tests/proposals/impact/{range_name}.json":
+        if (inputs[name] is None) != from_genesis:
+            raise RecordError(f"{where}: the {name} does not fit a range {'from the empty set' if from_genesis else 'from a snapshot'}")
+    if inputs["candidate_list"] != f"tests/proposals/impact/{range_name}.json":
         raise RecordError(f"{where}: the candidate list is not the list of the range")
     result = record["result"]
-    if (not HEX64.fullmatch(str(result["set_digest_hex"])) or result["set_digest_hex"] != inputs["expected_end"]
-            or not isinstance(result["blocks"], int) or result["blocks"] != record["last"] - record["first"] + 1):
-        raise RecordError(f"{where}: the result has no valid end digest or block count")
-    require_entry(record["recheck"]["summary"], f"{where}: recheck summary")
+    if result["set_digest_hex"] != inputs["expected_end"] or result["blocks"] != record["last"] - record["first"] + 1:
+        raise RecordError(f"{where}: the result has another end digest or block count")
     if result["changed_blocks"] != record["recheck"]["changed_blocks"]:
         raise RecordError(f"{where}: the recheck differs from the run")
 
@@ -264,9 +335,11 @@ def check_outputs(record: dict, outputs: Path, hashed: dict) -> None:
         if not path.is_file() or file_entry(path) != record["outputs"][name]:
             raise RecordError(f"{where}: the saved {name}.json is missing or differs from the record")
     summary = json.loads((run_dir / "summary.json").read_text())
-    for key, value in record["result"].items():
-        if summary.get(key) != value:
+    for key in RESULT_KEYS:
+        if key not in summary or summary[key] != record["result"][key]:
             raise RecordError(f"{where}: the saved summary differs from the record in {key}")
+    if json.loads((run_dir / "report.json").read_text()).get("changed_blocks") != record["result"]["changed_blocks"]:
+        raise RecordError(f"{where}: the saved report differs from the record in changed_blocks")
     pairs = [(summary.get("first"), record["first"]), (summary.get("last"), record["last"]),
              (summary.get("revision"), record["revision"]), (summary.get("seconds"), record["time"]["seconds"]),
              (summary.get("proposal_oracle_sha256"), record["executable"]["sha256"]),
@@ -372,7 +445,7 @@ def made_outputs(root: Path) -> tuple[Path, dict]:
                "baseline_compared": True, "set_digest_hex": digest, "set_coins": 5, "seconds": 3, "blocks": 2,
                "candidate_blocks": 0, "changed_blocks": 0, "unsupported": {}, "rejected_by_step": {}}
     (run_dir / "summary.json").write_text(dump(summary))
-    (run_dir / "report.json").write_text(dump({"changed": [], "blocks": 2}))
+    (run_dir / "report.json").write_text(dump({"changed": [], "blocks": 2, "changed_blocks": 0}))
     (run_dir / "response.json").write_text(dump({"ok": {"blocks": []}}))
     (outputs / "runs" / "short" / "RelativeLockTime-1.log").write_text("\tMaximum resident set size (kbytes): 1000\n")
     (outputs / "runs" / "short" / "baseline-response.json").write_text(dump({"ok": {}}))
@@ -456,6 +529,29 @@ def self_test(records: Path) -> int:
         ("an end digest other than the expected end", coherent(lambda c: edit_record(c, lambda r: r["result"].update(set_digest_hex="0" * 64)))),
         ("a changed SHA256SUMS", lambda c: (c / "SHA256SUMS").write_text((c / "SHA256SUMS").read_text().replace("0", "1", 1))),
     ]
+
+    def at(record: dict, path: tuple) -> dict:
+        for key in path:
+            record = record[key]
+        return record
+
+    # For each object of the schema: a required key deleted, and an unknown key added.
+    objects = [((), "result"), (("revision",), "activation_height"), (("executable",), "commit"),
+               (("inputs",), "expected_end"), (("inputs", "request"), "bytes"), (("inputs", "coins_file"), "name"),
+               (("inputs", "baseline_response"), "sha256"), (("outputs",), "report"), (("outputs", "response"), "sha256"),
+               (("result",), "set_coins"), (("time",), "max_rss_kib"), (("recheck",), "summary"),
+               (("recheck", "summary"), "bytes")]
+    for path, key in objects:
+        label = ".".join(path) or "the record"
+        cases.append((f"{label} without {key}",
+                      coherent(lambda c, path=path, key=key: edit_record(c, lambda r: at(r, path).pop(key)))))
+        cases.append((f"{label} with an unknown key",
+                      coherent(lambda c, path=path: edit_record(c, lambda r: at(r, path).update(unknown=0)))))
+    cases.append(("a result without candidate_blocks, unsupported, rejected_by_step and set_coins",
+                  coherent(lambda c: edit_record(c, lambda r: [r["result"].pop(k) for k in
+                                                               ("candidate_blocks", "unsupported", "rejected_by_step", "set_coins")]))))
+    cases.append(("a count that is not a number", coherent(lambda c: edit_record(c, lambda r: r["result"].update(candidate_blocks="0")))))
+    cases.append(("a time that is a Boolean", coherent(lambda c: edit_record(c, lambda r: r["time"].update(seconds=True)))))
     results = [planted(name, plant) for name, plant in cases]
 
     # The check of saved outputs, on a made directory for one run.
@@ -480,10 +576,17 @@ def self_test(records: Path) -> int:
                     path.write_text(saved)
             return run
 
+        def changed_summary_drop(key: str):
+            summary = json.loads((run_dir / "summary.json").read_text())
+            summary.pop(key)
+            return replaced_summary(dump(summary))
+
         def changed_summary(key: str, value):
             summary = json.loads((run_dir / "summary.json").read_text())
             summary[key] = value
-            changed = dump(summary)
+            return replaced_summary(dump(summary))
+
+        def replaced_summary(changed: str):
             # The record follows the new summary file, so that only the field comparison can fail.
             def run() -> None:
                 saved = (run_dir / "summary.json").read_text()
@@ -510,6 +613,8 @@ def self_test(records: Path) -> int:
             ("a saved summary with another digest", changed_summary("set_digest_hex", "0" * 64)),
             ("a saved summary with another block count", changed_summary("blocks", 3)),
             ("a saved summary with another blocks hash", changed_summary("blocks_sha256", "0" * 64)),
+            ("a saved summary without set_coins", changed_summary_drop("set_coins")),
+            ("a changed saved report", changed_file(run_dir / "report.json", "{}")),
         ]
         results += [outcome(name, run) for name, run in output_cases]
     return 0 if clean and all(results) else 1

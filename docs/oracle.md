@@ -453,6 +453,7 @@ The latter uses Core's network stream version without `SERIALIZE_TRANSACTION_NO_
 | `block.contextual_check_body` | `block_hex`, `mode`, `chain` | Boolean `valid`, `reject_reason`, `dos` and `reject_code` (null on acceptance), and Lean-only `diagnostic` |
 | `block.check_version` | `bytes_hex`, exactly 80 bytes, `network`, `selection_height` | Boolean `valid`, and Lean-only `diagnostic` |
 | `block.validate` | `mode`, `check_pow`, `check_merkle_root`, `adjusted_time`, `chain`, `bip34_ancestor_hex`, `coins`, `blocks_hex` | One record for each block, and the digest of the coin set, as [below](#block-validation) |
+| `block.version_bits_state` | `chain` | `csv` and `segwit`, the version-bits states of the next block, as [below](#version-bits-state) |
 
 `scrypt.hash` fixes N = 1024, r = 1, p = 1 and a 32-byte output.
 The 80 input bytes serve as both password and salt.
@@ -817,7 +818,7 @@ Each record replaces the digest `d` with the double SHA-256 of `d` followed by t
 
 `set_value` is the sum of the amounts of the coins of the set, in koinu, as a string of decimal digits.
 The sum can exceed `2^63`, so it is not a JSON number.
-The oracle reports `CoinSet.totalValue` of `Block.Proofs.ConnectProperties`, the quantity of `chain_issuance_bound`.
+The oracle reports `CoinSet.totalValue` of `Block.Coins`, the quantity of `chain_issuance_bound` in `Block.Proofs.ConnectProperties`.
 The harness adds the amounts of the coins of its own `CCoins` entries, in 128-bit arithmetic.
 
 The harness's sum is an `unsigned __int128`.
@@ -1000,6 +1001,39 @@ The draw of the specification takes fuel, 624 words in the oracle.
 If a case rejects that many words, the whole request gets the error kind `subsidy`, with `reason` `fuel_exhausted` and the `index` of the case.
 No known request gives that error: a [run outside CI](#block-subsidy-comparison-evidence) covers every seed.
 
+### Version-bits state
+
+`block.version_bits_state` runs `Block.versionBitsStateFull`, Core's `VersionBitsState` (SOURCES.md, D102), with the mainnet parameters of the CSV and SegWit deployments (D100).
+It walks every period of the chain from the genesis block, without a supplied boundary state.
+`scripts/compare_version_bits_walk.py` and `scripts/core_pass.py --version-bits` compare it with Core outside CI ([the Core pass](#the-core-pass)).
+`scripts/test_core_pass.py` compares it with Core in CI on synthetic chains.
+
+The request has one required field, `chain`: the blocks from the genesis block to the predecessor of the next block, oldest first.
+Each entry is an object with exactly these fields:
+
+- `version`: an integer from 0 to 4294967295, the 32 bits of the block's `nVersion`. The harness reads them as Core's signed `int32_t`.
+- `time`: an integer from 0 to 4294967295, the block's `nTime`.
+
+The array has no length limit.
+An entry at index `i` is the block at height `i`.
+
+```json
+{"id":"v1","op":"block.version_bits_state","chain":[]}
+{"id":"v1","ok":{"csv":"defined","segwit":"defined"}}
+```
+
+The result in `ok` has two fields:
+
+| Field | Meaning |
+| --- | --- |
+| `csv` | The state of the CSV deployment for the block after the last entry |
+| `segwit` | The state of the SegWit deployment for the block after the last entry |
+
+Each state is one of `defined`, `started`, `locked_in`, `active` and `failed`, Core's `THRESHOLD_DEFINED` to `THRESHOLD_FAILED`.
+The harness answers an empty chain with `defined` for both deployments, without a call to `VersionBitsState`.
+These are request errors: a `chain` that is not an array, an entry that is not an object, and an unknown or missing field.
+A value outside its range is also a request error.
+
 ## The Core harness
 
 `harness/core/core_oracle.cpp` answers the same requests by running Dogecoin Core's own code.
@@ -1067,6 +1101,7 @@ These pinned sources supply the work functions and parameter constructors:
 | `block.contextual_check_body` | `SelectParams` for mainnet, then `ContextualCheckBlock` on a `CBlock` that Core's stream code reads, with a predecessor that the harness builds from the chain. `VersionBitsState` reads the aligned boundary's median time, and the harness seeds `THRESHOLD_FAILED` at a boundary at or after the CSV timeout. With `force_csv_active`, the harness seeds `THRESHOLD_ACTIVE` for CSV, a state that no mainnet chain reaches ([the forced CSV state](#core-with-the-csv-state-forced-to-active)) |
 | `block.check` | `SelectParams` for mainnet, then `CheckBlock` on a `CBlock` that Core's stream code reads from the request, with the two flags of the request. Then `GetLegacySigOpCount` for each transaction, `GetSerializeSize` in base mode and `GetHash` |
 | `block.validate` | `SelectParams` for mainnet. Then, for each block that Core's stream code reads: `CheckBlockHeader` when `check_pow` is true, `ContextualCheckBlockHeader`, `CheckBlock`, `ContextualCheckBlock`, and `ConnectBlock` with `fJustCheck` true on a new `CCoinsViewCache` over the carried set. The first two do not run for the genesis hash. `UpdateCoins` on a second cache gives the changes of an accepted block ([choices](#block-validation-in-the-harness)) |
+| `block.version_bits_state` | `SelectParams` for mainnet, then `VersionBitsState` for CSV and SegWit on a `CBlockIndex` chain that the harness builds from the request, with an empty version-bits cache. The consensus parameters are those of the height after the last entry |
 | `block.subsidy` | `SelectParams` for mainnet, then `GetDogecoinBlockSubsidy` with `Params().GetConsensus(height)` for each case, as `ConnectBlock` calls it (D101, line 1996) |
 | `compactsize.encode` | `WriteCompactSize` into a `CDataStream` |
 | `compactsize.read` | `ReadCompactSize` from a `CDataStream` |

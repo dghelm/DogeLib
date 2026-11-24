@@ -16,8 +16,10 @@ The maintainer decides when to release and creates the tag.
 
 ## 2. Run the validation workflow
 
-The `validation` workflow runs every automated gate of the [checks table](../AGENTS.md#checks), including both Rust gates and both Core comparisons.
-It keeps the report and logs ([BUILDING.md](../BUILDING.md#validation-reports)).
+The `validation` workflow runs the gates that `scripts/release_gates.json` lists under `run`, in that order, including both Rust gates and both Core comparisons.
+The manifest lists the automated gates of the [checks table](../AGENTS.md#checks) that a GitHub runner can run.
+The report marks each other gate **not run**, with the reason from the manifest.
+The workflow keeps the report and logs ([BUILDING.md](../BUILDING.md#validation-reports)).
 A manual dispatch runs on the head of a branch, not on an arbitrary commit.
 
 1. Make sure that `main` is at the candidate commit:
@@ -46,10 +48,14 @@ A manual dispatch runs on the head of a branch, not on an arbitrary commit.
    ```
 
 5. Read the report.
-   Every automated gate must pass, or the release waits for a fix.
-   The report records only the two manual gates as **not run**: source and coverage review, and soundness review.
+   Every gate that the workflow runs must pass, or the release waits for a fix.
+   The report records two kinds of gate as **not run**.
+   The two manual gates are source and coverage review, and soundness review.
    A reviewer does these two reviews on the candidate commit.
-   Record their results with the release.
+   The other gates under `not_run` need the maintainer's node, a regtest node, or more time than the workflow has.
+   They run outside the workflow, on a contributor's machine, with `scripts/validation_report.py --gates`.
+   Record the result of each gate that ran with the release.
+   Name each gate that did not run.
 
 Keep the report and the complete logs with the release.
 Do not commit them. The `build/` directory is ignored.

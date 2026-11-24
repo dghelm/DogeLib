@@ -160,7 +160,9 @@ jobs:
         if: ${{ !cancelled() }}
         run: python3 -I scripts/fetch_version_bits_headers.py --check
 
-      # Every vendored vector file must match its pinned digest.
+      # Every vendored vector file must match its pinned digest. The list is
+      # the command of the gate Pinned vectors in AGENTS.md, and
+      # scripts/test_validation_report.py checks that the two agree.
       - name: pinned vectors
         if: ${{ !cancelled() }}
         run: |
@@ -185,6 +187,8 @@ jobs:
           (cd tests/block/mainnet-blocks/ranges/B && sha256sum -c SHA256SUMS)
           (cd tests/block/mainnet-blocks/ranges/C && sha256sum -c SHA256SUMS)
           (cd tests/block/mainnet-blocks/ranges/D && sha256sum -c SHA256SUMS)
+          (cd tests/block/mainnet-blocks/ranges/E1 && sha256sum -c SHA256SUMS)
+          (cd tests/block/mainnet-blocks/ranges/E2 && sha256sum -c SHA256SUMS)
           (cd tests/block/mainnet-blocks/ranges/F && sha256sum -c SHA256SUMS)
           (cd tests/block/mainnet-blocks/ranges/H && sha256sum -c SHA256SUMS)
           (cd tests/block/mainnet-blocks/rule-changes && sha256sum -c SHA256SUMS)

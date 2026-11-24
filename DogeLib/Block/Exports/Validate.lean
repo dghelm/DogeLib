@@ -2,7 +2,6 @@ module
 
 public import DogeLib.Block.Exports.Oracle
 public import DogeLib.Block.Validate
-public import DogeLib.Block.Proofs.ConnectProperties
 public import DogeLib.Script.CoreVerifier
 
 /-!

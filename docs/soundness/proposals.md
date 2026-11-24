@@ -6,7 +6,8 @@ See [SOUNDNESS.md](../../SOUNDNESS.md) for the trust model and Gaps A to D, and 
 - **Scope**: Script and block proposal frameworks, `ExampleVersionVerify`, `ExampleFaultyLocktime`, and the public proposal `RelativeLockTime` (BIP 68, BIP 112, and BIP 113).
 - **Specification modules**: `DogeLib.Proposals.Framework.*`, `ExampleVersionVerify`, `ExampleFaultyLocktime`, and `RelativeLockTime`.
 - **Proof modules**: `DogeLib.Proposals.Framework.Proofs`, `ExampleVersionVerify.Proofs`, `ExampleFaultyLocktime.Proofs`, and `RelativeLockTime.Proofs` (under `DogeLib.Proposals.Proofs`).
-- **Key boundaries**: All proposal theorems are Script-local or single-block claims on supplied state, not network-level soft-fork, fork-choice, or liveness proofs.
+- **Key boundaries**: The proposal theorems are claims about Script, one block, or the connection of a list of blocks (`connectChainWith_restricts`), all on supplied state.
+  None is a network-level soft-fork, fork-choice, or liveness proof.
   DogeLib takes no position on the activation of any proposal, and no proposal has a default activation height.
 
 ## Proposed revisions: the framework

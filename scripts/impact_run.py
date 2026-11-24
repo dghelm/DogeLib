@@ -6,9 +6,14 @@ Usage:
   python3 -I scripts/impact_run.py request --range NAME --output DIR [--pass DIR] [--harness PROGRAM]
       [--fixture DIR ...]
   python3 -I scripts/impact_run.py run --range NAME --request FILE --revision NAME[/VARIANT]
-      --activation HEIGHT|none --output DIR [--baseline FILE] <dogelib-proposal-oracle>
+      --activation HEIGHT|none --output DIR [--baseline FILE] <proposal executable>
   python3 -I scripts/impact_run.py check --range NAME --request FILE --revision NAME[/VARIANT]
-      --activation HEIGHT|none --output DIR --response FILE [--baseline FILE] <dogelib-proposal-oracle>
+      --activation HEIGHT|none --output DIR --response FILE [--baseline FILE] <proposal executable>
+
+The proposal executable is `dogelib-proposal-oracle` for `RelativeLockTime`. The two examples of
+the framework, `ExampleVersionVerify` and `ExampleFaultyLocktime`, are not proposals for Dogecoin,
+and only the test build `proposal-test-oracle` names them. The examples run on the short range
+alone. Their recorded runs on the other ranges are history (docs/oracle.md).
 
 **Ranges.**
 
@@ -85,8 +90,8 @@ GENESIS = {"genesis-10000": 10000, "genesis-145000": 145000}
 FROM_GENESIS_SNAPSHOT = {"short": (9000, 10000), "S": (100000, 101000)}
 PASS_RANGES = ("A", "B", "C", "D", "E1", "E2", "F", "H")
 RANGES = (*GENESIS, *FROM_GENESIS_SNAPSHOT, *PASS_RANGES)
-# The revisions of the runs: the two examples of design record 0011, section 10.3, and the proposed
-# revision of design record 0012.
+# The revisions of the runs: the two examples of design record 0011, section 10.3, which only the
+# test build `proposal-test-oracle` names, and the proposed revision of design record 0012.
 REVISIONS = {"ExampleVersionVerify": None, "ExampleFaultyLocktime/corrected": "corrected", "RelativeLockTime": None}
 
 

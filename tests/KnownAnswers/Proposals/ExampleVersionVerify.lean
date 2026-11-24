@@ -1,4 +1,4 @@
-import DogeLib.Proposals
+import ProposalExamples
 import KnownAnswers.Script
 
 /-!
@@ -28,7 +28,7 @@ One case shows the error order of design record 0007, section 10.2: a caller's s
 
 namespace KnownAnswers.Proposals.ExampleVersionVerify
 
-open DogeLib.Script DogeLib.Proposals.Framework DogeLib.Proposals.ExampleVersionVerify
+open DogeLib.Script DogeLib.Proposals.Framework ProposalExamples.ExampleVersionVerify
 open KnownAnswers.ScriptVerify (mkTx p2shOf)
 
 /-- The context of `mkTx version 0 0`. -/

@@ -1,12 +1,12 @@
 module
 
-public import DogeLib.Proposals.ExampleVersionVerify.Proofs.Compatibility
+public import ProposalExamples.ExampleVersionVerify.Proofs.Compatibility
 public import DogeLib.Proposals.Framework.Proofs.Block
 
 /-!
-# Proofs: `Proposals.ExampleVersionVerify`, block level
+# Proofs: `ProposalExamples.ExampleVersionVerify`, block level
 
-The example is not a proposal for Dogecoin (`DogeLib.Proposals.ExampleVersionVerify`).
+The example is not a proposal for Dogecoin (`ProposalExamples.ExampleVersionVerify`).
 Every theorem here is block-level: it is about one block on a supplied coin set and chain view.
 None is a claim about a chain or about the network.
 
@@ -21,9 +21,9 @@ Each holds for every pair of embeddings, verifier, pair of flags, context and co
 
 @[expose] public section
 
-namespace DogeLib.Proposals.ExampleVersionVerify
+namespace ProposalExamples.ExampleVersionVerify
 
-open DogeLib.Block DogeLib.Script DogeLib.Transaction DogeLib.Work DogeLib.Proposals.Framework
+open DogeLib DogeLib.Proposals DogeLib.Block DogeLib.Script DogeLib.Transaction DogeLib.Work DogeLib.Proposals.Framework
 
 variable {ρ μ ρ' μ' : Type}
 
@@ -62,4 +62,4 @@ theorem example_block_congr (V : ValidateEmbedding ρ μ ρ' μ')
     (fun _ f script st i hi => exampleStep_eq_of_not_nop10 _ _ _ f script st i hi)
     rfl (fun _ _ _ => rfl) fCheckPOW fCheckMerkleRoot rfl hfree
 
-end DogeLib.Proposals.ExampleVersionVerify
+end ProposalExamples.ExampleVersionVerify

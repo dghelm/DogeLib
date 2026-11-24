@@ -53,7 +53,8 @@ lean_lib «Exports» where
 /-- Proposed revisions of the baseline, and the framework that states them
 (design record 0007). Rooted at `DogeLib/Proposals.lean`. It may import
 `DogeLib`. No baseline library imports it, and
-`scripts/CheckRefinementImports.lean` checks that boundary.
+`scripts/CheckRefinementImports.lean` checks that boundary. The examples of
+the framework are in the test-only `ProposalExamples` library.
 `precompileModules` is off, as for `Proofs`. -/
 @[default_target]
 lean_lib «Proposals» where
@@ -68,7 +69,6 @@ lean_lib «Proposals» where
 lean_lib «ProposalProofs» where
   requiresModuleSystem := true
   roots := #[`DogeLib.Proposals.Proofs, `DogeLib.Proposals.Framework.Proofs,
-    `DogeLib.Proposals.ExampleFaultyLocktime.Proofs, `DogeLib.Proposals.ExampleVersionVerify.Proofs,
     `DogeLib.Proposals.RelativeLockTime.Proofs]
   precompileModules := false
 
@@ -133,6 +133,28 @@ lean_exe «bench-transaction-reader» where
   srcDir := "scripts"
   root := `BenchTransactionReader
   allowNonModules := true
+
+/-- The two examples of the proposal framework, `ExampleFaultyLocktime` and
+`ExampleVersionVerify`, with their theorems and the revisions of the test
+executable. Test-only: no production library imports it, and
+`scripts/CheckRefinementImports.lean` checks that boundary. It may import
+every production library. `precompileModules` is off, as for `Proposals`. -/
+@[default_target]
+lean_lib «ProposalExamples» where
+  srcDir := "tests"
+  requiresModuleSystem := true
+  roots := #[`ProposalExamples, `ProposalExamples.Proofs, `ProposalExamples.ExampleFaultyLocktime.Proofs,
+    `ProposalExamples.ExampleVersionVerify.Proofs, `ProposalExamples.Exports]
+  precompileModules := false
+
+/-- The test build of the proposal executable: the operations of
+`dogelib-proposal-oracle`, whose argument `revision` also names the two
+examples of `ProposalExamples`. The tests of the proposal executable and
+of the impact tools run it. -/
+@[default_target]
+lean_exe «proposal-test-oracle» where
+  srcDir := "tests"
+  root := `ProposalTestOracle
 
 /-- Test-only replay of named proposals on oracle-shaped legacy spend requests. -/
 @[default_target]

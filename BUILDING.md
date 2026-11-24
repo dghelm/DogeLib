@@ -213,15 +213,23 @@ bash scripts/test_import_boundaries.sh
 ```
 
 The self-test plants a module under `DogeLib/` that imports `DogeLib.Proposals`, and then one that imports `DogeLib.Proposals.Exports`. It requires a failure that names the proposal modules each time.
+It also plants a module under `DogeLib/Proposals/` that imports the test-only `ProposalExamples`, and requires a failure that names the example modules.
+
+The test-only `ProposalExamples` library holds the two examples of the proposal framework. The production declaration check does not load it, so it has its own check:
+
+```bash
+lake exe check-decls --scope ProposalExamples ProposalExamples ProposalExamples.Proofs ProposalExamples.Exports
+```
 
 The proposal executable has its own test, which needs no Dogecoin Core:
 
 ```bash
-lake build dogelib-oracle dogelib-proposal-oracle
-python3 -I scripts/test_proposal_oracle.py .lake/build/bin/dogelib-oracle .lake/build/bin/dogelib-proposal-oracle
+lake build dogelib-oracle dogelib-proposal-oracle proposal-test-oracle
+python3 -I scripts/test_proposal_oracle.py .lake/build/bin/dogelib-oracle .lake/build/bin/dogelib-proposal-oracle .lake/build/bin/proposal-test-oracle
 ```
 
-It requires the bytes of `dogelib-oracle` on every `block.validate` request of the full comparison when the request has no `revision` argument.
+`proposal-test-oracle` is the test build of the proposal executable. Its argument `revision` also names the two examples of the framework, which `dogelib-proposal-oracle` refuses.
+Without the argument `revision`, both executables must write the bytes of `dogelib-oracle` on every `block.validate` request of the full comparison.
 [docs/oracle.md](docs/oracle.md#the-proposal-executable) lists its other checks.
 
 [Refinement/Rust/README.md](Refinement/Rust/README.md) records the contract, fixtures, pins and regeneration steps.

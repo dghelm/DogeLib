@@ -1194,17 +1194,20 @@ It answers every operation of `dogelib-oracle` with the code of `dogelib-oracle`
 It adds one argument to `block.validate`, with `blocks_hex` and with `blocks_file`, and to `block.contextual_check_body`:
 
 ```text
-"revision": {"name": "ExampleVersionVerify", "variant": null, "activation_height": 0}
+"revision": {"name": "RelativeLockTime", "variant": null, "activation_height": 1}
 ```
 
 | Field | Value |
 | --- | --- |
-| `name` | The name of a revision: `ExampleFaultyLocktime`, `ExampleVersionVerify` or `RelativeLockTime`. |
+| `name` | The name of a revision: `RelativeLockTime`. The test build also names `ExampleFaultyLocktime` and `ExampleVersionVerify`. |
 | `variant` | `corrected` or `faulty` for `ExampleFaultyLocktime`, and null for the two other revisions. |
 | `activation_height` | A mainnet height from 0 to 2,147,483,646, or null for no activation. |
 
 The three fields are required, and any other field is a request error.
-`ExampleFaultyLocktime` and `ExampleVersionVerify` are the examples of the `Proposals` library. Neither is a proposal for Dogecoin.
+
+`ExampleFaultyLocktime` and `ExampleVersionVerify` are the examples of the framework, in the test-only `ProposalExamples` library. Neither is a proposal for Dogecoin.
+Only the test build `proposal-test-oracle` names them. It runs the code of `dogelib-proposal-oracle` with the two examples added to its revisions, and `dogelib-proposal-oracle` returns a request error for an example.
+
 `RelativeLockTime` is the proposed revision of [design record 0012](design/0012-relative-lock-time.md).
 It has the rules of BIP 113, BIP 112 and BIP 68.
 For `block.validate`, its transaction test reads the view `chain` of each block.
@@ -1264,19 +1267,22 @@ A request on which the baseline operation returns an error returns that error.
 The executable has one test, which needs no Dogecoin Core:
 
 ```bash
-lake build dogelib-oracle dogelib-proposal-oracle
-python3 -I scripts/test_proposal_oracle.py .lake/build/bin/dogelib-oracle .lake/build/bin/dogelib-proposal-oracle
+lake build dogelib-oracle dogelib-proposal-oracle proposal-test-oracle
+python3 -I scripts/test_proposal_oracle.py .lake/build/bin/dogelib-oracle .lake/build/bin/dogelib-proposal-oracle .lake/build/bin/proposal-test-oracle
 ```
 
-- Without `revision`, the two programs write the same bytes on the 42 `block.validate` requests of the full comparison and on 34 requests with `blocks_file`. With `--mainnet-blocks build/mainnet-blocks`, the test adds the replay of mainnet heights 0 to 10,000.
-- Without `revision`, the two programs also write the same bytes on the 22 `block.contextual_check_body` requests of the comparison. With a revision and no activation height, each `revised` object has `active` false and the baseline verdict. The examples change no lock-time argument, so the same holds for them from height 0.
+The checks of a revision run in the test build, which names all four revisions.
+`dogelib-proposal-oracle` refuses each example, and it writes the bytes of the test build on every request that names `RelativeLockTime`.
+
+- Without `revision`, each proposal executable writes the bytes of `dogelib-oracle` on the 42 `block.validate` requests of the full comparison and on 34 requests with `blocks_file`. With `--mainnet-blocks build/mainnet-blocks`, the test adds the replay of mainnet heights 0 to 10,000.
+- Without `revision`, each proposal executable also writes the bytes of `dogelib-oracle` on the 22 `block.contextual_check_body` requests of the comparison. With a revision and no activation height, each `revised` object has `active` false and the baseline verdict. The examples change no lock-time argument, so the same holds for them from height 0.
 - `dogelib-oracle` refuses `revision`, and the proposal executable refuses 18 malformed values of it.
 - With no activation height, each `revised` object has the verdict, the reject reason and the changes digest of its baseline record. The check covers the 119 block records of those 42 requests, for each revision.
 - From height 0 on the same requests, the response without the `revised` objects is the baseline response. No block goes from rejected to accepted under the two revisions with a restriction theorem.
 - One request of the comparison has five blocks that fail the five checks in Core's order. Each `revised` object names the check in `step`, and the transaction at 1 in `tx` for the duplicate inputs and for the missing coin.
 - Eleven made blocks give `revised` objects that the test states by hand from the text of each rule. Each block stands on a committed rule-change block and spends a supplied coin. For eight of them the script of the coin holds the rule of an example. A negative operand of each rule changes an accepted block to rejected. The counterexample of the faulty variant changes a rejected block to accepted. Three blocks are for the sequence locks of `RelativeLockTime`, with a transaction of version 2. A height lock that is met leaves the block accepted. A height lock that is one block short gives the reason `bad-txns-nonfinal`. A time lock on a coin above the block gives `unsupported` with the reason `RelativeLockTime: coinAboveBlock`.
 
-- Without `revision`, the two programs also write the same bytes on 33 of those requests with their coins in a `coins_file`. With `--snapshot-request`, the test adds one range request from a snapshot, such as the short range. A request with a revision gives the same `revised` objects with `coins_file` as with `coins`.
+- Without `revision`, each proposal executable also writes the bytes of `dogelib-oracle` on 33 of those requests with their coins in a `coins_file`. With `--snapshot-request`, the test adds one range request from a snapshot, such as the short range, for `dogelib-proposal-oracle`. A request with a revision gives the same `revised` objects with `coins_file` as with `coins`.
 
 A request with `coins_file` runs the snapshot path of `dogelib-oracle` with the hook of the revision (`Block.Exports.blockValidateSnapshotWith`).
 The revision runs on the same restricted coin set as the baseline: the coins whose transaction IDs the blocks name.
@@ -1288,7 +1294,8 @@ The test does not run a revision on the mainnet ranges of design record 0011. [H
 
 #### Historical impact runs
 
-`scripts/impact_run.py` runs a revision on a range of mainnet blocks in `dogelib-proposal-oracle`.
+`scripts/impact_run.py` runs a revision on a range of mainnet blocks in `dogelib-proposal-oracle`, or an example in the test build `proposal-test-oracle`.
+The examples run on the short range alone.
 It implements the self-test of [design record 0011](design/0011-mainnet-ranges.md), section 10.3, and the counts of [design record 0012](design/0012-relative-lock-time.md), section 10.3.
 
 `impact_run.py request` writes the range request:
@@ -1323,7 +1330,7 @@ A changed block is a block whose two verdicts differ. An unsupported result is n
 
 `scripts/test_impact.py` plants one candidate of each kind in a made block, in the form of a range request.
 The kinds are `0xb9`, `0xb3`, `0xb2`, a sequence lock that is one block short, and a lock time at the median time past.
-The scan lists each block, and the proposal executable rejects each one, which the baseline accepts.
+The scan lists each block, and the test build of the proposal executable rejects each one, which the baseline accepts.
 The run check fails when the list leaves the block out.
 
 The `revised` verdicts have no Core comparison, and an empty report is not a compatibility proof (design record 0011, section 10.4).

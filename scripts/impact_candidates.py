@@ -28,6 +28,10 @@ is not an instruction.
 | `ExampleFaultyLocktime` | A spend whose scripts hold `0xb3` (`OP_NOP4`) |
 | `RelativeLockTime` | A cutoff transaction, a sequence candidate, or a spend whose scripts hold `0xb2` |
 
+The two examples are not proposals for Dogecoin, and only the test build `proposal-test-oracle`
+runs them. Their candidates stay in each list, so that the committed lists of the recorded runs
+do not change.
+
 For every revision, a spend whose coin the script cannot find also makes its block a candidate.
 The theorems `example_block_congr`, `corrected_block_congr` (through `validateBlockWith_congr`) and
 `relativeLockTime_eq_of_untouched` show that a block whose two verdicts differ is a candidate.

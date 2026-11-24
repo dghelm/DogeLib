@@ -43,7 +43,9 @@ The implementation never becomes the specification.
 | `Refinement` | Extracted Rust implementation models and their refinement proofs. Imports the pinned Aeneas backend and Mathlib. | Off |
 | `check-decls` | An executable that checks the axioms and substitutions of every compiled declaration | — |
 | `dogelib-proposal-oracle` | The proposal executable: every operation of `dogelib-oracle`, and `block.validate` with the argument `revision`. Its entry point is `scripts/ProposalOracle.lean`, and its other definitions are in `ProposalExports`. | — |
-| `proposal-replay` | A test executable that answers `script.verify_legacy` requests with a proposed revision, for the campaign's planted-fault search. It imports `Exports` and `Proposals`, and no library imports it. | — |
+| `ProposalExamples` | Test-only. The two examples of the proposal framework, `ExampleFaultyLocktime` and `ExampleVersionVerify`, with their theorems and the revisions of `proposal-test-oracle`, rooted at `ProposalExamples` under `tests/` | Off |
+| `proposal-test-oracle` | The test build of the proposal executable: the code of `dogelib-proposal-oracle`, whose argument `revision` also names the two examples. Its entry point is `tests/ProposalTestOracle.lean`. | — |
+| `proposal-replay` | A test executable that answers `script.verify_legacy` requests with the example `ExampleFaultyLocktime`, for the campaign's planted-fault search. It imports `Exports`, `Proposals` and `ProposalExamples`, and no library imports it. | — |
 
 Each library uses the Lean module system (`requiresModuleSystem := true`), as EthLib does.
 Proofs live in their own library, so the specification builds and links without them.
@@ -71,6 +73,8 @@ tests/KnownAnswers.lean              the driver that `lake test` runs
 tests/KnownAnswers/                  known answers by topic and shared fixture readers
 tests/KnownAnswers/Proposals/        known answers of the proposed-revisions library
 tests/ProposalReplay.lean            the test executable proposal-replay
+tests/ProposalExamples/              the test-only examples of the proposal framework
+tests/ProposalTestOracle.lean        the test executable proposal-test-oracle
 harness/core/                        the Dogecoin Core harness: Core's code on the oracle's requests
 scripts/                             repository tools and checks
 DogeLib/Proposals/Framework/        the framework for proposed revisions
@@ -137,10 +141,13 @@ Proposed revisions live in three libraries of the root package, `Proposals`, `Pr
 `ProposalExports` may import `Proposals`, `Exports` and `DogeLib` ([design record 0011](docs/design/0011-mainnet-ranges.md), decision 10).
 No module of `DogeLib`, `Proofs` or `Exports` imports one of the three.
 So a consumer of the specification gets no proposal code, and no proposal can change a baseline result.
+
+The three libraries hold only proposed revisions.
+The examples of the framework are in the test-only library `ProposalExamples`, which no baseline or proposal library imports.
 Two checks enforce this direction:
 
-- `scripts/CheckRefinementImports.lean` rejects `DogeLib.Proposals` in the transitive imports of the baseline libraries. `scripts/test_import_boundaries.sh` plants such an import, of `DogeLib.Proposals` and of `DogeLib.Proposals.Exports`, and requires the failure. It also plants an import of a proof module in a specification module.
-- `lake exe check-decls` loads `DogeLib.Proposals`, `DogeLib.Proposals.Proofs` and `DogeLib.Proposals.Exports` among its default roots. It checks every proposal declaration, and it reports a proposal file that the roots do not reach.
+- `scripts/CheckRefinementImports.lean` rejects `DogeLib.Proposals` in the transitive imports of the baseline libraries, and `ProposalExamples` in those of the baseline and proposal libraries. `scripts/test_import_boundaries.sh` plants such an import, of `DogeLib.Proposals` and of `DogeLib.Proposals.Exports` in a baseline module, and of `ProposalExamples` in a proposal module, and requires the failure. It also plants an import of a proof module in a specification module.
+- `lake exe check-decls` loads `DogeLib.Proposals`, `DogeLib.Proposals.Proofs` and `DogeLib.Proposals.Exports` among its default roots. It checks every proposal declaration, and it reports a proposal file that the roots do not reach. The test declaration check runs the same check on `ProposalExamples`.
 
 `DogeLib.Proposals.Framework` holds four parts:
 
@@ -156,13 +163,16 @@ A proposal never gets a row in the baseline tables of [COVERAGE.md](COVERAGE.md)
 The proposal executable `dogelib-proposal-oracle` answers `block.validate` with the argument `revision` ([docs/oracle.md](docs/oracle.md#the-proposal-executable)).
 It uses the code of `Exports` for the baseline: `Block.Exports.blockValidateWith` takes an optional hook, which adds one field to each block record and changes nothing else.
 `Exports` defines no hook and names no proposal, and `ProposalExports` supplies the hook of each named revision.
+`dogelib-proposal-oracle` names only proposed revisions.
+The test build `proposal-test-oracle` runs the same code with the two examples added to its revisions.
 
-`DogeLib.Proposals.ExampleVersionVerify` is the worked example of design record 0007, section 10.
-It is not a proposal for Dogecoin. Decision 9 keeps it in the library as a permanent test of the framework.
+`ProposalExamples.ExampleVersionVerify` is the worked example of design record 0007, section 10.
+It is not a proposal for Dogecoin. Decision 9 keeps it as a permanent test of the framework, in the test-only library.
 
-`DogeLib.Proposals.ExampleFaultyLocktime` is an invented rule with a deliberate fault, and its corrected variant.
+`ProposalExamples.ExampleFaultyLocktime` is an invented rule with a deliberate fault, and its corrected variant.
 It is not a proposal for Dogecoin.
 It is a teaching example for [docs/in-practice.md](docs/in-practice.md), and a test that the framework refutes a false soft-fork claim.
+The campaign's planted-fault search must find its fault.
 
 `DogeLib.Proposals.RelativeLockTime` is the proposed revision of [design record 0012](docs/design/0012-relative-lock-time.md): the rules of BIP 68, BIP 112 and BIP 113.
 Its transaction test, the sequence locks of BIP 68, is in `DogeLib/Proposals/RelativeLockTime/SequenceLocks.lean`.

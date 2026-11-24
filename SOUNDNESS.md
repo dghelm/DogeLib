@@ -68,7 +68,7 @@ Per-area files under `docs/soundness/` state what each proof establishes, under 
 | Block headers and AuxPoW | [docs/soundness/headers.md](docs/soundness/headers.md) | Pure and full headers, Merkle roots, AuxPoW check, header PoW, version gating, contextual headers, and header sequences |
 | Block validation and coin sets | [docs/soundness/blocks.md](docs/soundness/blocks.md) | Block subsidy, `CheckTransaction`, `CheckBlock`, version bits, contextual body, `ConnectBlock`, issuance bounds, and coin-set restriction |
 | Script execution | [docs/soundness/script.md](docs/soundness/script.md) | Instruction reading, execution state, signature code, script numbers, `EvalScript`, encodings, opcodes, `VerifyScript`, and worked properties |
-| Proposed revisions | [docs/soundness/proposals.md](docs/soundness/proposals.md) | Script and block frameworks, `ExampleVersionVerify`, `ExampleFaultyLocktime`, and `RelativeLockTime` |
+| Proposed revisions | [docs/soundness/proposals.md](docs/soundness/proposals.md) | Script and block frameworks, `RelativeLockTime`, and the test-only examples `ExampleVersionVerify` and `ExampleFaultyLocktime` |
 | Oracle and Core harness (B4) | [docs/soundness/oracle-and-harness.md](docs/soundness/oracle-and-harness.md) | Per-operation trust boundaries for `dogelib-oracle`, `dogelib-proposal-oracle`, `core-oracle`, `core-signer`, and snapshots |
 
 ### What cannot be proved yet

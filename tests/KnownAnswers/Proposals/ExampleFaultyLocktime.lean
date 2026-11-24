@@ -1,4 +1,4 @@
-import DogeLib.Proposals
+import ProposalExamples
 import KnownAnswers.Script
 
 /-!
@@ -35,7 +35,7 @@ The 4 spend cases run `revisedVerifyLegacySpend` for both variants and the basel
 
 namespace KnownAnswers.Proposals.ExampleFaultyLocktime
 
-open DogeLib.Script DogeLib.Proposals.Framework DogeLib.Proposals.ExampleFaultyLocktime
+open DogeLib.Script DogeLib.Proposals.Framework ProposalExamples.ExampleFaultyLocktime
 open KnownAnswers.ScriptVerify (mkTx p2shOf)
 
 /-- `transactionChecker` for input 0 of `mkTx 1 lockTime sequence`, with a verifier that is always unavailable. -/

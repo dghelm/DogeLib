@@ -4,6 +4,7 @@
     "kernel-replay",
     "refinement",
     "declaration-check",
+    "test-declaration-check",
     "declaration-check-self-test",
     "kernel-replay-self-test",
     "import-boundaries",

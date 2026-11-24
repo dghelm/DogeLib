@@ -3,9 +3,10 @@
 This file states what the proposal-framework, block-level, example, and `RelativeLockTime` proofs establish, under which hypotheses, and what remains unproved.
 See [SOUNDNESS.md](../../SOUNDNESS.md) for the trust model and Gaps A to D, and [COVERAGE.md](../../COVERAGE.md#proposed-revisions) for proposal coverage.
 
-- **Scope**: Script and block proposal frameworks, `ExampleVersionVerify`, `ExampleFaultyLocktime`, and the public proposal `RelativeLockTime` (BIP 68, BIP 112, and BIP 113).
-- **Specification modules**: `DogeLib.Proposals.Framework.*`, `ExampleVersionVerify`, `ExampleFaultyLocktime`, and `RelativeLockTime`.
-- **Proof modules**: `DogeLib.Proposals.Framework.Proofs`, `ExampleVersionVerify.Proofs`, `ExampleFaultyLocktime.Proofs`, and `RelativeLockTime.Proofs` (under `DogeLib.Proposals.Proofs`).
+- **Scope**: Script and block proposal frameworks, the public proposal `RelativeLockTime` (BIP 68, BIP 112, and BIP 113), and the test-only examples `ExampleVersionVerify` and `ExampleFaultyLocktime`.
+- **Specification modules**: `DogeLib.Proposals.Framework.*` and `DogeLib.Proposals.RelativeLockTime`. The examples are `ProposalExamples.ExampleVersionVerify` and `ProposalExamples.ExampleFaultyLocktime`, in the test-only `ProposalExamples` library under `tests/`.
+- **Proof modules**: `DogeLib.Proposals.Framework.Proofs` and `DogeLib.Proposals.RelativeLockTime.Proofs` (under `DogeLib.Proposals.Proofs`), and `ProposalExamples.ExampleVersionVerify.Proofs` and `ProposalExamples.ExampleFaultyLocktime.Proofs` (under `ProposalExamples.Proofs`).
+- **Checks of the examples**: The production declaration check and the kernel replay do not load `ProposalExamples`. The test declaration check (`lake exe check-decls --scope ProposalExamples ...`, [AGENTS.md](../../AGENTS.md#checks)) checks the axioms of every declaration of the examples. No kernel replay covers them.
 - **Key boundaries**: The proposal theorems are claims about Script, one block, or the connection of a list of blocks (`connectChainWith_restricts`), all on supplied state.
   None is a network-level soft-fork, fork-choice, or liveness proof.
   DogeLib takes no position on the activation of any proposal, and no proposal has a default activation height.
@@ -167,9 +168,10 @@ By `#print axioms` with Lean `v4.35.0`, each theorem named in this subsection de
 
 ## Proposed revisions: the worked example
 
-`DogeLib.Proposals.ExampleVersionVerify` is the worked example of [design record 0007](../design/0007-proposed-revisions.md), section 10.
+`ProposalExamples.ExampleVersionVerify` is the worked example of [design record 0007](../design/0007-proposed-revisions.md), section 10.
 It is not a proposal for Dogecoin, and no network activates it.
-Decision 9 keeps it in the `Proposals` library as a permanent test of the framework.
+Decision 9 keeps it as a permanent test of the framework, in the test-only `ProposalExamples` library.
+Only the test build `proposal-test-oracle` of the proposal executable names it.
 
 The example redefines `OP_NOP10` (`0xb9`).
 With `active` true and the opcode in an executing branch, `exampleStep` runs the baseline `evalInstruction` and then `versionCheck` on its successful state.
@@ -212,8 +214,9 @@ By `#print axioms` with Lean `v4.35.0`:
 
 ## Proposed revisions: the deliberately faulty example
 
-`DogeLib.Proposals.ExampleFaultyLocktime` is an invented rule with a deliberate fault, and its corrected variant.
+`ProposalExamples.ExampleFaultyLocktime` is an invented rule with a deliberate fault, and its corrected variant.
 It is not a proposal for Dogecoin, and no network activates it.
+It is in the test-only `ProposalExamples` library, and only the test build `proposal-test-oracle` of the proposal executable names it.
 It is the worked example of [docs/in-practice.md](../in-practice.md), and a test that the framework refutes a false soft-fork claim.
 
 The rule redefines `OP_NOP4` (`0xb3`), a NOP at the pin (D3, lines 429 to 435).

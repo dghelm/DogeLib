@@ -1,11 +1,17 @@
 """Test of `dogelib-proposal-oracle`, the proposal executable of design record 0011, section 10.2.
 
 Usage: python3 -I scripts/test_proposal_oracle.py [--mainnet-blocks DIR] [--snapshot-request FILE] [--timeout SECONDS]
-           <dogelib-oracle> <dogelib-proposal-oracle>
+           <dogelib-oracle> <dogelib-proposal-oracle> <proposal-test-oracle>
+
+`proposal-test-oracle` is the test build of the proposal executable. Its argument `revision` also
+names the two examples of the test-only `ProposalExamples` library, `ExampleFaultyLocktime` and
+`ExampleVersionVerify`. Neither is a proposal for Dogecoin, and `dogelib-proposal-oracle` names
+only `RelativeLockTime`. Checks 4 to 7 run the examples through the test build, and check 8 ties
+the test build to the shipped executable.
 
 It needs no Dogecoin Core. The checks:
 
-1. Baseline. Without the argument `revision`, the proposal executable writes the bytes that
+1. Baseline. Without the argument `revision`, each proposal executable writes the bytes that
    `dogelib-oracle` writes, on every `block.validate` request of the full comparison
    (`block_validate_sets` of scripts/oracle_block_validate.py), and on the same requests with
    `blocks_file` (stage 6, exit condition 2), and on the requests with one record for each block
@@ -40,6 +46,9 @@ It needs no Dogecoin Core. The checks:
    The examples change no lock-time argument, so the same holds for them with activation height 0.
    scripts/compare_csv_forced.py checks the `revised` objects of `RelativeLockTime` against Core's
    own code, which this script does not run.
+8. The shipped executable. `dogelib-proposal-oracle` refuses each example with a request error,
+   and writes the bytes of the test build on every request of checks 4 to 7 that names
+   `RelativeLockTime`.
 
 The script signs nothing and uses no private key.
 """
@@ -63,6 +72,8 @@ FULL_COMPARISON_REQUESTS = 42
 
 REVISIONS = [("ExampleFaultyLocktime", "corrected"), ("ExampleFaultyLocktime", "faulty"),
              ("ExampleVersionVerify", None), ("RelativeLockTime", None)]
+# The revisions that `dogelib-proposal-oracle` names. The others are the examples of the test build.
+SHIPPED = [("RelativeLockTime", None)]
 # The revisions with a restriction theorem (`corrected_block_restricts`, `example_block_restricts` and
 # `relativeLockTime_restricts`).
 SOFT_FORKS = [("ExampleFaultyLocktime", "corrected"), ("ExampleVersionVerify", None), ("RelativeLockTime", None)]
@@ -213,28 +224,41 @@ def main() -> int:
     parser.add_argument("--timeout", type=float, default=3600.0)
     parser.add_argument("oracle")
     parser.add_argument("proposal_oracle")
+    parser.add_argument("test_oracle", help="proposal-test-oracle, the test build that also names the examples")
     args = parser.parse_args()
-    oracle, proposal, timeout = args.oracle, args.proposal_oracle, args.timeout
+    oracle, shipped, proposal, timeout = args.oracle, args.proposal_oracle, args.test_oracle, args.timeout
 
-    version = json.loads(subprocess.run([proposal, "--version"], capture_output=True, check=True).stdout)
     baseline_version = json.loads(subprocess.run([oracle, "--version"], capture_output=True, check=True).stdout)
-    check(version == {**baseline_version, "program": "dogelib-proposal-oracle"},
-          f"--version: {version} is not the oracle's format with the program name")
+    for program, name in ((shipped, "dogelib-proposal-oracle"), (proposal, "proposal-test-oracle")):
+        version = json.loads(subprocess.run([program, "--version"], capture_output=True, check=True).stdout)
+        check(version == {**baseline_version, "program": name},
+              f"--version: {version} is not the oracle's format with the program name {name}")
+    # Requests that name a shipped revision, for check 8: the shipped executable must write the
+    # bytes of the test build on each.
+    shipped_requests = []
+
+    def revised_responses(requests: list[dict], rev: tuple) -> list[dict]:
+        """The responses of the test build, and the requests kept for check 8 when `rev` is shipped."""
+        if rev in SHIPPED:
+            shipped_requests.extend(requests)
+        return responses(proposal, requests, timeout)
 
     # 1. Baseline: byte equality on the requests of the full comparison.
     requests = numbered([r for _, group in block_validate_sets() for r in group], "validate")
     check(len(requests) == FULL_COMPARISON_REQUESTS,
           f"{len(requests)} block.validate requests, expected {FULL_COMPARISON_REQUESTS}")
     ours = run(oracle, requests, timeout)
-    theirs = run(proposal, requests, timeout)
-    if check(ours == theirs, "the two programs differ on a block.validate request of the full comparison"):
-        print(f"ok:   {len(requests)} block.validate requests of the full comparison: the same bytes")
+    for program in (shipped, proposal):
+        if check(run(program, requests, timeout) == ours,
+                 f"{program} differs from the oracle on a block.validate request of the full comparison"):
+            print(f"ok:   {len(requests)} block.validate requests of the full comparison: {program} writes the same bytes")
     baseline = [json.loads(line) for line in ours.splitlines()]
     with tempfile.TemporaryDirectory() as directory:
         twins = numbered([req for req, _ in file_twins(requests, baseline, directory)], "file")
-        if check(run(oracle, twins, timeout) == run(proposal, twins, timeout),
-                 "the two programs differ on a blocks_file request"):
-            print(f"ok:   {len(twins)} blocks_file requests: the same bytes")
+        twins_bytes = run(oracle, twins, timeout)
+        for program in (shipped, proposal):
+            if check(run(program, twins, timeout) == twins_bytes, f"{program} differs from the oracle on a blocks_file request"):
+                print(f"ok:   {len(twins)} blocks_file requests: {program} writes the same bytes")
         # The hook also runs on the file path: one made request with a revision, in both forms.
         name, req, rev, expected, _ = made_blocks()[0]
         hex_request = {**req, "id": "made-file", "revision": revision(*rev, 0)}
@@ -246,9 +270,11 @@ def main() -> int:
             print("ok:   a request with a revision has one response for blocks_file and blocks_hex")
         # The snapshot path: the requests with their coins in a `coins_file` (design record 0011, section 3.3).
         snapshots = numbered([req for req, _ in snapshot_twins(requests, baseline, directory)], "snapshot")
-        if check(snapshots and run(oracle, snapshots, timeout) == run(proposal, snapshots, timeout),
-                 "the two programs differ on a coins_file request"):
-            print(f"ok:   {len(snapshots)} coins_file requests: the same bytes")
+        snapshot_bytes = run(oracle, snapshots, timeout) if snapshots else b""
+        for program in (shipped, proposal):
+            if check(snapshots and run(program, snapshots, timeout) == snapshot_bytes,
+                     f"{program} differs from the oracle on a coins_file request"):
+                print(f"ok:   {len(snapshots)} coins_file requests: {program} writes the same bytes")
         twin = snapshot_twins([req], [without_revised(hex_response)], directory)[0][0]
         snap_response = responses(proposal, [{**twin, "id": "made-file", "revision": revision(*rev, 0)}], timeout)[0]
         if check([b.get("revised") for b in block_records(snap_response)] ==
@@ -259,12 +285,12 @@ def main() -> int:
         # A range request with `coins_file`, such as the short range of scripts/impact_run.py.
         ranged = json.loads(pathlib.Path(args.snapshot_request).read_text())
         ranged = {**{k: v for k, v in ranged.items() if k != "expected_end"}, "id": "snapshot-range"}
-        if check("coins_file" in ranged and run(oracle, [ranged], timeout) == run(proposal, [ranged], timeout),
+        if check("coins_file" in ranged and run(oracle, [ranged], timeout) == run(shipped, [ranged], timeout),
                  f"the two programs differ on the coins_file request {args.snapshot_request}"):
             print(f"ok:   the coins_file range request {args.snapshot_request}: the same bytes")
     if args.mainnet_blocks:
         replay = numbered([r for _, group in mainnet_validate_sets(args.mainnet_blocks) for r in group], "mainnet")
-        if check(run(oracle, replay, timeout) == run(proposal, replay, timeout),
+        if check(run(oracle, replay, timeout) == run(shipped, replay, timeout),
                  "the two programs differ on the mainnet replay"):
             print(f"ok:   {len(replay)} mainnet replay request(s): the same bytes")
 
@@ -290,12 +316,16 @@ def main() -> int:
     bad = [m for m, a in zip(malformed, answers) if a.get("error", {}).get("kind") != "request"]
     if check(not bad, f"no request error for the revision arguments {bad}"):
         print(f"ok:   {len(malformed)} malformed revision arguments give request errors")
+    answers = responses(shipped, [{**sample, "id": f"malformed-{i}", "revision": m} for i, m in enumerate(malformed)], timeout)
+    bad = [m for m, a in zip(malformed, answers) if a.get("error", {}).get("kind") != "request"]
+    if check(not bad, f"dogelib-proposal-oracle: no request error for the revision arguments {bad}"):
+        print(f"ok:   dogelib-proposal-oracle: {len(malformed)} malformed revision arguments give request errors")
 
     # 4 and 5. Each revision on the requests of the comparison, without an activation height and from height 0.
     for name, variant in REVISIONS:
         for height in (None, 0):
             where = f"{label(name, variant)}, activation_height {json.dumps(height)}"
-            revised = responses(proposal, [{**r, "revision": revision(name, variant, height)} for r in requests], timeout)
+            revised = revised_responses([{**r, "revision": revision(name, variant, height)} for r in requests], (name, variant))
             same_state = all(without_revised(a) == b for a, b in zip(revised, baseline))
             check(same_state, f"{where}: a response differs from the baseline apart from the revised objects")
             records = [(new, old) for a, b in zip(revised, baseline)
@@ -344,7 +374,7 @@ def main() -> int:
     # 6. Made blocks.
     for name, req, rev, expected, baseline_valid in made_blocks():
         for height, inactive in ((0, False), (None, True)):
-            answer = responses(proposal, [{**req, "id": name, "revision": revision(*rev, height)}], timeout)[0]
+            answer = revised_responses([{**req, "id": name, "revision": revision(*rev, height)}], rev)[0]
             records = block_records(answer)
             if not check(len(records) == 1 and isinstance(records[0].get("revised"), dict),
                          f"made block {name}: no block record with a revised object: {json.dumps(answer)[:300]}"):
@@ -374,9 +404,10 @@ def main() -> int:
     # 7. `block.contextual_check_body`.
     body = numbered([dict(r) for _, rs in contextual_body_sets() for r in rs], "body")
     body_baseline = run(oracle, body, timeout)
-    if check(run(proposal, body, timeout) == body_baseline,
-             f"block.contextual_check_body: the proposal executable differs from dogelib-oracle on {len(body)} requests"):
-        print(f"ok:   {len(body)} block.contextual_check_body requests: the same bytes")
+    for program in (shipped, proposal):
+        if check(run(program, body, timeout) == body_baseline,
+                 f"block.contextual_check_body: {program} differs from dogelib-oracle on {len(body)} requests"):
+            print(f"ok:   {len(body)} block.contextual_check_body requests: {program} writes the same bytes")
     plain = [json.loads(line) for line in body_baseline.splitlines()]
     refused = responses(oracle, [{**body[0], "revision": revision("RelativeLockTime", None, None)}], timeout)[0]
     check(refused.get("error", {}).get("kind") == "request",
@@ -385,7 +416,7 @@ def main() -> int:
         heights = (None,) if name == "RelativeLockTime" else (None, 0)
         for height in heights:
             where = f"block.contextual_check_body, {label(name, variant)}, activation_height {json.dumps(height)}"
-            answers = responses(proposal, [{**r, "revision": revision(name, variant, height)} for r in body], timeout)
+            answers = revised_responses([{**r, "revision": revision(name, variant, height)} for r in body], (name, variant))
             good = True
             for old, new in zip(plain, answers):
                 if "ok" not in old:
@@ -401,6 +432,19 @@ def main() -> int:
                 good = check(same, f"{where}: {json.dumps(new)[:400]}") and good
             if good:
                 print(f"ok:   {where}: {len(answers)} responses, each revised object agrees with the baseline")
+
+    # 8. The shipped executable: no example, and the bytes of the test build on the shipped revisions.
+    examples = [rev for rev in REVISIONS if rev not in SHIPPED]
+    refusals = responses(shipped, [{**sample, "id": f"example-{i}", "revision": revision(*rev, 0)}
+                                   for i, rev in enumerate(examples)], timeout)
+    named = [rev for rev, a in zip(examples, refusals)
+             if a.get("error", {}).get("kind") != "request" or "unknown revision" not in a["error"].get("message", "")]
+    if check(not named, f"dogelib-proposal-oracle names the examples {named}"):
+        print(f"ok:   dogelib-proposal-oracle refuses each of the {len(examples)} examples as an unknown revision")
+    tagged = numbered(shipped_requests, "shipped")
+    if check(tagged and run(shipped, tagged, timeout) == run(proposal, tagged, timeout),
+             f"dogelib-proposal-oracle and proposal-test-oracle differ on a request that names a shipped revision"):
+        print(f"ok:   {len(tagged)} requests that name a shipped revision: the two proposal executables write the same bytes")
 
     if failures:
         print(f"{len(failures)} failure(s)")

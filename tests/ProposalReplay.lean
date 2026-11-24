@@ -2,6 +2,7 @@ module
 
 public import DogeLib.Exports.Oracle
 public import DogeLib.Proposals
+public import ProposalExamples
 
 /-!
 Replay the invented lock-time proposal on oracle-shaped requests.
@@ -11,7 +12,7 @@ This test executable belongs to neither the baseline libraries nor `Exports`.
 public section
 
 open DogeLib.Exports DogeLib.Script
-open DogeLib.Proposals.ExampleFaultyLocktime DogeLib.Proposals.Framework
+open ProposalExamples.ExampleFaultyLocktime DogeLib.Proposals.Framework
 
 /-- Encode the proposal outcome with the baseline oracle's Script response fields. -/
 def baselineResult : VerifyOutcome ScriptError Unsupported → VerifyResult

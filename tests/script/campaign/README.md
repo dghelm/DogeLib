@@ -48,7 +48,7 @@ The `id` of each request is new. Every other field is the exact request of the s
 | Item | Value |
 | --- | --- |
 | Property | `RestrictsAcceptance` of design record 0007: if the revised spend predicate accepts, the baseline accepts ([design record 0009, section 8.1](../../../docs/design/0009-bug-finding-campaign.md#81-the-planted-proposal-fault)) |
-| Failing side | `revised`: the faulty rule of `DogeLib.Proposals.ExampleFaultyLocktime`, a deliberate fault, not a proposal for Dogecoin |
+| Failing side | `revised`: the faulty rule of `ProposalExamples.ExampleFaultyLocktime`, a deliberate fault, not a proposal for Dogecoin |
 | Plan | Script `51 00 b3` (`OP_1 OP_0 OP_NOP4`). Version 1, one input with a null outpoint, an empty `scriptSig` and sequence `0xfffffffe`, no outputs, lock time 2, flags 0 |
 | Search | `campaign.py run --campaign proposal --variant faulty --seed 0 --cases 5840`. The search enumerates without a seed. The 5,840 cases are all scripts of one to three instructions. Case 1,394 is this fixture, and its saved request had the `id` `proposal-1394`. The search found 16 violations, all of three instructions |
 | Reduction | None. The fixture is the search output. `campaign.py reduce` on it gives the label `minimal` after 16 candidates, with two step 3 changes: lock time 0 and sequence 0. The fixture keeps lock time 2 and sequence `0xfffffffe`, the case of section 8.1 and of the theorem target `faulty_counterexample_short` |

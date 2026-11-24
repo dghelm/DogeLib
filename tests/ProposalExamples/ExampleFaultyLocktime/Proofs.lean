@@ -1,11 +1,11 @@
 module
 
-public import DogeLib.Proposals.ExampleFaultyLocktime.Proofs.Block
-public import DogeLib.Proposals.ExampleFaultyLocktime.Proofs.Compatibility
-public import DogeLib.Proposals.ExampleFaultyLocktime.Proofs.Witnesses
+public import ProposalExamples.ExampleFaultyLocktime.Proofs.Block
+public import ProposalExamples.ExampleFaultyLocktime.Proofs.Compatibility
+public import ProposalExamples.ExampleFaultyLocktime.Proofs.Witnesses
 
 /-!
-# `DogeLib.Proposals.ExampleFaultyLocktime.Proofs`
+# `ProposalExamples.ExampleFaultyLocktime.Proofs`
 
 The theorems of the example `ExampleFaultyLocktime`, an invented, deliberately faulty proposal that is not a proposal for Dogecoin.
 Each theorem is Script-local, except the block-level theorems of `Proofs.Block`.

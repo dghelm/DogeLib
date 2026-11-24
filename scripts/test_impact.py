@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Self-test of scripts/impact_candidates.py and scripts/impact_run.py.
 
-Usage: python3 -I scripts/test_impact.py <dogelib-proposal-oracle>
+Usage: python3 -I scripts/test_impact.py <proposal-test-oracle>
+
+`proposal-test-oracle` is the test build of the proposal executable, which also names the two
+examples of the framework. Check 4 runs both examples and `RelativeLockTime` through it.
 
 It needs no Dogecoin Core and no download. The checks:
 

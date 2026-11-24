@@ -1,11 +1,11 @@
 module
 
-public import DogeLib.Proposals.ExampleVersionVerify.Proofs.Compatibility
+public import ProposalExamples.ExampleVersionVerify.Proofs.Compatibility
 
 /-!
-# Proofs: `Proposals.ExampleVersionVerify`, characterization
+# Proofs: `ProposalExamples.ExampleVersionVerify`, characterization
 
-The example is not a proposal for Dogecoin (`DogeLib.Proposals.ExampleVersionVerify`).
+The example is not a proposal for Dogecoin (`ProposalExamples.ExampleVersionVerify`).
 
 ## Domain
 
@@ -33,9 +33,9 @@ Every theorem is Script-local.
 
 @[expose] public section
 
-namespace DogeLib.Proposals.ExampleVersionVerify
+namespace ProposalExamples.ExampleVersionVerify
 
-open DogeLib.Script DogeLib.Transaction DogeLib.Proposals.Framework
+open DogeLib DogeLib.Proposals DogeLib.Script DogeLib.Transaction DogeLib.Proposals.Framework
 
 /-! ## Reading the script -/
 
@@ -224,4 +224,4 @@ theorem example_spend_accepted_iff (ctx : InputContext) (prevScriptPubKey : Tran
   rw [hprev]
   exact example_accepted_iff (.ofInput ctx) _ flags hb₅ hsig hS
 
-end DogeLib.Proposals.ExampleVersionVerify
+end ProposalExamples.ExampleVersionVerify

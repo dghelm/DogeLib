@@ -1,0 +1,188 @@
+# The programs that wrote the generated fixtures of the repository, with the inputs of each run.
+#
+# Each table names one generated file. `program` wrote the file, and `agreed` gave the same
+# values in the same run. `command` is the command of the run, without the argument `--recorded`
+# of a local file, and the file is the results file of `program` in that run. The SHA-256 values
+# name the inputs and the output. tests/conformance/SHA256SUMS pins each file.
+#
+# scripts/conformance.py record writes this file from the runs of scripts/conformance.py compare.
+
+[generators."tests/conformance/ranges/short/expected.jsonl"]
+format = "dogelib-range-results/1"
+program = "build/core-harness/core-oracle: the Core harness of scripts/build_core_harness.sh, without --trap-overflow"
+core_repository = "dogecoin/dogecoin"
+core_commit = "e0a1c157791544e818c901bd9341896965afbf9d"
+dogelib_commit = "7444635dec366de5f87d39d92ddf0125df6f4e7c"
+compiler = "g++ (GCC) 16.2.1 20260810"
+agreed = ".lake/build/bin/dogelib-oracle, built from the same DogeLib commit"
+command = "python3 -I scripts/conformance.py compare --range short --dir build/conformance-work/short .lake/build/bin/dogelib-oracle build/core-harness/core-oracle"
+date = "2026-11-24"
+request_sha256 = "159cf6bc689012fe4bf428eb99de9352352230c74d339283c76a6c2c26b5aa63"
+blocks_sha256 = "ad5553cf0b0b4c68553124497cddaa4310359025c69204116c84a8c664da4c5b"
+results_sha256 = "ef0c243e67f70c698bded864cbcc76636f09d41803a67f6d42cd446f551c317c"
+blocks = 1000
+spent = 47185
+created = 76506
+core_seconds = 2
+oracle_seconds = 89
+recorded_run = "the block records of Core's replay from the genesis block to height 10,000 (scripts/impact_run.py request --harness), SHA-256 c977fc5ab8c293a2ab63ef72af0af08178b6fecfab1f3f3e85d0f0c1e7fdf5e4 without the fields of the whole set"
+
+[generators."tests/conformance/ranges/A/expected.jsonl"]
+format = "dogelib-range-results/1"
+program = "build/core-harness/core-oracle: the Core harness of scripts/build_core_harness.sh, without --trap-overflow"
+core_repository = "dogecoin/dogecoin"
+core_commit = "e0a1c157791544e818c901bd9341896965afbf9d"
+dogelib_commit = "7444635dec366de5f87d39d92ddf0125df6f4e7c"
+compiler = "g++ (GCC) 16.2.1 20260810"
+agreed = ".lake/build/bin/dogelib-oracle, built from the same DogeLib commit"
+command = "python3 -I scripts/conformance.py compare --range A --dir build/conformance-work/A .lake/build/bin/dogelib-oracle build/core-harness/core-oracle"
+date = "2026-11-24"
+request_sha256 = "ec2a6e4b4f998b6da30bf9356035ce26c59425f126b18e3e329ce49b5dec9ac1"
+blocks_sha256 = "c022bf754ddeb09663473add359918132d26b9fc0e742cb379cb50ac6635e82b"
+results_sha256 = "42b4cfc9d2142d03705b79fe5fed8b11dda13026c1f7d27551b96d1979e585d9"
+blocks = 10000
+spent = 472618
+created = 756959
+core_seconds = 41
+oracle_seconds = 1274
+recorded_run = "the block records of the recorded run from the whole snapshot, SHA-256 92a9468e7458dac2e04e22520d78230c2aa97e758ae28ce0e011b3b9ed3c31fc without the fields of the whole set"
+
+[generators."tests/conformance/ranges/B/expected.jsonl"]
+format = "dogelib-range-results/1"
+program = "build/core-harness/core-oracle: the Core harness of scripts/build_core_harness.sh, without --trap-overflow"
+core_repository = "dogecoin/dogecoin"
+core_commit = "e0a1c157791544e818c901bd9341896965afbf9d"
+dogelib_commit = "7444635dec366de5f87d39d92ddf0125df6f4e7c"
+compiler = "g++ (GCC) 16.2.1 20260810"
+agreed = ".lake/build/bin/dogelib-oracle, built from the same DogeLib commit"
+command = "python3 -I scripts/conformance.py compare --range B --dir build/conformance-work/B .lake/build/bin/dogelib-oracle build/core-harness/core-oracle"
+date = "2026-11-24"
+request_sha256 = "786704cf7e2402db3240cebc3cea4a74072dfecd89e1e9f93a305e2ad82b004a"
+blocks_sha256 = "83140d38ea1010f69412306b5be617017a1c314a27d18ee9e5fb9aae487f4db1"
+results_sha256 = "fcb1abbefc49ae93415f1b746d5007637c1acd6ad061d313a7cb08790a327438"
+blocks = 2000
+spent = 90664
+created = 137185
+core_seconds = 10
+oracle_seconds = 227
+recorded_run = "the block records of the recorded run from the whole snapshot, SHA-256 21944694ff8dd21414d416836e3946b10939eecf23e397579532ef07ac59c794 without the fields of the whole set"
+
+[generators."tests/conformance/ranges/C/expected.jsonl"]
+format = "dogelib-range-results/1"
+program = "build/core-harness/core-oracle: the Core harness of scripts/build_core_harness.sh, without --trap-overflow"
+core_repository = "dogecoin/dogecoin"
+core_commit = "e0a1c157791544e818c901bd9341896965afbf9d"
+dogelib_commit = "7444635dec366de5f87d39d92ddf0125df6f4e7c"
+compiler = "g++ (GCC) 16.2.1 20260810"
+agreed = ".lake/build/bin/dogelib-oracle, built from the same DogeLib commit"
+command = "python3 -I scripts/conformance.py compare --range C --dir build/conformance-work/C .lake/build/bin/dogelib-oracle build/core-harness/core-oracle"
+date = "2026-11-24"
+request_sha256 = "1fbe8b25fb9fccfa5e1db36ed8ac5250934ddf7cdd80990781210b8d7f471a62"
+blocks_sha256 = "8594c4f65d706672e36c76db917cc0fb230fecdb7bf7a5d35cc6bd0acbdc08b9"
+results_sha256 = "46993a925893426f3d8a894a8c6bc6417f10ddb04c8896be2aa2f539eb1265d9"
+blocks = 2000
+spent = 173936
+created = 189816
+core_seconds = 14
+oracle_seconds = 483
+recorded_run = "the block records of the recorded run from the whole snapshot, SHA-256 0ee6e82d1495a2bdd40ece58d6eef3327a3854c68ceae6fa507ac194fab44d5f without the fields of the whole set"
+
+[generators."tests/conformance/ranges/D/expected.jsonl"]
+format = "dogelib-range-results/1"
+program = "build/core-harness/core-oracle: the Core harness of scripts/build_core_harness.sh, without --trap-overflow"
+core_repository = "dogecoin/dogecoin"
+core_commit = "e0a1c157791544e818c901bd9341896965afbf9d"
+dogelib_commit = "7444635dec366de5f87d39d92ddf0125df6f4e7c"
+compiler = "g++ (GCC) 16.2.1 20260810"
+agreed = ".lake/build/bin/dogelib-oracle, built from the same DogeLib commit"
+command = "python3 -I scripts/conformance.py compare --range D --dir build/conformance-work/D .lake/build/bin/dogelib-oracle build/core-harness/core-oracle"
+date = "2026-11-24"
+request_sha256 = "1d607c715f9844984701b349149096d6171c27ae0745e06f6e995124b5d10af8"
+blocks_sha256 = "fe0a039a16f6075981e88f8ac40614f286e58f97e5f5fa245b31b6fa3526e2a1"
+results_sha256 = "559bce90cb43e23b3c6b832dc80a77e6216a78dcbdfd85d1fc5167b74999ee43"
+blocks = 2000
+spent = 61002
+created = 66411
+core_seconds = 7
+oracle_seconds = 173
+recorded_run = "the block records of the recorded run from the whole snapshot, SHA-256 955d75662c49091f30f002282838ddb5f9d9de38c7660bc7de75ddd39bd46b6d without the fields of the whole set"
+
+[generators."tests/conformance/ranges/E1/expected.jsonl"]
+format = "dogelib-range-results/1"
+program = "build/core-harness/core-oracle: the Core harness of scripts/build_core_harness.sh, without --trap-overflow"
+core_repository = "dogecoin/dogecoin"
+core_commit = "e0a1c157791544e818c901bd9341896965afbf9d"
+dogelib_commit = "7444635dec366de5f87d39d92ddf0125df6f4e7c"
+compiler = "g++ (GCC) 16.2.1 20260810"
+agreed = ".lake/build/bin/dogelib-oracle, built from the same DogeLib commit"
+command = "python3 -I scripts/conformance.py compare --range E1 --dir build/conformance-work/E1 .lake/build/bin/dogelib-oracle build/core-harness/core-oracle"
+date = "2026-11-24"
+request_sha256 = "9749bc7727e796cfc8af14c859d78e042d8bb0db709e39f4d6613428684ce88f"
+blocks_sha256 = "f0647f8e1fdb6109e6297c498f8df154b24829295032824662bd34eba6a584a7"
+results_sha256 = "75031500e02695c078ed0b24587448fff94d4bd63d1254ba2fec1900b4233981"
+blocks = 2000
+spent = 57055
+created = 92020
+core_seconds = 6
+oracle_seconds = 159
+recorded_run = "none"
+
+[generators."tests/conformance/ranges/E2/expected.jsonl"]
+format = "dogelib-range-results/1"
+program = "build/core-harness/core-oracle: the Core harness of scripts/build_core_harness.sh, without --trap-overflow"
+core_repository = "dogecoin/dogecoin"
+core_commit = "e0a1c157791544e818c901bd9341896965afbf9d"
+dogelib_commit = "7444635dec366de5f87d39d92ddf0125df6f4e7c"
+compiler = "g++ (GCC) 16.2.1 20260810"
+agreed = ".lake/build/bin/dogelib-oracle, built from the same DogeLib commit"
+command = "python3 -I scripts/conformance.py compare --range E2 --dir build/conformance-work/E2 .lake/build/bin/dogelib-oracle build/core-harness/core-oracle"
+date = "2026-11-24"
+request_sha256 = "1c0b0feb861c78ecd2e323514cb181d25f92450d6acc4c0eed1d3e5187be90d2"
+blocks_sha256 = "95e0f69d1565f412da666ec68b6b4669d9a280849e12225c1964c8e4f9177225"
+results_sha256 = "2cfa27b257a2997d29d27228a8814e7eb5a85aaa63bb13f1a0133b7b7cc54f9e"
+blocks = 2000
+spent = 68452
+created = 58397
+core_seconds = 12
+oracle_seconds = 215
+recorded_run = "none"
+
+[generators."tests/conformance/ranges/F/expected.jsonl"]
+format = "dogelib-range-results/1"
+program = "build/core-harness/core-oracle: the Core harness of scripts/build_core_harness.sh, without --trap-overflow"
+core_repository = "dogecoin/dogecoin"
+core_commit = "e0a1c157791544e818c901bd9341896965afbf9d"
+dogelib_commit = "7444635dec366de5f87d39d92ddf0125df6f4e7c"
+compiler = "g++ (GCC) 16.2.1 20260810"
+agreed = ".lake/build/bin/dogelib-oracle, built from the same DogeLib commit"
+command = "python3 -I scripts/conformance.py compare --range F --dir build/conformance-work/F .lake/build/bin/dogelib-oracle build/core-harness/core-oracle"
+date = "2026-11-24"
+request_sha256 = "dd5257f45b56402e869af8927ef07d4e53a9d15a941735a47db86f15dc86c020"
+blocks_sha256 = "7b2b4b2fa443dbdbcbf4a9fa6f1188a51d30d3c8977b071a92ed282b2b154905"
+results_sha256 = "e442125b3b0e129994d0fab36086da21c1a9c77b88c708d353f3b67884dd8a5b"
+blocks = 2000
+spent = 154273
+created = 189205
+core_seconds = 13
+oracle_seconds = 389
+recorded_run = "the block records of the recorded run from the whole snapshot, SHA-256 0be4b0f84510843c16eecaf0bbeaa365d60894229e5ba61a926f338a9587626c without the fields of the whole set"
+
+[generators."tests/conformance/ranges/H/expected.jsonl"]
+format = "dogelib-range-results/1"
+program = "build/core-harness/core-oracle: the Core harness of scripts/build_core_harness.sh, without --trap-overflow"
+core_repository = "dogecoin/dogecoin"
+core_commit = "e0a1c157791544e818c901bd9341896965afbf9d"
+dogelib_commit = "7444635dec366de5f87d39d92ddf0125df6f4e7c"
+compiler = "g++ (GCC) 16.2.1 20260810"
+agreed = ".lake/build/bin/dogelib-oracle, built from the same DogeLib commit"
+command = "python3 -I scripts/conformance.py compare --range H --dir build/conformance-work/H .lake/build/bin/dogelib-oracle build/core-harness/core-oracle"
+date = "2026-11-24"
+request_sha256 = "bddcd0a463089c2b885d622a923afc0490b3235d9f14a8c5737895bd205cf778"
+blocks_sha256 = "6e2d5d9e79a327d4e0855a989ee83d4503ac9e8fb8764fbc79d20c01c53c86a9"
+results_sha256 = "3f521111b8ae506a4c88109578ed21b87250be7ccc8b13107dc6748eda6fd16f"
+blocks = 1000
+spent = 224569
+created = 238833
+core_seconds = 14
+oracle_seconds = 598
+recorded_run = "the block records of the recorded run from the whole snapshot, SHA-256 4dc8298638fb3b2f43aeb0d1840e87ded0a6dc2bbeafb9f4dd935b3fcc11846f without the fields of the whole set"

@@ -43,6 +43,8 @@
     "replay-tool-self-test",
     "snapshot-range-short-form",
     "core-pass-self-test",
+    "conformance-corpus-self-test",
+    "conformance-corpus-short-and-d",
     "cutoff-candidates",
     "csv-forced-active",
     "impact-tools-self-test",
@@ -59,6 +61,7 @@
     "mainnet-replay-to-145-000": "Needs the blocks to height 145,000 from the maintainer's node, and the oracle takes about 17 hours.",
     "snapshot-range-s": "Needs the blocks to height 145,000 from the maintainer's node.",
     "core-pass": "Reads about 180 GB of blocks from the maintainer's node.",
-    "mainnet-range": "Needs the Core pass and the range fixtures from the maintainer's node."
+    "mainnet-range": "Needs the Core pass and the range fixtures from the maintainer's node.",
+    "conformance-corpus-comparison": "Needs the Core harness, and the oracle takes hours for all ranges on one core. CI runs the short range and range D against the committed results."
   }
 }

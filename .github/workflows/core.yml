@@ -25,7 +25,7 @@ env:
   # Dogecoin Core v1.14.9, the commit that SOURCES.md pins.
   CORE_PIN: e0a1c157791544e818c901bd9341896965afbf9d
 
-# The checks run in four jobs at the same time, each on its own runner. Each
+# The checks run in five jobs at the same time, each on its own runner. Each
 # job builds the oracle, and compare, csv-forced, and impact build the harness
 # from the shared cache.
 jobs:
@@ -205,4 +205,29 @@ jobs:
           for run in "ExampleVersionVerify none" "ExampleVersionVerify 0" "ExampleFaultyLocktime/corrected none" "ExampleFaultyLocktime/corrected 0"; do
             set -- $run
             time python3 -I scripts/impact_run.py run --range short --request build/impact/requests/short/request.json --revision "$1" --activation "$2" --output "build/impact/runs/short/${1%%/*}-$2" .lake/build/bin/proposal-test-oracle
+          done
+
+  # Design record 0011, stage 5, exit condition 5: the oracle runs two ranges
+  # of the conformance corpus from the released assets, and the checker
+  # compares its results with the committed expected results, which are the
+  # Core harness's results (docs/conformance.md). The job builds no harness.
+  conformance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: ./.github/actions/core-setup
+        with:
+          harness: false
+
+      - name: fetch the corpus ranges short and D
+        run: time python3 -I scripts/conformance.py fetch short D
+
+      - name: conformance ranges short and D
+        run: |
+          for range in short D; do
+            time python3 -I scripts/range_results.py --range "$range" --request "build/conformance/$range/request.json" --blocks "build/conformance/$range/fixture/blocks.bin" --output "build/conformance/$range/results.jsonl" .lake/build/bin/dogelib-oracle
+            python3 -I scripts/check_range_results.py "build/conformance/$range/results.jsonl" "tests/conformance/ranges/$range/expected.jsonl"
           done

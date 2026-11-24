@@ -87,6 +87,7 @@ class Release(unittest.TestCase):
         run = self.manifest['run']
         for consumer, maker in (('snapshot-range-short-form', 'mainnet-block-ranges'),
                                 ('core-pass-self-test', 'core-comparison'),
+                                ('conformance-corpus-short-and-d', 'build'),
                                 ('core-harness-state', 'core-comparison'),
                                 ('impact-tools-self-test', 'proposal-oracle'),
                                 ('comparator-self-test', 'proposal-oracle'),
@@ -313,6 +314,7 @@ class Reports(unittest.TestCase):
                               '(cd tests/block/mainnet-blocks/rule-changes && sha256sum -c SHA256SUMS) && '
                               '(cd tests/block/mainnet-blocks/version-bits-headers && sha256sum -c SHA256SUMS) && '
                               '(cd tests/block/regtest-header-sequences && sha256sum -c SHA256SUMS) && '
+                              '(cd tests/conformance && sha256sum -c SHA256SUMS) && '
                               '(cd tests/proposals/impact/runs && sha256sum -c SHA256SUMS) && '
                               '(cd tests/script/campaign && sha256sum -c SHA256SUMS) && '
                               '(cd tests/script/corpus && sha256sum -c SHA256SUMS) && '
@@ -376,6 +378,20 @@ class Reports(unittest.TestCase):
                          '--local build/mainnet-blocks/range-10001-145000 build/core-harness/core-oracle-trap',
             'mainnet-range': 'python3 -I scripts/run_range.py --range A --pass build/core-pass --fixture build/ranges/A '
                              '--output build/range-runs/A .lake/build/bin/dogelib-oracle build/core-harness/core-oracle',
+            'conformance-corpus-self-test': 'python3 -I scripts/test_conformance.py',
+            'conformance-corpus-short-and-d': 'python3 -I scripts/conformance.py fetch short D && '
+                                              'python3 -I scripts/range_results.py --range short --request build/conformance/short/request.json '
+                                              '--blocks build/conformance/short/fixture/blocks.bin --output build/conformance/short/results.jsonl '
+                                              '.lake/build/bin/dogelib-oracle && '
+                                              'python3 -I scripts/check_range_results.py build/conformance/short/results.jsonl '
+                                              'tests/conformance/ranges/short/expected.jsonl && '
+                                              'python3 -I scripts/range_results.py --range D --request build/conformance/D/request.json '
+                                              '--blocks build/conformance/D/fixture/blocks.bin --output build/conformance/D/results.jsonl '
+                                              '.lake/build/bin/dogelib-oracle && '
+                                              'python3 -I scripts/check_range_results.py build/conformance/D/results.jsonl '
+                                              'tests/conformance/ranges/D/expected.jsonl',
+            'conformance-corpus-comparison': 'python3 -I scripts/conformance.py fetch && '
+                                             'python3 -I scripts/conformance.py compare .lake/build/bin/dogelib-oracle build/core-harness/core-oracle',
             'lane-tool': 'bash scripts/test_lane.sh',
         }
         self.assertEqual({g['slug']: g['command'] for g in gates}, expected)

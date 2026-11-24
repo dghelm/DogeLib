@@ -1,4 +1,5 @@
-# Replay every declaration of DogeLib into Lean's kernel, after the build.
+# Replay every declaration of DogeLib, and of the test-only ProposalExamples,
+# into Lean's kernel, after the build.
 #
 # Adapted from EthLib's replay.yml at commit b4070a856 (CC0 1.0).
 # DogeLib installs Lean with the pinned action of ci.yml and builds without a cache.
@@ -51,3 +52,11 @@ jobs:
         env:
           REPLAY_JOBS: "2"
         run: bash scripts/replay.sh
+
+      # The test-only examples of the proposal framework, which the production
+      # libraries do not import, in the same way.
+      - name: replay the proposal examples into the kernel
+        if: ${{ !cancelled() }}
+        env:
+          REPLAY_JOBS: "2"
+        run: bash scripts/replay.sh tests/ProposalExamples

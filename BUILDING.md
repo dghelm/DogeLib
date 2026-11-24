@@ -165,6 +165,7 @@ After `lake build --wfail`, replay the declarations of each module under `DogeLi
 
 ```bash
 REPLAY_JOBS=2 bash scripts/replay.sh
+REPLAY_JOBS=2 bash scripts/replay.sh tests/ProposalExamples
 ```
 
 The script first requires that the kernel rejects the planted theorem of `scripts/ReplayFixture.lean`.
@@ -172,10 +173,13 @@ Then `scripts/ReplayModule.lean` replays each module in its own process, `REPLAY
 `REPLAY_BUDGET` sets the time limit for each module, 300 seconds by default.
 
 The script replays every module: the root `DogeLib.lean` and each `.lean` file under `DogeLib/`.
-On 2026-11-23, the replay of all 220 modules took 217 seconds with two jobs on a development machine.
+With the argument `tests/ProposalExamples` it replays the test-only library of the proposal examples, the root `tests/ProposalExamples.lean` and each file under `tests/ProposalExamples/`.
+On 2026-11-24 its 14 modules took 4 seconds with two jobs.
+
+On 2026-11-23, the replay of all 220 modules of `DogeLib` took 217 seconds with two jobs on a development machine.
 The slowest module took between 66 and 83 seconds in the recorded runs.
 `DogeLib.Block.Proofs.Subsidy` used the most memory, 7.4 GB.
-The workflow `replay` runs the script on each push to `main` and every Monday, not on pull requests.
+The workflow `replay` runs both replays on each push to `main` and every Monday, not on pull requests.
 
 After a change to the replay scripts, run their self-test, which needs no build of DogeLib:
 

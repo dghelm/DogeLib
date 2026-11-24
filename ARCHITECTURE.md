@@ -187,13 +187,13 @@ The test build `proposal-test-oracle` runs the same code with the two test-only 
   - When a revision restricts spend acceptance and matches the P2SH flag, baseline connection accepts every block that revised connection accepts. The resulting coin set and changes match.
   - Under those two connection conditions and a non-greater lock-time cutoff when contextual header checks pass, baseline validation accepts every revised-accepted block.
   - When every entry of a block list meets those two connection conditions, baseline connection accepts any list that revised connection accepts. Both reach the same final coin set.
-  - When a revision agrees outside an opcode set and its other hooks match the baseline, blocks free of those opcodes give embedded baseline outcomes.
+  - When a revision agrees outside an opcode set and its other hooks match the baseline, a block whose spends are untouched (`BlockUntouched`) gives the embedded baseline outcome. Each spend's `scriptSig`, its spent `scriptPubKey` and, for a pay-to-script-hash spend with a push-only `scriptSig`, its redeem script hold no opcode of the set. The spent coin is in the supplied coin set or created earlier in the block.
   - `ProposalProofs` proves these generic theorems for every signature verifier and embedding. Each proposal proves its own hypotheses.
 - Failure:
   - `BlockOutcome` separates acceptance, consensus rejection, and unsupported results outside the model.
   - Embedding maps send baseline rejections to `rejected` and baseline out-of-model or adapter errors to `unsupported`.
   - An unsupported result is never a rejection and says nothing about Dogecoin Core's verdict.
-  - A failed script check runs again without non-mandatory flags to classify mandatory status, and keeps the first error.
+  - When a script check fails and its flags include a non-mandatory flag, it runs again without those flags. If the second run accepts, the rejection is not mandatory, and if it rejects, the rejection is mandatory. Either rejection keeps the error of the first run. If the second run is unsupported, the result is that unsupported result. A failure with no non-mandatory flag is a mandatory rejection at once.
 - Guarantees:
   - In an accepted non-genesis block, each non-coinbase transaction found its inputs in the coin set before it. It also passed the transaction test and the script loop.
   - Block-level theorems cover one block (or a supplied list of blocks for connection alone) on a supplied chain view and coin set.

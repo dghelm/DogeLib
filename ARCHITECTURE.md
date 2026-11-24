@@ -42,7 +42,7 @@ The implementation never becomes the specification.
 | `ProposalExports` | The operations of the proposal executable, `dogelib-proposal-oracle`, rooted at `DogeLib.Proposals.Exports` | Off |
 | `Refinement` | Extracted Rust implementation models and their refinement proofs. Imports the pinned Aeneas backend and Mathlib. | Off |
 | `check-decls` | An executable that checks the axioms and substitutions of every compiled declaration | — |
-| `dogelib-proposal-oracle` | The proposal executable: every operation of `dogelib-oracle`, and `block.validate` with the argument `revision`. Its entry point is `scripts/ProposalOracle.lean`, and its other definitions are in `ProposalExports`. | — |
+| `dogelib-proposal-oracle` | The proposal executable: every operation of `dogelib-oracle`, plus `block.validate` and `block.contextual_check_body` with the argument `revision`. It names only proposed revisions (`RelativeLockTime`). Its entry point is `scripts/ProposalOracle.lean`, and its other definitions are in `ProposalExports`. | — |
 | `ProposalExamples` | Test-only. The two examples of the proposal framework, `ExampleFaultyLocktime` and `ExampleVersionVerify`, with their theorems and the revisions of `proposal-test-oracle`, rooted at `ProposalExamples` under `tests/` | Off |
 | `proposal-test-oracle` | The test build of the proposal executable: the code of `dogelib-proposal-oracle`, whose argument `revision` also names the two examples. Its entry point is `tests/ProposalTestOracle.lean`. | — |
 | `proposal-replay` | A test executable that answers `script.verify_legacy` requests with the example `ExampleFaultyLocktime`, for the campaign's planted-fault search. It imports `Exports`, `Proposals` and `ProposalExamples`, and no library imports it. | — |
@@ -102,9 +102,9 @@ Bottom-up. Each layer imports only the layers above it in this list.
 | `Base` | Bytes, fixed-width field meanings, endianness, hash representations |
 | `Serialization` | Codecs, prefix decoders, CompactSize, counted lists, packed representations |
 | `Cryptography` | SHA-1, SHA-256, double SHA-256, HMAC-SHA-256, PBKDF2-HMAC-SHA-256, RIPEMD-160 and Hash160, secp256k1 curve arithmetic, ECDSA verification on scalars, and libsecp256k1's public-key parser |
-| `Work` | Proof-of-work arithmetic: 256-bit targets, their compact encoding, and the difficulty retarget |
-| `Transaction` | Raw transaction types, base serialization, transaction IDs, legacy signature hashing, `CheckTransaction` and the legacy count of signature operations |
-| `Block` | Pure block headers, full headers with the AuxPoW payload and their codec, and the AuxPoW check. Header proof of work and `CheckBlockHeader`, the contextual parameters by height and the checkpoint tables, contextual header validation, block hashes and transaction Merkle roots. The block-index model of header-sequence validation, with the ancestor view and the checkpoint search over the index. One step of header acceptance, and the sequence. The mainnet block subsidy, with Boost's `mt19937` and `uniform_int`. The block codec, and `CheckBlock` |
+| `Work` | Proof-of-work arithmetic: 256-bit targets and word models, compact encoding, difficulty retargets, next-work selection, median time past, block proof, and work parameters |
+| `Transaction` | Raw transaction types, base and witness-allowed serialization, transaction IDs, legacy signature hashing, `CheckTransaction`, and the legacy signature-operation count |
+| `Block` | Pure and full block headers with the AuxPoW payload and check, header proof of work, version gating, contextual parameters, checkpoints, and contextual header validation. Block hashes, transaction Merkle roots, the block-index model, single-step and sequence header acceptance, and chain work. Mainnet block subsidy (with Boost 1.70.0's `mt19937` and `uniform_int`), version bits, block serialization, `CheckBlock`, and `ContextualCheckBlock`. The coin set, `CheckTxInputs`, signature-operation cost, `ConnectBlock`, and `validateBlock` for mainnet blocks. |
 | `Script` | The instruction reader of the Script interpreter, the state of one `EvalScript` call, Script numbers (`CScriptNum`) and the truth value of a stack item. The interpreter's errors and flags, and one `EvalScript` call for the opcodes of stages 2 to 4, including the numeric, hash, signature and lock-time opcodes. The encoding checks of signatures and public keys, the signature checker that the evaluator takes as a parameter, and `coreVerifier`, Core's `CPubKey::Verify`. `VerifyScript` without a witness, and the spend predicate of one legacy input. |
 
 `Cryptography.Inverse` and `Cryptography.Jacobian` support `Cryptography.Secp256k1.Field`, `Curve` and `Ecdsa`.
@@ -125,7 +125,7 @@ It composes `isValidPubKey`, `parsePubKey`, `parseDerLax` and `Ecdsa.verify` int
 `Script.Number` imports no other layer.
 `Script.SignatureEncoding` imports only the errors and flags of `Script`. It checks bytes and does no elliptic-curve arithmetic.
 `Script` has a proof root and an export root.
-`DogeLib/Script/Exports/` adapts instruction reading and one `EvalScript` call to the [oracle format](docs/oracle.md).
+`DogeLib/Script/Exports/` adapts `script.read_op`, `script.eval`, `pubkey.verify`, and `script.verify_legacy` to the [oracle format](docs/oracle.md).
 
 Ledger, Rules and Models layers are added when their work begins.
 
@@ -154,30 +154,79 @@ Two checks enforce this direction:
 - `Framework.Script`: copies of `evalLoop`, `evalScript` and `verifyScript` that take the instruction step as a parameter. They also take the proposal's error type and type of unsupported reasons. Agreement theorems in `ProposalProofs` prove that each copy, with the baseline step, equals its baseline definition. A change to the baseline loop that the copy does not follow fails the build.
 - `Framework.Activation`: the activation model. A revised definition takes `active : Bool`, and a block-level `Activation` gives each network one activation height or none.
 - `Framework.Compatibility`: the compatibility classes of design record 0007, section 8, and the legacy projection.
-- `Framework.Block`: the block level of a revision of Script (design record 0011, section 10.1). `connectBlockWith` and `validateBlockWith` are copies of `connectBlock` and `validateBlock` that take the spend check of a `BlockRevision` in place of `verifyLegacySpend`. Their results have the form of the Script framework: an acceptance, a rejection or an unsupported result, through embedding maps of the baseline errors. Agreement theorems prove that each copy, with the baseline spend check, equals its baseline definition.
+- `Framework.Block`: the block level of a proposed revision (design record 0011, section 10.1, and extensions E1 to E4 of design record 0012, section 6.3). `BlockRevision` parameterizes four parts: the spend check, script flags (E1), a non-coinbase transaction test (E2), and `ContextualCheckBlock` lock-time arguments (E3). The outcome types of `txTest` and `connectBlockWith` carry the revision's rejections and unsupported reasons (E4). `connectBlockWith` and `validateBlockWith` return `BlockOutcome` through embedding maps of the baseline errors. Agreement theorems prove that each copy, with the baseline revision, equals its baseline definition.
 
 A proposal lives under `DogeLib.Proposals.<Name>`, and `DogeLib/Proposals.lean` imports it.
 Its proof tree is a root of `ProposalProofs`, and `DogeLib/Proposals/Proofs.lean` imports it.
 A proposal never gets a row in the baseline tables of [COVERAGE.md](COVERAGE.md), and `dogelib-oracle` has no proposal operation.
 
-The proposal executable `dogelib-proposal-oracle` answers `block.validate` with the argument `revision` ([docs/oracle.md](docs/oracle.md#the-proposal-executable)).
-It uses the code of `Exports` for the baseline: `Block.Exports.blockValidateWith` takes an optional hook, which adds one field to each block record and changes nothing else.
-`Exports` defines no hook and names no proposal, and `ProposalExports` supplies the hook of each named revision.
-`dogelib-proposal-oracle` names only proposed revisions.
-The test build `proposal-test-oracle` runs the same code with the two examples added to its revisions.
+The proposal executable `dogelib-proposal-oracle` answers `block.validate` and `block.contextual_check_body` with the argument `revision` ([docs/oracle.md](docs/oracle.md#the-proposal-executable)).
+For `block.validate`, `Block.Exports.blockValidateWith` takes an optional hook that adds `revised` to each block record and changes nothing else.
+For `block.contextual_check_body`, `ProposalExports` adds `revised` from `contextualBodyWith` without changing the baseline response.
+`Exports` defines no hook and names no proposal, and `ProposalExports` supplies each named revision (`RelativeLockTime`).
+The test build `proposal-test-oracle` runs the same code with the two test-only examples of `ProposalExamples` added to its revisions.
 
-`ProposalExamples.ExampleVersionVerify` is the worked example of design record 0007, section 10.
-It is not a proposal for Dogecoin. Decision 9 keeps it as a permanent test of the framework, in the test-only library.
+### Operation boundary: block-level proposals
 
-`ProposalExamples.ExampleFaultyLocktime` is an invented rule with a deliberate fault, and its corrected variant.
-It is not a proposal for Dogecoin.
-It is a teaching example for [docs/in-practice.md](docs/in-practice.md), and a test that the framework refutes a false soft-fork claim.
-The campaign's planted-fault search must find its fault.
+- Boundary:
+  - `Proposals.Framework.Block` runs proposed consensus revisions over the baseline `Block` validation steps.
+  - Each named proposal in `Proposals` supplies a `BlockRevision` and error embeddings.
+  - No baseline library (`DogeLib`, `Proofs`, or `Exports`) imports `Proposals`, `ProposalProofs`, or `ProposalExports`.
+- Owns:
+  - `Proposals.Framework` owns `BlockRevision`, `SpendCheck`, `TxTest`, `BlockOutcome`, `ConnectEmbedding`, `ValidateEmbedding`, `Activation`, and `VerifyOutcome`.
+  - Baseline `Block`, `Transaction`, and `Script` own `Block`, `Transaction`, `CoinSet`, `Coin`, `ValidateContext`, `ConnectContext`, `ConnectResult`, `InputContext`, `ScriptError`, and `Unsupported`.
+- Operations:
+  - The spend check evaluates one legacy transaction input against its spent output script and script flags.
+  - The script-flags hook returns the verification flags for one block height and activation state.
+  - The transaction test checks each non-coinbase transaction after input lookup and before signature-operation counts.
+  - The lock-time hook supplies `csvActive` and the median time past to `ContextualCheckBlock`.
+  - Baseline defaults leave each unoverridden part identical to the baseline `Block` specification.
+- Laws:
+  - With the baseline revision, block connection and block validation equal the embedded baseline results for every context and embedding.
+  - With `active` false, a revision whose four parts match baseline defaults equals the embedded baseline result.
+  - When a revision restricts spend acceptance and matches the P2SH flag, baseline connection accepts every block that revised connection accepts. The resulting coin set and changes match.
+  - Under those two connection conditions and a non-greater lock-time cutoff when contextual header checks pass, baseline validation accepts every revised-accepted block.
+  - When every entry of a block list meets those two connection conditions, baseline connection accepts any list that revised connection accepts. Both reach the same final coin set.
+  - When a revision agrees outside an opcode set and its other hooks match the baseline, a block whose spends are untouched (`BlockUntouched`) gives the embedded baseline outcome. Each spend's `scriptSig`, its spent `scriptPubKey` and, for a pay-to-script-hash spend with a push-only `scriptSig`, its redeem script hold no opcode of the set. The spent coin is in the supplied coin set or created earlier in the block.
+  - `ProposalProofs` proves these generic theorems for every signature verifier and embedding. Each proposal proves its own hypotheses.
+- Failure:
+  - `BlockOutcome` separates acceptance, consensus rejection, and unsupported results outside the model.
+  - Embedding maps send baseline rejections to `rejected` and baseline out-of-model or adapter errors to `unsupported`.
+  - An unsupported result is never a rejection and says nothing about Dogecoin Core's verdict.
+  - When a script check fails and its flags include a non-mandatory flag, it runs again without those flags. If the second run accepts, the rejection is not mandatory, and if it rejects, the rejection is mandatory. Either rejection keeps the error of the first run. If the second run is unsupported, the result is that unsupported result. A failure with no non-mandatory flag is a mandatory rejection at once.
+- Guarantees:
+  - In an accepted non-genesis block, each non-coinbase transaction found its inputs in the coin set before it. It also passed the transaction test and the script loop.
+  - Block-level theorems cover one block (or a supplied list of blocks for connection alone) on a supplied chain view and coin set.
+  - They make no claim about chain selection, fork choice, convergence, liveness, or network-wide soft-fork safety.
+- Assumes:
+  - Every block-level revision inherits the mainnet-only scope and trust boundaries of baseline `Block` validation ([SOUNDNESS.md](SOUNDNESS.md#summary)).
+  - The baseline context field `csvActive` keeps its baseline error when true. Revisions set lock-time rules through their own hooks.
+  - Signature-operation counts, amount arithmetic, coin-set updates, and header checks follow the baseline without modification.
+- Readings:
+  - The transaction test runs after input lookup and before signature-operation counts, as in Core's `SequenceLocks` placement ([D114][d114-seqlocks]).
+  - The lock-time cutoff selects median time past when `csvActive` is true and block `nTime` otherwise ([D110][d110-cutoff]).
+  - Non-mandatory script failures recheck with non-mandatory flags cleared, as in Core's `CheckInputs` ([D114][d114-checkinputs]).
 
-`DogeLib.Proposals.RelativeLockTime` is the proposed revision of [design record 0012](docs/design/0012-relative-lock-time.md): the rules of BIP 68, BIP 112 and BIP 113.
+[d110-cutoff]: https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.cpp#L3128-L3136
+[d114-seqlocks]: https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.cpp#L1948-L1959
+[d114-checkinputs]: https://github.com/dogecoin/dogecoin/blob/e0a1c157791544e818c901bd9341896965afbf9d/src/validation.cpp#L1462-L1518
+
+### Public proposals
+
+`DogeLib.Proposals.RelativeLockTime` is the proposed revision of [design record 0012](docs/design/0012-relative-lock-time.md): the rules of BIP 68, BIP 112, and BIP 113.
 Its transaction test, the sequence locks of BIP 68, is in `DogeLib/Proposals/RelativeLockTime/SequenceLocks.lean`.
-Its theorems are under `DogeLib/Proposals/RelativeLockTime/Proofs/`, and its known answers are in `tests/KnownAnswers/Proposals/RelativeLockTime.lean`, `RelativeLockTimeOpcode.lean` and `RelativeLockTimeSequence.lean`.
-The proposal executable also answers `block.contextual_check_body` with the argument `revision`.
+Its theorems are under `DogeLib/Proposals/RelativeLockTime/Proofs/`, and its known answers are in `tests/KnownAnswers/Proposals/RelativeLockTime.lean`, `RelativeLockTimeOpcode.lean`, and `RelativeLockTimeSequence.lean`.
+DogeLib takes no position on the activation of this proposal.
+
+### Test-only framework examples
+
+The two examples of the framework live in the test-only `ProposalExamples` library under `tests/`, outside the production proposal libraries.
+No baseline or proposal library imports `ProposalExamples`, and `dogelib-proposal-oracle` refuses both examples.
+The test declaration check (`lake exe check-decls --scope ProposalExamples ...`) checks their declarations, and the second kernel replay (`scripts/replay.sh tests/ProposalExamples`) replays their modules ([AGENTS.md](AGENTS.md#checks)).
+
+- `ProposalExamples.ExampleVersionVerify` is the worked example of design record 0007, section 10. It is not a proposal for Dogecoin. Decision 9 keeps it as a permanent test of the framework.
+- `ProposalExamples.ExampleFaultyLocktime` is an invented rule with a deliberate fault, and its corrected variant. It is not a proposal for Dogecoin. It teaches compatibility refutation in [docs/in-practice.md](docs/in-practice.md) and serves as the planted fault for `proposal-replay`.
+- `proposal-test-oracle` (`tests/ProposalTestOracle.lean`) runs `dogelib-proposal-oracle`'s code with both examples added for proposal-oracle and short-range impact tests.
 
 ## Adopted upstream code
 

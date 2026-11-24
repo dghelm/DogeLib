@@ -87,10 +87,11 @@ one JSON object per line on standard input and output. -/
 lean_exe «dogelib-oracle» where
   root := `DogeLib.Exports.Main
 
-/-- The proposal executable: every operation of `dogelib-oracle`, and
-`block.validate` with the argument `revision` (design record 0011,
-section 10.2). Its entry point is `scripts/ProposalOracle.lean`, and every
-other definition is in the `ProposalExports` library. -/
+/-- The proposal executable: every operation of `dogelib-oracle`, plus
+`block.validate` and `block.contextual_check_body` with the argument `revision`
+(design record 0011, section 10.2, and design record 0012, section 10.2).
+Its entry point is `scripts/ProposalOracle.lean`, and every other definition
+is in the `ProposalExports` library. -/
 @[default_target]
 lean_exe «dogelib-proposal-oracle» where
   srcDir := "scripts"

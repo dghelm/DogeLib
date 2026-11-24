@@ -258,7 +258,7 @@ The committed [Core harness and comparator](../../docs/oracle.md#the-core-harnes
 These finite cases do not prove equivalence to Core for every input.
 
 The Core compatibility domain has at most 2^31 leaves because larger lists can wrap its final sweep counter.
-[SOUNDNESS.md](../../SOUNDNESS.md#pure-headers-and-transaction-merkle-roots) explains the wrap and undefined shift at the pinned revision.
+[SOUNDNESS.md](../../docs/soundness/headers.md#pure-headers-and-transaction-merkle-roots) explains the wrap and undefined shift at the pinned revision.
 The Lean definitions remain total on all finite lists without a rejection rule.
 
 ## Licence

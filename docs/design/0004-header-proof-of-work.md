@@ -24,7 +24,7 @@ The specification has four parts:
 - The composition of these parts with the existing compact-target check `Work.checkProofOfWork`.
 
 DogeLib already specifies the 80-byte pure header, its double SHA-256 hash, the AuxPoW flag test and the compact-target check for a supplied hash.
-[SOUNDNESS.md](../../SOUNDNESS.md#target-validity-and-supplied-hash-proof-of-work) states that no theorem establishes the scrypt digest, AuxPoW validity or contextual header validity.
+[SOUNDNESS.md](../soundness/work.md#target-validity-and-supplied-hash-proof-of-work) states that no theorem establishes the scrypt digest, AuxPoW validity or contextual header validity.
 This record sets out how to close the first two of those gaps.
 The theorems in section 8 are targets, not implemented results.
 

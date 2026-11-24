@@ -65,6 +65,6 @@ This section is an addendum, not part of the read.
 - Finding 1 is correct. `CBlock::SerializationOp` reads the header and `vtx`, and it does not assign `fChecked` (`src/primitives/block.h`, lines 87 to 91).
   At the revision of the read, the module documentation of `DogeLib.Block.Check` said that a block from a stream has `fChecked` false.
   It now says that this holds for a read into a new object, and that a read into an object with the member set is outside the definition.
-  [SOUNDNESS.md](../../SOUNDNESS.md#block-codec-checktransaction-and-checkblock) and [docs/oracle.md](../oracle.md#transaction-and-block-checks) say the same.
+  [SOUNDNESS.md](../soundness/blocks.md#block-codec-checktransaction-and-checkblock) and [docs/oracle.md](../oracle.md#transaction-and-block-checks) say the same.
   The Core harness reads each block into a new `CBlock`, and it stops if the member is set before the call.
 - The definitions did not change after the read.

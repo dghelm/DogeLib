@@ -10,7 +10,7 @@ The witness operations model a serialization format only.
 Segregated witness is not active on Dogecoin at the pin.
 `IsWitnessEnabled` returns false, and main and test reject blocks with witness data (SOURCES.md D36).
 
-Its [protocol context](../SOUNDNESS.md#transactions-the-witness-allowed-format) separates witness script verification from the commitment checks in Core.
+Its [protocol context](soundness/transactions.md#transactions-the-witness-allowed-format) separates witness script verification from the commitment checks in Core.
 Its output describes an operation under supplied flags, without a claim that an input is valid on any network.
 In particular, `script.eval` does not check a complete spend.
 
@@ -933,7 +933,7 @@ Let `T` be the transaction IDs that the blocks of the request name: the ID of ea
 3. It runs the blocks on the kept coins. Before each block, it requires that `T` holds every ID that the block names. A block that names another ID is the error `blocks_file_changed`, which can occur only if the file changes between the two reads.
 4. It reads the snapshot again, and computes `set_digest_hex`, `set_coins` and `set_value` of the set after the last record. That set is the records of the file whose ID is not in `T`, merged in order with the entries of the run. A file with another number of records than in step 2 is the error `coins_file_changed`.
 
-The theorem `validateBlock_restrict` is the reason for step 4 ([SOUNDNESS.md](../SOUNDNESS.md#validateblock_restrict-a-block-on-the-coins-that-it-names)).
+The theorem `validateBlock_restrict` is the reason for step 4 ([SOUNDNESS.md](soundness/blocks.md#validateblock_restrict-a-block-on-the-coins-that-it-names)).
 On a coin set and on its restriction to `T`, `validateBlock` gives the same error, or the same coin changes.
 The new set then has the entries of the restricted run at the IDs of `T`, and the entries of the old set at every other ID.
 No theorem covers the reads of the two files or the merge of step 4.
@@ -1241,7 +1241,7 @@ An unsupported result is not a rejection, and its block is not a changed block.
 The run answers one question for each block: what does the revision say about this block on the baseline chain below it?
 It does not build the chain that revised nodes would build after a changed block.
 No Core behaviour exists for an example, so no comparison supports its `revised` objects.
-The theorems of `DogeLib.Proposals.Framework.Proofs.Block` relate the two verdicts ([SOUNDNESS.md](../SOUNDNESS.md#proposed-revisions-the-block-level)).
+The theorems of `DogeLib.Proposals.Framework.Proofs.Block` relate the two verdicts ([SOUNDNESS.md](soundness/proposals.md#proposed-revisions-the-block-level)).
 
 With the argument, `block.contextual_check_body` returns the response of the baseline operation with one more object, `revised`.
 The object is the result of `Proposals.Framework.contextualBodyWith`: `ContextualCheckBlock` with the lock-time arguments of the revision.
@@ -2500,7 +2500,7 @@ Each result is one run.
 It holds under the hypothesis of section 3.4: the snapshot at the start is Core's coin set at its height.
 Both snapshots come from Core's replay from the genesis block: the first pass to 1,033,382, and the second pass from there.
 The oracle did not check the blocks between the ranges.
-On mainnet the CSV state is never active, so the walk changes no verdict of the ranges ([SOUNDNESS.md](../SOUNDNESS.md#version-bits)).
+On mainnet the CSV state is never active, so the walk changes no verdict of the ranges ([SOUNDNESS.md](soundness/blocks.md#version-bits)).
 The ranges compare the states that the walk reports, in the oracle and in Core.
 
 ### Block subsidy comparison evidence

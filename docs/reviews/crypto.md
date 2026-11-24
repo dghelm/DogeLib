@@ -102,4 +102,4 @@ A check against Core at the pin, by the model that prepared this record, confirm
 Finding 4 needs a positive output length, as in its example.
 With `dkLen = 0`, Core's outer loop runs no iteration (`src/crypto/scrypt.cpp`, line 88).
 The doc comments of `Ecdsa.verify`, `Point.isOnCurve`, `readCoordinate` and `pbkdf2` state the boundaries.
-So do [SOUNDNESS.md](../../SOUNDNESS.md#secp256k1-curve-and-ecdsa-scalar-verification) and the rows of [COVERAGE.md](../../COVERAGE.md) for those operations.
+So do [SOUNDNESS.md](../soundness/cryptography.md#secp256k1-curve-and-ecdsa-scalar-verification) and the rows of [COVERAGE.md](../../COVERAGE.md) for those operations.

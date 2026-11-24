@@ -29,35 +29,35 @@ Each item below links to its evidence.
 [SOUNDNESS.md](SOUNDNESS.md#what-the-proofs-say) gives the hypotheses, assumptions and execution boundaries of each claim.
 
 - **Serialization.** Fixed-width integer, byte-string and CompactSize codecs, with round trips.
-  Core's bounded CompactSize and counted-list readers, with soundness and completeness against a separate relation ([CompactSize](SOUNDNESS.md#compactsize)).
-  Transactions in base mode and in the witness-allowed format, as a serialization format only, with the transaction ID and witness hash ([transactions](SOUNDNESS.md#transactions)).
+  Core's bounded CompactSize and counted-list readers, with soundness and completeness against a separate relation ([CompactSize](docs/soundness/serialization.md#compactsize)).
+  Transactions in base mode and in the witness-allowed format, as a serialization format only, with the transaction ID and witness hash ([transactions](docs/soundness/transactions.md#transactions)).
 - **Legacy signature hash.** The hash plan for `SIGVERSION_BASE`.
-  `legacySignatureHashPlan_eq_reference` proves it equal to Core's transaction-transformation reference on a stated domain ([legacy signature hash](SOUNDNESS.md#legacy-signature-hash-transformation-reference)).
-- **Hashes.** SHA-256, double SHA-256, SHA-1, RIPEMD-160 and Hash160, with known answers ([SHA-1](SOUNDNESS.md#sha-1), [RIPEMD-160 and Hash160](SOUNDNESS.md#ripemd-160-and-hash160)).
-  HMAC-SHA-256 and PBKDF2-HMAC-SHA-256, each proved equal to a separate list model ([HMAC](SOUNDNESS.md#hmac-sha-256), [PBKDF2](SOUNDNESS.md#pbkdf2-hmac-sha-256)).
-- **Work and blocks.** The DigiShield retarget, next-work selection, the compact-target check of a supplied hash, 80-byte pure headers and transaction Merkle roots ([target validity](SOUNDNESS.md#target-validity-and-supplied-hash-proof-of-work)).
+  `legacySignatureHashPlan_eq_reference` proves it equal to Core's transaction-transformation reference on a stated domain ([legacy signature hash](docs/soundness/transactions.md#legacy-signature-hash-transformation-reference)).
+- **Hashes.** SHA-256, double SHA-256, SHA-1, RIPEMD-160 and Hash160, with known answers ([SHA-1](docs/soundness/cryptography.md#sha-1), [RIPEMD-160 and Hash160](docs/soundness/cryptography.md#ripemd-160-and-hash160)).
+  HMAC-SHA-256 and PBKDF2-HMAC-SHA-256, each proved equal to a separate list model ([HMAC](docs/soundness/cryptography.md#hmac-sha-256), [PBKDF2](docs/soundness/cryptography.md#pbkdf2-hmac-sha-256)).
+- **Work and blocks.** The DigiShield retarget, next-work selection, the compact-target check of a supplied hash, 80-byte pure headers and transaction Merkle roots ([target validity](docs/soundness/work.md#target-validity-and-supplied-hash-proof-of-work)).
 - **Header proof of work.** The work of [design record 0004](docs/design/0004-header-proof-of-work.md):
-  - Dogecoin's scrypt digest of a header. `powHash_eq_spec` proves it equal to the RFC 7914 scrypt model on every 80-byte input ([scrypt digest](SOUNDNESS.md#dogecoins-scrypt-digest)).
-  - Full headers with the AuxPoW payload, and `CAuxPow::check` ([full headers](SOUNDNESS.md#full-headers-and-the-auxpow-payload), [the AuxPoW check](SOUNDNESS.md#the-auxpow-check)).
-  - `CheckAuxPowProofOfWork` and `CheckBlockHeader` with `fCheckPOW` true. `checkAuxPowProofOfWork_iff` characterizes acceptance for every parameter record and full header ([header proof of work](SOUNDNESS.md#header-proof-of-work)).
-  - The two version gates of `ContextualCheckBlockHeader` ([version gating](SOUNDNESS.md#version-gating)).
+  - Dogecoin's scrypt digest of a header. `powHash_eq_spec` proves it equal to the RFC 7914 scrypt model on every 80-byte input ([scrypt digest](docs/soundness/cryptography.md#dogecoins-scrypt-digest)).
+  - Full headers with the AuxPoW payload, and `CAuxPow::check` ([full headers](docs/soundness/headers.md#full-headers-and-the-auxpow-payload), [the AuxPoW check](docs/soundness/headers.md#the-auxpow-check)).
+  - `CheckAuxPowProofOfWork` and `CheckBlockHeader` with `fCheckPOW` true. `checkAuxPowProofOfWork_iff` characterizes acceptance for every parameter record and full header ([header proof of work](docs/soundness/headers.md#header-proof-of-work)).
+  - The two version gates of `ContextualCheckBlockHeader` ([version gating](docs/soundness/headers.md#version-gating)).
 - **Contextual header validation.** `ContextualCheckBlockHeader` on a checked view of the predecessor's chain, with the adjusted time and the last known checkpoint as inputs ([design record 0006](docs/design/0006-contextual-header-validation.md)).
-  `contextualCheck_eq_ok_iff` and one theorem for each rejection give the exact result on the domain ([contextual header validation](SOUNDNESS.md#contextual-header-validation)).
+  `contextualCheck_eq_ok_iff` and one theorem for each rejection give the exact result on the domain ([contextual header validation](docs/soundness/headers.md#contextual-header-validation)).
 - **Header sequences.** Core's `AcceptBlockHeader` and `ProcessNewBlockHeaders` over an explicit model of the block index, with the chain work of each entry ([design record 0008](docs/design/0008-header-sequence-validation.md)).
-  `process_linear` gives the result for headers that extend one entry in order, under its stated hypotheses ([the sequence](SOUNDNESS.md#the-sequence-processnewblockheaders)).
+  `process_linear` gives the result for headers that extend one entry in order, under its stated hypotheses ([the sequence](docs/soundness/headers.md#the-sequence-processnewblockheaders)).
 - **Block checks without coins.** The block codec, `CheckTransaction`, `CheckBlock`, `ContextualCheckBlock` on mainnet, the mainnet block subsidy and the version-bits state, stage 0010a of [design record 0010](docs/design/0010-block-validity.md).
-  `block.check` and `block.contextual_check_body` agree with Core on 11,018 real mainnet blocks ([the block checks](SOUNDNESS.md#block-codec-checktransaction-and-checkblock), [the contextual block body](SOUNDNESS.md#the-contextual-block-body)).
+  `block.check` and `block.contextual_check_body` agree with Core on 11,018 real mainnet blocks ([the block checks](docs/soundness/blocks.md#block-codec-checktransaction-and-checkblock), [the contextual block body](docs/soundness/blocks.md#the-contextual-block-body)).
 - **Proposed revisions.** A framework that states a revision of the Script rules and classifies it against the baseline, for example as a `SoftFork` ([design record 0007](docs/design/0007-proposed-revisions.md)).
   It has two invented examples and one proposed revision, `RelativeLockTime`, with the rules of BIP 113, BIP 112 and BIP 68 ([design record 0012](docs/design/0012-relative-lock-time.md)).
-  Its compatibility theorems are Script-local or block-level: each is about one Script evaluation, one transaction input or one block, not about the network ([the framework](SOUNDNESS.md#proposed-revisions-the-framework)).
+  Its compatibility theorems are Script-local or block-level: each is about one Script evaluation, one transaction input or one block, not about the network ([the framework](docs/soundness/proposals.md#proposed-revisions-the-framework)).
 - **Campaign.** `scripts/campaign.py` generates spends that Core signs, checks stated properties of them, reduces a failure and replays it on a regtest node ([design record 0009](docs/design/0009-bug-finding-campaign.md)).
   It found no fault in Core or in DogeLib, and its regression fixtures come from planted faults ([campaign](COVERAGE.md#campaign-infrastructure)).
 - **Signatures.** The secp256k1 curve and ECDSA verification, adapted from EthLib, and Core's public-key parser and `CPubKey::Verify` as `Script.coreVerifier` ([design record 0005](docs/design/0005-signature-verifier.md)).
-  Its theorems give the result of each of Core's checks, and reduce the final test to the point computation `Point.mulAdd` ([Core's verifier](SOUNDNESS.md#secp256k1-public-key-parser-and-cores-verifier)).
+  Its theorems give the result of each of Core's checks, and reduce the final test to the point computation `Point.mulAdd` ([Core's verifier](docs/soundness/cryptography.md#secp256k1-public-key-parser-and-cores-verifier)).
   No theorem proves that DogeLib's point arithmetic computes Core's `secp256k1_ecmult` result. Finite comparisons with Core are the evidence for that step.
-- **Script.** The legacy Script interpreter of [design record 0003](docs/design/0003-legacy-spend-validation.md): one `EvalScript` call, `VerifyScript` with P2SH, the lock-time opcodes, and `verifyLegacySpend` for one transaction input ([Script evaluation](SOUNDNESS.md#script-evaluation-one-evalscript-call), [`VerifyScript`](SOUNDNESS.md#script-lock-times-and-verifyscript)).
-  A worked property proves when a multisig-with-recovery spend is accepted, for `k` of `n` keys with `1 ≤ k ≤ n ≤ 16` ([worked property](SOUNDNESS.md#script-worked-property-multisig-with-recovery)).
-- **Rust refinement.** `decode_refines` relates a Lean model extracted from a Rust CompactSize reader to the bounded reader ([Rust reader](SOUNDNESS.md#rust-bounded-compactsize-reader)).
+- **Script.** The legacy Script interpreter of [design record 0003](docs/design/0003-legacy-spend-validation.md): one `EvalScript` call, `VerifyScript` with P2SH, the lock-time opcodes, and `verifyLegacySpend` for one transaction input ([Script evaluation](docs/soundness/script.md#script-evaluation-one-evalscript-call), [`VerifyScript`](docs/soundness/script.md#script-lock-times-and-verifyscript)).
+  A worked property proves when a multisig-with-recovery spend is accepted, for `k` of `n` keys with `1 ≤ k ≤ n ≤ 16` ([worked property](docs/soundness/script.md#script-worked-property-multisig-with-recovery)).
+- **Rust refinement.** `decode_refines` relates a Lean model extracted from a Rust CompactSize reader to the bounded reader ([Rust reader](docs/soundness/serialization.md#rust-bounded-compactsize-reader)).
 
 Script verification takes a signature checker as a parameter.
 `transactionChecker` computes the legacy signature hash and returns the answer of the verifier that its caller supplies.
@@ -85,7 +85,7 @@ For header proof of work, Core and the oracle agree on all 321 recorded mainnet 
 A comparison covers its requests and no other inputs.
 
 DogeLib has no definition of chain validity.
-`Block.validateBlock` runs Core's five checks of a new mainnet block on a supplied chain view and coin set ([soundness](SOUNDNESS.md#the-coin-set-checktxinputs-and-connectblock)).
+`Block.validateBlock` runs Core's five checks of a new mainnet block on a supplied chain view and coin set ([soundness](docs/soundness/blocks.md#the-coin-set-checktxinputs-and-connectblock)).
 It does not specify these parts of Dogecoin:
 
 - `ConnectBlock` and `ContextualCheckBlock` on testnet and regtest. The block subsidy and coinbase maturity are specified for mainnet alone
@@ -110,8 +110,8 @@ jq -c 'select(.id == "recovery") | {id, op: "script.verify_legacy", tx_hex, inpu
 ```
 
 Core's recorded verdict for this spend is also `OK`.
-Under the hypotheses of `MultisigRecoverySpend`, `multisigRecovery_sound_coreVerifier` proves that an accepted spend of this template satisfies the ordinary branch or the recovery branch ([worked property](SOUNDNESS.md#script-worked-property-multisig-with-recovery)).
-The [verifier section](SOUNDNESS.md#secp256k1-public-key-parser-and-cores-verifier) states the step of `coreVerifier` that no theorem relates to Core.
+Under the hypotheses of `MultisigRecoverySpend`, `multisigRecovery_sound_coreVerifier` proves that an accepted spend of this template satisfies the ordinary branch or the recovery branch ([worked property](docs/soundness/script.md#script-worked-property-multisig-with-recovery)).
+The [verifier section](docs/soundness/cryptography.md#secp256k1-public-key-parser-and-cores-verifier) states the step of `coreVerifier` that no theorem relates to Core.
 
 ## Documents
 

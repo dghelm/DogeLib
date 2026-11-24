@@ -105,7 +105,7 @@ DEFINITION_SEPARATOR = re.compile(
     r"(?:\s*\((?:[^()]|\([^()]*\))*\))*\s*(?P<dash>—|–|--)\s+")
 # Library reference text describes the present library (rule C3).
 HISTORY_SCOPE = re.compile(
-    r"^(?:DogeLib/|(?:README|ARCHITECTURE|BUILDING|SOUNDNESS|WRITING)\.md$)|\.lean$")
+    r"^(?:DogeLib/|docs/soundness/|(?:README|ARCHITECTURE|BUILDING|SOUNDNESS|WRITING)\.md$)|\.lean$")
 # SOUNDNESS.md holds facts that scripts/soundness_facts.py writes between these markers.
 GENERATED_START = re.compile(r"<!--\s*generated:")
 GENERATED_END = re.compile(r"<!--\s*end generated\s*-->")

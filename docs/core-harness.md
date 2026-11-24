@@ -25,7 +25,8 @@ See [docs/soundness/oracle-and-harness.md](soundness/oracle-and-harness.md) for 
   - The trust model documents the foreign boundary, compiler, runtime and digest-collision assumptions.
 - Failure:
   - A response object carries either an `ok` result or an `error`. Its `kind` selects its other fields ([errors](oracle.md#errors)). For example, a request error has a free-text `message` and no `reason`.
-  - A serialization error stops evaluation before any consensus check of that request. A `blocks_file` request reads and validates its blocks one at a time, so a decoding error in a later block comes after the consensus checks of the earlier blocks.
+  - A serialization error in a block stops evaluation before any consensus check of that block.
+    `block.validate` reads and validates its blocks one at a time, from `blocks_hex` or from `blocks_file`. So a decoding error in a later block can come after the consensus checks of earlier blocks.
   - Adapter errors report resource, view or domain limits and are separate from consensus rejection.
   - An unmapped Core exception or mismatch ends the harness with exit status 3 and fails the run.
   - Outside checked flag-dependency refusals, any request error from either program fails comparison.

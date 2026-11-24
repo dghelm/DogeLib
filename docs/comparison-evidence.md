@@ -921,6 +921,59 @@ The oracle did not check the blocks between the ranges.
 On mainnet the CSV state is never active, so the walk changes no verdict of the ranges ([docs/soundness/blocks.md](soundness/blocks.md#version-bits)).
 The ranges compare the states that the walk reports, in the oracle and in Core.
 
+### The conformance corpus
+
+The conformance corpus is stage 5 of design record 0011.
+[docs/conformance.md](conformance.md) defines its formats and the steps of a run.
+Each range of the corpus has a range request with restricted coins. They are the coins of the snapshot at its start whose transaction ID the blocks name.
+`validateBlock_restrict` states why these coins give each block the verdict of the whole set ([coverage](coverage/blocks.md#block-validation-on-the-coins-that-a-block-names)).
+
+**The run.**
+For each range, `scripts/conformance.py request` wrote the range request from the snapshot of the Core pass and the source request of `scripts/impact_run.py request`.
+Then `scripts/conformance.py compare` ran both programs on it, on one core at low priority:
+
+```bash
+nice -n 19 taskset -c 12 python3 -I scripts/conformance.py compare --range <NAME> --dir build/conformance-work/<NAME> --recorded <range-oracle-response.json> .lake/build/bin/dogelib-oracle build/core-harness/core-oracle
+```
+
+The oracle and the harness `core-oracle` were built from `main` at `7444635`, the harness without `--trap-overflow`.
+The runs were on 2026-11-24, one range at a time.
+[`tests/generators.toml`](../tests/generators.toml) records the command, the SHA-256 of each input and output, and the times of each range.
+
+| Range | Heights | Blocks | Start coins | End: coins and digest | Spent | Created | Core | Oracle |
+| --- | --- | ---: | ---: | --- | ---: | ---: | ---: | ---: |
+| short | 9,001 to 10,000 | 1,000 | 35,224 | 64,545, `df2822c32b94e18245581f49a345faabe590f648c320112d64f92ebbe798f30d` | 47,185 | 76,506 | 2 s | 89 s |
+| A | 145,001 to 155,000 | 10,000 | 1,126,994 | 1,411,335, `18e2c2cf047b8ebd86bd81c8352bd156dd4bb58552e24d06155a966aefab4daa` | 472,618 | 756,959 | 41 s | 1,274 s |
+| B | 370,337 to 372,336 | 2,000 | 594,617 | 641,138, `19fa027a5cf528937013668a62cd88d907889c34d299e674cfa6da3a4014c1ba` | 90,664 | 137,185 | 10 s | 227 s |
+| C | 599,000 to 600,999 | 2,000 | 580,188 | 596,068, `9a9b2dfeaf468affdb624d5e40f87bf83471d8a451fdce7bd74b940e15ec3319` | 173,936 | 189,816 | 14 s | 483 s |
+| D | 1,033,383 to 1,035,382 | 2,000 | 493,817 | 499,226, `7b31b0be6e08ce6511db42f925596fee4d1a1b4aa1bc7ae16142aa9790b1dc1d` | 61,002 | 66,411 | 7 s | 173 s |
+| E1 | 1,198,520 to 1,200,519 | 2,000 | 282,022 | 316,987, `232e024d1738c360ce0cd02aad91e9ef4f5970b04ff640a6fe80b48858af00d7` | 57,055 | 92,020 | 6 s | 159 s |
+| E2 | 1,702,520 to 1,704,519 | 2,000 | 785,232 | 775,177, `ff9a583be94733c0b803bbaa7a2f448d86b29dcb94b4eea838abe7a16ed6fa89` | 68,452 | 58,397 | 12 s | 215 s |
+| F | 3,463,751 to 3,465,750 | 2,000 | 467,821 | 502,753, `41fdcd7e7085f8e915241f79f970b555141b6ba3fb540ceda985805d8125446e` | 154,273 | 189,205 | 13 s | 389 s |
+| H | 5,049,001 to 5,050,000 | 1,000 | 568,840 | 583,104, `6aec16b0c5419b2c27ccba406f2be56521dacc5deaf0531d5909773e6da8249c` | 224,569 | 238,833 | 14 s | 598 s |
+
+In each range, both programs accept every block.
+Their two `block.validate` responses agree in every field of the full comparison.
+So they agree on every block record, on the start digest and on the end digest of the restricted set.
+The checker `scripts/check_range_results.py` passes on the results of the oracle against those of the harness.
+The results of the harness are the committed expected results in [`tests/conformance/ranges/`](../tests/conformance).
+
+For A, B, C, D, F and H, `--recorded` named the oracle's response of the recorded run of the range from the whole snapshot ([ranges A to H](#ranges-a-to-h)).
+For the short range it named Core's response of its replay from the genesis block to height 10,000, which `scripts/impact_run.py request --harness` wrote.
+In each of these seven ranges, the block records of the run from the restricted coins equal the recorded records.
+No response of the recorded runs of E1 and E2 was kept, so their records were compared only between the two programs.
+For A to H, E1 and E2, the numbers spent and created equal those of the recorded runs in the tables above.
+
+The oracle took 3,607 seconds for the nine ranges, about one hour on one core.
+Each result is one run.
+It holds under the hypothesis of section 3.4: the snapshot at the start is Core's coin set at its height.
+
+**The assets.**
+`scripts/conformance.py pack` wrote the blocks, the block manifest and the range request of each range as release assets, 27 files of 256 MB in all.
+They are in the release `conformance-corpus-2026-11-24`, and [`tests/conformance/release.json`](../tests/conformance/release.json) gives the size and the SHA-256 of each.
+In CI, the job `core` / `conformance` fetches the short range and range D from the release.
+The oracle runs each, and the checker compares its results with the expected results.
+
 ## Block subsidy comparison evidence
 
 The harness calls Core's own `GetDogecoinBlockSubsidy` (D104), so the comparison tests Core's code and the Boost release of the harness build.

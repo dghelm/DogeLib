@@ -2,7 +2,8 @@
 # Replay every declaration of DogeLib into Lean's kernel with the replay function of leanchecker.
 # Adapted from EthLib, scripts/replay.sh at commit b4070a856 (CC0 1.0).
 # The changes are the library name, this note, the comments on Mathlib and on the crash of Lean v4.36.0,
-# the argument LIBRARY, and the module inventory, which replays every module without a source filter.
+# the argument LIBRARY, the module inventory, which replays every module without a source filter,
+# and the second planted fixture, a changed inductive type.
 #
 # Usage: scripts/replay.sh [LIBRARY]
 # LIBRARY is the directory of a library, `DogeLib` by default.
@@ -12,6 +13,8 @@
 #
 # The replay reads the private part of each module, so it checks proof bodies again.
 # It finds a declaration that a metaprogram added without the kernel check.
+# `scripts/ReplayModule.lean` also requires each stored constant to equal the one in the replayed environment.
+# That finds a stored inductive type that differs from the one the kernel generates (Lean issues 16730 and 16688).
 # It uses the same kernel as Lean, so it does not check the kernel itself.
 #
 # leanchecker replays every module whose name starts with its argument, in one process.
@@ -49,6 +52,23 @@ if ! grep -q "$expected" "$fixture_dir/fixture.log"; then
   exit 1
 fi
 echo "the replay rejects the unchecked fixture theorem"
+
+# Second, the replay must reject a stored inductive type that differs from the one the kernel generates (Lean issue 16730).
+lake env lean -o "$fixture_dir/ForgedInductive.olean" scripts/replay-fixtures/ForgedInductive.lean
+if lake env bash -c \
+    'LEAN_PATH="$1:$LEAN_PATH" REPLAY_MODULE=ForgedInductive lean "$2"' \
+    _ "$fixture_dir" "$repo/scripts/ReplayModule.lean" > "$fixture_dir/forged.log" 2>&1; then
+  cat "$fixture_dir/forged.log"
+  echo "the replay accepted a changed inductive type" >&2
+  exit 1
+fi
+expected="the stored inductive type 'PB2' differs from the one that the kernel generated, in \[numParams, numIndices\]"
+if ! grep -q "$expected" "$fixture_dir/forged.log"; then
+  cat "$fixture_dir/forged.log"
+  echo "the replay failed on the changed inductive type for another reason" >&2
+  exit 1
+fi
+echo "the replay rejects the changed fixture inductive type"
 
 # Every module is replayed: the root and each file under the library directory.
 # The source text does not decide which modules to skip, because a file can declare something in a form that a pattern misses.

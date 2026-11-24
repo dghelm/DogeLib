@@ -232,6 +232,14 @@ jobs:
         if: ${{ !cancelled() }}
         run: python3 -I scripts/generate_header_sequences.py --check
 
+      - name: lean command check
+        if: ${{ !cancelled() }}
+        run: python3 -I scripts/check_lean_commands.py
+
+      - name: lean command check self-test
+        if: ${{ !cancelled() }}
+        run: python3 -I scripts/test_check_lean_commands.py
+
       - name: script corpus freshness
         if: ${{ !cancelled() }}
         run: python3 -I scripts/convert_script_tests.py --check

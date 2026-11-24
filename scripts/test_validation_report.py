@@ -284,6 +284,8 @@ class Reports(unittest.TestCase):
             'declaration-check-self-test': 'bash scripts/test_check_decls.sh',
             'kernel-replay': 'REPLAY_JOBS=2 bash scripts/replay.sh && REPLAY_JOBS=2 bash scripts/replay.sh tests/ProposalExamples',
             'kernel-replay-self-test': 'bash scripts/test_replay.sh',
+            'lean-command-check': 'python3 -I scripts/check_lean_commands.py',
+            'lean-command-check-self-test': 'python3 -I scripts/test_check_lean_commands.py',
             'source-and-coverage-review': None,
             'conformance': 'lake test',
             'pinned-vectors': '(cd tests/cryptography/secp256k1 && sha256sum -c SHA256SUMS) && '

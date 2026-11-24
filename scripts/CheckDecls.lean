@@ -18,6 +18,7 @@ Every declaration in scope is checked for:
 * an `unsafe`, `partial` or `opaque` constant, which the kernel cannot unfold;
 * `@[extern]` or `@[implemented_by]`, which make the compiled code run something other than the definition;
 * a `@[csimp]` theorem that replaces a function in scope.
+* an inductive type that disagrees with the other types of its declaration, its constructors or its recursor, as a changed stored copy does (Lean issue 16730).
 
 A definition of the specification is also checked for reaching an opaque constant through the definitions it unfolds to.
 `while` reaches `Loop.forIn`, which Lean core defines with `partial`, and `IO` reaches the runtime's primitives.
@@ -235,11 +236,49 @@ def inductiveOwner? (env : Environment) (scope : Name) : Name → Option Name
     if (env.find? n).any (· matches .inductInfo _) && inScope env scope n then some n
     else inductiveOwner? env scope p
 
+/-! ## Inductive types against the constants that the kernel generates with them -/
+
+/-- Why the stored inductive type `v` disagrees with the constants of its declaration, if it does.
+
+A metaprogram can store an `InductiveVal` with other values than the kernel generated, and the kernel replay of Lean v4.35.0 does not compare them (Lean issue 16730).
+The kernel trusts the stored `numParams` when it types a projection, so a wrong value can prove `False`.
+The kernel replay of `scripts/replay.sh` compares every field.
+This check is weaker and needs no replay.
+It compares `v` with the other types of its declaration, its constructors and its recursor.
+The replay compares the constructors and recursors with the ones the kernel generates, so a forged `numParams` or `numIndices` shows here as a disagreement.
+A forged `isRec`, `isReflexive`, `numNested` or `type` does not show. -/
+def inductiveMismatch? (env : Environment) (v : InductiveVal) : Option String := do
+  let mut why : Array String := #[]
+  unless v.all.contains v.name do
+    why := why.push "its `all` field does not list it"
+  for m in v.all do
+    match env.find? m with
+    | some (.inductInfo w) =>
+      unless w.all == v.all do why := why.push s!"'{m}' has another `all` field"
+      unless w.numParams == v.numParams do why := why.push s!"'{m}' has {w.numParams} parameters, not {v.numParams}"
+      unless w.levelParams == v.levelParams do why := why.push s!"'{m}' has other universe parameters"
+    | _ => why := why.push s!"'{m}' of its `all` field is not an inductive type"
+  for c in v.ctors do
+    match env.find? c with
+    | some (.ctorInfo w) =>
+      unless w.induct == v.name do why := why.push s!"the constructor '{c}' belongs to '{w.induct}'"
+      unless w.numParams == v.numParams do why := why.push s!"the constructor '{c}' has {w.numParams} parameters, not {v.numParams}"
+    | _ => why := why.push s!"'{c}' of its `ctors` field is not a constructor"
+  match env.find? (Name.mkStr v.name "rec") with
+  | some (.recInfo r) =>
+    unless r.numParams == v.numParams do why := why.push s!"its recursor has {r.numParams} parameters, not {v.numParams}"
+    unless r.numIndices == v.numIndices do why := why.push s!"its recursor has {r.numIndices} indices, not {v.numIndices}"
+  | _ => why := why.push "it has no recursor"
+  if why.isEmpty then none else some (", ".intercalate why.toList)
+
 /-- Check every declaration in a module under `scope`. -/
 def check (env : Environment) (scope : Name) : Array Finding := Id.run do
   let decls := env.constants.toList.filter fun (n, _) => inScope env scope n
   let mut out : Array Finding := #[]
   for (n, c) in decls do
+    if let .inductInfo v := c then
+      if let some why := inductiveMismatch? env v then
+        out := out.push ⟨"inductive-metadata", n, s!"the stored inductive type disagrees with its declaration: {why}"⟩
     if let .axiomInfo _ := c then
       unless isNativeAxiom env n do
         out := out.push ⟨"axiom", n, "an axiom declaration"⟩

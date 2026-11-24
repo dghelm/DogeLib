@@ -1,0 +1,4 @@
+# Lines of library modules that may run code during elaboration (scripts/check_lean_commands.py).
+# Each entry: path | code line, without comments and strings | reason.
+DogeLib/Proofs/TheoremTag.lean | initialize | Registers the attribute `theorem_tag`. Its handler reads the environment to check that the declaration is a theorem and returns a tag, which Lean stores in the attribute's extension. It adds no constant and writes no other part of the environment.
+DogeLib/Proposals/Framework/Proofs/Block.lean | elab c:ident : term => do | `definition_value%` returns the stored value of a definition as a term. It writes nothing. The kernel then checks each theorem that uses the term, such as `validateBlock_value`, and the kernel replay checks the stored value itself.

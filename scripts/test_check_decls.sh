@@ -84,6 +84,24 @@ else
   echo "FAIL: the imported unfinished proof was not attributed"; cat "$WORK/imported"; FAIL=1
 fi
 
+# A stored inductive type that disagrees with its declaration must fail (Lean issue 16730).
+# The planted module of the kernel replay stores `PB2` with one parameter and no index, where the kernel generated none and one.
+# It is compiled outside every library, because a module that imports it can prove `False`.
+# The earlier runs of `lake exe check-decls` built the executable.
+mkdir -p "$WORK/forged"
+if ! lake env lean -o "$WORK/forged/ForgedInductive.olean" scripts/replay-fixtures/ForgedInductive.lean >"$WORK/forged/build" 2>&1; then
+  echo "FAIL: the forged fixture does not compile"; cat "$WORK/forged/build"; FAIL=1
+elif lake env bash -c 'LEAN_PATH="$1:$LEAN_PATH" exec "$2" --scope ForgedInductive --baseline /dev/null ForgedInductive' \
+    _ "$WORK/forged" .lake/build/bin/check-decls >"$WORK/forged/out" 2>&1; then
+  echo "FAIL: the declaration check accepted a changed inductive type"; cat "$WORK/forged/out"; FAIL=1
+elif grep -q "^inductive-metadata PB2: .*the constructor 'PB2.mk' has 0 parameters, not 1" "$WORK/forged/out" \
+    && grep -q "^inductive-metadata PB2: .*its recursor has 1 indices, not 0" "$WORK/forged/out" \
+    && grep -q "^inductive-metadata PA2: .*'PB2' has 1 parameters, not 0" "$WORK/forged/out"; then
+  echo "ok:   a changed numParams and numIndices of a mutual inductive type fail the check"
+else
+  echo "FAIL: the changed inductive type was not reported"; cat "$WORK/forged/out"; FAIL=1
+fi
+
 # Check the actual imported environment against every production file on disk.
 if lake exe check-decls >"$WORK/production" 2>&1; then
   echo "ok:   every production module is reachable and has no findings"

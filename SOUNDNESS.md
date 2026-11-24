@@ -45,7 +45,7 @@ Gap D asks whether the use of DogeLib holds together.
 | B6 | Extraction or the Rust toolchain is wrong | `decode_refines` relates the extracted Rust reader model to `decodeBounded`. Charon, Aeneas, library models, the Rust compiler and runtime remain trusted. See [B6](#b6-extraction-and-the-rust-toolchain). | I |
 | C1 | The Lean kernel or its axioms are unsound | `lake exe check-decls` rejects transitive axiom dependencies outside the allowed set, including imported unfinished proofs. Kernel soundness and axiom consistency remain trusted. | P I |
 | C2 | A proof trusts compiled code | `lake exe check-decls` fails on any use | P I |
-| C3 | A declaration reached the environment unchecked | `scripts/replay.sh` replays each module under `DogeLib/` into the kernel on each push to `main` and every week. `Refinement/` is not replayed. The declaration check requires every production module to be reachable from its default roots. See [C3](#c3-declarations-the-kernel-did-not-check). | P I |
+| C3 | A declaration reached the environment unchecked | `scripts/replay.sh` replays each module of `DogeLib` into the kernel on each push to `main` and every week. `Refinement/` is not replayed. The declaration check requires every production module to be reachable from its default roots. See [C3](#c3-declarations-the-kernel-did-not-check). | P I |
 | D1 | A client misuses an operation, such as a prefix decoder where complete consumption is required | Policy: each public operation documents its input domain and consumption contract | R I |
 | D2 | A dependency changes | Source and toolchain pins constrain dependency changes. The root package has no Lake dependencies, while the separate refinement package owns Aeneas and Mathlib. See [D2](#d2-dependency-changes). | P R I |
 | D3 | The fixtures are wrong | Each fixture records its provenance. The NIST CAVP files, Wycheproof P1363 records and Core's `sighash.json` are pinned by digest, and CI checks the pins. Core's test cases are copied into `tests/KnownAnswers/` topic modules with their file and line. | F |
@@ -4194,15 +4194,19 @@ The fixtures in `scripts/CheckDeclsTest` use them on purpose.
 ### C3. Declarations the kernel did not check
 
 A metaprogram can add a declaration to the environment without the kernel checking it.
-`scripts/replay.sh` replays the declarations of each module under `DogeLib/` into Lean's kernel, with the function `replayFromImports` of leanchecker in Lean `v4.35.0`.
+
+`scripts/replay.sh` replays the declarations of each module of `DogeLib` into Lean's kernel, with the function `replayFromImports` of leanchecker in Lean `v4.35.0`.
 The replay reads the private part of each module, so it checks the proof bodies again.
-A module that only imports other modules declares nothing, and the script does not replay it.
+The script replays every module: the root `DogeLib.lean` and each `.lean` file under `DogeLib/`.
+It does not read the source to skip a module, and a module without an `.olean` file fails the replay.
 The workflow `replay` runs the script after `lake build --wfail` on each push to `main`, every Monday and on request.
 It does not run on pull requests, so a declaration that the kernel did not check can reach `main` before the next replay finds it.
 
 The replay first requires the rejection of a planted theorem that the kernel never checked, `scripts/ReplayFixture.lean`.
 Then it replays each module in its own process, with a time budget of 300 seconds for each module.
 A module that the kernel rejects, or that does not finish within the budget, fails the replay by name.
+`scripts/test_replay.sh` runs the script on planted libraries in CI.
+An unchecked theorem in the root fails it, and so does one on the `namespace` line of a module with submodules.
 
 The replay uses the same kernel as Lean, so it does not check the kernel itself (C1).
 It does not replay the modules under `Refinement/`, which import Aeneas and Mathlib.

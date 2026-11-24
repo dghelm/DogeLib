@@ -280,6 +280,7 @@ class Reports(unittest.TestCase):
             'rust-extraction-freshness': 'Refinement/Rust/regenerate.sh --check',
             'declaration-check-self-test': 'bash scripts/test_check_decls.sh',
             'kernel-replay': 'REPLAY_JOBS=2 bash scripts/replay.sh',
+            'kernel-replay-self-test': 'bash scripts/test_replay.sh',
             'source-and-coverage-review': None,
             'conformance': 'lake test',
             'pinned-vectors': '(cd tests/cryptography/secp256k1 && sha256sum -c SHA256SUMS) && '

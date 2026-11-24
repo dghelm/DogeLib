@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
 # Replay every declaration of DogeLib into Lean's kernel with the replay function of leanchecker.
 # Adapted from EthLib, scripts/replay.sh at commit b4070a856 (CC0 1.0).
-# The changes are the library name, this note, and the comments on Mathlib and on the crash of Lean v4.36.0.
+# The changes are the library name, this note, the comments on Mathlib and on the crash of Lean v4.36.0,
+# the argument LIBRARY, and the module inventory, which replays every module without a source filter.
+#
+# Usage: scripts/replay.sh [LIBRARY]
+# LIBRARY is the directory of a library, `DogeLib` by default.
+# The modules are its root file LIBRARY.lean and every `.lean` file under LIBRARY/.
 # Run it after `lake build`, which writes the `.olean` files that it reads.
+# `scripts/test_replay.sh` runs it on a small planted library, with `REPLAY_LEAN_PATH` for its `.olean` files.
 #
 # The replay reads the private part of each module, so it checks proof bodies again.
 # It finds a declaration that a metaprogram added without the kernel check.
@@ -14,14 +20,23 @@
 # The script runs `REPLAY_JOBS` replays at a time.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+repo="$PWD"
+
+library="${1:-DogeLib}"
+library="${library%/}"
+if [ ! -d "$library" ] || [ ! -f "$library.lean" ]; then
+  echo "the library $library needs the directory $library and the root file $library.lean" >&2
+  exit 2
+fi
+extra_path="${REPLAY_LEAN_PATH:-}"
 
 # First, the replay must reject a theorem that the kernel never checked.
 fixture_dir="$(mktemp -d)"
 trap 'rm -rf "$fixture_dir"' EXIT
 lake env lean -o "$fixture_dir/ReplayFixture.olean" scripts/ReplayFixture.lean
 if lake env bash -c \
-    'LEAN_PATH="$1:$LEAN_PATH" REPLAY_MODULE=ReplayFixture lean scripts/ReplayModule.lean' \
-    _ "$fixture_dir" > "$fixture_dir/fixture.log" 2>&1; then
+    'LEAN_PATH="$1:$LEAN_PATH" REPLAY_MODULE=ReplayFixture lean "$2"' \
+    _ "$fixture_dir" "$repo/scripts/ReplayModule.lean" > "$fixture_dir/fixture.log" 2>&1; then
   cat "$fixture_dir/fixture.log"
   echo "the replay accepted a theorem that the kernel never checked" >&2
   exit 1
@@ -35,40 +50,19 @@ if ! grep -q "$expected" "$fixture_dir/fixture.log"; then
 fi
 echo "the replay rejects the unchecked fixture theorem"
 
-# A module that only imports declares nothing, so it is not replayed.
-# Any other module is replayed alone, and each of its submodules in its own process.
+# Every module is replayed: the root and each file under the library directory.
+# The source text does not decide which modules to skip, because a file can declare something in a form that a pattern misses.
+# A module that only imports replays quickly, because it has no constants of its own.
 jobs="${REPLAY_JOBS:-2}"
-modules="$(mktemp)"
 targets="$(mktemp)"
-trap 'rm -rf "$fixture_dir" "$modules" "$targets"' EXIT
-find DogeLib -name '*.lean' | sed 's/\.lean$//; s#/#.#g' | LC_ALL=C sort > "$modules"
-while read -r m; do
-  if grep -q "^${m//./\\.}\\." "$modules"; then
-    file="$(echo "$m" | tr . /).lean"
-    # Comments, imports, sections and commands such as `#print` declare nothing.
-    # One awk reads the whole file, so no pipe can end early.
-    if awk '
-        { line = $0 }
-        inner { k = index(line, "-/"); if (!k) next; line = substr(line, k + 2); inner = 0 }
-        { while ((k = index(line, "/-")) > 0) {
-            rest = substr(line, k + 2); e = index(rest, "-/")
-            if (e) line = substr(line, 1, k - 1) substr(rest, e + 2)
-            else { line = substr(line, 1, k - 1); inner = 1 } } }
-        { sub(/--.*/, "", line) }
-        line ~ /^[ \t]*$/ { next }
-        line ~ /^[ \t]*(module|end|(@\[expose\] )?(public )?section)([ \t]|$)/ { next }
-        line ~ /^[ \t]*(public )?import / { next }
-        line ~ /^[ \t]*(namespace|open) / { next }
-        line ~ /^[ \t]*#[a-z_]+/ { next }
-        { found = 1; exit }
-        END { exit !found }' "$file"; then
-      echo "$m" >> "$targets"
-    fi
-  else
-    echo "$m" >> "$targets"
-  fi
-done < "$modules"
-echo "replaying $(wc -l < "$targets") of $(wc -l < "$modules") modules, $jobs at a time"
+trap 'rm -rf "$fixture_dir" "$targets"' EXIT
+base="$(dirname "$library")"
+name="$(basename "$library")"
+{
+  echo "$name"
+  (cd "$base" && find "$name" -name '*.lean' -print | sed 's/\.lean$//; s#/#.#g')
+} | LC_ALL=C sort > "$targets"
+echo "replaying $(wc -l < "$targets") modules of $name, $jobs at a time"
 start=$SECONDS
 # A proof can make the kernel evaluate a large computation that the build did not evaluate.
 # Its replay can then run for hours and fill the memory of the runner.
@@ -76,16 +70,20 @@ start=$SECONDS
 budget="${REPLAY_BUDGET:-300}"
 # `xargs` runs every module and fails if one fails.
 # The kernel names the declaration that it rejects.
-LEAN_NUM_THREADS=1 lake env xargs -P "$jobs" -n 1 bash -c '
+# A module without an `.olean` file fails too, because the replay cannot read it.
+LEAN_NUM_THREADS=1 lake env bash -c '
+  [ -n "$1" ] && export LEAN_PATH="$1:$LEAN_PATH"
+  shift
+  exec xargs -P "$@"' _ "$extra_path" "$jobs" -n 1 bash -c '
   begin=$SECONDS
   status=0
-  REPLAY_MODULE="$2" timeout "$1" lean scripts/ReplayModule.lean || status=$?
+  REPLAY_MODULE="$3" timeout "$1" lean "$2" || status=$?
   if [ "$status" -eq 0 ]; then
-    echo "$2 replayed in $((SECONDS - begin)) s"
+    echo "$3 replayed in $((SECONDS - begin)) s"
   elif [ "$status" -eq 124 ]; then
-    echo "$2 did not replay within the budget of $1 s" >&2
+    echo "$3 did not replay within the budget of $1 s" >&2
   else
-    echo "$2 failed to replay after $((SECONDS - begin)) s" >&2
+    echo "$3 failed to replay after $((SECONDS - begin)) s" >&2
   fi
-  exit "$((status != 0))"' _ "$budget" < "$targets"
+  exit "$((status != 0))"' _ "$budget" "$repo/scripts/ReplayModule.lean" < "$targets"
 echo "replayed in $((SECONDS - start)) s"

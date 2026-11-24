@@ -24,8 +24,8 @@ See [docs/soundness/oracle-and-harness.md](soundness/oracle-and-harness.md) for 
   - No machine-checked theorem equates the Lean specification, the compiled binary or the Core C++ binary.
   - The trust model documents the foreign boundary, compiler, runtime and digest-collision assumptions.
 - Failure:
-  - A response object carries either an `ok` result or a typed `error` with a `kind` and `reason`.
-  - Serialization and block-file errors stop evaluation before consensus checks run.
+  - A response object carries either an `ok` result or an `error`. Its `kind` selects its other fields ([errors](oracle.md#errors)). For example, a request error has a free-text `message` and no `reason`.
+  - A serialization error stops evaluation before any consensus check of that request. A `blocks_file` request reads and validates its blocks one at a time, so a decoding error in a later block comes after the consensus checks of the earlier blocks.
   - Adapter errors report resource, view or domain limits and are separate from consensus rejection.
   - An unmapped Core exception or mismatch ends the harness with exit status 3 and fails the run.
   - Outside checked flag-dependency refusals, any request error from either program fails comparison.
@@ -113,41 +113,41 @@ Each row maps one harness operation to the Dogecoin Core code it calls and to it
 
 | `op` | Core's code | Sources |
 | --- | --- | --- |
-| `auxpow.check` | `CAuxPow::check` on a payload that Core's stream code reads | D41, D54, D55, D56 (`harness/core/auxpow_fixtures.inc`) |
+| `auxpow.check` | `CAuxPow::check` on a payload that Core's stream code reads | D41 and D54, the full-header and payload readers. D55, `CAuxPow::check`. D6, `CheckAuxPowProofOfWork`. D14, `GetConsensus`. D33, only the two version gates, with D10's `IsLegacy` and `IsAuxpow`. `harness/core/auxpow_fixtures.inc` adapts D56's deterministic construction and runtime-mined cases, and checks their exact bytes and verdicts. |
 | `block.check` | `SelectParams` for mainnet, then `CheckBlock` on a `CBlock` that Core's stream code reads from the request, with the two flags of the request. Then `GetLegacySigOpCount` for each transaction, `GetSerializeSize` in base mode and `GetHash` | D14, D21, D106, D108 |
-| `block.check_pow` | `SelectParams`, `Params().GetConsensus(selection_height)`, then `CheckAuxPowProofOfWork` with generic scrypt | D6, D14, D40, D41, D54, D56 (`harness/core/auxpow_fixtures.inc`), D61 |
-| `block.check_version` | `Params().GetConsensus(selection_height)` for `fAllowLegacyBlocks`, then the two version gates of `ContextualCheckBlockHeader` through Core's `IsLegacy` and `IsAuxpow` | D10, D14, D33 |
-| `block.contextual_check` | `ContextualCheckBlockHeader` on index entries that the harness builds from the request | D33, D67, D69 |
+| `block.check_pow` | `SelectParams`, `Params().GetConsensus(selection_height)`, then `CheckAuxPowProofOfWork` with generic scrypt | D41 and D54, the full-header and payload readers. D55, `CAuxPow::check`. D6, `CheckAuxPowProofOfWork`. D14, `GetConsensus`. D33, only the two version gates, with D10's `IsLegacy` and `IsAuxpow`. `harness/core/auxpow_fixtures.inc` adapts D56's deterministic construction and runtime-mined cases, and checks their exact bytes and verdicts. |
+| `block.check_version` | `Params().GetConsensus(selection_height)` for `fAllowLegacyBlocks`, then the two version gates of `ContextualCheckBlockHeader` through Core's `IsLegacy` and `IsAuxpow` | D41 and D54, the full-header and payload readers. D55, `CAuxPow::check`. D6, `CheckAuxPowProofOfWork`. D14, `GetConsensus`. D33, only the two version gates, with D10's `IsLegacy` and `IsAuxpow`. `harness/core/auxpow_fixtures.inc` adapts D56's deterministic construction and runtime-mined cases, and checks their exact bytes and verdicts. |
+| `block.contextual_check` | `ContextualCheckBlockHeader` on index entries that the harness builds from the request | D33, `ContextualCheckBlockHeader`, lines 3066 to 3119. D67 and D69 for the checkpoint state |
 | `block.contextual_check_body` | `SelectParams` for mainnet, then `ContextualCheckBlock` on a `CBlock` that Core's stream code reads, with a predecessor that the harness builds from the chain. `VersionBitsState` reads the aligned boundary's median time, and the harness seeds `THRESHOLD_FAILED` at a boundary at or after the CSV timeout. With `force_csv_active`, the harness seeds `THRESHOLD_ACTIVE` for CSV, a state that no mainnet chain reaches ([the forced CSV state](#core-with-the-csv-state-forced-to-active)) | D14, D102, D103, D110 |
-| `block.header.read` | `CBlockHeader` read from a `CDataStream` in the requested stream mode | D21, D41, D54 |
-| `block.header_sequence` | `AcceptBlockHeader` once for each header, which calls `CheckBlockHeader`, `ContextualCheckBlockHeader` and `AddToBlockIndex`, on an index that the harness builds from the request | D33, D35, D103 |
+| `block.header.read` | `CBlockHeader` read from a `CDataStream` in the requested stream mode | D41 and D54, the full-header and payload readers. D55, `CAuxPow::check`. D6, `CheckAuxPowProofOfWork`. D14, `GetConsensus`. D33, only the two version gates, with D10's `IsLegacy` and `IsAuxpow`. `harness/core/auxpow_fixtures.inc` adapts D56's deterministic construction and runtime-mined cases, and checks their exact bytes and verdicts. |
+| `block.header_sequence` | `AcceptBlockHeader` once for each header, which calls `CheckBlockHeader`, `ContextualCheckBlockHeader` and `AddToBlockIndex`, on an index that the harness builds from the request | D33, `AcceptBlockHeader`, lines 3205 to 3267, which calls `CheckBlockHeader`, `ContextualCheckBlockHeader` and `AddToBlockIndex`. D35, `BuildSkip`. D103, the state that the textual include reaches |
 | `block.subsidy` | `SelectParams` for mainnet, then `GetDogecoinBlockSubsidy` with `Params().GetConsensus(height)` for each case, as `ConnectBlock` calls it (D101, line 1996) | D14, D101, D104 |
-| `block.validate` | `SelectParams` for mainnet. Then, for each block that Core's stream code reads: `CheckBlockHeader` when `check_pow` is true, `ContextualCheckBlockHeader`, `CheckBlock`, `ContextualCheckBlock`, and `ConnectBlock` with `fJustCheck` true on a new `CCoinsViewCache` over the carried set. The first two do not run for the genesis hash. `UpdateCoins` on a second cache gives the changes of an accepted block ([choices](#block-validation-in-the-harness)) | D33, D35, D102, D103, D106, D110, D113, D114, D116 |
+| `block.validate` | `SelectParams` for mainnet. Then, for each block that Core's stream code reads: `CheckBlockHeader` when `check_pow` is true, `ContextualCheckBlockHeader`, `CheckBlock`, `ContextualCheckBlock`, and `ConnectBlock` with `fJustCheck` true on a new `CCoinsViewCache` over the carried set. The first two do not run for the genesis hash. `UpdateCoins` on a second cache gives the changes of an accepted block ([choices](#block-validation-in-the-harness)) | D33, `CheckBlockHeader` and `ContextualCheckBlockHeader`. D106, `CheckBlock`. D110, `ContextualCheckBlock`. D114, `ConnectBlock`. D113, `CCoinsViewCache`, `UpdateCoins` and the coin view. D116, `InitSignatureCache`. D35, `BuildSkip` and `GetAncestor`. D102 and D103, the version-bits cache and the state that the textual include reaches |
 | `block.version_bits_state` | `SelectParams` for mainnet, then `VersionBitsState` for CSV and SegWit on a `CBlockIndex` chain that the harness builds from the request, with an empty version-bits cache. The consensus parameters are those of the height after the last entry | D14, D100, D102 |
-| `compactsize.encode` | `WriteCompactSize` into a `CDataStream` | D1, D21 |
-| `compactsize.read` | `ReadCompactSize` from a `CDataStream` | D1, D21 |
-| `hash.hash160` | `CHash160::Write` and `Finalize` | D8 |
-| `hash.ripemd160` | `CRIPEMD160::Write` and `Finalize` | `src/crypto/ripemd160.cpp` at the Dogecoin pin |
-| `hash.sha1` | `CSHA1::Write` and `Finalize` | `src/crypto/sha1.cpp` at the Dogecoin pin |
-| `header.encode` | `CPureBlockHeader` written to a `CDataStream` | D10, D21 |
-| `header.hash` | `CPureBlockHeader::GetHash` | D40 |
-| `header.read` | `CPureBlockHeader` read from a `CDataStream` | D10, D21 |
-| `merkle.compute` | `ComputeMerkleRoot`, including its `mutated` output argument (at most 2^31 internal-order leaves) | D42 |
+| `compactsize.encode` | `WriteCompactSize` into a `CDataStream` | D1, `WriteCompactSize` and `ReadCompactSize`. D21, `CDataStream` |
+| `compactsize.read` | `ReadCompactSize` from a `CDataStream` | D1, `WriteCompactSize` and `ReadCompactSize`. D21, `CDataStream` |
+| `hash.hash160` | `CHash160::Write` and `Finalize` | `src/crypto/ripemd160.cpp`, `CRIPEMD160::Write`, `Finalize`. D8, `CHash160::Write`, `Finalize`. `src/crypto/sha1.cpp`, `CSHA1::Write`, `Finalize`. All at the Dogecoin pin. |
+| `hash.ripemd160` | `CRIPEMD160::Write` and `Finalize` | `src/crypto/ripemd160.cpp`, `CRIPEMD160::Write`, `Finalize`. D8, `CHash160::Write`, `Finalize`. `src/crypto/sha1.cpp`, `CSHA1::Write`, `Finalize`. All at the Dogecoin pin. |
+| `hash.sha1` | `CSHA1::Write` and `Finalize` | `src/crypto/ripemd160.cpp`, `CRIPEMD160::Write`, `Finalize`. D8, `CHash160::Write`, `Finalize`. `src/crypto/sha1.cpp`, `CSHA1::Write`, `Finalize`. All at the Dogecoin pin. |
+| `header.encode` | `CPureBlockHeader` written to a `CDataStream` | D10, `CPureBlockHeader::SerializationOp`. D21, `CDataStream`. D40, `CPureBlockHeader::GetHash`. |
+| `header.hash` | `CPureBlockHeader::GetHash` | D10, `CPureBlockHeader::SerializationOp`. D21, `CDataStream`. D40, `CPureBlockHeader::GetHash`. |
+| `header.read` | `CPureBlockHeader` read from a `CDataStream` | D10, `CPureBlockHeader::SerializationOp`. D21, `CDataStream`. D40, `CPureBlockHeader::GetHash`. |
+| `merkle.compute` | `ComputeMerkleRoot`, including its `mutated` output argument (at most 2^31 internal-order leaves) | D42, `ComputeMerkleRoot` and `MerkleComputation`, with at most 2^31 internal-order leaves. |
 | `pubkey.verify` | `CPubKey::Verify`, with storage-order `uint256` digest bytes | D50 |
-| `script.eval` | `EvalScript` with the caller stack and flags, `BaseSignatureChecker` and `SIGVERSION_BASE` | D3, D25 |
+| `script.eval` | `EvalScript` with the caller stack and flags, `BaseSignatureChecker` and `SIGVERSION_BASE` | D3, `EvalScript` with `SIGVERSION_BASE`. D25, `BaseSignatureChecker`. |
 | `script.read_op` | `CScript::GetOp` on the exact script bytes, with iterator `begin() + cursor` | D24 |
-| `script.verify_legacy` | `VerifyScript` with a null witness and the selected `BaseSignatureChecker` or `TransactionSignatureChecker`. `CPubKey::Verify` and `ECCVerifyHandle` use libsecp256k1 | D3, D25, D50 |
-| `scrypt.hash` | `scrypt_1024_1_1_256_sp_generic` (generic scrypt, `--disable-scrypt-sse2`) | D40, D61, D62 |
-| `sighash.legacy` | `tx_hex` read as by `tx.decode_base`. Then `SignatureHash` with amount 0 and `SIGVERSION_BASE` | D3, D4 |
+| `script.verify_legacy` | `VerifyScript` with a null witness and the selected `BaseSignatureChecker` or `TransactionSignatureChecker`. `CPubKey::Verify` and `ECCVerifyHandle` use libsecp256k1 | D3, `VerifyScript` and `TransactionSignatureChecker`. D25, `BaseSignatureChecker`. D50, `CPubKey::Verify` and `ECCVerifyHandle`. |
+| `scrypt.hash` | `scrypt_1024_1_1_256_sp_generic` (generic scrypt, `--disable-scrypt-sse2`) | D40 and D61, `scrypt_1024_1_1_256_sp_generic`, with its output bytes. D62 supplies the five independent digest vectors. |
+| `sighash.legacy` | `tx_hex` read as by `tx.decode_base`. Then `SignatureHash` with amount 0 and `SIGVERSION_BASE` | D3, `SignatureHash` with `SIGVERSION_BASE` |
 | `tx.check` | `CheckTransaction` on a `CTransaction` that Core's stream code reads from the request in the mode of the request. Then `GetLegacySigOpCount` and `GetSerializeSize` in base mode | D4, D21, D106 |
-| `tx.decode_base` | `CMutableTransaction` read from a `CDataStream` with `SERIALIZE_TRANSACTION_NO_WITNESS`, then a check that the stream is empty. The transaction written back to a stream of the same version, and `CTransaction::GetHash` | D4, D11, D21, D23 |
-| `tx.decode_witness` | `CMutableTransaction` read from a `CDataStream` without `SERIALIZE_TRANSACTION_NO_WITNESS`, requiring an empty stream. Writes with witness data allowed and calls `CTransaction::HasWitness`, `GetHash` and `GetWitnessHash` | D4, D11, D21, D23 |
-| `tx.read_base` | `CMutableTransaction` read from a `CDataStream` whose version has `SERIALIZE_TRANSACTION_NO_WITNESS`, so `UnserializeTransaction` reads base mode | D4, D21 |
-| `tx.read_witness` | `CMutableTransaction` read from a `CDataStream` without `SERIALIZE_TRANSACTION_NO_WITNESS`. Writes with witness data allowed and calls `CTransaction::HasWitness`, `GetHash` and `GetWitnessHash` | D4, D11, D21, D23 |
-| `work.calculate_next` | `SelectParams`, `Params().GetConsensus(selection_height)`, then `CalculateDogecoinNextWorkRequired` on an explicit `CBlockIndex` | D6, D7, D14 |
-| `work.get_compact` | `arith_uint256::GetCompact` | D13, D16 |
-| `work.next` | `SelectParams`, candidate-height `GetConsensus`, then `GetNextWorkRequired` on linked `CBlockIndex` objects | D14, D17, D18, D35 |
-| `work.set_compact` | `arith_uint256::SetCompact` | D13, D16 |
+| `tx.decode_base` | `CMutableTransaction` read from a `CDataStream` with `SERIALIZE_TRANSACTION_NO_WITNESS`, then a check that the stream is empty. The transaction written back to a stream of the same version, and `CTransaction::GetHash` | D4, `UnserializeTransaction` and `SerializeTransaction`, with `SERIALIZE_TRANSACTION_NO_WITNESS`. D23, `CTransaction::ComputeHash`. D11, `base_blob::GetHex` |
+| `tx.decode_witness` | `CMutableTransaction` read from a `CDataStream` without `SERIALIZE_TRANSACTION_NO_WITNESS`, requiring an empty stream. Writes with witness data allowed and calls `CTransaction::HasWitness`, `GetHash` and `GetWitnessHash` | D4, `UnserializeTransaction`, `SerializeTransaction` and `CTransaction::HasWitness`, without `SERIALIZE_TRANSACTION_NO_WITNESS`. D23, `CTransaction::GetHash` and `GetWitnessHash`. D11, `base_blob::GetHex` |
+| `tx.read_base` | `CMutableTransaction` read from a `CDataStream` whose version has `SERIALIZE_TRANSACTION_NO_WITNESS`, so `UnserializeTransaction` reads base mode | D4, `UnserializeTransaction` and `SerializeTransaction`, with `SERIALIZE_TRANSACTION_NO_WITNESS`. D23, `CTransaction::ComputeHash`. D11, `base_blob::GetHex` |
+| `tx.read_witness` | `CMutableTransaction` read from a `CDataStream` without `SERIALIZE_TRANSACTION_NO_WITNESS`. Writes with witness data allowed and calls `CTransaction::HasWitness`, `GetHash` and `GetWitnessHash` | D4, `UnserializeTransaction`, `SerializeTransaction` and `CTransaction::HasWitness`, without `SERIALIZE_TRANSACTION_NO_WITNESS`. D23, `CTransaction::GetHash` and `GetWitnessHash`. D11, `base_blob::GetHex` |
+| `work.calculate_next` | `SelectParams`, `Params().GetConsensus(selection_height)`, then `CalculateDogecoinNextWorkRequired` on an explicit `CBlockIndex` | D6, `CalculateDogecoinNextWorkRequired`, lines 41–87. D14, `SelectParams` and `GetConsensus`. Known answers: D7, `get_next_work_*`, lines 123–210. |
+| `work.get_compact` | `arith_uint256::GetCompact` | D13, `arith_uint256::SetCompact` and `GetCompact`, lines 204–245. Known answers: D16, `bignum_SetCompact`, lines 412–538. |
+| `work.next` | `SelectParams`, candidate-height `GetConsensus`, then `GetNextWorkRequired` on linked `CBlockIndex` objects | D17, `GetNextWorkRequired`, lines 32–88. D18, `CBlockIndex`. D35, `BuildSkip` and `GetAncestor`, with `GetSkipHeight` only as a guard on suffix construction. D14, candidate-height parameters. |
+| `work.set_compact` | `arith_uint256::SetCompact` | D13, `arith_uint256::SetCompact` and `GetCompact`, lines 204–245. Known answers: D16, `bignum_SetCompact`, lines 412–538. |
 
 Core's consensus archive supplies `primitives/pureheader.cpp` and `consensus/merkle.cpp`.
 The same archive contains `script/interpreter.cpp`, `script/script.cpp` and `script/script_error.cpp`.

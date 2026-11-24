@@ -429,7 +429,7 @@ One row per public operation. Add rows in sorted order by operation name.
 
 The Core harness, `harness/core/core_oracle.cpp` with `harness/core/core_validation.cpp`, calls Dogecoin Core at the pin.
 [What the harness runs](docs/core-harness.md#what-the-harness-runs) maps all 35 harness operations to Core functions and citations from this file.
-For request parsing and the build, the harness uses D31 (UniValue), D103 (the link line) and D39 (`SelectBaseParams`).
+For request parsing and the build, the harness uses D31, UniValue, to read requests. D19, `configure.ac`: with the daemon enabled, configure requires Boost 1.60.0 or later (lines 688 to 694). D103, the link line. D39 supplies `SelectBaseParams`.
 D19 (`configure.ac`, lines 688 to 694) requires Boost 1.60.0 or later with the daemon enabled.
 
 The fixture generator, `harness/core/core_signer.cpp`, also calls Core at the same pin.

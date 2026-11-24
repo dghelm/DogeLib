@@ -49,7 +49,7 @@ Gap D asks whether the use of DogeLib holds together.
 | B6 | Extraction or the Rust toolchain is wrong | `decode_refines` relates the extracted Rust reader model to `decodeBounded`. Charon, Aeneas, library models, the Rust compiler and runtime remain trusted. See [B6](#b6-extraction-and-the-rust-toolchain). | I |
 | C1 | The Lean kernel or its axioms are unsound | `lake exe check-decls` rejects transitive axiom dependencies outside the allowed set, including imported unfinished proofs. Kernel soundness and axiom consistency remain trusted. | P I |
 | C2 | A proof trusts compiled code | `lake exe check-decls` fails on any use | P I |
-| C3 | A declaration reached the environment unchecked | `scripts/replay.sh` replays each module of `DogeLib`, and of the test-only `ProposalExamples`, into the kernel on each push to `main` and every week, and requires each stored constant to equal the replayed one. `Refinement/` is not replayed. `scripts/check_lean_commands.py` rejects source commands that run code during elaboration, except an allowlist. The declaration check requires every production module to be reachable from its default roots. See [C3](#c3-declarations-the-kernel-did-not-check). | P I |
+| C3 | A declaration reached the environment unchecked | `scripts/replay.sh` replays each module of `DogeLib`, and of the test-only `ProposalExamples`, into the kernel on each push to `main` and every week, and requires each stored constant to equal the replayed one. `Refinement/` is not replayed. `scripts/check_lean_commands.py` reports listed source commands, attributes and names that can run code or write the environment, except in reviewed files that the allowlist pins by digest. The declaration check requires every production module to be reachable from its default roots. See [C3](#c3-declarations-the-kernel-did-not-check). | P I |
 | D1 | A client misuses an operation, such as a prefix decoder where complete consumption is required | Policy: each public operation documents its input domain and consumption contract | R I |
 | D2 | A dependency changes | Source and toolchain pins constrain dependency changes. The root package has no Lake dependencies, while the separate refinement package owns Aeneas and Mathlib. See [D2](#d2-dependency-changes). | P R I |
 | D3 | The fixtures are wrong | Each fixture records its provenance. The NIST CAVP files, Wycheproof P1363 records and Core's `sighash.json` are pinned by digest, and CI checks the pins. Core's test cases are copied into `tests/KnownAnswers/` topic modules with their file and line. | F |
@@ -440,29 +440,26 @@ A changed `isRec`, `isReflexive`, `numNested` or `type` does not, so the replay 
 #### The source check
 
 `scripts/check_lean_commands.py` reads the Lean source of `DogeLib`, `ProposalExamples` and `Refinement/Refinement`, and runs in CI on each pull request.
-It fails on each command of Lean core that runs code during elaboration or defines code for Lean to run later.
-Examples are `run_cmd`, `#eval`, `elab`, `initialize`, `macro` and `macro_rules`.
-A macro counts because it can expand to any command, `run_cmd` included.
+It is a review aid, not a proof that no code runs while Lean builds the libraries.
+It reports each word of three fixed lists in the script:
 
-The check also fails on each attribute that registers a declaration as an elaborator, a macro, a tactic, an initializer or another handler.
-It finds the attribute in `@[...]` and in an `attribute [...]` command, on one line or across lines.
-The attributes whose names start with `builtin_` count too.
-It also fails on each name that writes the environment, skips the kernel or names a private declaration.
-Examples are `setEnv`, `addDecl`, `skipKernelTC`, `_private` and any name with the component `Kernel`.
+- Named commands that run code or register code, such as `run_cmd`, `#eval`, `elab`, `initialize`, `macro`, `macro_rules` and the procedure commands of Lean's `Init/Simproc.lean`, with each word that starts with `builtin_`.
+- Named attributes that register a handler, such as `command_elab` and `tactic`, in `@[...]` or in an `attribute [...]` command, on one line or across lines.
+- Names with a listed component, such as `setEnv`, `addDecl`, `skipKernelTC`, `_private` and `Kernel`.
 
-Each entry of the allowlist `scripts/check_lean_commands_allowlist.txt` allows one construct, which it names by its first line and the SHA-256 of its source.
-A second construct with the same first line, or a changed construct, needs its own reviewed entry.
-The allowlist has four entries, each with a reason.
+The check ignores comments and strings and matches words only.
+It misses what its lists do not name, such as a command that an imported module defines or a function reached under another name.
+It does not cover `extern`, `implemented_by` or `@[export]`, so it is not a ban on native or foreign code.
+The declaration check reports the first two.
+
+Each entry of the allowlist `scripts/check_lean_commands_allowlist.txt` pins one whole file by its SHA-256 and its number of findings, with a reason.
+Any edit to a listed file changes its digest, and the file then fails until a reviewer renews its entry.
+The allowlist has four entries, each with one finding.
 The `initialize` of `DogeLib.Proofs.TheoremTag` registers the attribute described below.
 The `elab` of `definition_value%` in `DogeLib.Proposals.Framework.Proofs.Block` returns the stored value of a definition as a term, and writes nothing.
 The tactic macros `narrow_widen` and `accept_cases` expand to fixed tactic blocks and to no command.
 
-The check matches words in the source.
-So it misses a command or a function that a module reaches under another name, for example a command that an imported module defines.
-`notation`, `infix` and `syntax` are not findings, because they declare parsers and term templates.
-A new command gets its meaning only through one of the findings above.
-The check is not a ban on native or foreign code: `extern` and `implemented_by` are findings of the declaration check, and `@[export]` is not checked.
-It is a second defence, and the replay is the check of what the modules store.
+The replay remains the check of what the modules store.
 
 #### The attribute and the reachability check
 

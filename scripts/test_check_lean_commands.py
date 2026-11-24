@@ -2,12 +2,12 @@
 """
 Self-test of `scripts/check_lean_commands.py`.
 
-Each planted command, name and registration attribute fails the check, including an attribute in an
-`attribute [...]` command or across lines, and a macro that expands to `run_cmd`. The same text in a
-comment, a string or a longer name does not. An allowlist entry allows one construct with its digest:
-a second construct with the same first line, a changed construct and a repeated construct fail, and
-so does an unused or malformed entry. The committed libraries pass with the committed allowlist, and
-the planted forged module of `scripts/replay-fixtures/` fails.
+Each planted command, name and registration attribute fails the check, including an `attribute [...]`
+command, an attribute across lines, a macro that expands to `run_cmd` and a `builtin_simproc`. The
+same text in a comment, a string or a longer name does not. An allowlist entry pins its whole file:
+any edit to the file, such as a second initializer or a continuation of the reviewed one in the first
+column, fails, and so does an unused, repeated or malformed entry. The committed libraries pass with
+the committed allowlist, and the planted forged module of `scripts/replay-fixtures/` fails.
 
     python3 -I scripts/test_check_lean_commands.py
 """
@@ -62,6 +62,16 @@ class Planted(unittest.TestCase):
             ("builtin_initialize pure ()", "builtin_initialize"),
             ("simproc reduceX (f _) := fun _ => pure .continue", "simproc"),
             ("dsimproc reduceY (f _) := fun _ => pure .continue", "dsimproc"),
+            ("simproc_decl reduceZ (f _) := fun _ => pure .continue", "simproc_decl"),
+            ("dsimproc_decl reduceW (f _) := fun _ => pure .continue", "dsimproc_decl"),
+            ("simproc_pattern% f _ => reduceZ", "simproc_pattern%"),
+            ("builtin_simproc ↓ p (f _) := fun _ => pure .continue", "builtin_simproc"),
+            ("builtin_dsimproc p (f _) := fun _ => pure .continue", "builtin_dsimproc"),
+            ("builtin_simproc_decl p (f _) := fun _ => pure .continue", "builtin_simproc_decl"),
+            ("builtin_dsimproc_decl p (f _) := fun _ => pure .continue", "builtin_dsimproc_decl"),
+            ("builtin_simproc_pattern% f _ => p", "builtin_simproc_pattern%"),
+            ("builtin_initialize pure ()", "builtin_initialize"),
+            ("local builtin_some_future_command x", "builtin_some_future_command"),
             ("unsafe def f : Nat := 0", "unsafe"),
         ]:
             with self.subTest(line=line):
@@ -92,16 +102,24 @@ class Planted(unittest.TestCase):
             ("@[tactic foo] def f := 0", 1),
             ("@[init g] def f := 0", 1),
             ("@[macro foo] def f := 0", 1),
-            ("@[builtin_command_elab foo] def f := 0", 1),
-            ("@[local builtin_tactic foo] def f := 0", 1),
+            ("@[sevalproc] def f := 0", 1),
             ("attribute [command_elab probeCmd] probeHandler", 1),
             ("attribute [local term_elab x] h", 1),
-            ("attribute\n  [builtin_init g] f", 2),
+            ("attribute\n  [local init g] f", 2),
             ("@[\n  command_elab probeCmd2\n]\ndef probeHandler2 : CommandElab := fun _ => pure ()", 2),
             ("@[simp,\n  Lean.Elab.Command.command_elab x] def f := 0", 2),
         ]:
             with self.subTest(text=text):
                 self.assertIn(line, [n for n, w, _ in c.findings_of(text) if w.startswith("@[")])
+
+    def test_each_builtin_attribute_fails(self):
+        for text, line, word in [
+            ("@[builtin_command_elab foo] def f := 0", 1, "builtin_command_elab"),
+            ("@[local builtin_tactic foo] def f := 0", 1, "builtin_tactic"),
+            ("attribute\n  [builtin_init g] f", 2, "builtin_init"),
+        ]:
+            with self.subTest(text=text):
+                self.assertIn((line, word), [(n, w) for n, w, _ in c.findings_of(text)])
 
     def test_the_reviewed_probes_fail(self):
         # The probes of the independent review of pull request 206: a command elaborator registered
@@ -127,6 +145,20 @@ class Planted(unittest.TestCase):
             "probe_macro",
         ])
         self.assertEqual([(n, w) for n, w, _ in c.findings_of(macro)], [(3, "macro")])
+        # The probe of the re-review: a builtin simplification procedure.
+        builtin = "\n".join([
+            "import Lean",
+            "open Lean Meta Simp",
+            "",
+            "def probeF (n : Nat) : Nat := Nat.succ n",
+            "",
+            "builtin_simproc ↓ probeProcedure (probeF _) := fun _ => do",
+            "  logInfo \"builtin procedure ran\"",
+            "  return .continue",
+            "",
+            "example (n : Nat) : probeF n ≠ n := by simp [probeF, Nat.succ_ne_self]",
+        ])
+        self.assertEqual([(n, w) for n, w, _ in c.findings_of(builtin)], [(6, "builtin_simproc")])
 
     def test_one_finding_per_line_and_word(self):
         found = c.findings_of("theorem a : True := trivial\nrun_cmd setEnv e\n")
@@ -154,6 +186,9 @@ class NotCode(unittest.TestCase):
             "syntax \"probe\" : tactic",
             "notation \"one\" => 1",
             "def init := 0",
+            "def x := 7 % 2",
+            "def builtinValue := 0",
+            "theorem t_builtin_free : True := trivial",
             "theorem tactic_free : True := trivial",
         ])
         self.assertEqual(c.findings_of(text), [])
@@ -163,90 +198,82 @@ class NotCode(unittest.TestCase):
         self.assertEqual([n for n, _, _ in c.findings_of(text)], [6])
 
 
-ELAB_ONE = "elab \"one%\" : term => do\n  pure (Lean.mkConst ``True)\n"
-ELAB_TWO = "elab \"two%\" : term => do\n  pure (Lean.mkConst ``True)\n"
-INIT = "initialize\n  pure ()\n"
+TAG = ROOT / "DogeLib/Proofs/TheoremTag.lean"
 
 
 class Allowlist(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()
-        self.path = Path(self.dir.name) / "M.lean"
+        self.path = Path(self.dir.name) / "TheoremTag.lean"
         self.rel = self.path.as_posix()
-        self.write(ELAB_ONE + "-- a comment\n\n" + INIT)
+        self.original = TAG.read_text(encoding="utf-8")
+        self.path.write_text(self.original, encoding="utf-8")
 
     def tearDown(self):
         self.dir.cleanup()
 
-    def write(self, text: str) -> None:
-        self.path.write_text(text, encoding="utf-8")
-
-    def entry(self, code: str, body: str) -> str:
-        """An allowlist entry for the construct `body` whose first line has the code `code`."""
-        digest = "sha256:" + hashlib.sha256(body.encode("utf-8")).hexdigest()
-        return f"{self.rel} | {code} | {digest} | reason\n"
-
-    def entries(self) -> str:
-        return self.entry("elab : term => do", ELAB_ONE) + self.entry("initialize", INIT)
+    def entry(self, text: str, count: int = 1) -> str:
+        """An allowlist entry for the file `text` at the temporary path."""
+        digest = "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
+        return f"{self.rel} | {digest} | {count} | reason\n"
 
     def test_no_entry_fails(self):
         status, out = run([self.rel], "")
         self.assertEqual(status, 1)
-        self.assertIn(f"{self.rel}:1: elab", out)
-        self.assertIn(f"{self.rel}:5: initialize", out)
-        self.assertIn(f"{self.rel}:1-2: construct 'elab : term => do' has the digest sha256:", out)
+        self.assertIn(": initialize runs code", out)
+        self.assertIn(f"{self.rel}: the file has the digest sha256:", out)
 
-    def test_the_entries_allow_their_constructs(self):
-        status, out = run([self.rel], self.entries())
+    def test_the_entry_allows_its_file(self):
+        status, out = run([self.rel], self.entry(self.original))
         self.assertEqual(status, 0, out)
 
-    def test_a_second_elaborator_with_the_same_code_fails(self):
-        # Once its string is removed, the second elaborator has the code of the first, but not its digest.
-        self.write(ELAB_ONE + ELAB_TWO + "\n" + INIT)
-        status, out = run([self.rel], self.entries())
+    def test_a_continuation_in_the_first_column_fails(self):
+        # The re-review's probe: an operator in the first column continues the reviewed initializer.
+        changed = self.original.replace("  }\n", "  }\n*> IO.println \"unreviewed initializer continuation ran\"\n", 1)
+        self.assertNotEqual(changed, self.original)
+        self.path.write_text(changed, encoding="utf-8")
+        status, out = run([self.rel], self.entry(self.original))
         self.assertEqual(status, 1)
-        self.assertIn(f"{self.rel}:3: elab", out)
-        self.assertNotIn(f"{self.rel}:1: elab", out)
+        self.assertIn(f"allowlist entry unused: {self.rel}", out)
 
     def test_a_second_initializer_fails(self):
-        self.write(ELAB_ONE + "\n" + INIT + "\ninitialize\n  IO.println \"extra initializer ran\"\n")
-        status, out = run([self.rel], self.entries())
+        self.path.write_text(self.original + "\ninitialize\n  IO.println \"extra initializer ran\"\n", encoding="utf-8")
+        status, out = run([self.rel], self.entry(self.original))
         self.assertEqual(status, 1)
-        self.assertIn(f"{self.rel}:7: initialize", out)
+        self.assertIn(f"{self.rel}: the file has the digest sha256:", out)
+        self.assertIn("and 2 findings", out)
 
-    def test_a_repeated_construct_fails(self):
-        self.write(ELAB_ONE + "\n" + INIT + "\n" + INIT)
-        status, out = run([self.rel], self.entries())
+    def test_a_comment_edit_fails(self):
+        self.path.write_text(self.original + "-- a comment\n", encoding="utf-8")
+        status, _ = run([self.rel], self.entry(self.original))
         self.assertEqual(status, 1)
-        self.assertIn(f"allowlist entry matches 2 constructs, not one: {self.rel} | initialize", out)
 
-    def test_a_changed_construct_fails(self):
-        self.write(ELAB_ONE + "\n" + "initialize\n  pure ()\n  Lean.modifyEnv id\n")
-        status, out = run([self.rel], self.entries())
+    def test_a_wrong_count_fails(self):
+        status, _ = run([self.rel], self.entry(self.original, 2))
         self.assertEqual(status, 1)
-        self.assertIn(f"{self.rel}:4: initialize", out)
-        self.assertIn(f"{self.rel}:6: Lean.modifyEnv", out)
-        self.assertIn(f"allowlist entry unused {self.rel} | initialize", out)
-
-    def test_a_finding_after_the_construct_fails(self):
-        self.write(ELAB_ONE + "run_cmd pure ()\n\n" + INIT)
-        status, out = run([self.rel], self.entries())
-        self.assertEqual(status, 1)
-        self.assertIn(f"{self.rel}:3: run_cmd", out)
 
     def test_an_unused_entry_fails(self):
-        status, out = run([self.rel], self.entries() + self.entry("run_cmd pure ()", "run_cmd pure ()\n"))
+        other = Path(self.dir.name) / "Plain.lean"
+        other.write_text("theorem t : True := trivial\n", encoding="utf-8")
+        allow = self.entry(self.original) + f"{other.as_posix()} | sha256:{'0' * 64} | 1 | reason\n"
+        status, out = run([self.rel, other.as_posix()], allow)
         self.assertEqual(status, 1)
-        self.assertIn(f"allowlist entry unused {self.rel} | run_cmd pure ()", out)
+        self.assertIn(f"allowlist entry unused: {other.as_posix()}", out)
+
+    def test_a_second_entry_for_a_file_fails(self):
+        status, out = run([self.rel], self.entry(self.original) + self.entry(self.original))
+        self.assertEqual(status, 1)
+        self.assertIn(f"a second entry for {self.rel}", out)
 
     def test_a_malformed_entry_fails(self):
-        for bad in [f"{self.rel} | initialize | sha256:00 | reason\n",
-                    f"{self.rel} | initialize | reason\n",
-                    self.entry("initialize", INIT).replace(" | reason", " |")]:
+        for bad in [f"{self.rel} | sha256:00 | 1 | reason\n",
+                    f"{self.rel} | sha256:{'0' * 64} | reason\n",
+                    f"{self.rel} | sha256:{'0' * 64} | 0 | reason\n",
+                    self.entry(self.original).replace(" | reason", " |")]:
             with self.subTest(entry=bad):
                 status, out = run([self.rel], bad)
                 self.assertEqual(status, 1)
-                self.assertIn("an entry needs a path, a code line, a digest sha256:HEX and a reason", out)
+                self.assertIn("an entry needs a path, a digest sha256:HEX, a number of findings and a reason", out)
 
 
 class Repository(unittest.TestCase):

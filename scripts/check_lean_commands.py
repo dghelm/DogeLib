@@ -1,44 +1,38 @@
 #!/usr/bin/env python3
 """
-Check that no library module runs code during elaboration without a reviewed allowlist entry.
+List the commands, attributes and names in library modules that can run code or write the environment.
 
 A metaprogram can store a constant that the kernel never checked, or a changed copy of one that it did
 (Lean issues 16688 and 16730). The kernel replay of `scripts/replay.sh` finds such a constant in a
-compiled module. This check is a second defence on the source, and it runs on pull requests.
+compiled module. This check is a review aid on the source, and it runs on pull requests. It is not a
+proof that no code runs while Lean builds the libraries.
 
 The modules are the Lean files of the libraries DogeLib and ProposalExamples, and the Refinement
 sources: `DogeLib.lean`, `DogeLib/`, `tests/ProposalExamples.lean`, `tests/ProposalExamples/`,
 `Refinement/Refinement.lean` and `Refinement/Refinement/`.
 
-The check fails on three kinds of finding:
+It reports three kinds of finding, each from a fixed list:
 
-* A command of Lean core that runs code or defines code that Lean runs later: `run_cmd`, `#eval`,
-  `elab`, `elab_rules`, `macro`, `macro_rules`, `initialize`, `simproc` and the others of `COMMANDS`.
-  A macro counts, because a macro can expand to any command, `run_cmd` included.
-* An attribute that registers a declaration as an elaborator, a macro, a tactic, an initializer or
-  another handler, in `@[...]` or in an `attribute [...]` command, on one line or several.
-  Each attribute of `REGISTRATIONS` counts, and so does each attribute whose name starts with `builtin_`.
-* A name that writes the environment, skips the kernel or reaches a private part of Lean, such as
-  `setEnv`, `addDecl`, `_private` and any name with the component `Kernel`.
+* A command named in `COMMANDS`, such as `run_cmd`, `#eval`, `elab`, `macro`, `initialize` and the
+  procedure commands of `Init/Simproc.lean`, and each word that starts with `builtin_`.
+* An attribute named in `REGISTRATIONS`, in `@[...]` or in an `attribute [...]` command, on one line
+  or several.
+* A name with a component of `COMPONENTS` or the component `Kernel`, such as `setEnv`, `addDecl` and
+  `_private`.
 
 The check reads code only: comments, strings and character literals are removed first.
-It matches words, so it misses a command or a function that the libraries reach under another name,
-for example a command that an imported module defines. `notation`, `infix` and `syntax` are not
-findings: they declare parsers and term templates, and give a new command meaning only through one
-of the findings above.
+It matches words, so it misses whatever it does not name: a command that an imported module defines,
+or a function reached under another name.
 
-A finding belongs to the construct that contains its line. A construct starts at a line whose code
-starts in the first column, and ends at the last line with code before the next such line.
-The allowlist `scripts/check_lean_commands_allowlist.txt` pins each reviewed construct:
+The allowlist `scripts/check_lean_commands_allowlist.txt` pins each reviewed file whole:
 
-    path | code of the first line | sha256:DIGEST | reason
+    path | sha256:DIGEST | N | reason
 
-The code of the first line is that line after comments and strings are removed, with each run of
-spaces made one space. The digest is the SHA-256 of the construct's source lines, comments and
-strings included, each line ending in a newline. An entry allows the findings of one construct only.
-The check fails on an entry without a reason, an entry that matches no construct, and an entry
-that matches two. When a reviewed construct changes, its digest changes, and the entry must be
-reviewed again. A finding that no entry allows is printed with the digest of its construct.
+The digest is the SHA-256 of the file, and N is the number of findings in it. An entry allows the
+findings of its file only while the file has that digest and that number of findings, so any edit to
+the file needs a renewed entry. The check fails on an entry without a reason, a second entry for one
+file, and an entry that allows nothing. A file whose findings no entry allows is printed with its
+digest and its number of findings.
 
     python3 -I scripts/check_lean_commands.py
     python3 -I scripts/check_lean_commands.py --allowlist FILE PATH...
@@ -83,6 +77,7 @@ COMMANDS = {
     "dsimproc": "defines a simplification procedure, which runs code",
     "simproc_decl": "defines a simplification procedure, which runs code",
     "dsimproc_decl": "defines a simplification procedure, which runs code",
+    "simproc_pattern%": "registers a simplification procedure, which runs code",
     "unsafe": "marks code that the kernel does not check",
 }
 
@@ -101,16 +96,16 @@ COMPONENTS = {
 }
 
 # Attributes that register a declaration as code that Lean runs: an elaborator, a macro, a tactic,
-# an initializer or another handler. Each attribute whose name starts with `builtin_` counts too.
+# an initializer or another handler. A `builtin_` attribute is a finding of the word scan.
 REGISTRATIONS = {
     "term_elab", "command_elab", "tactic", "macro", "init", "env_extension",
-    "simproc", "dsimproc", "delab", "app_unexpander",
+    "simproc", "dsimproc", "sevalproc", "delab", "app_unexpander",
 }
 
 # The start of an attribute list: `@[` or the command `attribute [`.
 ATTRIBUTE_START = re.compile(r"@\[|(?<![\w'!?.])attribute\s*\[")
 
-WORD = re.compile(r"#?[A-Za-z_][A-Za-z0-9_'!?]*(?:\.(?:[A-Za-z_][A-Za-z0-9_'!?]*|[0-9]+))*")
+WORD = re.compile(r"#?[A-Za-z_][A-Za-z0-9_'!?]*(?:\.(?:[A-Za-z_][A-Za-z0-9_'!?]*|[0-9]+))*%?")
 CHAR_LITERAL = re.compile(r"'(?:\\(?:u\{[0-9A-Fa-f]+\}|x[0-9A-Fa-f]{2}|.)|[^\\'\n])'")
 RAW_STRING = re.compile(r'r(#*)"')
 
@@ -202,7 +197,7 @@ def attribute_findings(code: str) -> list[tuple[int, str, str]]:
             if match.start() > 0 and is_ident(code[match.start() - 1]):
                 continue
             name = match.group(0).split(".")[-1]
-            if name in REGISTRATIONS or name.startswith("builtin_"):
+            if name in REGISTRATIONS:
                 number = code.count("\n", 0, match.start()) + 1
                 found.append((number, "@[" + name, "registers a declaration as code that Lean runs"))
     return found
@@ -222,6 +217,9 @@ def findings_of(text: str) -> list[tuple[int, str, str]]:
             if word in COMMANDS:
                 found.append((number, word, COMMANDS[word]))
                 continue
+            if word.startswith("builtin_"):
+                found.append((number, word, "is a builtin command or attribute, which registers code"))
+                continue
             parts = word.split(".")
             for part in parts:
                 if part in COMPONENTS:
@@ -234,44 +232,23 @@ def findings_of(text: str) -> list[tuple[int, str, str]]:
     return sorted(found, key=lambda f: f[0])
 
 
-def construct_of(code_lines: list[str], number: int) -> tuple[int, int]:
-    """
-    The first and last line of the construct that contains line `number`, counted from 1.
-
-    It starts at the last line at or before `number` whose code starts in the first column, and ends
-    at the last line with code before the next such line.
-    """
-    first = number
-    while first > 1 and not (code_lines[first - 1][:1].strip()):
-        first -= 1
-    last = first
-    for index in range(first + 1, len(code_lines) + 1):
-        line = code_lines[index - 1]
-        if line[:1].strip():
-            break
-        if line.strip():
-            last = index
-    return first, max(last, number)
-
-
-def digest_of(text_lines: list[str], first: int, last: int) -> str:
-    """The SHA-256 of the source lines `first` to `last`, each ending in a newline."""
-    body = "".join(line + "\n" for line in text_lines[first - 1:last])
-    return "sha256:" + hashlib.sha256(body.encode("utf-8")).hexdigest()
-
-
-def read_allowlist(path: Path) -> tuple[list[tuple[str, str, str, str]], list[str]]:
-    """The entries of the allowlist as (path, code line, digest, reason), and its format errors."""
-    entries, errors = [], []
+def read_allowlist(path: Path) -> tuple[list[tuple[str, str, int, str]], list[str]]:
+    """The entries of the allowlist as (path, digest, number of findings, reason), and its format errors."""
+    entries, errors, paths = [], [], set()
     for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
         if not line.strip() or line.lstrip().startswith("#"):
             continue
         fields = [field.strip() for field in line.split(" | ")]
-        if len(fields) != 4 or not all(fields) or not re.fullmatch(r"sha256:[0-9a-f]{64}", fields[2]):
-            errors.append(f"{path}:{number}: an entry needs a path, a code line, a digest sha256:HEX "
+        if (len(fields) != 4 or not all(fields) or not re.fullmatch(r"sha256:[0-9a-f]{64}", fields[1])
+                or not re.fullmatch(r"[1-9][0-9]*", fields[2])):
+            errors.append(f"{path}:{number}: an entry needs a path, a digest sha256:HEX, a number of findings "
                           "and a reason, separated by ' | '")
             continue
-        entries.append((fields[0], fields[1], fields[2], fields[3]))
+        if fields[0] in paths:
+            errors.append(f"{path}:{number}: a second entry for {fields[0]}")
+            continue
+        paths.add(fields[0])
+        entries.append((fields[0], fields[1], int(fields[2]), fields[3]))
     return entries, errors
 
 
@@ -290,42 +267,36 @@ def lean_files(paths: list[str]) -> list[Path]:
 
 
 def check(paths: list[str], allowlist: Path) -> int:
-    """Print each finding that no entry allows and each unused or repeated entry. Return the exit status."""
+    """Print each finding that no entry allows and each unused entry. Return the exit status."""
     entries, errors = read_allowlist(allowlist)
     for error in errors:
         print(error)
-    matches = [0] * len(entries)
+    by_path = {entry[0]: entry for entry in entries}
+    used: set[str] = set()
     fresh = 0
     files = lean_files(paths)
     for path in files:
         rel = path.relative_to(ROOT).as_posix() if path.is_relative_to(ROOT) else path.as_posix()
-        text = path.read_text(encoding="utf-8")
-        text_lines = text.split("\n")
-        code_lines = code_of(text).split("\n")
-        constructs: dict[tuple[int, int], list[tuple[int, str, str]]] = {}
-        for finding in findings_of(text):
-            constructs.setdefault(construct_of(code_lines, finding[0]), []).append(finding)
-        for (first, last), found in constructs.items():
-            code = " ".join(code_lines[first - 1].split())
-            digest = digest_of(text_lines, first, last)
-            allowed = False
-            for index, (entry_path, entry_code, entry_digest, _) in enumerate(entries):
-                if entry_path == rel and entry_code == code and entry_digest == digest:
-                    matches[index] += 1
-                    allowed = True
-            if not allowed:
-                for number, word, why in found:
-                    print(f"{rel}:{number}: {word} {why}")
-                print(f"{rel}:{first}-{last}: construct {code!r} has the digest {digest}")
-                fresh += len(found)
-    bad = 0
-    for (entry_path, entry_code, entry_digest, _), count in zip(entries, matches):
-        if count != 1:
-            what = "unused" if count == 0 else f"matches {count} constructs, not one:"
-            print(f"allowlist entry {what} {entry_path} | {entry_code} | {entry_digest}")
-            bad += 1
-    print(f"check_lean_commands: {len(files)} files, {fresh} findings not allowed, {bad} allowlist entries not used exactly once")
-    return 0 if fresh == 0 and bad == 0 and not errors else 1
+        data = path.read_bytes()
+        found = findings_of(data.decode("utf-8"))
+        if not found:
+            continue
+        digest = "sha256:" + hashlib.sha256(data).hexdigest()
+        entry = by_path.get(rel)
+        if entry and entry[1] == digest and entry[2] == len(found):
+            used.add(rel)
+            continue
+        for number, word, why in found:
+            print(f"{rel}:{number}: {word} {why}")
+        print(f"{rel}: the file has the digest {digest} and {len(found)} findings")
+        fresh += len(found)
+    unused = 0
+    for entry_path, digest, count, _ in entries:
+        if entry_path not in used:
+            print(f"allowlist entry unused: {entry_path} | {digest} | {count}")
+            unused += 1
+    print(f"check_lean_commands: {len(files)} files, {fresh} findings not allowed, {unused} unused entries")
+    return 0 if fresh == 0 and unused == 0 and not errors else 1
 
 
 def main() -> int:

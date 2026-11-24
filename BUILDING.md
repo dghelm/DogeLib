@@ -200,14 +200,14 @@ python3 -I scripts/check_lean_commands.py
 python3 -I scripts/test_check_lean_commands.py
 ```
 
-It fails on each command of Lean core that runs code during elaboration or defines code for Lean to run later.
-Examples are `run_cmd`, `#eval`, `elab`, `initialize`, `macro` and `macro_rules`.
-It fails on each attribute that registers a handler, such as `command_elab` or `tactic`, in `@[...]` or `attribute [...]`, on one or several lines.
-It also fails on each name that writes the environment, skips the kernel or names a private declaration, such as `setEnv`, `addDecl`, `Kernel.Environment` and `_private`.
+It is a review aid, not a proof that no code runs while Lean builds the libraries ([the source check](SOUNDNESS.md#the-source-check)).
+It fails on each word of three lists in the script: commands such as `run_cmd`, `#eval`, `elab`, `initialize` and `macro`, and each word that starts with `builtin_`.
+The second list has attributes that register a handler, such as `command_elab` or `tactic`, in `@[...]` or `attribute [...]`.
+The third has names such as `setEnv`, `addDecl`, `Kernel.Environment` and `_private`.
 
-Each line of `scripts/check_lean_commands_allowlist.txt` allows one construct, by its first line and the SHA-256 of its source, with a reason.
-A finding that no entry allows is printed with the digest of its construct, which a reviewed entry can name.
-The check ignores comments and strings, and it matches words only, so it is a second defence beside the kernel replay ([the source check](SOUNDNESS.md#the-source-check)).
+Each line of `scripts/check_lean_commands_allowlist.txt` pins one file by its SHA-256 and its number of findings, with a reason.
+Any edit to that file needs a renewed entry.
+A file whose findings no entry allows is printed with its digest and its number of findings.
 
 ## Rust refinement
 

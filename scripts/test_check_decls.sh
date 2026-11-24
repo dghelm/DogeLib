@@ -3,6 +3,7 @@
 # scripts/CheckDeclsTest, pass once a baseline lists them, and fail on a
 # baseline entry that no longer matches. Run from anywhere.
 # Adapted from EthLib, scripts/test_check_decls.sh at commit bb6dfe5 (CC0 1.0).
+# The expected findings usesCycle and usesLeft are adapted from EthLib commit 1f13f422.
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 FAIL=0
@@ -25,6 +26,8 @@ axiom CheckDeclsTest.Bad.Phantom._native
 axiom CheckDeclsTest.Bad.assumed
 axioms CheckDeclsTest.Bad.Carrier
 axioms CheckDeclsTest.Bad.usesAssumed
+axioms CheckDeclsTest.Bad.usesCycle
+axioms CheckDeclsTest.Bad.usesLeft
 axioms CheckDeclsTest.ImportedSorry.inherited
 csimp CheckDeclsTest.Bad.double_eq_doubleFast
 extern CheckDeclsTest.Bad.external

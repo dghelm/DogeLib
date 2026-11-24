@@ -71,6 +71,46 @@ else
   fi
 fi
 
+# The pair of Lean issue 16730: a module that stores a changed inductive type, and a module that proves `False` from it.
+# A third module stores an inductive type that its own `all` field does not list (Lean issue 16688).
+forged=scripts/replay-fixtures/ForgedInductive
+mkdir -p "$WORK/forged/ForgedInductive"
+for m in ForgedInductive ForgedInductive/Unlisted ForgedInductive/Use; do
+  if ! lake env bash -c 'LEAN_PATH="$1:$LEAN_PATH" lean --root="$2" -o "$1/$3.olean" "$2/$3.lean"' \
+      _ "$WORK/forged" scripts/replay-fixtures "$m" > "$WORK/forged/$(basename "$m").log" 2>&1; then
+    echo "FAIL: the fixture $m does not compile"; cat "$WORK/forged/$(basename "$m").log"; exit 1
+  fi
+done
+# The fixture must still be the exploit: Lean accepts the proof of `False` with no axiom.
+if grep -q "'boom' does not depend on any axioms" "$WORK/forged/Use.log"; then
+  echo "ok:   the planted pair proves False with no axiom when Lean compiles it"
+else
+  echo "FAIL: the planted pair no longer proves False"; cat "$WORK/forged/Use.log"; FAIL=1
+fi
+if REPLAY_LEAN_PATH="$WORK/forged" bash scripts/replay.sh "$forged" > "$WORK/forged/replay.log" 2>&1; then
+  echo "FAIL: the replay accepted the changed inductive types"; cat "$WORK/forged/replay.log"; FAIL=1
+else
+  log="$WORK/forged/replay.log"
+  if grep -qx 'ForgedInductive failed to replay after [0-9]* s' "$log" \
+      && grep -q "in the module ForgedInductive: the stored inductive type 'PB2' differs from the one that the kernel generated, in \[numParams, numIndices\]" "$log"; then
+    echo "ok:   a changed numParams of a mutual inductive type fails the replay"
+  else
+    echo "FAIL: the changed PB2 was not rejected"; cat "$log"; FAIL=1
+  fi
+  if grep -qx 'ForgedInductive.Unlisted failed to replay after [0-9]* s' "$log" \
+      && grep -q "in the module ForgedInductive.Unlisted: 'bad' is stored, but the replayed environment does not contain it" "$log"; then
+    echo "ok:   an inductive type that its own all field does not list fails the replay"
+  else
+    echo "FAIL: the unlisted inductive type was not rejected"; cat "$log"; FAIL=1
+  fi
+  # The replay trusts the imports, so the importer passes alone. The gate fails through the module it imports.
+  if grep -q '^ForgedInductive.Use replayed in' "$log"; then
+    echo "ok:   the importer replays alone, so the gate depends on replaying every module"
+  else
+    echo "FAIL: the importer did not replay"; cat "$log"; FAIL=1
+  fi
+fi
+
 # A source file without an `.olean` file must fail, not be skipped.
 rm "$WORK/good/out/ReplayGood/Parent/Leaf.olean"
 if replay "$WORK/good" ReplayGood; then

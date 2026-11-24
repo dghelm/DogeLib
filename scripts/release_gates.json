@@ -7,6 +7,8 @@
     "test-declaration-check",
     "declaration-check-self-test",
     "kernel-replay-self-test",
+    "lean-command-check",
+    "lean-command-check-self-test",
     "import-boundaries",
     "import-boundary-self-test",
     "conformance",

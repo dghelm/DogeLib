@@ -49,7 +49,7 @@ Gap D asks whether the use of DogeLib holds together.
 | B6 | Extraction or the Rust toolchain is wrong | `decode_refines` relates the extracted Rust reader model to `decodeBounded`. Charon, Aeneas, library models, the Rust compiler and runtime remain trusted. See [B6](#b6-extraction-and-the-rust-toolchain). | I |
 | C1 | The Lean kernel or its axioms are unsound | `lake exe check-decls` rejects transitive axiom dependencies outside the allowed set, including imported unfinished proofs. Kernel soundness and axiom consistency remain trusted. | P I |
 | C2 | A proof trusts compiled code | `lake exe check-decls` fails on any use | P I |
-| C3 | A declaration reached the environment unchecked | `scripts/replay.sh` replays each module of `DogeLib`, and of the test-only `ProposalExamples`, into the kernel on each push to `main` and every week. `Refinement/` is not replayed. The declaration check requires every production module to be reachable from its default roots. See [C3](#c3-declarations-the-kernel-did-not-check). | P I |
+| C3 | A declaration reached the environment unchecked | `scripts/replay.sh` replays each module of `DogeLib`, and of the test-only `ProposalExamples`, into the kernel on each push to `main` and every week, and requires each stored constant to equal the replayed one. `Refinement/` is not replayed. `scripts/check_lean_commands.py` reports listed source commands, attributes and names that can run code or write the environment, except in reviewed files that the allowlist pins by digest. The declaration check requires every production module to be reachable from its default roots. See [C3](#c3-declarations-the-kernel-did-not-check). | P I |
 | D1 | A client misuses an operation, such as a prefix decoder where complete consumption is required | Policy: each public operation documents its input domain and consumption contract | R I |
 | D2 | A dependency changes | Source and toolchain pins constrain dependency changes. The root package has no Lake dependencies, while the separate refinement package owns Aeneas and Mathlib. See [D2](#d2-dependency-changes). | P R I |
 | D3 | The fixtures are wrong | Each fixture records its provenance. The NIST CAVP files, Wycheproof P1363 records and Core's `sighash.json` are pinned by digest, and CI checks the pins. Core's test cases are copied into `tests/KnownAnswers/` topic modules with their file and line. | F |
@@ -403,9 +403,65 @@ A module that the kernel rejects, or that does not finish within the budget, fai
 `scripts/test_replay.sh` runs the script on planted libraries in CI.
 An unchecked theorem in the root fails it, and so does one on the `namespace` line of a module with submodules.
 
-The replay uses the same kernel as Lean, so it does not check the kernel itself (C1).
-It does not replay the modules under `Refinement/`, which import Aeneas and Mathlib.
-For those modules C3 is still open.
+#### Stored inductive types (Lean issues 16730 and 16688)
+
+The replay function of Lean `v4.35.0`, `Kernel.Environment.replay`, sends each inductive declaration to the kernel, but never compares the stored inductive types with the ones that the kernel generates.
+In a mutual declaration it sends the kernel the `numParams` of one member only.
+A metaprogram can store another member again with a changed `numParams` and `numIndices`, through the private `Lean.Kernel.Environment.add`, which adds a constant without the kernel check.
+A module that imports it reads the stored value.
+The kernel trusts the stored `numParams` when it types a projection, so the importer can prove `False` with no axiom (Lean issue 16730).
+The replay also skips a stored inductive type that its own `all` field does not list, and an importer can use that type too (Lean issue 16688).
+Before this change, `scripts/replay.sh` at commit `7444635` accepted the forged module of issue 16730 and its importer.
+
+`scripts/ReplayModule.lean` now keeps the environment that the replay returns.
+It requires each constant that the module stores, under its own name, to equal the constant in that environment in every field.
+For an inductive type the fields are `levelParams`, `type`, `numParams`, `numIndices`, `all`, `ctors`, `numNested`, `isRec`, `isUnsafe` and `isReflexive`.
+The comparison also covers constructors, recursors and every other kind of constant.
+It follows Lean pull request 16717, which is not part of Lean `v4.35.0`.
+There are two exceptions, both from the replay itself.
+The replay skips `unsafe` and `partial` constants, and so does the comparison.
+The replay skips a theorem that the imports hold with the same name, type, universe parameters and `all` field, and the comparison accepts it with those fields equal.
+
+An importer can read the exported or the server part of a module instead of the private part, which the replay reads.
+So each constant of those parts must equal the constant of the private part, with one exception.
+The module system exports a theorem, or a definition without its value, as an axiom with the same name, universe parameters and type.
+
+`scripts/replay.sh` requires the rejection of a second planted module, `scripts/replay-fixtures/ForgedInductive.lean`, the module of issue 16730.
+`scripts/test_replay.sh` also compiles its importer, which must prove `False` with no axiom, and a module with the inductive type of issue 16688.
+The replay of each forged module fails by name.
+The replay of the importer alone passes, because the replay trusts the imports.
+So the gate holds only because it replays every module, the imported ones included.
+
+The declaration check runs on pull requests, where the replay does not.
+It compares each inductive type in its scope with the other types of its declaration, its constructors and its recursor, which the replay compares with the ones the kernel generates.
+A changed `numParams` or `numIndices` shows as a disagreement.
+A changed `isRec`, `isReflexive`, `numNested` or `type` does not, so the replay remains the complete check.
+
+#### The source check
+
+`scripts/check_lean_commands.py` reads the Lean source of `DogeLib`, `ProposalExamples` and `Refinement/Refinement`, and runs in CI on each pull request.
+It is a review aid, not a proof that no code runs while Lean builds the libraries.
+It reports each word of three fixed lists in the script:
+
+- Named commands that run code or register code, such as `run_cmd`, `#eval`, `elab`, `initialize`, `macro`, `macro_rules` and the procedure commands of Lean's `Init/Simproc.lean`, with each word that starts with `builtin_`.
+- Named attributes that register a handler, such as `command_elab` and `tactic`, in `@[...]` or in an `attribute [...]` command, on one line or across lines.
+- Names with a listed component, such as `setEnv`, `addDecl`, `skipKernelTC`, `_private` and `Kernel`.
+
+The check ignores comments and strings and matches words only.
+It misses what its lists do not name, such as a command that an imported module defines or a function reached under another name.
+It does not cover `extern`, `implemented_by` or `@[export]`, so it is not a ban on native or foreign code.
+The declaration check reports the first two.
+
+Each entry of the allowlist `scripts/check_lean_commands_allowlist.txt` pins one whole file by its SHA-256 and its number of findings, with a reason.
+Any edit to a listed file changes its digest, and the file then fails until a reviewer renews its entry.
+The allowlist has four entries, each with one finding.
+The `initialize` of `DogeLib.Proofs.TheoremTag` registers the attribute described below.
+The `elab` of `definition_value%` in `DogeLib.Proposals.Framework.Proofs.Block` returns the stored value of a definition as a term, and writes nothing.
+The tactic macros `narrow_widen` and `accept_cases` expand to fixed tactic blocks and to no command.
+
+The replay remains the check of what the modules store.
+
+#### The attribute and the reachability check
 
 `DogeLib.Proofs.TheoremTag` defines the attribute `theorem_tag`, which labels a cited theorem as a property, a model agreement, a refinement, a characterization or a witness.
 A proof module that uses the attribute imports that module with `meta import`, and Lean runs the handler of the attribute when it elaborates the module.
@@ -422,6 +478,15 @@ The default imports, checked namespaces and file inventory include the extracted
 The default check fails if the separate refinement package is missing, unbuilt or cannot load every requested module.
 `--skip-refinement` checks only DogeLib and prints `Refinement NOT checked` in the summary.
 Production CI never uses this flag.
+
+#### What C3 still leaves open
+
+The replay uses the same kernel as Lean, so it does not check the kernel itself (C1).
+No independent checker, such as one that reads the output of `lean4export`, checks the modules.
+The replay does not include the modules under `Refinement/`, which import Aeneas and Mathlib.
+For those modules C3 is still open.
+The source check covers the Refinement sources of this repository, but not Aeneas or Mathlib.
+The replay does not run on pull requests.
 
 ## Gap D: does the use of DogeLib hold together?
 

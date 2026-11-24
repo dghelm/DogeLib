@@ -146,6 +146,7 @@ It builds the fixtures in `scripts/CheckDeclsTest`, which contain `sorry` and ev
 The check must report each planted finding and nothing else, pass with a baseline that lists them, and fail on a stale baseline entry.
 An isolated fixture requires rejection of an imported unfinished proof.
 The self-test also plants an unimported production file, and one under `DogeLib/Proposals/`, and requires a failure that names each module.
+It compiles the planted module `scripts/replay-fixtures/ForgedInductive.lean` outside every library and requires the finding `inductive-metadata` at both types of its mutual declaration.
 
 ## Kernel replay
 
@@ -157,8 +158,16 @@ REPLAY_JOBS=2 bash scripts/replay.sh tests/ProposalExamples
 ```
 
 The script first requires that the kernel rejects the planted theorem of `scripts/ReplayFixture.lean`.
+It then requires the rejection of `scripts/replay-fixtures/ForgedInductive.lean`, which stores a changed inductive type (Lean issue 16730).
+
 Then `scripts/ReplayModule.lean` replays each module in its own process, `REPLAY_JOBS` at a time, with one thread each.
+After the replay of a module, it requires each constant that the module stores to equal the constant in the replayed environment.
+As the replay does, the comparison skips `unsafe` and `partial` constants.
+It also accepts a theorem that the imports hold with the same name, type, universe parameters and `all` field ([C3](SOUNDNESS.md#stored-inductive-types-lean-issues-16730-and-16688)).
 `REPLAY_BUDGET` sets the time limit for each module, 300 seconds by default.
+
+The replay uses the same kernel as Lean, so it does not check the kernel itself.
+It does not replay the modules under `Refinement/` ([What C3 still leaves open](SOUNDNESS.md#what-c3-still-leaves-open)).
 
 The script replays every module: the root `DogeLib.lean` and each `.lean` file under `DogeLib/`.
 With the argument `tests/ProposalExamples` it replays the test-only library of the proposal examples, the root `tests/ProposalExamples.lean` and each file under `tests/ProposalExamples/`.
@@ -178,6 +187,27 @@ bash scripts/test_replay.sh
 It builds small libraries in a temporary directory and requires the replay to select every module.
 An unchecked theorem in the root, or on the `namespace` line of a parent module, must fail the replay by name.
 A module without an `.olean` file must fail it too.
+It also compiles the three modules of `scripts/replay-fixtures/`.
+The importer `ForgedInductive.Use` must prove `False` with no axiom when Lean compiles it.
+The replay of `ForgedInductive` and of `ForgedInductive.Unlisted` must fail by name, and the importer alone must replay, because the replay trusts the imports.
+
+## The Lean command check
+
+`scripts/check_lean_commands.py` reads the Lean source of `DogeLib`, `ProposalExamples` and `Refinement/Refinement`:
+
+```bash
+python3 -I scripts/check_lean_commands.py
+python3 -I scripts/test_check_lean_commands.py
+```
+
+It is a review aid, not a proof that no code runs while Lean builds the libraries ([the source check](SOUNDNESS.md#the-source-check)).
+It fails on each word of three lists in the script: commands such as `run_cmd`, `#eval`, `elab`, `initialize` and `macro`, and each word that starts with `builtin_`.
+The second list has attributes that register a handler, such as `command_elab` or `tactic`, in `@[...]` or `attribute [...]`.
+The third has names such as `setEnv`, `addDecl`, `Kernel.Environment` and `_private`.
+
+Each line of `scripts/check_lean_commands_allowlist.txt` pins one file by its SHA-256 and its number of findings, with a reason.
+Any edit to that file needs a renewed entry.
+A file whose findings no entry allows is printed with its digest and its number of findings.
 
 ## Rust refinement
 

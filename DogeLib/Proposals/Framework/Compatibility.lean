@@ -51,7 +51,7 @@ A revision that changes no encoding and no state effect has `LegacyProjection.id
 A non-identity projection waits for the first proposal that needs one, and that proposal's design record defines it.
 
 No block-level or chain-level theorem uses a projection yet. `DogeLib.Proposals.Framework.Block` holds the block level of a revision of Script.
-The worked example `ExampleVersionVerify` states Script-local theorems with the identity projection.
+The worked example `ExampleVersionVerify` of the test-only `ProposalExamples` library states Script-local theorems with the identity projection.
 -/
 
 @[expose] public section

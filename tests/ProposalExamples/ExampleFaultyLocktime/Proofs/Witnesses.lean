@@ -1,11 +1,11 @@
 module
 
-public import DogeLib.Proposals.ExampleFaultyLocktime.Proofs.Compatibility
+public import ProposalExamples.ExampleFaultyLocktime.Proofs.Compatibility
 
 /-!
-# Proofs: `Proposals.ExampleFaultyLocktime`, witnesses
+# Proofs: `ProposalExamples.ExampleFaultyLocktime`, witnesses
 
-The example is an invented, deliberately faulty proposal, not a proposal for Dogecoin (`DogeLib.Proposals.ExampleFaultyLocktime`).
+The example is an invented, deliberately faulty proposal, not a proposal for Dogecoin (`ProposalExamples.ExampleFaultyLocktime`).
 Every witness is one concrete spend of input 0 of `spendTx lockTime`:
 
 - `spendTx lockTime`: version 1, one input with an empty `scriptSig` and sequence `0xfffffffe`, no outputs, and the lock time `lockTime`.
@@ -42,9 +42,9 @@ The kernel computes every witness with `decide +kernel`. No digest is computed o
 
 @[expose] public section
 
-namespace DogeLib.Proposals.ExampleFaultyLocktime
+namespace ProposalExamples.ExampleFaultyLocktime
 
-open DogeLib.Script DogeLib.Transaction DogeLib.Proposals.Framework
+open DogeLib DogeLib.Proposals DogeLib.Script DogeLib.Transaction DogeLib.Proposals.Framework
 
 /-- The empty script. -/
 def emptyScript : Transaction.Script := ⟨⟨[], by decide⟩⟩
@@ -213,4 +213,4 @@ theorem corrected_softFork :
   strict := ⟨spendArgs 1 useScript, by rw [corrected_strict.1]; rfl, by rw [corrected_strict.2]; rfl⟩
   use := ⟨spendArgs 2 useScript, by rw [corrected_use.1]; rfl, corrected_use.2⟩
 
-end DogeLib.Proposals.ExampleFaultyLocktime
+end ProposalExamples.ExampleFaultyLocktime

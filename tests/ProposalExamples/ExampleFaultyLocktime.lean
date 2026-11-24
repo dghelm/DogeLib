@@ -3,11 +3,12 @@ module
 public import DogeLib.Proposals.Framework.Block
 
 /-!
-# `Proposals.ExampleFaultyLocktime`
+# `ProposalExamples.ExampleFaultyLocktime`
 
 **This module is not a proposal for Dogecoin.**
 It is an invented proposal with a deliberate fault, kept as a teaching example and as a test of the framework.
 No one proposes this rule for any network, and no network activates it.
+It is in the test-only `ProposalExamples` library, which no production library imports.
 Its theorems show that the framework of design record 0007 catches one class of error.
 In that class, a small change of stack effect makes a soft-fork claim false.
 
@@ -49,7 +50,7 @@ The proposal replay of the campaign maps each revised result back to a baseline 
 
 ## Results
 
-`DogeLib.Proposals.ExampleFaultyLocktime.Proofs` proves these Script-local results:
+`ProposalExamples.ExampleFaultyLocktime.Proofs` proves these Script-local results:
 
 - Both variants have the inactive equality.
 - The faulty step does not restrict the baseline step.
@@ -61,7 +62,7 @@ The proposal replay of the campaign maps each revised result back to a baseline 
 
 `blockRevision v verify` is variant `v` as a `BlockRevision` of `DogeLib.Proposals.Framework.Block`: its spend check is `revisedVerifyLegacySpend v` with the verifier `verify`.
 `connectBlockWith` and `validateBlockWith` run it on a block (design record 0011, section 10.1).
-`DogeLib.Proposals.ExampleFaultyLocktime.Proofs.Block` has the block-level theorems.
+`ProposalExamples.ExampleFaultyLocktime.Proofs.Block` has the block-level theorems.
 
 ## Labels
 
@@ -74,9 +75,9 @@ There is no external document, so the example has no identifier in SOURCES.md.
 
 @[expose] public section
 
-namespace DogeLib.Proposals.ExampleFaultyLocktime
+namespace ProposalExamples.ExampleFaultyLocktime
 
-open DogeLib.Script DogeLib.Transaction DogeLib.Proposals.Framework
+open DogeLib DogeLib.Proposals DogeLib.Script DogeLib.Transaction DogeLib.Proposals.Framework
 
 /-- `OP_NOP4`, the opcode that the example redefines. -/
 def nop4 : UInt8 := 0xb3
@@ -180,4 +181,4 @@ The second instruction of that script is `OP_NOP4` at the top level, so it execu
 def RunsRule (a : SpendArgs) : Prop :=
   ∃ b S, b.length ≤ 5 ∧ a.prevScriptPubKey.bytes.val = operandScript b S
 
-end DogeLib.Proposals.ExampleFaultyLocktime
+end ProposalExamples.ExampleFaultyLocktime

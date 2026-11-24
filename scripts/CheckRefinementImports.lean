@@ -10,10 +10,13 @@ Design record 0007, section 4, sets the boundary for proposals, and design recor
 The specification, `DogeLib`, and the export libraries, `Exports` and `ProposalExports`, must not import a module of a proof library.
 ARCHITECTURE.md states that the specification builds and links without the proofs.
 
+No baseline or proposal library may import the test-only library `ProposalExamples`, which holds the two examples of the framework.
+
 A module of a proof library has `Proofs` as a component of its name.
 
-With module names as arguments, the check loads those modules as baseline roots instead of the default ones, and skips the proposal roots.
-It applies the first rule and the proof rule to those modules.
+With module names as arguments, the check loads those modules as roots instead of the default ones.
+A module under `DogeLib.Proposals` is a proposal root, and any other module is a baseline root.
+The check applies the rule of its kind and the proof rule to each of those modules.
 `scripts/test_import_boundaries.sh` uses that form to plant a forbidden import.
 -/
 
@@ -27,6 +30,9 @@ def baselineRoots : List Name := [`DogeLib, `DogeLib.Proofs, `DogeLib.Exports]
 
 /-- The roots of the proposal libraries. -/
 def proposalRoots : List Name := [`DogeLib.Proposals, `DogeLib.Proposals.Proofs, `DogeLib.Proposals.Exports]
+
+/-- The module prefix of the test-only library with the examples of the framework. -/
+def testPrefixes : List Name := [`ProposalExamples]
 
 /-- The roots of the specification and of the export libraries, which must not import a proof module. -/
 def proofFreeRoots : List Name := [`DogeLib, `DogeLib.Exports, `DogeLib.Serialization.Exports,
@@ -70,23 +76,29 @@ unsafe def main (args : List String) : IO UInt32 := do
   initSearchPath (← findSysroot)
   enableInitializersExecution
   let custom := !args.isEmpty
-  let roots := if custom then args.map String.toName else baselineRoots
-  let loaded := if custom then roots else roots ++ proposalRoots ++ proofFreeRoots
+  let given := args.map String.toName
+  let (roots, proposals) := if custom then given.partition fun m => !(Name.isPrefixOf `DogeLib.Proposals m)
+    else (baselineRoots, proposalRoots)
+  let loaded := if custom then given else roots ++ proposals ++ proofFreeRoots
   let env ← importModules (loaded.toArray.map fun m => { module := m }) {} (loadExts := true) (level := .private)
-  let baselineBad := forbiddenImports env roots (refinementPrefixes ++ [`DogeLib.Proposals])
+  let baselineBad := forbiddenImports env roots (refinementPrefixes ++ [`DogeLib.Proposals] ++ testPrefixes)
   for m in baselineBad do
     IO.eprintln s!"forbidden import in a baseline library: {m}"
-  let proposalBad := if custom then #[] else forbiddenImports env proposalRoots refinementPrefixes
-  for m in proposalBad do
+  let proposalRefinement := forbiddenImports env proposals refinementPrefixes
+  for m in proposalRefinement do
     IO.eprintln s!"forbidden refinement dependency in a proposal library: {m}"
-  let proofRoots := if custom then roots else proofFreeRoots
+  let proposalTest := forbiddenImports env proposals testPrefixes
+  for m in proposalTest do
+    IO.eprintln s!"forbidden test import in a proposal library: {m}"
+  let proposalBad := proposalRefinement ++ proposalTest
+  let proofRoots := if custom then given else proofFreeRoots
   let proofBad := ((closure env proofRoots).toArray.filter isProofModule).qsort Name.lt
   for m in proofBad do
     IO.eprintln s!"forbidden proof import in the specification or an export library: {m}"
   unless baselineBad.isEmpty && proposalBad.isEmpty && proofBad.isEmpty do
     return 1
   if custom then
-    IO.println s!"import boundaries: {roots} import no refinement dependency, no module of DogeLib.Proposals and no proof module"
+    IO.println s!"import boundaries: {roots} import no refinement dependency, no module of DogeLib.Proposals or ProposalExamples and no proof module; {proposals} import no refinement dependency, no module of ProposalExamples and no proof module"
   else
-    IO.println "import boundaries: the root package has no dependencies; DogeLib, Proofs and Exports import neither refinement dependencies nor DogeLib.Proposals; Proposals, ProposalProofs and ProposalExports do not import refinement dependencies; DogeLib, Exports and ProposalExports import no proof module"
+    IO.println "import boundaries: the root package has no dependencies; DogeLib, Proofs and Exports import neither refinement dependencies, DogeLib.Proposals nor ProposalExamples; Proposals, ProposalProofs and ProposalExports import neither refinement dependencies nor ProposalExamples; DogeLib, Exports and ProposalExports import no proof module"
   return 0

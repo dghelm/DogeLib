@@ -21,6 +21,9 @@ For `RelativeLockTime` the list counts each created output that holds `0xb2`, an
 | `ExampleFaultyLocktime` | `0xb3` | A missing coin |
 | `RelativeLockTime` | `0xb2` | A missing coin, a cutoff transaction, a sequence candidate |
 
+The two examples are not proposals for Dogecoin, and only the test build `proposal-test-oracle` runs them, on the short range alone.
+Their candidates stay in every list, so that the lists of the recorded runs do not change.
+
 Each file also has the counts of the range.
 They are the transactions, the inputs, the outputs and the missing coins, and the counts of `RelativeLockTime`.
 Those are the time lock times with an input that is not final, the cutoff transactions and the sequence candidates.

@@ -49,7 +49,7 @@ Gap D asks whether the use of DogeLib holds together.
 | B6 | Extraction or the Rust toolchain is wrong | `decode_refines` relates the extracted Rust reader model to `decodeBounded`. Charon, Aeneas, library models, the Rust compiler and runtime remain trusted. See [B6](#b6-extraction-and-the-rust-toolchain). | I |
 | C1 | The Lean kernel or its axioms are unsound | `lake exe check-decls` rejects transitive axiom dependencies outside the allowed set, including imported unfinished proofs. Kernel soundness and axiom consistency remain trusted. | P I |
 | C2 | A proof trusts compiled code | `lake exe check-decls` fails on any use | P I |
-| C3 | A declaration reached the environment unchecked | `scripts/replay.sh` replays each module of `DogeLib` into the kernel on each push to `main` and every week. `Refinement/` is not replayed. The declaration check requires every production module to be reachable from its default roots. See [C3](#c3-declarations-the-kernel-did-not-check). | P I |
+| C3 | A declaration reached the environment unchecked | `scripts/replay.sh` replays each module of `DogeLib`, and of the test-only `ProposalExamples`, into the kernel on each push to `main` and every week. `Refinement/` is not replayed. The declaration check requires every production module to be reachable from its default roots. See [C3](#c3-declarations-the-kernel-did-not-check). | P I |
 | D1 | A client misuses an operation, such as a prefix decoder where complete consumption is required | Policy: each public operation documents its input domain and consumption contract | R I |
 | D2 | A dependency changes | Source and toolchain pins constrain dependency changes. The root package has no Lake dependencies, while the separate refinement package owns Aeneas and Mathlib. See [D2](#d2-dependency-changes). | P R I |
 | D3 | The fixtures are wrong | Each fixture records its provenance. The NIST CAVP files, Wycheproof P1363 records and Core's `sighash.json` are pinned by digest, and CI checks the pins. Core's test cases are copied into `tests/KnownAnswers/` topic modules with their file and line. | F |
@@ -68,7 +68,7 @@ Per-area files under `docs/soundness/` state what each proof establishes, under 
 | Block headers and AuxPoW | [docs/soundness/headers.md](docs/soundness/headers.md) | Pure and full headers, Merkle roots, AuxPoW check, header PoW, version gating, contextual headers, and header sequences |
 | Block validation and coin sets | [docs/soundness/blocks.md](docs/soundness/blocks.md) | Block subsidy, `CheckTransaction`, `CheckBlock`, version bits, contextual body, `ConnectBlock`, issuance bounds, and coin-set restriction |
 | Script execution | [docs/soundness/script.md](docs/soundness/script.md) | Instruction reading, execution state, signature code, script numbers, `EvalScript`, encodings, opcodes, `VerifyScript`, and worked properties |
-| Proposed revisions | [docs/soundness/proposals.md](docs/soundness/proposals.md) | Script and block frameworks, `ExampleVersionVerify`, `ExampleFaultyLocktime`, and `RelativeLockTime` |
+| Proposed revisions | [docs/soundness/proposals.md](docs/soundness/proposals.md) | Script and block frameworks, `RelativeLockTime`, and the test-only examples `ExampleVersionVerify` and `ExampleFaultyLocktime` |
 | Oracle and Core harness (B4) | [docs/soundness/oracle-and-harness.md](docs/soundness/oracle-and-harness.md) | Per-operation trust boundaries for `dogelib-oracle`, `dogelib-proposal-oracle`, `core-oracle`, `core-signer`, and snapshots |
 
 ### What cannot be proved yet
@@ -391,8 +391,10 @@ A metaprogram can add a declaration to the environment without the kernel checki
 `scripts/replay.sh` replays the declarations of each module of `DogeLib` into Lean's kernel, with the function `replayFromImports` of leanchecker in Lean `v4.35.0`.
 The replay reads the private part of each module, so it checks the proof bodies again.
 The script replays every module: the root `DogeLib.lean` and each `.lean` file under `DogeLib/`.
-It does not read the source to skip a module, and a module without an `.olean` file fails the replay.
-The workflow `replay` runs the script after `lake build --wfail` on each push to `main`, every Monday and on request.
+A second run replays the test-only library of the proposal examples in the same way, the root `tests/ProposalExamples.lean` and each `.lean` file under `tests/ProposalExamples/`.
+
+The script does not read the source to skip a module, and a module without an `.olean` file fails the replay.
+The workflow `replay` runs both replays after `lake build --wfail` on each push to `main`, every Monday and on request.
 It does not run on pull requests, so a declaration that the kernel did not check can reach `main` before the next replay finds it.
 
 The replay first requires the rejection of a planted theorem that the kernel never checked, `scripts/ReplayFixture.lean`.

@@ -3,12 +3,14 @@ module
 public import DogeLib.Proposals.Framework.Block
 
 /-!
-# `Proposals.ExampleVersionVerify`
+# `ProposalExamples.ExampleVersionVerify`
 
 **This module is not a proposal for Dogecoin.**
 No one proposes this rule for any network, and no network activates it.
 It is the worked example of design record 0007, section 10.
-Decision 9 keeps it in the `Proposals` library as a permanent test of the framework.
+
+Decision 9 keeps it as a permanent test of the framework.
+It is in the test-only `ProposalExamples` library, which no production library imports.
 Its theorems show that the framework states and proves a Script-local soft fork from end to end.
 They say nothing about the merits of any rule.
 
@@ -70,7 +72,7 @@ No network has an activation height for the example, and the module defines no `
 
 ## Labels
 
-Every compatibility theorem in `DogeLib.Proposals.ExampleVersionVerify.Proofs` is Script-local, except those of `Proofs.Block`, which are block-level.
+Every compatibility theorem in `ProposalExamples.ExampleVersionVerify.Proofs` is Script-local, except those of `Proofs.Block`, which are block-level.
 A Script-local theorem is about one call of `evalScript`, `verifyScript` or `verifyLegacySpend`.
 No theorem of the example is a soft-fork claim about the network, which also needs the statement for chains (design record 0007, section 8.3).
 The legacy projection of the example is the identity, because the rule changes no encoding and a successful step leaves the baseline state.
@@ -80,9 +82,9 @@ There is no external document, so the example has no identifier in SOURCES.md.
 
 @[expose] public section
 
-namespace DogeLib.Proposals.ExampleVersionVerify
+namespace ProposalExamples.ExampleVersionVerify
 
-open DogeLib.Script DogeLib.Transaction DogeLib.Proposals.Framework
+open DogeLib DogeLib.Proposals DogeLib.Script DogeLib.Transaction DogeLib.Proposals.Framework
 
 /-- `OP_NOP10`, the opcode that the example redefines. -/
 def nop10 : UInt8 := 0xb9
@@ -217,4 +219,4 @@ The rule changes no encoding, and a successful revised step leaves the baseline 
 def projection : LegacyProjection InputContext InputContext ExecState ExecState :=
   LegacyProjection.identity InputContext ExecState
 
-end DogeLib.Proposals.ExampleVersionVerify
+end ProposalExamples.ExampleVersionVerify

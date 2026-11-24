@@ -1,11 +1,11 @@
 module
 
-public import DogeLib.Proposals.ExampleVersionVerify.Proofs.Compatibility
+public import ProposalExamples.ExampleVersionVerify.Proofs.Compatibility
 
 /-!
-# Proofs: `Proposals.ExampleVersionVerify`, witnesses
+# Proofs: `ProposalExamples.ExampleVersionVerify`, witnesses
 
-The example is not a proposal for Dogecoin (`DogeLib.Proposals.ExampleVersionVerify`).
+The example is not a proposal for Dogecoin (`ProposalExamples.ExampleVersionVerify`).
 A revision that rejects every input restricts acceptance, so a soft fork also needs two witnesses (design record 0007, section 8.1).
 Both witnesses are one concrete spend, with the version of its transaction as the only difference:
 
@@ -25,9 +25,9 @@ Every theorem is Script-local.
 
 @[expose] public section
 
-namespace DogeLib.Proposals.ExampleVersionVerify
+namespace ProposalExamples.ExampleVersionVerify
 
-open DogeLib.Script DogeLib.Transaction DogeLib.Proposals.Framework
+open DogeLib DogeLib.Proposals DogeLib.Script DogeLib.Transaction DogeLib.Proposals.Framework
 
 /-- The empty script. -/
 def emptyScript : Transaction.Script := ⟨⟨[], by decide⟩⟩
@@ -80,4 +80,4 @@ theorem example_softFork :
   strict := ⟨witnessArgs 1, by rw [example_strict.1]; rfl, by rw [example_strict.2]; rfl⟩
   use := ⟨witnessArgs 2, by rw [example_use.1]; rfl, example_use.2⟩
 
-end DogeLib.Proposals.ExampleVersionVerify
+end ProposalExamples.ExampleVersionVerify

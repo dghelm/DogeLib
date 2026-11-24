@@ -1,12 +1,12 @@
 module
 
-public import DogeLib.Proposals.ExampleVersionVerify.Proofs.Block
-public import DogeLib.Proposals.ExampleVersionVerify.Proofs.Characterization
-public import DogeLib.Proposals.ExampleVersionVerify.Proofs.Compatibility
-public import DogeLib.Proposals.ExampleVersionVerify.Proofs.Witnesses
+public import ProposalExamples.ExampleVersionVerify.Proofs.Block
+public import ProposalExamples.ExampleVersionVerify.Proofs.Characterization
+public import ProposalExamples.ExampleVersionVerify.Proofs.Compatibility
+public import ProposalExamples.ExampleVersionVerify.Proofs.Witnesses
 
 /-!
-# `DogeLib.Proposals.ExampleVersionVerify.Proofs`
+# `ProposalExamples.ExampleVersionVerify.Proofs`
 
 The theorems of the worked example `ExampleVersionVerify`, which is not a proposal for Dogecoin.
 Each theorem is Script-local, except the block-level theorems of `Proofs.Block`.

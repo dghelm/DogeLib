@@ -1,12 +1,12 @@
 module
 
-public import DogeLib.Proposals.ExampleFaultyLocktime.Proofs.Compatibility
+public import ProposalExamples.ExampleFaultyLocktime.Proofs.Compatibility
 public import DogeLib.Proposals.Framework.Proofs.Block
 
 /-!
-# Proofs: `Proposals.ExampleFaultyLocktime`, block level
+# Proofs: `ProposalExamples.ExampleFaultyLocktime`, block level
 
-The example is an invented, deliberately faulty proposal, not a proposal for Dogecoin (`DogeLib.Proposals.ExampleFaultyLocktime`).
+The example is an invented, deliberately faulty proposal, not a proposal for Dogecoin (`ProposalExamples.ExampleFaultyLocktime`).
 Every theorem here is block-level: it is about one block on a supplied coin set and chain view.
 None is a claim about a chain or about the network.
 
@@ -23,9 +23,9 @@ Each theorem holds for every pair of embeddings, verifier, pair of flags, contex
 
 @[expose] public section
 
-namespace DogeLib.Proposals.ExampleFaultyLocktime
+namespace ProposalExamples.ExampleFaultyLocktime
 
-open DogeLib.Block DogeLib.Script DogeLib.Transaction DogeLib.Work DogeLib.Proposals.Framework
+open DogeLib DogeLib.Proposals DogeLib.Block DogeLib.Script DogeLib.Transaction DogeLib.Work DogeLib.Proposals.Framework
 
 variable {ρ μ ρ' μ' : Type}
 
@@ -71,4 +71,4 @@ theorem block_congr (V : ValidateEmbedding ρ μ ρ' μ') (E : ConnectEmbedding 
     (fun _ f script st i hi => lockStep_eq_of_not_nop4 v _ _ f script st i hi)
     rfl (fun _ _ _ => rfl) fCheckPOW fCheckMerkleRoot rfl hfree
 
-end DogeLib.Proposals.ExampleFaultyLocktime
+end ProposalExamples.ExampleFaultyLocktime

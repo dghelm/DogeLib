@@ -165,6 +165,7 @@ After `lake build --wfail`, replay the declarations of each module under `DogeLi
 
 ```bash
 REPLAY_JOBS=2 bash scripts/replay.sh
+REPLAY_JOBS=2 bash scripts/replay.sh tests/ProposalExamples
 ```
 
 The script first requires that the kernel rejects the planted theorem of `scripts/ReplayFixture.lean`.
@@ -172,10 +173,13 @@ Then `scripts/ReplayModule.lean` replays each module in its own process, `REPLAY
 `REPLAY_BUDGET` sets the time limit for each module, 300 seconds by default.
 
 The script replays every module: the root `DogeLib.lean` and each `.lean` file under `DogeLib/`.
-On 2026-11-23, the replay of all 220 modules took 217 seconds with two jobs on a development machine.
+With the argument `tests/ProposalExamples` it replays the test-only library of the proposal examples, the root `tests/ProposalExamples.lean` and each file under `tests/ProposalExamples/`.
+On 2026-11-24 its 14 modules took 4 seconds with two jobs.
+
+On 2026-11-23, the replay of all 220 modules of `DogeLib` took 217 seconds with two jobs on a development machine.
 The slowest module took between 66 and 83 seconds in the recorded runs.
 `DogeLib.Block.Proofs.Subsidy` used the most memory, 7.4 GB.
-The workflow `replay` runs the script on each push to `main` and every Monday, not on pull requests.
+The workflow `replay` runs both replays on each push to `main` and every Monday, not on pull requests.
 
 After a change to the replay scripts, run their self-test, which needs no build of DogeLib:
 
@@ -213,15 +217,23 @@ bash scripts/test_import_boundaries.sh
 ```
 
 The self-test plants a module under `DogeLib/` that imports `DogeLib.Proposals`, and then one that imports `DogeLib.Proposals.Exports`. It requires a failure that names the proposal modules each time.
+It also plants a module under `DogeLib/Proposals/` that imports the test-only `ProposalExamples`, and requires a failure that names the example modules.
+
+The test-only `ProposalExamples` library holds the two examples of the proposal framework. The production declaration check does not load it, so it has its own check:
+
+```bash
+lake exe check-decls --scope ProposalExamples ProposalExamples ProposalExamples.Proofs ProposalExamples.Exports
+```
 
 The proposal executable has its own test, which needs no Dogecoin Core:
 
 ```bash
-lake build dogelib-oracle dogelib-proposal-oracle
-python3 -I scripts/test_proposal_oracle.py .lake/build/bin/dogelib-oracle .lake/build/bin/dogelib-proposal-oracle
+lake build dogelib-oracle dogelib-proposal-oracle proposal-test-oracle
+python3 -I scripts/test_proposal_oracle.py .lake/build/bin/dogelib-oracle .lake/build/bin/dogelib-proposal-oracle .lake/build/bin/proposal-test-oracle
 ```
 
-It requires the bytes of `dogelib-oracle` on every `block.validate` request of the full comparison when the request has no `revision` argument.
+`proposal-test-oracle` is the test build of the proposal executable. Its argument `revision` also names the two examples of the framework, which `dogelib-proposal-oracle` refuses.
+Without the argument `revision`, both executables must write the bytes of `dogelib-oracle` on every `block.validate` request of the full comparison.
 [docs/oracle.md](docs/oracle.md#the-proposal-executable) lists its other checks.
 
 [Refinement/Rust/README.md](Refinement/Rust/README.md) records the contract, fixtures, pins and regeneration steps.

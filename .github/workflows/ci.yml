@@ -61,7 +61,8 @@ jobs:
       - name: import boundaries
         run: lake env lean --run scripts/CheckRefinementImports.lean
 
-      # A baseline module that imports a proposed revision must fail the check.
+      # A baseline module that imports a proposed revision must fail the check,
+      # and so must a proposal module that imports the test-only examples.
       - name: import boundary fixtures
         if: ${{ !cancelled() }}
         run: bash scripts/test_import_boundaries.sh
@@ -72,6 +73,12 @@ jobs:
       - name: declarations
         if: ${{ !cancelled() }}
         run: lake exe check-decls
+
+      # The same check on the test-only library of the two examples of the
+      # proposal framework, which the production check does not import.
+      - name: test declarations
+        if: ${{ !cancelled() }}
+        run: lake exe check-decls --scope ProposalExamples ProposalExamples ProposalExamples.Proofs ProposalExamples.Exports
 
       # The check must report exactly what its fixtures plant.
       - name: declaration check fixtures
@@ -95,10 +102,12 @@ jobs:
         run: bash scripts/test_oracle.sh
 
       # The proposal executable: the bytes of dogelib-oracle without a revision,
-      # and the revised verdicts of the two examples on made blocks.
+      # and the revised verdicts of the two examples on made blocks, through the
+      # test build proposal-test-oracle. The shipped executable refuses the
+      # examples and writes the bytes of the test build on RelativeLockTime.
       - name: proposal oracle
         if: ${{ !cancelled() }}
-        run: lake build dogelib-oracle dogelib-proposal-oracle && python3 -I scripts/test_proposal_oracle.py .lake/build/bin/dogelib-oracle .lake/build/bin/dogelib-proposal-oracle
+        run: lake build dogelib-oracle dogelib-proposal-oracle proposal-test-oracle && python3 -I scripts/test_proposal_oracle.py .lake/build/bin/dogelib-oracle .lake/build/bin/dogelib-proposal-oracle .lake/build/bin/proposal-test-oracle
 
   rust:
     runs-on: ubuntu-24.04

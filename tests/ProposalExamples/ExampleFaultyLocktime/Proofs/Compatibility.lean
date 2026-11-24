@@ -1,14 +1,14 @@
 module
 
-public import DogeLib.Proposals.ExampleFaultyLocktime
+public import ProposalExamples.ExampleFaultyLocktime
 public import DogeLib.Proposals.Framework.Proofs.Compatibility
 public import DogeLib.Script.Proofs.Eval
 public import DogeLib.Script.Proofs.Verify
 
 /-!
-# Proofs: `Proposals.ExampleFaultyLocktime`, compatibility
+# Proofs: `ProposalExamples.ExampleFaultyLocktime`, compatibility
 
-The example is an invented, deliberately faulty proposal, not a proposal for Dogecoin (`DogeLib.Proposals.ExampleFaultyLocktime`).
+The example is an invented, deliberately faulty proposal, not a proposal for Dogecoin (`ProposalExamples.ExampleFaultyLocktime`).
 Every theorem here is Script-local: it is about one call of `evalScript`, `verifyScript` or `verifyLegacySpend`, not about a block or a chain.
 
 ## The step
@@ -17,7 +17,7 @@ Every theorem here is Script-local: it is about one call of `evalScript`, `verif
 - `lockCheck_corrected_next`: a successful corrected check leaves the state unchanged.
 - `correctedStep_restricts`: the corrected step restricts the baseline step, for every `active`, checker and flag set.
 
-`DogeLib.Proposals.ExampleFaultyLocktime.Proofs.Witnesses` proves that the faulty step does not restrict the baseline step.
+`ProposalExamples.ExampleFaultyLocktime.Proofs.Witnesses` proves that the faulty step does not restrict the baseline step.
 
 ## Inactive equality
 
@@ -33,9 +33,9 @@ Every theorem here is Script-local: it is about one call of `evalScript`, `verif
 
 @[expose] public section
 
-namespace DogeLib.Proposals.ExampleFaultyLocktime
+namespace ProposalExamples.ExampleFaultyLocktime
 
-open DogeLib.Script DogeLib.Transaction DogeLib.Proposals.Framework
+open DogeLib DogeLib.Proposals DogeLib.Script DogeLib.Transaction DogeLib.Proposals.Framework
 
 variable {ε₀ υ₀ : Type}
 
@@ -133,4 +133,4 @@ theorem corrected_restrictsAcceptance :
   rw [baselineVerdict_eq_accepted]
   exact corrected_soft_fork_local h
 
-end DogeLib.Proposals.ExampleFaultyLocktime
+end ProposalExamples.ExampleFaultyLocktime

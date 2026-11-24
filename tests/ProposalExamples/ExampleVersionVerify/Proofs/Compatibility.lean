@@ -1,13 +1,13 @@
 module
 
-public import DogeLib.Proposals.ExampleVersionVerify
+public import ProposalExamples.ExampleVersionVerify
 public import DogeLib.Proposals.Framework.Proofs.Compatibility
 public import DogeLib.Script.Proofs.Verify
 
 /-!
-# Proofs: `Proposals.ExampleVersionVerify`, compatibility
+# Proofs: `ProposalExamples.ExampleVersionVerify`, compatibility
 
-The example is not a proposal for Dogecoin (`DogeLib.Proposals.ExampleVersionVerify`).
+The example is not a proposal for Dogecoin (`ProposalExamples.ExampleVersionVerify`).
 Every theorem here is Script-local: it is about one call of `evalScript`, `verifyScript` or `verifyLegacySpend`, not about a block or a chain.
 
 ## The step
@@ -41,9 +41,9 @@ Every theorem here is Script-local: it is about one call of `evalScript`, `verif
 
 @[expose] public section
 
-namespace DogeLib.Proposals.ExampleVersionVerify
+namespace ProposalExamples.ExampleVersionVerify
 
-open DogeLib.Script DogeLib.Transaction DogeLib.Proposals.Framework
+open DogeLib DogeLib.Proposals DogeLib.Script DogeLib.Transaction DogeLib.Proposals.Framework
 
 variable {ε₀ υ₀ : Type}
 
@@ -260,4 +260,4 @@ theorem example_soft_fork_projected {active : Bool} {ctx : InputContext} {prevSc
     verifyLegacySpend (projection.message ctx) prevScriptPubKey flags verify = .accepted :=
   example_soft_fork_local h
 
-end DogeLib.Proposals.ExampleVersionVerify
+end ProposalExamples.ExampleVersionVerify

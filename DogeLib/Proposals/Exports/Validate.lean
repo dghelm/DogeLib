@@ -2,8 +2,6 @@ module
 
 public import DogeLib.Block.Exports.Validate
 public import DogeLib.Exports.Oracle
-public import DogeLib.Proposals.ExampleFaultyLocktime
-public import DogeLib.Proposals.ExampleVersionVerify
 public import DogeLib.Proposals.Framework.Block
 public import DogeLib.Proposals.RelativeLockTime
 
@@ -19,7 +17,7 @@ Design record 0012, section 10.2 and decision 13, sets the contract of the secon
 The operation is `block.validate` of `dogelib-oracle` with one more argument:
 
 ```text
-"revision": {"name": "ExampleVersionVerify", "variant": null, "activation_height": 0}
+"revision": {"name": "RelativeLockTime", "variant": null, "activation_height": 1}
 ```
 
 `name` and `variant` select an entry of `revisions`. `activation_height` is a mainnet height, or null for no activation.
@@ -69,14 +67,18 @@ So a revision that reads the median time past of the view needs a view with that
 
 ## The revisions
 
-`ExampleFaultyLocktime` and `ExampleVersionVerify` are the two examples of the `Proposals` library. Neither is a proposal for Dogecoin.
-`RelativeLockTime` is the revision of design record 0012, with its three rules: BIP 113, BIP 112 and BIP 68.
+`dogelib-proposal-oracle` names one revision, `RelativeLockTime`.
+It is the revision of design record 0012, with its three rules: BIP 113, BIP 112 and BIP 68.
 For `block.validate`, the transaction test of the revision reads the view `chain` of the block.
+
 A `revised` object names the rule of a rejection through its step and its reason.
 The cutoff of BIP 113 has the step `ContextualCheckBlock` and the reason `bad-txns-nonfinal`.
 A sequence lock of BIP 68 has the step `ConnectBlock`, the reason `bad-txns-nonfinal` and the transaction.
 The opcode of BIP 112 has a script failure with its `script_error`.
 For `block.contextual_check_body`, the `revised` object holds the result of the lock-time cutoff alone, because that operation runs no script and connects no transaction.
+
+Every operation of this module takes the list of revisions as a parameter.
+The test executable `proposal-test-oracle` of `tests/ProposalExamples/Exports.lean` adds the two examples of the framework to `revisions`.
 -/
 
 @[expose] public section
@@ -223,29 +225,8 @@ structure NamedRevision where
   /-- The body hook of the revision for an activation, for `block.contextual_check_body`. -/
   body : Activation → BodyHook
 
-/-- The text of a script error of `ExampleVersionVerify`: Core's text for a baseline error, and a name for an error of the example. -/
-def describeExampleError : ExampleVersionVerify.ExampleScriptError → String
-  | .inl e => e.description
-  | .inr .negativeOperand => "ExampleVersionVerify: negative operand"
-  | .inr .versionTooLow => "ExampleVersionVerify: version too low"
-
-/-- The text of an unsupported script reason of `ExampleVersionVerify`. -/
-def describeExampleUnsupported : ExampleVersionVerify.ExampleScriptUnsupported → String
-  | .inl u => reprStr u
-  | .inr .missingContext => "ExampleVersionVerify: missing context"
-
 /-- The type of failure fields, which is the type of rejections and of unsupported reasons of a `revised` object. -/
 abbrev Fields : Type := List (String × Json)
-
-/-- `ExampleFaultyLocktime` with a variant, as a revision of the executable. -/
-def faultyLocktimeRevision (v : ExampleFaultyLocktime.Variant) :
-    BlockRevision ScriptError Unsupported Fields Fields :=
-  ExampleFaultyLocktime.blockRevision v coreVerifier
-
-/-- `ExampleVersionVerify` as a revision of the executable. -/
-def versionVerifyRevision :
-    BlockRevision ExampleVersionVerify.ExampleScriptError ExampleVersionVerify.ExampleScriptUnsupported Fields Fields :=
-  ExampleVersionVerify.blockRevision coreVerifier
 
 /--
 `RelativeLockTime` as a revision of the executable, for the context of a block.
@@ -286,22 +267,11 @@ def relativeLockTimeFields :
       failureFields (some "ConnectBlock") none none none none none none (some (describeRelativeLockTimeReason reason))
 
 /--
-The revisions that a request can name, with `coreVerifier`.
-`ExampleFaultyLocktime` has the variants `corrected` and `faulty`. `ExampleVersionVerify` has no variant.
-Neither example is a proposal for Dogecoin.
+The revisions that a request to `dogelib-proposal-oracle` can name, with `coreVerifier`.
 `RelativeLockTime` is the revision of design record 0012, with the rules of BIP 113, BIP 112 and BIP 68. It has no variant.
 -/
 def revisions : List NamedRevision :=
-  [⟨"ExampleFaultyLocktime", some "corrected",
-      revisedHook (faultyLocktimeRevision .corrected) ScriptError.description reprStr,
-      revisedBody (faultyLocktimeRevision .corrected) noGuard⟩,
-    ⟨"ExampleFaultyLocktime", some "faulty",
-      revisedHook (faultyLocktimeRevision .faulty) ScriptError.description reprStr,
-      revisedBody (faultyLocktimeRevision .faulty) noGuard⟩,
-    ⟨"ExampleVersionVerify", none,
-      revisedHook versionVerifyRevision describeExampleError describeExampleUnsupported,
-      revisedBody versionVerifyRevision noGuard⟩,
-    ⟨"RelativeLockTime", none,
+  [⟨"RelativeLockTime", none,
       revisedHookWith relativeLockTimeRevision relativeLockTimeFields RelativeLockTime.connectEmbedding,
       fun activation ctx b => revisedBody (relativeLockTimeRevision ctx) relativeLockTimeGuard activation ctx b⟩]
 
@@ -315,7 +285,8 @@ def mainnetActivation (height : Option Nat) : Activation :=
 The revision of a request: none without the argument `revision`, and the named revision with its activation otherwise.
 The argument is an object with exactly the fields `name`, `variant` and `activation_height`.
 -/
-def requestRevision (fields : Args) : Except Failure (Option (NamedRevision × Activation)) := do
+def requestRevision (revs : List NamedRevision) (fields : Args) :
+    Except Failure (Option (NamedRevision × Activation)) := do
   let some value := fields.get? "revision" | return none
   let .obj revision := value | throw (.request "revision must be an object")
   for (key, _) in revision do
@@ -329,23 +300,23 @@ def requestRevision (fields : Args) : Except Failure (Option (NamedRevision × A
   let height ← match ← arg revision "activation_height" with
     | .null => pure none
     | _ => (fun h => some h.toNat) <$> argInt revision "activation_height" 0 2147483646
-  let some named := revisions.find? fun r => r.name == name && r.variant == variant
+  let some named := revs.find? fun r => r.name == name && r.variant == variant
     | throw (.request s!"unknown revision {name} with variant {variant.getD "null"}")
   return some (named, mainnetActivation height)
 
-/-- The hook of a request: none without the argument `revision`, and the hook of the named revision with it. -/
-def revisionHook : HookReader := fun fields => do
-  return (← requestRevision fields).map fun (named, activation) => named.hook activation
+/-- The hook of a request: none without the argument `revision`, and the hook of the revision of `revs` that it names with it. -/
+def revisionHook (revs : List NamedRevision) : HookReader := fun fields => do
+  return (← requestRevision revs fields).map fun (named, activation) => named.hook activation
 
 /-- The arguments that the proposal executable adds to `block.validate`. -/
 def revisionArgs : List String := ["revision"]
 
 /-- `block.validate` of the proposal executable: the baseline operation with the argument `revision`. -/
-def blockValidate : Operation := blockValidateWith revisionArgs revisionHook
+def blockValidate (revs : List NamedRevision) : Operation := blockValidateWith revisionArgs (revisionHook revs)
 
 /-- `block.validate` with `blocks_file` of the proposal executable. A request that also has `coins_file` goes to `Block.Exports.blockValidateSnapshotWith` with the same argument and hook. -/
-def blockValidateFile (fields : Args) : IO (Except Failure Json) :=
-  blockValidateFileWith revisionArgs revisionHook fields
+def blockValidateFile (revs : List NamedRevision) (fields : Args) : IO (Except Failure Json) :=
+  blockValidateFileWith revisionArgs (revisionHook revs) fields
 
 /--
 `block.contextual_check_body` of the proposal executable: the baseline operation with the argument `revision`.
@@ -353,11 +324,11 @@ Without the argument it runs the baseline operation.
 With it, the response of the baseline operation gains the object `revised`, which the body hook of the revision gives.
 A request on which the baseline operation returns an error returns that error.
 -/
-def contextualCheckBody : Operation where
+def contextualCheckBody (revs : List NamedRevision) : Operation where
   name := Block.Exports.contextualCheckBody.name
   args := Block.Exports.contextualCheckBody.args ++ revisionArgs
   run fields := do
-    match ← requestRevision fields with
+    match ← requestRevision revs fields with
     | none => Block.Exports.contextualCheckBody.run fields
     | some (named, activation) =>
       let base ← Block.Exports.contextualCheckBody.run (fields.erase "revision")
@@ -374,29 +345,38 @@ def contextualCheckBody : Operation where
         return base.setObjVal! "revised" (named.body activation ctx b)
 
 /-- Every operation of the proposal executable: those of `dogelib-oracle`, with `blockValidate` and `contextualCheckBody` of this module in the place of the baseline ones. -/
-def operations : List Operation :=
+def operations (revs : List NamedRevision) : List Operation :=
   DogeLib.Exports.operations.map fun op =>
-    if op.name == blockValidate.name then blockValidate
-    else if op.name == contextualCheckBody.name then contextualCheckBody
+    if op.name == (blockValidate revs).name then blockValidate revs
+    else if op.name == (contextualCheckBody revs).name then contextualCheckBody revs
     else op
 
-/-- Answer a line in `IO`, as the `dogelib-proposal-oracle` executable does. -/
-def respondIO (line : String) : IO (Option Json) :=
-  respondM (runRequestIOWith operations (fun fields =>
-    if fields.contains "coins_file" then Block.Exports.blockValidateSnapshotWith revisionArgs revisionHook fields
-    else blockValidateFile fields)) line
+/-- Answer a line in `IO` with the revisions `revs`, as a proposal executable does. -/
+def respondIO (revs : List NamedRevision) (line : String) : IO (Option Json) :=
+  respondM (runRequestIOWith (operations revs) (fun fields =>
+    if fields.contains "coins_file" then Block.Exports.blockValidateSnapshotWith revisionArgs (revisionHook revs) fields
+    else blockValidateFile revs fields)) line
 
 /-- The name of the executable. -/
 def programName : String := "dogelib-proposal-oracle"
 
-/-- The object that `dogelib-proposal-oracle --version` prints: the record format of the oracle, and the name of this program, so that a saved run does not mistake it for `dogelib-oracle`. -/
-def versionJson : Json := Json.mkObj [("format", .str formatName), ("program", .str programName)]
+/--
+The object that a proposal executable named `program` prints for `--version`: the record format of the oracle, and the name of the program.
+A saved run then does not mistake the program for `dogelib-oracle`.
+-/
+def versionJsonOf (program : String) : Json := Json.mkObj [("format", .str formatName), ("program", .str program)]
 
-/-- The entry point of `dogelib-proposal-oracle`: answer each line of standard input, or print the version object with `--version`. -/
-def run (argv : List String) : IO UInt32 := do
+/-- The object that `dogelib-proposal-oracle --version` prints. -/
+def versionJson : Json := versionJsonOf programName
+
+/--
+The entry point of a proposal executable named `program` with the revisions `revs`.
+It answers each line of standard input, or prints the version object with `--version`.
+-/
+def runWith (program : String) (revs : List NamedRevision) (argv : List String) : IO UInt32 := do
   match argv with
   | ["--version"] =>
-    IO.println versionJson.compress
+    IO.println (versionJsonOf program).compress
     return 0
   | [] =>
     let stdin ← IO.getStdin
@@ -404,12 +384,15 @@ def run (argv : List String) : IO UInt32 := do
     repeat
       let line ← stdin.getLine
       if line.isEmpty then break
-      if let some response ← respondIO line then
+      if let some response ← respondIO revs line then
         stdout.putStrLn response.compress
         stdout.flush
     return 0
   | _ =>
-    IO.eprintln s!"usage: {programName} [--version]"
+    IO.eprintln s!"usage: {program} [--version]"
     return 2
+
+/-- The entry point of `dogelib-proposal-oracle`: `runWith` with `revisions`. -/
+def run (argv : List String) : IO UInt32 := runWith programName revisions argv
 
 end DogeLib.Proposals.Exports

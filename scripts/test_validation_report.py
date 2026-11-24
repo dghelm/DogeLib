@@ -275,12 +275,13 @@ class Reports(unittest.TestCase):
         expected = {
             'build': 'lake build --wfail',
             'declaration-check': 'lake exe check-decls',
+            'test-declaration-check': 'lake exe check-decls --scope ProposalExamples ProposalExamples ProposalExamples.Proofs ProposalExamples.Exports',
             'import-boundaries': 'lake env lean --run scripts/CheckRefinementImports.lean',
             'import-boundary-self-test': 'bash scripts/test_import_boundaries.sh',
             'rust-known-answers': 'cargo +nightly-2026-09-17 test --locked --manifest-path Refinement/Rust/Cargo.toml --jobs 4',
             'rust-extraction-freshness': 'Refinement/Rust/regenerate.sh --check',
             'declaration-check-self-test': 'bash scripts/test_check_decls.sh',
-            'kernel-replay': 'REPLAY_JOBS=2 bash scripts/replay.sh',
+            'kernel-replay': 'REPLAY_JOBS=2 bash scripts/replay.sh && REPLAY_JOBS=2 bash scripts/replay.sh tests/ProposalExamples',
             'kernel-replay-self-test': 'bash scripts/test_replay.sh',
             'source-and-coverage-review': None,
             'conformance': 'lake test',
@@ -319,8 +320,9 @@ class Reports(unittest.TestCase):
             'soundness-review': None,
             'writing': 'uv run --no-project --python 3.12 python scripts/check_writing.py --base main',
             'oracle': 'bash scripts/test_oracle.sh',
-            'proposal-oracle': 'lake build dogelib-oracle dogelib-proposal-oracle && '
-                               'python3 -I scripts/test_proposal_oracle.py .lake/build/bin/dogelib-oracle .lake/build/bin/dogelib-proposal-oracle',
+            'proposal-oracle': 'lake build dogelib-oracle dogelib-proposal-oracle proposal-test-oracle && '
+                               'python3 -I scripts/test_proposal_oracle.py .lake/build/bin/dogelib-oracle .lake/build/bin/dogelib-proposal-oracle '
+                               '.lake/build/bin/proposal-test-oracle',
             'core-comparison': 'scripts/build_core_harness.sh --trap-overflow <dogecoin-git-clone> build/core-harness && '
                                'python3 -I scripts/compare_core.py .lake/build/bin/dogelib-oracle build/core-harness/core-oracle',
             'rust-compactsize-comparison': 'cargo +nightly-2026-09-17 build --locked --manifest-path Refinement/Rust/Cargo.toml --example compactsize_oracle --jobs 4 && '
@@ -340,10 +342,10 @@ class Reports(unittest.TestCase):
             'core-harness-state': 'python3 -I scripts/test_core_harness.py .lake/build/bin/dogelib-oracle build/core-harness/core-oracle',
             'csv-forced-active': 'python3 -I scripts/compare_csv_forced.py .lake/build/bin/dogelib-oracle .lake/build/bin/dogelib-proposal-oracle build/core-harness/core-oracle',
             'cutoff-candidates': 'python3 -I scripts/relative_lock_time_candidates.py --check',
-            'impact-tools-self-test': 'python3 -I scripts/test_impact.py .lake/build/bin/dogelib-proposal-oracle',
+            'impact-tools-self-test': 'python3 -I scripts/test_impact.py .lake/build/bin/proposal-test-oracle',
             'impact-run-to-10-000': 'python3 -I scripts/impact_run.py request --range genesis-10000 --fixture build/mainnet-blocks/genesis-10000 --output build/impact/requests/genesis-10000 && python3 -I scripts/impact_candidates.py --range genesis-10000 --request build/impact/requests/genesis-10000/request.json --check && python3 -I scripts/impact_run.py run --range genesis-10000 --request build/impact/requests/genesis-10000/request.json --revision RelativeLockTime --activation 1 --output build/impact/runs/genesis-10000 .lake/build/bin/dogelib-proposal-oracle',
-            'impact-runs-short-range': 'python3 -I scripts/impact_run.py request --range short --fixture build/mainnet-blocks/genesis-10000 --harness build/core-harness/core-oracle --output build/impact/requests/short && python3 -I scripts/impact_candidates.py --range short --request build/impact/requests/short/request.json --check && python3 -I scripts/impact_run.py run --range short --request build/impact/requests/short/request.json --revision ExampleVersionVerify --activation none --output build/impact/runs/short/vv-none .lake/build/bin/dogelib-proposal-oracle && python3 -I scripts/impact_run.py run --range short --request build/impact/requests/short/request.json --revision ExampleVersionVerify --activation 0 --output build/impact/runs/short/vv-0 .lake/build/bin/dogelib-proposal-oracle && python3 -I scripts/impact_run.py run --range short --request build/impact/requests/short/request.json --revision ExampleFaultyLocktime/corrected --activation none --output build/impact/runs/short/fl-none .lake/build/bin/dogelib-proposal-oracle && python3 -I scripts/impact_run.py run --range short --request build/impact/requests/short/request.json --revision ExampleFaultyLocktime/corrected --activation 0 --output build/impact/runs/short/fl-0 .lake/build/bin/dogelib-proposal-oracle',
-            'impact-runs-on-the-ranges': 'python3 -I scripts/impact_run.py run --range A --request build/impact/requests/A/request.json --revision ExampleVersionVerify --activation 0 --baseline build/range-runs/A/range-oracle-response.json --output build/impact/runs/A/ExampleVersionVerify-0 .lake/build/bin/dogelib-proposal-oracle',
+            'impact-runs-short-range': 'python3 -I scripts/impact_run.py request --range short --fixture build/mainnet-blocks/genesis-10000 --harness build/core-harness/core-oracle --output build/impact/requests/short && python3 -I scripts/impact_candidates.py --range short --request build/impact/requests/short/request.json --check && python3 -I scripts/impact_run.py run --range short --request build/impact/requests/short/request.json --revision ExampleVersionVerify --activation none --output build/impact/runs/short/vv-none .lake/build/bin/proposal-test-oracle && python3 -I scripts/impact_run.py run --range short --request build/impact/requests/short/request.json --revision ExampleVersionVerify --activation 0 --output build/impact/runs/short/vv-0 .lake/build/bin/proposal-test-oracle && python3 -I scripts/impact_run.py run --range short --request build/impact/requests/short/request.json --revision ExampleFaultyLocktime/corrected --activation none --output build/impact/runs/short/fl-none .lake/build/bin/proposal-test-oracle && python3 -I scripts/impact_run.py run --range short --request build/impact/requests/short/request.json --revision ExampleFaultyLocktime/corrected --activation 0 --output build/impact/runs/short/fl-0 .lake/build/bin/proposal-test-oracle',
+            'impact-runs-on-the-ranges': 'python3 -I scripts/impact_run.py run --range A --request build/impact/requests/A/request.json --revision RelativeLockTime --activation 1 --baseline build/range-runs/A/range-oracle-response.json --output build/impact/runs/A/RelativeLockTime-1 .lake/build/bin/dogelib-proposal-oracle',
             'impact-run-to-145-000': 'python3 -I scripts/impact_run.py run --range genesis-145000 --request build/impact/requests/genesis-145000/request.json --revision RelativeLockTime --activation 1 --output build/impact/runs/genesis-145000 .lake/build/bin/dogelib-proposal-oracle',
             'comparator-self-test': 'python3 -I scripts/test_compare_core.py .lake/build/bin/dogelib-oracle',
             'writing-checker-tests': 'uv run --no-project --python 3.12 python -m unittest scripts/test_check_writing.py',

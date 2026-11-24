@@ -1,4 +1,5 @@
 import DogeLib.Proposals
+import ProposalExamples
 import DogeLib.Script.CoreVerifier
 import KnownAnswers.Common
 
@@ -17,7 +18,7 @@ These compiled checks are finite regression evidence, not a proof.
 
 namespace KnownAnswers.Campaign
 
-open DogeLib.Script DogeLib.Transaction DogeLib.Proposals.Framework DogeLib.Proposals.ExampleFaultyLocktime
+open DogeLib.Script DogeLib.Transaction DogeLib.Proposals.Framework ProposalExamples.ExampleFaultyLocktime
 
 /-- The input context, previous-output script and flags of one request. -/
 structure Request where

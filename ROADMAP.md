@@ -89,7 +89,7 @@ Section 12 of the record gives two stages:
 | Stage | Deliverable | Status |
 | --- | --- | --- |
 | 1 | The `Proposals` and `ProposalProofs` libraries, the import check, the activation model and the Script loop with a step parameter | Specified in `DogeLib.Proposals.Framework`, with the framework targets of section 11 except `checkBlockHeader_not_versionBitsCondition` (decision 11), and the import-check self-test |
-| 2 | The worked example `ExampleVersionVerify`, with its theorem targets and known answers | Specified in `DogeLib.Proposals.ExampleVersionVerify`, with every target of section 10.3 and known answers through the compiled code |
+| 2 | The worked example `ExampleVersionVerify`, with its theorem targets and known answers | Specified in `ProposalExamples.ExampleVersionVerify`, now a test-only library, with every target of section 10.3 and known answers through the compiled code |
 
 Header-sequence validation is implemented through stage 5, under [design record 0008](docs/design/0008-header-sequence-validation.md).
 The maintainer adopted the record on 2026-11-07, with every decision of its section 13.

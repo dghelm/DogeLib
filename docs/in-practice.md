@@ -47,7 +47,7 @@ The sections below apply these activities to an invented revision with a planted
 A *soft fork* only restricts acceptance: every input that the revised rules accept, the baseline rules also accept.
 [Design record 0007](design/0007-proposed-revisions.md) gives DogeLib's framework for this claim.
 This section applies the framework to an invented rule with a deliberate fault.
-The rule is in `DogeLib.Proposals.ExampleFaultyLocktime`, and it is not a proposal for Dogecoin.
+The rule is in `ProposalExamples.ExampleFaultyLocktime`, a test-only library under `tests/`, and it is not a proposal for Dogecoin.
 
 ### The rule
 
@@ -126,7 +126,7 @@ The framework gives the soft-fork requirement a precise form.
 `RestrictsAcceptance` says that for every `active` and every input, if the revision accepts, the baseline accepts.
 `SoftFork` needs that property and three more, which the next subsection lists.
 
-These theorems in `DogeLib.Proposals.ExampleFaultyLocktime.Proofs.Witnesses` refute the claim for the faulty rule:
+These theorems in `ProposalExamples.ExampleFaultyLocktime.Proofs.Witnesses` refute the claim for the faulty rule:
 
 - `faulty_not_restrictsAcceptance`: the faulty spend predicate does not restrict acceptance. The counterexample is the witness.
 - `faulty_not_softFork`: for every use predicate, the faulty spend predicate is not a `SoftFork` of `verifyLegacySpend`.

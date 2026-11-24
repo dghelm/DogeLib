@@ -192,7 +192,7 @@ Regtest has `fStrictChainId` true, so the three tests of R15 cannot activate CSV
 
 | Part | State in DogeLib at `ae66db4` |
 | --- | --- |
-| The opcode (section 3.2) | Defined. `Script.checkSequenceStep` and `sequenceSatisfied` follow R7, and `supportedFlags` holds the CSV flag. The comparison with Core includes 940 targeted CSV requests and the CSV records of `script_tests.json` ([docs/oracle.md](../oracle.md#the-comparison)). |
+| The opcode (section 3.2) | Defined. `Script.checkSequenceStep` and `sequenceSatisfied` follow R7, and `supportedFlags` holds the CSV flag. The comparison with Core includes 940 targeted CSV requests and the CSV records of `script_tests.json` ([docs/comparison-evidence.md](../comparison-evidence.md#the-comparison)). |
 | The cutoff (section 3.1) | Defined. `Block.contextualCheckBlockBody` takes `csvActive` and the median time past of the predecessor. The oracle derives `csvActive` from the version-bits state, which is never `ACTIVE` on the compared blocks. |
 | Median time past | Defined. `Work.medianTimePast` gives the value for the first entry of a view. |
 | Coin heights | Defined. `Block.Coin` has the height and the coinbase flag of its `CCoins` entry. |

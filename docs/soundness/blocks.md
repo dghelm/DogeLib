@@ -180,7 +180,7 @@ The adapter computes them from a finite view, and the request supplies that view
 A comparison gives the evidence for the adapter.
 In `scripts/test_core_pass.py`, the oracle and the harness report the same state in `block.validate` at 16 boundaries of three synthetic chains.
 The states cover all five, and each equals both full walks.
-The ranges E1 and E2 compare the states on mainnet ([recorded runs](../oracle.md#the-csv-window-ranges-e1-and-e2)). Both programs report `DEFINED` and `STARTED` in E1, and `STARTED` and `FAILED` in E2.
+The ranges E1 and E2 compare the states on mainnet ([recorded runs](../comparison-evidence.md#the-csv-window-ranges-e1-and-e2)). Both programs report `DEFINED` and `STARTED` in E1, and `STARTED` and `FAILED` in E2.
 The walk can give `ACTIVE` on a made chain that signals. `block.validate` then returns the error `outside_model` before the checks of the block, because its context holds the aligned boundary's median time and not the predecessor's.
 
 On mainnet the walk changes no verdict.
@@ -233,7 +233,7 @@ Otherwise, under the hypothesis that the AuxPoW payload transaction has no witne
 That hypothesis excludes some real mainnet blocks: pull request #152 found that the AuxPoW parent coinbase of blocks 6,455,642, 6,456,071 and 6,456,247 carries witness data that Core accepts.
 The theorem does not cover a block whose AuxPoW payload transaction has witness data.
 
-The comparison evidence is in [COVERAGE.md](../../COVERAGE.md#operations) and [docs/oracle.md](../oracle.md#contextual-block-body-comparison-evidence).
+The comparison evidence is in [COVERAGE.md](../../COVERAGE.md#operations) and [docs/comparison-evidence.md](../comparison-evidence.md#contextual-block-body-comparison-evidence).
 `block.contextual_check_body` compares the verdict, the reject reason, the denial-of-service score and the reject code with Core's own `ContextualCheckBlock` ([B4](../../SOUNDNESS.md#b4-the-oracle-and-foreign-boundaries)).
 [docs/reviews/contextualbody.md](../reviews/contextualbody.md) records a model read of the definitions against Core.
 
@@ -332,7 +332,7 @@ By `#print axioms`, `getSigOpCountAccurate_eq_scanOps` depends on `propext` and 
 It is not Core's `AcceptBlock` or `ProcessNewBlock`: it has no block index, it chooses no chain, and it writes nothing.
 The caller supplies the view of the predecessor and establishes that `hashPrevBlock` names it.
 
-The comparison evidence is in [COVERAGE.md](../../COVERAGE.md#operations) and [docs/oracle.md](../oracle.md#block-validation-comparison-evidence).
+The comparison evidence is in [COVERAGE.md](../../COVERAGE.md#operations) and [docs/comparison-evidence.md](../comparison-evidence.md#block-validation-comparison-evidence).
 `block.validate` compares each block's verdict, reason, score and code with Core's own functions, and compares the digests of the coins ([B4](../../SOUNDNESS.md#b4-the-oracle-and-foreign-boundaries)).
 
 By `#print axioms`, `connect_fits`, `checkTxInputs_ne_feeNegative`, `checkTxInputs_ne_feeOutOfRange`, `connectBlock_ne_feeNegative` and `connectBlock_ne_feeOutOfRange` depend on `propext`, `Classical.choice` and `Quot.sound`.

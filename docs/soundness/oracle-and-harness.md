@@ -27,7 +27,7 @@ Core's set visits the failed list in address order.
 Each anchor above height 0 gets a placeholder predecessor, which stands for the ancestors that the request does not name.
 Users trust the index construction, JSON conversion, the placeholder and the preflight refusal of short histories (A1, B4).
 Agreement on the tested inputs does not prove agreement on all inputs.
-The [comparison streams](../oracle.md#header-sequence-comparison-evidence) record the finite evidence and seeds.
+The [comparison streams](../comparison-evidence.md#header-sequence-comparison-evidence) record the finite evidence and seeds.
 
 The comparison excludes Lean diagnostics.
 All other fields must agree before the comparator decides whether to exclude child marks.
@@ -117,7 +117,7 @@ Finite comparisons establish neither full transaction validity nor equivalence t
 
 A wrong conversion could make the oracle and Core disagree, or agree, for a reason outside the specification.
 
-The Core harness, `harness/core/core_oracle.cpp`, is the other side of the comparison ([docs/oracle.md](../oracle.md#the-core-harness)).
+The Core harness, `harness/core/core_oracle.cpp`, is the other side of the comparison ([docs/core-harness.md](../core-harness.md#the-core-harness)).
 A user of the comparison trusts these parts of it:
 
 - Core's libraries at the pin, compiled by the compiler of the machine that runs the comparison: GCC 13 in CI, on `ubuntu-24.04`.
@@ -217,7 +217,7 @@ A time lock of BIP 68 reads an ancestor at the height of the spent coin.
 Three reads of `SequenceLocks` are outside the model of the revision: an ancestor below the supplied chain, a time lock on a coin above the block, and a coin height from 2^31 - 65535.
 The harness scans each block for such a read before the forced `ConnectBlock`, and does not run Core on it. The object `forced` then names the reason, and has no verdict.
 The scan is harness code, not Core's code. A user trusts that it finds each such read: a read that it misses reaches Core, which can then dereference a null pointer or leave the supplied chain.
-The scan does not follow every exit of `ConnectBlock`, such as an earlier transaction that fails its own sequence lock. So it can name a read on a block that Core would reject earlier ([docs/oracle.md](../oracle.md#core-with-the-csv-state-forced-to-active)).
+The scan does not follow every exit of `ConnectBlock`, such as an earlier transaction that fails its own sequence lock. So it can name a read on a block that Core would reject earlier ([docs/core-harness.md](../core-harness.md#core-with-the-csv-state-forced-to-active)).
 Agreement on such a block shows that the two programs draw the limit of the model at one place. It shows nothing about a verdict of Core.
 
 The two seeds differ in kind.
@@ -254,7 +254,7 @@ The oracle computes `versionBitsStateFull` on the same sequence.
 
 For `block.validate` the harness calls Core's five checks of a new block on each block, in Core's order: `CheckBlockHeader`, `ContextualCheckBlockHeader`, `CheckBlock`, `ContextualCheckBlock` and `ConnectBlock`.
 It carries a coin set and a block index through the request.
-[docs/oracle.md](../oracle.md#block-validation-in-the-harness) lists its choices.
+[docs/core-harness.md](../core-harness.md#block-validation-in-the-harness) lists its choices.
 Users trust these parts of the harness, which no Core function supplies:
 
 - The coin view over a `std::map`, and the commit after an accepted block. `ConnectBlock` runs with `fJustCheck` true, so Core's own `SetBestBlock` and its writes do not run.
@@ -290,8 +290,8 @@ The recorded replay also compared the digest at height 100,000 between the two p
 Its record does not state the value.
 Neither program checks that a snapshot file stays the same during a request, except that the oracle requires one number of records in both reads.
 
-The ranges A, B, C, D, F and H of stage 2 start from the snapshots of the Core pass ([record](../oracle.md#ranges-a-to-h)).
-The ranges E1 and E2 of stage 4 start from the snapshots of a second pass, which started from the snapshot of range D ([record](../oracle.md#the-csv-window-ranges-e1-and-e2)).
+The ranges A, B, C, D, F and H of stage 2 start from the snapshots of the Core pass ([record](../comparison-evidence.md#ranges-a-to-h)).
+The ranges E1 and E2 of stage 4 start from the snapshots of a second pass, which started from the snapshot of range D ([record](../comparison-evidence.md#the-csv-window-ranges-e1-and-e2)).
 Each range from `a + 1` to `b` agrees under section 3.4 of [design record 0011](../design/0011-mainnet-ranges.md).
 
 So each range shows a conditional statement.

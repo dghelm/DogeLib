@@ -14,7 +14,7 @@ This record sets the scope for a signature verifier that agrees with Dogecoin Co
 DogeLib has no instance of the parameter that decides a signature.
 The oracle's `transaction` checker uses a verifier that is always unavailable, so a request that reaches it gives `unsupported` with the reason `signature_verifier`.
 
-That gap removes these requests from the Core comparison ([docs/oracle.md](../oracle.md#the-comparison)):
+That gap removes these requests from the Core comparison ([docs/comparison-evidence.md](../comparison-evidence.md#the-comparison)):
 
 - 44 of the 925 inside-milestone records of Core's `script_tests.json`, with the `transaction` checker.
 - 60 of the 159 eligible transaction inputs: 42 of the 91 inputs that Core must accept, and 18 of the 68 inputs with no expectation.

@@ -44,7 +44,7 @@ The messages include empty input, ASCII, embedded zero and high-bit bytes, all b
 Both independent implementations agreed on all twelve digests before the fixtures were committed.
 The Lean implementation did not produce any expectation.
 The comparison driver is local-only and is not committed.
-The committed [Core harness and comparator](../../../docs/oracle.md#the-core-harness) repeat the fixture comparison and add generated padding boundaries.
+The committed [Core harness and comparator](../../../docs/core-harness.md#the-core-harness) repeat the fixture comparison and add generated padding boundaries.
 
 ## Encoding and checksums
 

@@ -22,7 +22,7 @@ Each line holds one `dogelib-oracle/1` request, and the same line of another fil
 | `expected-corrected.jsonl` | The response of `proposal-replay ExampleFaultyLocktime corrected --active` |
 | `SHA256SUMS` | The SHA-256 of each JSONL file |
 
-`proposal-replay` answers a request with `revisedVerifyLegacySpend` of the named variant ([the planted proposal search](../../../docs/oracle.md#the-planted-proposal-search)).
+`proposal-replay` answers a request with `revisedVerifyLegacySpend` of the named variant ([the planted proposal search](../../../docs/campaign.md#the-planted-proposal-search)).
 The two revised files have a line for each request, so the M3 fixture also checks that the revision leaves a spend without `OP_NOP4` unchanged.
 
 ## Checks

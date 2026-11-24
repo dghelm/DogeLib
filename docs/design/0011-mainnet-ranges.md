@@ -8,7 +8,7 @@ This record is frozen. Implementation status belongs in ROADMAP.md and COVERAGE.
 
 ## 1. Purpose
 
-`block.validate` agrees with Core on mainnet from the genesis block to height 145,000 ([recorded run](../oracle.md#replay-of-mainnet-to-height-145000)).
+`block.validate` agrees with Core on mainnet from the genesis block to height 145,000 ([recorded run](../comparison-evidence.md#replay-of-mainnet-to-height-145000)).
 Most of the rules of the chain today start above that height: AuxPoW at 371,337, BIP34 and BIP66 at 1,034,383, and BIP65 at 3,464,751.
 The replay does not reach them.
 
@@ -292,7 +292,7 @@ Every range also compares the whole of `validateBlock`: the five checks of secti
 
 Three limits apply to every row:
 
-- A block of mainnet shows only the accepting side of a rule. The rejecting side has its evidence in the changed blocks of the full comparison ([evidence](../oracle.md#block-validation-comparison-evidence)).
+- A block of mainnet shows only the accepting side of a rule. The rejecting side has its evidence in the changed blocks of the full comparison ([evidence](../comparison-evidence.md#block-validation-comparison-evidence)).
 - `block.validate` runs `contextualCheckBlockHeader` with checkpoints disabled. So no range exercises the checkpoint rule, in either program.
 - CSV and SegWit semantics stay outside the Lean definitions, which prove them inactive on mainnet (design record 0010, section 7). A range in the oracle fails with `outside_model` if a block needs them.
 

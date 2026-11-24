@@ -83,7 +83,7 @@ Dogecoin Core's own test cases test the compact target encoding and the difficul
 
 ## Comparison with Dogecoin Core
 
-The comparison runs Dogecoin Core's own code on the oracle's requests ([docs/oracle.md](docs/oracle.md#the-core-harness)).
+The comparison runs Dogecoin Core's own code on the oracle's requests ([docs/core-harness.md](docs/core-harness.md#the-core-harness)).
 It needs a git clone of Dogecoin Core that contains the pinned commit.
 It also needs autoconf, automake, libtool, pkg-config, curl, and the development files of OpenSSL and libevent.
 On Ubuntu the last two are `libssl-dev` and `libevent-dev`.
@@ -129,7 +129,7 @@ taskset -c 0 nice -n 19 python3 -I scripts/replay_blocks.py --last 145000 --outp
 The replay writes a second file of 3 GB below `build/replay-145000`.
 The oracle takes about 17 hours on one core and about 8 GB of memory.
 It writes each thousandth height to standard error.
-[docs/oracle.md](docs/oracle.md#replay-of-mainnet-to-height-145000) records one run.
+[docs/comparison-evidence.md](docs/comparison-evidence.md#replay-of-mainnet-to-height-145000) records one run.
 
 ### Compiled Rust CompactSize comparison
 

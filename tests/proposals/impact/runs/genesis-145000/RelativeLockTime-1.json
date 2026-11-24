@@ -1,0 +1,69 @@
+{
+  "executable": {
+    "commit": "6ef0e12f8ace3a7576216f9ef2c1bf11d7fb095f",
+    "name": "dogelib-proposal-oracle",
+    "sha256": "220a29cdff67c47bb80541fb7cbf75098b9965f68837b56155216b47c24d4548"
+  },
+  "first": 0,
+  "format": "dogelib-impact-run/1",
+  "inputs": {
+    "baseline_response": null,
+    "blocks_file": {
+      "bytes": 3024443782,
+      "sha256": "5295801124f275bd7b6aad9f60bc734631e8157d99a07d8a9c66ee8f2bd034e3"
+    },
+    "candidate_list": "tests/proposals/impact/genesis-145000.json",
+    "candidate_list_sha256": "17ea01173f87cd1b806e1e23f937eda84b659ac12e243d15f87af8e3db564329",
+    "coins_file": null,
+    "expected_end": "b28411dc46135fd0f85c954a664866d4f610803f7d667c9d2032ddfd6c58716d",
+    "request": {
+      "bytes": 417,
+      "sha256": "85afdc4daed0af83f3f0f9b88d264d68ba0f7d9c755970d0db27360220c06464"
+    }
+  },
+  "last": 145000,
+  "outputs": {
+    "report": {
+      "bytes": 135,
+      "sha256": "8e5af5b9cea42197e860e0a9a49551326da6e884364f07fe8c6695239f7b2cf8"
+    },
+    "response": {
+      "bytes": 98994041,
+      "sha256": "a4ca0689556e11d3aa17bfc442aa65dc9b041608f753147e319d5da5b0e814a4"
+    },
+    "summary": {
+      "bytes": 906,
+      "sha256": "648ee13ba041667002e38eb6bfcfaa6d5daf0fd702bc0631491703c86bc8bedf"
+    }
+  },
+  "range": "genesis-145000",
+  "recheck": {
+    "changed_blocks": 0,
+    "command": "python3 -I scripts/impact_run.py check --range genesis-145000 --request build/impact/requests/genesis-145000/request.json --revision RelativeLockTime --activation 1 --response build/impact/runs/genesis-145000/RelativeLockTime-1/response.json --output build/impact/recheck/genesis-145000/RelativeLockTime-1 build/bin-6ef0e12/dogelib-proposal-oracle",
+    "summary": {
+      "bytes": 967,
+      "sha256": "423f712f77c6c00fbc266dad89ad88533fd2583d4d919c593cdf918e766fa154"
+    }
+  },
+  "result": {
+    "blocks": 145001,
+    "candidate_blocks": 0,
+    "changed_blocks": 0,
+    "rejected_by_step": {},
+    "set_coins": 5094671,
+    "set_digest_hex": "b28411dc46135fd0f85c954a664866d4f610803f7d667c9d2032ddfd6c58716d",
+    "unsupported": {}
+  },
+  "revision": {
+    "activation_height": 1,
+    "name": "RelativeLockTime",
+    "variant": null
+  },
+  "run": "RelativeLockTime-1",
+  "time": {
+    "elapsed": "41:12:35",
+    "finished_utc": "2026-11-24T11:29:36Z",
+    "max_rss_kib": 7838132,
+    "seconds": 148352
+  }
+}

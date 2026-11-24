@@ -1,0 +1,76 @@
+{
+  "executable": {
+    "commit": "6ef0e12f8ace3a7576216f9ef2c1bf11d7fb095f",
+    "name": "dogelib-proposal-oracle",
+    "sha256": "220a29cdff67c47bb80541fb7cbf75098b9965f68837b56155216b47c24d4548"
+  },
+  "first": 3463751,
+  "format": "dogelib-impact-run/1",
+  "inputs": {
+    "baseline_response": {
+      "bytes": 824623,
+      "sha256": "453c9a0984942de92d4b7e34c7277f3d6e315351d7a9ef8617bb5f5fc2a14859"
+    },
+    "blocks_file": {
+      "bytes": 34205002,
+      "sha256": "7b2b4b2fa443dbdbcbf4a9fa6f1188a51d30d3c8977b071a92ed282b2b154905"
+    },
+    "candidate_list": "tests/proposals/impact/F.json",
+    "candidate_list_sha256": "704db3e020cba2d03e4aacfa88bb47cbc9708d2e1a049be1936145592a50c294",
+    "coins_file": {
+      "bytes": 1103862190,
+      "name": "coins-3463750.bin",
+      "sha256": "1043e1a13dca76e739dbb2f474594926ec57b604a5e1f928f6fec61bc1cf82c7"
+    },
+    "expected_end": "a6b3bb146f7e3c41c97cdf63f699b5d50a47adc51b2e940b35980d37b8fc4849",
+    "request": {
+      "bytes": 621018,
+      "sha256": "747116e38a4eff97c6ff7bfecf5d01299bb82ed5e2922b2f74c8e19444923642"
+    }
+  },
+  "last": 3465750,
+  "outputs": {
+    "report": {
+      "bytes": 133,
+      "sha256": "71cb00532225119182fcc306a191ad44027cd3d1c31ff6ab17c3cbddf9a3bdab"
+    },
+    "response": {
+      "bytes": 1370624,
+      "sha256": "6ed75183a4b0bb0005c1f7e3883a17c6f191e34ec4efa884608dbbc4580e4b19"
+    },
+    "summary": {
+      "bytes": 913,
+      "sha256": "dfca488614eefa3f804f40490ad5a679ff23259600ed43e77ef12a0c82e9cc3e"
+    }
+  },
+  "range": "F",
+  "recheck": {
+    "changed_blocks": 0,
+    "command": "python3 -I scripts/impact_run.py check --range F --request build/impact/requests/F/request.json --revision ExampleFaultyLocktime/corrected --activation none --baseline build/range-runs/F/range-oracle-response.json --response build/impact/runs/F/ExampleFaultyLocktime-corrected-none/response.json --output build/impact/recheck/F/ExampleFaultyLocktime-corrected-none build/bin-6ef0e12/dogelib-proposal-oracle",
+    "summary": {
+      "bytes": 981,
+      "sha256": "89e145b26a8a27a9d38c18f97e6e4afca53bf099d29a3e81e941a37dcfb97a79"
+    }
+  },
+  "result": {
+    "blocks": 2000,
+    "candidate_blocks": 0,
+    "changed_blocks": 0,
+    "rejected_by_step": {},
+    "set_coins": 14520734,
+    "set_digest_hex": "a6b3bb146f7e3c41c97cdf63f699b5d50a47adc51b2e940b35980d37b8fc4849",
+    "unsupported": {}
+  },
+  "revision": {
+    "activation_height": null,
+    "name": "ExampleFaultyLocktime",
+    "variant": "corrected"
+  },
+  "run": "ExampleFaultyLocktime-corrected-none",
+  "time": {
+    "elapsed": "22:57.72",
+    "finished_utc": "2026-11-22T08:00:13Z",
+    "max_rss_kib": 520436,
+    "seconds": 1378
+  }
+}

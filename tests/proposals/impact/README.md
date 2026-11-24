@@ -39,6 +39,8 @@ They also include the opcode spends, and each created output that holds `0xb2`.
 
 Every list has 0 candidate blocks for each of the three revisions, and 0 missing coins.
 
+The directory `runs/` has the records of the recorded runs, with an index and `SHA256SUMS` ([docs/oracle.md](../../../docs/oracle.md#historical-impact-runs)).
+
 ## Provenance
 
 The script reads the blocks file, the `chain` and the snapshot of the range request of `scripts/impact_run.py request`.

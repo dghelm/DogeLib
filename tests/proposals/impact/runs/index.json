@@ -1,0 +1,572 @@
+{
+  "build": {
+    "commit": "6ef0e12f8ace3a7576216f9ef2c1bf11d7fb095f",
+    "dogelib-oracle_sha256": "32b9fc94235fe8408d0bd06d3bc90945d0314057e037d68fb8db50647cf1a025",
+    "dogelib-proposal-oracle_sha256": "220a29cdff67c47bb80541fb7cbf75098b9965f68837b56155216b47c24d4548"
+  },
+  "format": "dogelib-impact-runs/1",
+  "retained": "The maintainer's machine keeps the requests, responses, reports, summaries and logs under build/impact/. They are not in Git and not in a release asset.",
+  "runs": [
+    {
+      "file": "A/ExampleFaultyLocktime-corrected-0.json",
+      "range": "A",
+      "revision": {
+        "activation_height": 0,
+        "name": "ExampleFaultyLocktime",
+        "variant": "corrected"
+      },
+      "run": "ExampleFaultyLocktime-corrected-0",
+      "sha256": "429f2e9420869bc7386340a38886ac6d4d03c45b0acaef369bbf167094f9842b"
+    },
+    {
+      "file": "A/ExampleFaultyLocktime-corrected-none.json",
+      "range": "A",
+      "revision": {
+        "activation_height": null,
+        "name": "ExampleFaultyLocktime",
+        "variant": "corrected"
+      },
+      "run": "ExampleFaultyLocktime-corrected-none",
+      "sha256": "8e49681916b4bad66b00d4bf6927213bc0e4a0974e0c3650affb097724e84864"
+    },
+    {
+      "file": "A/ExampleVersionVerify-0.json",
+      "range": "A",
+      "revision": {
+        "activation_height": 0,
+        "name": "ExampleVersionVerify",
+        "variant": null
+      },
+      "run": "ExampleVersionVerify-0",
+      "sha256": "14678635a4fa51d85a6dedc2646db5338ee0bf6f1f72c28d93c92db2ada7b3d7"
+    },
+    {
+      "file": "A/ExampleVersionVerify-none.json",
+      "range": "A",
+      "revision": {
+        "activation_height": null,
+        "name": "ExampleVersionVerify",
+        "variant": null
+      },
+      "run": "ExampleVersionVerify-none",
+      "sha256": "6814a7ce63bc30b5421a539ce211bef0ea20fc7687692fbaf50287071e7418b9"
+    },
+    {
+      "file": "A/RelativeLockTime-1.json",
+      "range": "A",
+      "revision": {
+        "activation_height": 1,
+        "name": "RelativeLockTime",
+        "variant": null
+      },
+      "run": "RelativeLockTime-1",
+      "sha256": "48c4c3c63c32cbdd37f7ca454dabe6db3cbbfeb894560d266af9397f9bf24986"
+    },
+    {
+      "file": "B/ExampleFaultyLocktime-corrected-0.json",
+      "range": "B",
+      "revision": {
+        "activation_height": 0,
+        "name": "ExampleFaultyLocktime",
+        "variant": "corrected"
+      },
+      "run": "ExampleFaultyLocktime-corrected-0",
+      "sha256": "31d1b3154a599da1c7f57cc3955bcc0ddc334356721810a0bb1a28c54f5c7587"
+    },
+    {
+      "file": "B/ExampleFaultyLocktime-corrected-none.json",
+      "range": "B",
+      "revision": {
+        "activation_height": null,
+        "name": "ExampleFaultyLocktime",
+        "variant": "corrected"
+      },
+      "run": "ExampleFaultyLocktime-corrected-none",
+      "sha256": "68a5c04ea952458b4ba01d80191f049a95fd3788eae5624838fe278932a63be0"
+    },
+    {
+      "file": "B/ExampleVersionVerify-0.json",
+      "range": "B",
+      "revision": {
+        "activation_height": 0,
+        "name": "ExampleVersionVerify",
+        "variant": null
+      },
+      "run": "ExampleVersionVerify-0",
+      "sha256": "0c2f4ab1da77c3b20f2765b0439f12125e04e6ed306767a618fbce029e837bef"
+    },
+    {
+      "file": "B/ExampleVersionVerify-none.json",
+      "range": "B",
+      "revision": {
+        "activation_height": null,
+        "name": "ExampleVersionVerify",
+        "variant": null
+      },
+      "run": "ExampleVersionVerify-none",
+      "sha256": "e5e4985ad63c534fbe9a84fe58d55fcb0922ffe6832f4c1bdab4d1ac6d073607"
+    },
+    {
+      "file": "B/RelativeLockTime-1.json",
+      "range": "B",
+      "revision": {
+        "activation_height": 1,
+        "name": "RelativeLockTime",
+        "variant": null
+      },
+      "run": "RelativeLockTime-1",
+      "sha256": "e918f044ab287ffda1025d1439da3e341ac700f0debf0000ac1b1e03a09a8acf"
+    },
+    {
+      "file": "C/ExampleFaultyLocktime-corrected-0.json",
+      "range": "C",
+      "revision": {
+        "activation_height": 0,
+        "name": "ExampleFaultyLocktime",
+        "variant": "corrected"
+      },
+      "run": "ExampleFaultyLocktime-corrected-0",
+      "sha256": "5eeaf055df00d0d3674fe5a5cffadb9c4dad94646bee7b6d01a6561db616376b"
+    },
+    {
+      "file": "C/ExampleFaultyLocktime-corrected-none.json",
+      "range": "C",
+      "revision": {
+        "activation_height": null,
+        "name": "ExampleFaultyLocktime",
+        "variant": "corrected"
+      },
+      "run": "ExampleFaultyLocktime-corrected-none",
+      "sha256": "bd30909618d4e6c9f2a9c7ed589fe7de8fdf20717b6a9fca581c712466efff24"
+    },
+    {
+      "file": "C/ExampleVersionVerify-0.json",
+      "range": "C",
+      "revision": {
+        "activation_height": 0,
+        "name": "ExampleVersionVerify",
+        "variant": null
+      },
+      "run": "ExampleVersionVerify-0",
+      "sha256": "34fce4926c4e1900773f29924d319ba7596d573e3a589093652e50198e060b10"
+    },
+    {
+      "file": "C/ExampleVersionVerify-none.json",
+      "range": "C",
+      "revision": {
+        "activation_height": null,
+        "name": "ExampleVersionVerify",
+        "variant": null
+      },
+      "run": "ExampleVersionVerify-none",
+      "sha256": "97ca74898ab2499d5e444989aa389f9ea173d07a047ba58baceecdda6aed389e"
+    },
+    {
+      "file": "C/RelativeLockTime-1.json",
+      "range": "C",
+      "revision": {
+        "activation_height": 1,
+        "name": "RelativeLockTime",
+        "variant": null
+      },
+      "run": "RelativeLockTime-1",
+      "sha256": "21d8e735ee02d0ed542da6b0c15f84e118096c0c452c1bb1e66d37f447acc27b"
+    },
+    {
+      "file": "D/ExampleFaultyLocktime-corrected-0.json",
+      "range": "D",
+      "revision": {
+        "activation_height": 0,
+        "name": "ExampleFaultyLocktime",
+        "variant": "corrected"
+      },
+      "run": "ExampleFaultyLocktime-corrected-0",
+      "sha256": "f4c7dc96fb5601d141f1486be382a65cbf060dc81da36b64baac0aa8721d7a0a"
+    },
+    {
+      "file": "D/ExampleFaultyLocktime-corrected-none.json",
+      "range": "D",
+      "revision": {
+        "activation_height": null,
+        "name": "ExampleFaultyLocktime",
+        "variant": "corrected"
+      },
+      "run": "ExampleFaultyLocktime-corrected-none",
+      "sha256": "05efa1d4108e36b7bfa85a6d005285801f97f4575156d892cededf62cc99ba7b"
+    },
+    {
+      "file": "D/ExampleVersionVerify-0.json",
+      "range": "D",
+      "revision": {
+        "activation_height": 0,
+        "name": "ExampleVersionVerify",
+        "variant": null
+      },
+      "run": "ExampleVersionVerify-0",
+      "sha256": "c9a1762e259bf1257220c8498d1b2cb8274e9a51b1d9bf60d2d0157dc54e1305"
+    },
+    {
+      "file": "D/ExampleVersionVerify-none.json",
+      "range": "D",
+      "revision": {
+        "activation_height": null,
+        "name": "ExampleVersionVerify",
+        "variant": null
+      },
+      "run": "ExampleVersionVerify-none",
+      "sha256": "2ac4c81233b810d0539df4a185f3712084be819cc506352984268562f9de1d2f"
+    },
+    {
+      "file": "D/RelativeLockTime-1.json",
+      "range": "D",
+      "revision": {
+        "activation_height": 1,
+        "name": "RelativeLockTime",
+        "variant": null
+      },
+      "run": "RelativeLockTime-1",
+      "sha256": "3e3a7dc6514c75a616c04b4aa5f65045abb44c830c60d1f4947cce227255e89c"
+    },
+    {
+      "file": "E1/ExampleFaultyLocktime-corrected-0.json",
+      "range": "E1",
+      "revision": {
+        "activation_height": 0,
+        "name": "ExampleFaultyLocktime",
+        "variant": "corrected"
+      },
+      "run": "ExampleFaultyLocktime-corrected-0",
+      "sha256": "cfe5f33108d5276a290cb420827f4e2c04badb7915bd3edb454f412217c62499"
+    },
+    {
+      "file": "E1/ExampleFaultyLocktime-corrected-none.json",
+      "range": "E1",
+      "revision": {
+        "activation_height": null,
+        "name": "ExampleFaultyLocktime",
+        "variant": "corrected"
+      },
+      "run": "ExampleFaultyLocktime-corrected-none",
+      "sha256": "d8ef07964a02a9135e7d44a5770622218d965b4c1e690817b8d92acf4076bc2d"
+    },
+    {
+      "file": "E1/ExampleVersionVerify-0.json",
+      "range": "E1",
+      "revision": {
+        "activation_height": 0,
+        "name": "ExampleVersionVerify",
+        "variant": null
+      },
+      "run": "ExampleVersionVerify-0",
+      "sha256": "e667980ca6337c4b0946b7f3ea656c3e52f9d86883486ed9fa37143c6f95891d"
+    },
+    {
+      "file": "E1/ExampleVersionVerify-none.json",
+      "range": "E1",
+      "revision": {
+        "activation_height": null,
+        "name": "ExampleVersionVerify",
+        "variant": null
+      },
+      "run": "ExampleVersionVerify-none",
+      "sha256": "94b3122e063090cdfc112d8e51d534a1a9ee08bed425de87e4960e536d6bbf5e"
+    },
+    {
+      "file": "E1/RelativeLockTime-1.json",
+      "range": "E1",
+      "revision": {
+        "activation_height": 1,
+        "name": "RelativeLockTime",
+        "variant": null
+      },
+      "run": "RelativeLockTime-1",
+      "sha256": "c5d1f3e9b035439d10a8b3cb218436c7e9026a7760023dc922a4facd6fd105cc"
+    },
+    {
+      "file": "E2/ExampleFaultyLocktime-corrected-0.json",
+      "range": "E2",
+      "revision": {
+        "activation_height": 0,
+        "name": "ExampleFaultyLocktime",
+        "variant": "corrected"
+      },
+      "run": "ExampleFaultyLocktime-corrected-0",
+      "sha256": "8a5675d5df00f5fadcb7046958f6ce8599263d31a276e5f8fbac4f6513f2f196"
+    },
+    {
+      "file": "E2/ExampleFaultyLocktime-corrected-none.json",
+      "range": "E2",
+      "revision": {
+        "activation_height": null,
+        "name": "ExampleFaultyLocktime",
+        "variant": "corrected"
+      },
+      "run": "ExampleFaultyLocktime-corrected-none",
+      "sha256": "4748f95b624963fd1506fcec0671130d5547f8a35055f736a8f84f5b2f2b77fc"
+    },
+    {
+      "file": "E2/ExampleVersionVerify-0.json",
+      "range": "E2",
+      "revision": {
+        "activation_height": 0,
+        "name": "ExampleVersionVerify",
+        "variant": null
+      },
+      "run": "ExampleVersionVerify-0",
+      "sha256": "94c36835c169804ea63d705fce934c7ed88943f9dddbbebf7ebef3130ba9d7b3"
+    },
+    {
+      "file": "E2/ExampleVersionVerify-none.json",
+      "range": "E2",
+      "revision": {
+        "activation_height": null,
+        "name": "ExampleVersionVerify",
+        "variant": null
+      },
+      "run": "ExampleVersionVerify-none",
+      "sha256": "0818f7c08cc767de8fc866e5b90adbade3167871af3c0d466c3251eff44219ed"
+    },
+    {
+      "file": "E2/RelativeLockTime-1.json",
+      "range": "E2",
+      "revision": {
+        "activation_height": 1,
+        "name": "RelativeLockTime",
+        "variant": null
+      },
+      "run": "RelativeLockTime-1",
+      "sha256": "d534d3ba97981ce4a6aff2bf20dd5a80eebb51c731a8544b8fd3119bde6bba81"
+    },
+    {
+      "file": "F/ExampleFaultyLocktime-corrected-0.json",
+      "range": "F",
+      "revision": {
+        "activation_height": 0,
+        "name": "ExampleFaultyLocktime",
+        "variant": "corrected"
+      },
+      "run": "ExampleFaultyLocktime-corrected-0",
+      "sha256": "59eb1d952f864b5cd3ca6de60c3ea34d6f33c845b2c072276aa9abf9c20fabbc"
+    },
+    {
+      "file": "F/ExampleFaultyLocktime-corrected-none.json",
+      "range": "F",
+      "revision": {
+        "activation_height": null,
+        "name": "ExampleFaultyLocktime",
+        "variant": "corrected"
+      },
+      "run": "ExampleFaultyLocktime-corrected-none",
+      "sha256": "cae505903b59935059b3d320e8e230ffb132c696d7a79c2813459eef862e2506"
+    },
+    {
+      "file": "F/ExampleVersionVerify-0.json",
+      "range": "F",
+      "revision": {
+        "activation_height": 0,
+        "name": "ExampleVersionVerify",
+        "variant": null
+      },
+      "run": "ExampleVersionVerify-0",
+      "sha256": "7f9868e1bf1a566d4f4b847acedf4bc9f2dea6a0f9601f2abad156b61dfcda7f"
+    },
+    {
+      "file": "F/ExampleVersionVerify-none.json",
+      "range": "F",
+      "revision": {
+        "activation_height": null,
+        "name": "ExampleVersionVerify",
+        "variant": null
+      },
+      "run": "ExampleVersionVerify-none",
+      "sha256": "50a546e01f8a41723f35e3ba9210d202bb5041087b19e4a8f8b9f71d21f7e1e7"
+    },
+    {
+      "file": "F/RelativeLockTime-1.json",
+      "range": "F",
+      "revision": {
+        "activation_height": 1,
+        "name": "RelativeLockTime",
+        "variant": null
+      },
+      "run": "RelativeLockTime-1",
+      "sha256": "8a9f6d1b4ead4045cd269a46ad4b38ccade0587e028341b764bb8c6987ac75c2"
+    },
+    {
+      "file": "H/ExampleFaultyLocktime-corrected-0.json",
+      "range": "H",
+      "revision": {
+        "activation_height": 0,
+        "name": "ExampleFaultyLocktime",
+        "variant": "corrected"
+      },
+      "run": "ExampleFaultyLocktime-corrected-0",
+      "sha256": "b18ebc6359c2a4ec5f21c9ff86314b863ce667ba5cee212610009115d1ff08f1"
+    },
+    {
+      "file": "H/ExampleFaultyLocktime-corrected-none.json",
+      "range": "H",
+      "revision": {
+        "activation_height": null,
+        "name": "ExampleFaultyLocktime",
+        "variant": "corrected"
+      },
+      "run": "ExampleFaultyLocktime-corrected-none",
+      "sha256": "cb508bcbeef662aaaf8e1bb6cdcee60b675ca1bec0bdf45d9746393050ca97b7"
+    },
+    {
+      "file": "H/ExampleVersionVerify-0.json",
+      "range": "H",
+      "revision": {
+        "activation_height": 0,
+        "name": "ExampleVersionVerify",
+        "variant": null
+      },
+      "run": "ExampleVersionVerify-0",
+      "sha256": "7be848e8072618c11883dfee1bc410167cc0d75bf2da084b419a055eeb8b9407"
+    },
+    {
+      "file": "H/ExampleVersionVerify-none.json",
+      "range": "H",
+      "revision": {
+        "activation_height": null,
+        "name": "ExampleVersionVerify",
+        "variant": null
+      },
+      "run": "ExampleVersionVerify-none",
+      "sha256": "edcc304e048e21c172a47c9bd95f7b20ef30e6c0729c35f974709249c6c3a752"
+    },
+    {
+      "file": "H/RelativeLockTime-1.json",
+      "range": "H",
+      "revision": {
+        "activation_height": 1,
+        "name": "RelativeLockTime",
+        "variant": null
+      },
+      "run": "RelativeLockTime-1",
+      "sha256": "57d338c4839eb74be757ab9cb1675468be575b66d8241f661befced307a1c698"
+    },
+    {
+      "file": "S/ExampleFaultyLocktime-corrected-0.json",
+      "range": "S",
+      "revision": {
+        "activation_height": 0,
+        "name": "ExampleFaultyLocktime",
+        "variant": "corrected"
+      },
+      "run": "ExampleFaultyLocktime-corrected-0",
+      "sha256": "cc846aa3f218de8f47d2b5a3ec486c7822b9542276dc5481a1d6b3e743eb2ef2"
+    },
+    {
+      "file": "S/ExampleFaultyLocktime-corrected-none.json",
+      "range": "S",
+      "revision": {
+        "activation_height": null,
+        "name": "ExampleFaultyLocktime",
+        "variant": "corrected"
+      },
+      "run": "ExampleFaultyLocktime-corrected-none",
+      "sha256": "866e44af13be556ff7d35ff8730ea9b167e4921e11ed46142e95374ef9317206"
+    },
+    {
+      "file": "S/ExampleVersionVerify-0.json",
+      "range": "S",
+      "revision": {
+        "activation_height": 0,
+        "name": "ExampleVersionVerify",
+        "variant": null
+      },
+      "run": "ExampleVersionVerify-0",
+      "sha256": "23607960ab0147ce81f78745329a3156056392fb7e25dedbbf723224df5bcb1d"
+    },
+    {
+      "file": "S/ExampleVersionVerify-none.json",
+      "range": "S",
+      "revision": {
+        "activation_height": null,
+        "name": "ExampleVersionVerify",
+        "variant": null
+      },
+      "run": "ExampleVersionVerify-none",
+      "sha256": "a47510f0dcbb085768f6e521fb514035aa46e01219ef6f807ce8ec81e9fc536d"
+    },
+    {
+      "file": "S/RelativeLockTime-1.json",
+      "range": "S",
+      "revision": {
+        "activation_height": 1,
+        "name": "RelativeLockTime",
+        "variant": null
+      },
+      "run": "RelativeLockTime-1",
+      "sha256": "09bf7e5448648d112295abe9059478de3faa6118aabcd4d78636b04711bdc011"
+    },
+    {
+      "file": "genesis-145000/RelativeLockTime-1.json",
+      "range": "genesis-145000",
+      "revision": {
+        "activation_height": 1,
+        "name": "RelativeLockTime",
+        "variant": null
+      },
+      "run": "RelativeLockTime-1",
+      "sha256": "d0cae36bad5af5a25fe2689ab439ffbf1b1d0651926ab058d925079174ea4729"
+    },
+    {
+      "file": "short/ExampleFaultyLocktime-corrected-0.json",
+      "range": "short",
+      "revision": {
+        "activation_height": 0,
+        "name": "ExampleFaultyLocktime",
+        "variant": "corrected"
+      },
+      "run": "ExampleFaultyLocktime-corrected-0",
+      "sha256": "7c0756ca4e51f333632654a11655fa5b4ee1e9c9bc67e323d1904e1fecd1f00a"
+    },
+    {
+      "file": "short/ExampleFaultyLocktime-corrected-none.json",
+      "range": "short",
+      "revision": {
+        "activation_height": null,
+        "name": "ExampleFaultyLocktime",
+        "variant": "corrected"
+      },
+      "run": "ExampleFaultyLocktime-corrected-none",
+      "sha256": "cc253dc8a23c2e257ebb66dc2db4f42a15f5ecc1a6387502b1fcac7cc94cead4"
+    },
+    {
+      "file": "short/ExampleVersionVerify-0.json",
+      "range": "short",
+      "revision": {
+        "activation_height": 0,
+        "name": "ExampleVersionVerify",
+        "variant": null
+      },
+      "run": "ExampleVersionVerify-0",
+      "sha256": "ead3ff4d1ebb6fd93fa58bbd5e63a0ee8b8ce9c40fe7b0a7e90116038e19ef13"
+    },
+    {
+      "file": "short/ExampleVersionVerify-none.json",
+      "range": "short",
+      "revision": {
+        "activation_height": null,
+        "name": "ExampleVersionVerify",
+        "variant": null
+      },
+      "run": "ExampleVersionVerify-none",
+      "sha256": "b261cc37e42f131e3a7238368ce8d90597047115cf0b50d4c4a7d70c4f806012"
+    },
+    {
+      "file": "short/RelativeLockTime-1.json",
+      "range": "short",
+      "revision": {
+        "activation_height": 1,
+        "name": "RelativeLockTime",
+        "variant": null
+      },
+      "run": "RelativeLockTime-1",
+      "sha256": "927914ba210aec014c3675b3cd215da917c5b40fa905f09e090a0f11dc258464"
+    }
+  ]
+}

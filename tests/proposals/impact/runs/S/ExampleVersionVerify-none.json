@@ -1,0 +1,76 @@
+{
+  "executable": {
+    "commit": "6ef0e12f8ace3a7576216f9ef2c1bf11d7fb095f",
+    "name": "dogelib-proposal-oracle",
+    "sha256": "220a29cdff67c47bb80541fb7cbf75098b9965f68837b56155216b47c24d4548"
+  },
+  "first": 100001,
+  "format": "dogelib-impact-run/1",
+  "inputs": {
+    "baseline_response": {
+      "bytes": 412020,
+      "sha256": "79daf3096e0a376e2d01cdd57fc9a72dc2c9696f4364a1f2a6dc79291467fbab"
+    },
+    "blocks_file": {
+      "bytes": 24007527,
+      "sha256": "d71b608dca465cfbab5f238950c8569e839ec513e4c00419b2ab5c8c8dab9052"
+    },
+    "candidate_list": "tests/proposals/impact/S.json",
+    "candidate_list_sha256": "186b379c2be9a162b0e095402f63e5aa1e2763671ec443ce8eda58b546f95dc3",
+    "coins_file": {
+      "bytes": 422359596,
+      "name": "coins-100000.bin",
+      "sha256": "fc9a4ebf7a2ef72a555aa1caf06583160d1e5785d18738cca729d3cd3783bca9"
+    },
+    "expected_end": "e6aeca49614547750a803c3d4dd85f6986f69f819a207531f896e1aa7840aa1b",
+    "request": {
+      "bytes": 5789447,
+      "sha256": "b3313c1ac43f80e00072f3375863a46afb7246d1c2d0b3da0405ac26edb9e29b"
+    }
+  },
+  "last": 101000,
+  "outputs": {
+    "report": {
+      "bytes": 133,
+      "sha256": "9158a93dbbf2ae25d8509f88ed3cbd007ebf1eb1eeaaeec82c9625041aeff617"
+    },
+    "response": {
+      "bytes": 685020,
+      "sha256": "ba53cf267604514e830086d94f6049c7f4edc3983107b8082b2853af13f5c15f"
+    },
+    "summary": {
+      "bytes": 900,
+      "sha256": "d93b6849b38f3384f6d257030001d0958712bdc6c7a115df58337bb521fc828b"
+    }
+  },
+  "range": "S",
+  "recheck": {
+    "changed_blocks": 0,
+    "command": "python3 -I scripts/impact_run.py check --range S --request build/impact/requests/S/request.json --revision ExampleVersionVerify --activation none --baseline build/impact/runs/S/baseline-response.json --response build/impact/runs/S/ExampleVersionVerify-none/response.json --output build/impact/recheck/S/ExampleVersionVerify-none build/bin-6ef0e12/dogelib-proposal-oracle",
+    "summary": {
+      "bytes": 958,
+      "sha256": "9c587f9837fa7e95328e5e1538fe0a4424e0f4c5c7b37499863984f647e88a5b"
+    }
+  },
+  "result": {
+    "blocks": 1000,
+    "candidate_blocks": 0,
+    "changed_blocks": 0,
+    "rejected_by_step": {},
+    "set_coins": 5585974,
+    "set_digest_hex": "e6aeca49614547750a803c3d4dd85f6986f69f819a207531f896e1aa7840aa1b",
+    "unsupported": {}
+  },
+  "revision": {
+    "activation_height": null,
+    "name": "ExampleVersionVerify",
+    "variant": null
+  },
+  "run": "ExampleVersionVerify-none",
+  "time": {
+    "elapsed": "12:22.55",
+    "finished_utc": "2026-11-22T06:48:38Z",
+    "max_rss_kib": 422928,
+    "seconds": 742
+  }
+}

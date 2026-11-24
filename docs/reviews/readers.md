@@ -67,4 +67,4 @@ That read is unsafe in Core, and Lean returns `truncated`.
 
 The doc comments of `readFixed`, `decodeBitVecLE` and `readBitVecLE` state one bound that excludes both cases.
 The bound is that the read position plus the size of the read is below 2^32.
-So do [SOUNDNESS.md](../../SOUNDNESS.md#codecs) and the *Reader combinators* row of [COVERAGE.md](../../COVERAGE.md).
+So do [SOUNDNESS.md](../soundness/serialization.md#codecs) and the *Reader combinators* row of [COVERAGE.md](../../COVERAGE.md).

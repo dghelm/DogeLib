@@ -90,7 +90,8 @@ class Release(unittest.TestCase):
                                 ('core-harness-state', 'core-comparison'),
                                 ('impact-tools-self-test', 'proposal-oracle'),
                                 ('comparator-self-test', 'proposal-oracle'),
-                                ('campaign-proposal-search', 'build')):
+                                ('campaign-proposal-search', 'build'),
+                                ('kernel-replay', 'build')):
             moved = [s for s in run if s != consumer]
             moved.insert(moved.index(maker), consumer)
             with self.assertRaisesRegex(ValueError, 'inputs', msg=consumer):

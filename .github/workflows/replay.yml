@@ -1,0 +1,53 @@
+# Replay every declaration of DogeLib into Lean's kernel, after the build.
+#
+# Adapted from EthLib's replay.yml at commit b4070a856 (CC0 1.0).
+# DogeLib installs Lean with the pinned action of ci.yml and builds without a cache.
+# The libraries under DogeLib/ do not import Mathlib, so the job does not fetch it.
+# The Rust refinement under Refinement/ is not replayed.
+#
+# The replay repeats the kernel work of the proofs, so it does not run on pull requests.
+# It runs on each push to main and every Monday.
+
+name: replay
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+# A push does not cancel a scheduled run, which has its own group.
+# On main the running replay finishes, and a newer pending run replaces the older one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  leanchecker:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      # Installs elan and the toolchain that lean-toolchain pins.
+      - uses: leanprover/lean-action@50fcf42d2e460296f1a34b402e990d1b24f8b596 # v1.6.0
+        with:
+          auto-config: false
+          use-mathlib-cache: false
+          use-github-cache: false
+
+      - name: build
+        run: lake build --wfail
+
+      # Each module replays in its own process, which loads all its imports.
+      - name: replay into the kernel
+        env:
+          REPLAY_JOBS: "2"
+        run: bash scripts/replay.sh

@@ -159,6 +159,34 @@ The check must report each planted finding and nothing else, pass with a baselin
 An isolated fixture requires rejection of an imported unfinished proof.
 The self-test also plants an unimported production file, and one under `DogeLib/Proposals/`, and requires a failure that names each module.
 
+## Kernel replay
+
+After `lake build --wfail`, replay the declarations of each module under `DogeLib/` into Lean's kernel:
+
+```bash
+REPLAY_JOBS=2 bash scripts/replay.sh
+```
+
+The script first requires that the kernel rejects the planted theorem of `scripts/ReplayFixture.lean`.
+Then `scripts/ReplayModule.lean` replays each module in its own process, `REPLAY_JOBS` at a time, with one thread each.
+`REPLAY_BUDGET` sets the time limit for each module, 300 seconds by default.
+
+The script replays every module: the root `DogeLib.lean` and each `.lean` file under `DogeLib/`.
+On 2026-11-23, the replay of all 220 modules took 217 seconds with two jobs on a development machine.
+The slowest module took between 66 and 83 seconds in the recorded runs.
+`DogeLib.Block.Proofs.Subsidy` used the most memory, 7.4 GB.
+The workflow `replay` runs the script on each push to `main` and every Monday, not on pull requests.
+
+After a change to the replay scripts, run their self-test, which needs no build of DogeLib:
+
+```bash
+bash scripts/test_replay.sh
+```
+
+It builds small libraries in a temporary directory and requires the replay to select every module.
+An unchecked theorem in the root, or on the `namespace` line of a parent module, must fail the replay by name.
+A module without an `.olean` file must fail it too.
+
 ## Rust refinement
 
 The optional package build checks the committed generated model and its complete-result proof.

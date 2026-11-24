@@ -64,6 +64,8 @@ INPUTS = {
     'proposal oracle': (r'dogelib-proposal-oracle|proposal oracle build',
                         r'lake build [^&]*\bdogelib-proposal-oracle\b'),
     'proposal-replay': (r'proposal-replay', r'^lake build --wfail\b'),
+    # The kernel replay reads the .olean files of the library, which the build writes.
+    'library build': (r'scripts/replay\.sh', r'^lake build --wfail\b'),
 }
 
 

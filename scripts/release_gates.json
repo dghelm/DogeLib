@@ -1,9 +1,11 @@
 {
   "run": [
     "build",
+    "kernel-replay",
     "refinement",
     "declaration-check",
     "declaration-check-self-test",
+    "kernel-replay-self-test",
     "import-boundaries",
     "import-boundary-self-test",
     "conformance",

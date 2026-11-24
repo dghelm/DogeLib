@@ -78,6 +78,11 @@ jobs:
         if: ${{ !cancelled() }}
         run: bash scripts/test_check_decls.sh
 
+      # The kernel replay must select every module and fail on each planted unchecked theorem.
+      - name: kernel replay fixtures
+        if: ${{ !cancelled() }}
+        run: bash scripts/test_replay.sh
+
       # Known answers from independent sources, through the compiled code.
       - name: known answers
         if: ${{ !cancelled() }}

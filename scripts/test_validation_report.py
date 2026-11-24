@@ -90,7 +90,8 @@ class Release(unittest.TestCase):
                                 ('core-harness-state', 'core-comparison'),
                                 ('impact-tools-self-test', 'proposal-oracle'),
                                 ('comparator-self-test', 'proposal-oracle'),
-                                ('campaign-proposal-search', 'build')):
+                                ('campaign-proposal-search', 'build'),
+                                ('kernel-replay', 'build')):
             moved = [s for s in run if s != consumer]
             moved.insert(moved.index(maker), consumer)
             with self.assertRaisesRegex(ValueError, 'inputs', msg=consumer):
@@ -279,6 +280,8 @@ class Reports(unittest.TestCase):
             'rust-known-answers': 'cargo +nightly-2026-09-17 test --locked --manifest-path Refinement/Rust/Cargo.toml --jobs 4',
             'rust-extraction-freshness': 'Refinement/Rust/regenerate.sh --check',
             'declaration-check-self-test': 'bash scripts/test_check_decls.sh',
+            'kernel-replay': 'REPLAY_JOBS=2 bash scripts/replay.sh',
+            'kernel-replay-self-test': 'bash scripts/test_replay.sh',
             'source-and-coverage-review': None,
             'conformance': 'lake test',
             'pinned-vectors': '(cd tests/cryptography/secp256k1 && sha256sum -c SHA256SUMS) && '

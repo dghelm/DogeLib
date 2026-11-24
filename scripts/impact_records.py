@@ -23,12 +23,20 @@ reports of `impact_run.py check` on each saved response. No release asset holds 
   and one entry for each run with the path and SHA-256 of its record.
 - `SHA256SUMS` of the index and of every record.
 
-`--check` requires that the index names each record file exactly once, with its SHA-256, that
-each record agrees with its index entry, and that `SHA256SUMS` lists exactly those files with
-their SHA-256 values. With `--outputs DIR` it also requires that the saved files under DIR have the
-SHA-256 values of the records. It runs no DogeLib code and reads no network.
+`--check` requires the 51 expected runs, which the script states without the index: the five runs
+of each of the ten ranges from a snapshot, and `RelativeLockTime` from height 1 on heights 0 to
+145,000. The index must name each once, with the revision and activation of the run and the
+SHA-256 of its record. Each record must have the response, the report and the summary, and its
+inputs and recheck, each with a SHA-256 and a size above 0, and an end digest equal to the expected
+end of its request. `SHA256SUMS` must list exactly the index and the records, with their SHA-256.
+With `--outputs DIR`, each saved file of a run must exist under DIR with the SHA-256 and size of its
+record: the response, report, summary, request, recheck, blocks file, coins file and baseline. The
+counts, digest and block count of each saved summary must equal the record. The check runs no
+DogeLib code and reads no network.
 
-`--self-test` plants faults in a copy of the records, and `--check` must fail on each one.
+`--self-test` plants faults in a copy of the records, after which the index and the sums are made
+to agree with the planted copy. It also plants faults in a made directory of saved outputs for
+one run. `--check` must fail on each.
 """
 
 from __future__ import annotations
@@ -185,35 +193,144 @@ def write_sums(records: Path) -> None:
     (records / "SHA256SUMS").write_text("".join(f"{sha256_file(records / f)}  {f}\n" for f in files))
 
 
+# The runs that the records must cover, independently of the index: the five runs of each range
+# from a snapshot, and RelativeLockTime from height 1 on heights 0 to 145,000.
+REVISION_OF_RUN = {
+    "ExampleVersionVerify-none": {"name": "ExampleVersionVerify", "variant": None, "activation_height": None},
+    "ExampleVersionVerify-0": {"name": "ExampleVersionVerify", "variant": None, "activation_height": 0},
+    "ExampleFaultyLocktime-corrected-none": {"name": "ExampleFaultyLocktime", "variant": "corrected", "activation_height": None},
+    "ExampleFaultyLocktime-corrected-0": {"name": "ExampleFaultyLocktime", "variant": "corrected", "activation_height": 0},
+    "RelativeLockTime-1": {"name": "RelativeLockTime", "variant": None, "activation_height": 1},
+}
+SNAPSHOT_RANGES = ("short", "S", "A", "B", "C", "D", "E1", "E2", "F", "H")
+EXPECTED = {(r, run): REVISION_OF_RUN[run] for r in SNAPSHOT_RANGES for run in RUN_NAMES}
+EXPECTED[("genesis-145000", "RelativeLockTime-1")] = REVISION_OF_RUN["RelativeLockTime-1"]
+OUTPUT_NAMES = ("response", "report", "summary")
+HEX64 = re.compile(r"[0-9a-f]{64}")
+
+
+def require_entry(value, where: str) -> None:
+    """A file entry: exactly a SHA-256 of 64 lowercase hex digits and a size above 0."""
+    if (not isinstance(value, dict) or set(value) - {"name"} != {"sha256", "bytes"}
+            or not isinstance(value["sha256"], str) or not HEX64.fullmatch(value["sha256"])
+            or not isinstance(value["bytes"], int) or isinstance(value["bytes"], bool) or value["bytes"] <= 0):
+        raise RecordError(f"{where} is not a file entry with a SHA-256 and a size")
+
+
+def check_record(record: dict, range_name: str, run: str) -> None:
+    """The fields that every record must have, with valid hashes."""
+    where = f"{range_name}/{run}"
+    if record.get("format") != RUN_FORMAT or (record.get("range"), record.get("run")) != (range_name, run):
+        raise RecordError(f"{where}: the record has another format, range or run")
+    if record.get("revision") != EXPECTED[(range_name, run)]:
+        raise RecordError(f"{where}: the record has another revision or activation")
+    if record["executable"] != {"name": "dogelib-proposal-oracle", "sha256": BUILD["dogelib-proposal-oracle_sha256"],
+                                "commit": BUILD["commit"]}:
+        raise RecordError(f"{where}: the record names another executable")
+    outputs = record.get("outputs")
+    if not isinstance(outputs, dict) or set(outputs) != set(OUTPUT_NAMES):
+        raise RecordError(f"{where}: the outputs are not exactly {', '.join(OUTPUT_NAMES)}")
+    for name in OUTPUT_NAMES:
+        require_entry(outputs[name], f"{where}: output {name}")
+    inputs = record["inputs"]
+    for name in ("request", "blocks_file"):
+        require_entry(inputs[name], f"{where}: input {name}")
+    from_genesis = range_name == "genesis-145000"
+    for name in ("coins_file", "baseline_response"):
+        if from_genesis:
+            if inputs[name] is not None:
+                raise RecordError(f"{where}: a range from the empty set has a {name}")
+        else:
+            require_entry(inputs[name], f"{where}: input {name}")
+    if not HEX64.fullmatch(str(inputs["candidate_list_sha256"])) or inputs["candidate_list"] != f"tests/proposals/impact/{range_name}.json":
+        raise RecordError(f"{where}: the candidate list is not the list of the range")
+    result = record["result"]
+    if (not HEX64.fullmatch(str(result["set_digest_hex"])) or result["set_digest_hex"] != inputs["expected_end"]
+            or not isinstance(result["blocks"], int) or result["blocks"] != record["last"] - record["first"] + 1):
+        raise RecordError(f"{where}: the result has no valid end digest or block count")
+    require_entry(record["recheck"]["summary"], f"{where}: recheck summary")
+    if result["changed_blocks"] != record["recheck"]["changed_blocks"]:
+        raise RecordError(f"{where}: the recheck differs from the run")
+
+
+def check_outputs(record: dict, outputs: Path, hashed: dict) -> None:
+    """The saved files of one run under OUTPUTS have the hashes of the record, and agree with its result."""
+    where = f"{record['range']}/{record['run']}"
+    if not outputs.is_dir():
+        raise RecordError(f"{outputs} is not a directory of saved outputs")
+    run_dir = outputs / "runs" / record["range"] / record["run"]
+    for name in OUTPUT_NAMES:
+        path = run_dir / f"{name}.json"
+        if not path.is_file() or file_entry(path) != record["outputs"][name]:
+            raise RecordError(f"{where}: the saved {name}.json is missing or differs from the record")
+    summary = json.loads((run_dir / "summary.json").read_text())
+    for key, value in record["result"].items():
+        if summary.get(key) != value:
+            raise RecordError(f"{where}: the saved summary differs from the record in {key}")
+    pairs = [(summary.get("first"), record["first"]), (summary.get("last"), record["last"]),
+             (summary.get("revision"), record["revision"]), (summary.get("seconds"), record["time"]["seconds"]),
+             (summary.get("proposal_oracle_sha256"), record["executable"]["sha256"]),
+             (summary.get("blocks_sha256"), record["inputs"]["blocks_file"]["sha256"]),
+             (summary.get("candidate_list_sha256"), record["inputs"]["candidate_list_sha256"])]
+    if any(a != b for a, b in pairs):
+        raise RecordError(f"{where}: the saved summary differs from the record")
+    request_path = outputs / "requests" / record["range"] / "request.json"
+    if not request_path.is_file() or file_entry(request_path) != record["inputs"]["request"]:
+        raise RecordError(f"{where}: the saved request is missing or differs from the record")
+    request = json.loads(request_path.read_text())
+    if request.get("expected_end") != record["inputs"]["expected_end"]:
+        raise RecordError(f"{where}: the saved request has another expected end")
+
+    def cached(path: Path) -> dict:
+        key = str(path.resolve())
+        if key not in hashed:
+            hashed[key] = file_entry(path)
+        return hashed[key]
+
+    if cached(Path(request["blocks_file"])) != record["inputs"]["blocks_file"]:
+        raise RecordError(f"{where}: the blocks file differs from the record")
+    coins = record["inputs"]["coins_file"]
+    if (coins is None) != (request.get("coins_file") is None) or (
+            coins is not None and {"name": Path(request["coins_file"]).name, **cached(Path(request["coins_file"]))} != coins):
+        raise RecordError(f"{where}: the coins file differs from the record")
+    baseline = baseline_path(outputs, record["range"], request, summary)
+    if (None if baseline is None else cached(baseline)) != record["inputs"]["baseline_response"]:
+        raise RecordError(f"{where}: the baseline response differs from the record")
+    recheck_path = outputs / "recheck" / record["range"] / record["run"] / "summary.json"
+    if not recheck_path.is_file() or file_entry(recheck_path) != record["recheck"]["summary"]:
+        raise RecordError(f"{where}: the saved recheck is missing or differs from the record")
+    if json.loads(recheck_path.read_text()).get("changed_blocks") != record["recheck"]["changed_blocks"]:
+        raise RecordError(f"{where}: the saved recheck differs from the record")
+
+
 def check(records: Path, outputs: Path | None, log) -> None:
     index = json.loads((records / "index.json").read_text())
     if index.get("format") != INDEX_FORMAT or index.get("build") != BUILD:
         raise RecordError("index.json has another format or build")
+    listed = [(e["range"], e["run"]) for e in index["runs"]]
+    if len(set(listed)) != len(listed):
+        raise RecordError("index.json names a run twice")
+    if set(listed) != set(EXPECTED):
+        differ = sorted(set(listed) ^ set(EXPECTED))
+        raise RecordError(f"index.json does not list exactly the {len(EXPECTED)} expected runs: {len(differ)} differ, "
+                          f"such as {differ[:3]}")
     files = {e["file"] for e in index["runs"]}
-    if len(files) != len(index["runs"]):
-        raise RecordError("index.json names a record twice")
     present = {p.relative_to(records).as_posix() for p in records.rglob("*.json")} - {"index.json"}
     if present != files:
         raise RecordError(f"records and index differ: {sorted(present ^ files)}")
+    hashed: dict = {}
     for entry in index["runs"]:
+        if entry["file"] != f"{entry['range']}/{entry['run']}.json":
+            raise RecordError(f"{entry['file']} is not at the path of its range and run")
+        if entry["revision"] != EXPECTED[(entry["range"], entry["run"])]:
+            raise RecordError(f"{entry['file']}: the index names another revision or activation")
         path = records / entry["file"]
         if sha256_file(path) != entry["sha256"]:
             raise RecordError(f"{entry['file']} does not have the SHA-256 of the index")
         record = json.loads(path.read_text())
-        if (record.get("format"), record["range"], record["run"], record["revision"]) != (
-                RUN_FORMAT, entry["range"], entry["run"], entry["revision"]):
-            raise RecordError(f"{entry['file']} differs from its index entry")
-        if entry["file"] != f"{record['range']}/{record['run']}.json":
-            raise RecordError(f"{entry['file']} is not at the path of its range and run")
-        if record["executable"]["sha256"] != BUILD["dogelib-proposal-oracle_sha256"]:
-            raise RecordError(f"{entry['file']} names another executable")
-        if record["result"]["changed_blocks"] != record["recheck"]["changed_blocks"]:
-            raise RecordError(f"{entry['file']}: the recheck differs from the run")
+        check_record(record, entry["range"], entry["run"])
         if outputs is not None:
-            run_dir = outputs / "runs" / record["range"] / record["run"]
-            for name, expected in record["outputs"].items():
-                if file_entry(run_dir / f"{name}.json") != expected:
-                    raise RecordError(f"{run_dir}/{name}.json differs from its record")
+            check_outputs(record, outputs, hashed)
     sums = {}
     for line in (records / "SHA256SUMS").read_text().splitlines():
         digest, name = line.split("  ", 1)
@@ -223,68 +340,191 @@ def check(records: Path, outputs: Path | None, log) -> None:
     for name, digest in sums.items():
         if sha256_file(records / name) != digest:
             raise RecordError(f"{name} does not have its SHA-256 in SHA256SUMS")
-    log(f"{len(files)} records agree with index.json and SHA256SUMS"
+    log(f"{len(files)} records agree with the expected runs, index.json and SHA256SUMS"
         + (f", and with the saved outputs under {outputs}" if outputs is not None else ""))
 
 
+def refresh(copy: Path) -> None:
+    """Give each index entry the SHA-256 of its record, and rewrite SHA256SUMS, so that only the planted fault is wrong."""
+    index = json.loads((copy / "index.json").read_text())
+    for entry in index["runs"]:
+        entry["sha256"] = sha256_file(copy / entry["file"])
+    (copy / "index.json").write_text(dump(index))
+    write_sums(copy)
+
+
+def made_outputs(root: Path) -> tuple[Path, dict]:
+    """A made directory of saved outputs for one run of the short range, and its record."""
+    outputs = root / "impact"
+    run_dir = outputs / "runs" / "short" / "RelativeLockTime-1"
+    run_dir.mkdir(parents=True)
+    (outputs / "requests" / "short").mkdir(parents=True)
+    (outputs / "recheck" / "short" / "RelativeLockTime-1").mkdir(parents=True)
+    blocks, coins = root / "blocks.bin", root / "coins-9000.bin"
+    blocks.write_bytes(b"made blocks")
+    coins.write_bytes(b"made coins")
+    digest = "ab" * 32
+    (outputs / "requests" / "short" / "request.json").write_text(dump(
+        {"blocks_file": str(blocks), "coins_file": str(coins), "expected_end": digest}))
+    summary = {"range": "short", "revision": REVISION_OF_RUN["RelativeLockTime-1"], "first": 9001, "last": 9002,
+               "blocks_sha256": sha256_file(blocks), "coins_file": coins.name, "candidate_list": "tests/proposals/impact/short.json",
+               "candidate_list_sha256": "cd" * 32, "proposal_oracle_sha256": BUILD["dogelib-proposal-oracle_sha256"],
+               "baseline_compared": True, "set_digest_hex": digest, "set_coins": 5, "seconds": 3, "blocks": 2,
+               "candidate_blocks": 0, "changed_blocks": 0, "unsupported": {}, "rejected_by_step": {}}
+    (run_dir / "summary.json").write_text(dump(summary))
+    (run_dir / "report.json").write_text(dump({"changed": [], "blocks": 2}))
+    (run_dir / "response.json").write_text(dump({"ok": {"blocks": []}}))
+    (outputs / "runs" / "short" / "RelativeLockTime-1.log").write_text("\tMaximum resident set size (kbytes): 1000\n")
+    (outputs / "runs" / "short" / "baseline-response.json").write_text(dump({"ok": {}}))
+    (outputs / "recheck" / "short" / "RelativeLockTime-1" / "summary.json").write_text(dump(summary))
+    return outputs, run_record(outputs, "short", "RelativeLockTime-1", {})
+
+
 def self_test(records: Path) -> int:
-    def fails(name: str, plant) -> bool:
-        with tempfile.TemporaryDirectory() as tmp:
-            copy = Path(tmp) / "runs"
-            shutil.copytree(records, copy)
-            plant(copy)
-            try:
-                check(copy, None, lambda _: None)
-            except (RecordError, OSError, ValueError, KeyError) as error:
-                print(f"ok: {name} fails ({error})")
-                return True
-            print(f"FAIL: {name} passes")
-            return False
-
-    first = json.loads((records / "index.json").read_text())["runs"][0]["file"]
-
-    def edit_record(copy: Path, change) -> None:
-        path = copy / first
-        record = json.loads(path.read_text())
-        change(record)
-        path.write_text(dump(record))
-
-    def drop_entry(copy: Path) -> None:
-        index = json.loads((copy / "index.json").read_text())
-        index["runs"].pop()
-        (copy / "index.json").write_text(dump(index))
-
-    def resum_after(change):
-        def plant(copy: Path) -> None:
-            change(copy)
-            write_sums(copy)
-        return plant
-
-    cases = [
-        ("a changed record", lambda c: edit_record(c, lambda r: r["result"].update(changed_blocks=1))),
-        ("a changed record with new sums", resum_after(lambda c: edit_record(c, lambda r: r["result"].update(changed_blocks=1)))),
-        ("a missing record", lambda c: (c / first).unlink()),
-        ("an extra record", lambda c: (c / first).with_name("extra.json").write_text((c / first).read_text())),
-        ("an index without an entry", resum_after(drop_entry)),
-        ("a record of another executable", resum_after(lambda c: (edit_record(c, lambda r: r["executable"].update(sha256="0" * 64)),
-                                                                 refresh_index(c)))),
-        ("a changed SHA256SUMS", lambda c: (c / "SHA256SUMS").write_text((c / "SHA256SUMS").read_text().replace("0", "1", 1))),
-    ]
     clean = True
     try:
         check(records, None, print)
     except RecordError as error:
         print(f"FAIL: the committed records fail ({error})")
         clean = False
-    return 0 if clean and all(fails(name, plant) for name, plant in cases) else 1
+
+    def outcome(name: str, run) -> bool:
+        try:
+            run()
+        except (RecordError, OSError, ValueError, KeyError, TypeError) as error:
+            print(f"ok: {name} fails ({error})")
+            return True
+        print(f"FAIL: {name} passes")
+        return False
+
+    def planted(name: str, plant) -> bool:
+        with tempfile.TemporaryDirectory() as tmp:
+            copy = Path(tmp) / "runs"
+            shutil.copytree(records, copy)
+            plant(copy)
+            return outcome(name, lambda: check(copy, None, lambda _: None))
+
+    first = "A/ExampleFaultyLocktime-corrected-0.json"
+    genesis = "genesis-145000/RelativeLockTime-1.json"
+
+    def edit_record(copy: Path, change, path: str = first) -> None:
+        record = json.loads((copy / path).read_text())
+        change(record)
+        (copy / path).write_text(dump(record))
+
+    def edit_index(copy: Path, change) -> None:
+        index = json.loads((copy / "index.json").read_text())
+        change(index)
+        (copy / "index.json").write_text(dump(index))
+
+    def coherent(plant):
+        def run(copy: Path) -> None:
+            plant(copy)
+            refresh(copy)
+        return run
+
+    def delete_genesis(copy: Path) -> None:
+        (copy / genesis).unlink()
+        edit_index(copy, lambda i: i.update(runs=[e for e in i["runs"] if e["file"] != genesis]))
+
+    def empty(copy: Path) -> None:
+        for path in list(copy.rglob("*.json")):
+            if path.name != "index.json":
+                path.unlink()
+        edit_index(copy, lambda i: i.update(runs=[]))
+
+    def other_activation(copy: Path) -> None:
+        edit_record(copy, lambda r: r["revision"].update(activation_height=2))
+        edit_index(copy, lambda i: [e["revision"].update(activation_height=2) for e in i["runs"] if e["file"] == first])
+
+    cases = [
+        ("a changed record", lambda c: edit_record(c, lambda r: r["result"].update(changed_blocks=1))),
+        ("a changed record with a new index and sums", coherent(lambda c: edit_record(c, lambda r: r["result"].update(changed_blocks=1)))),
+        ("a missing record", lambda c: (c / first).unlink()),
+        ("an extra record", lambda c: (c / first).with_name("extra.json").write_text((c / first).read_text())),
+        ("an index without an entry", coherent(lambda c: edit_index(c, lambda i: i["runs"].pop()))),
+        ("the record and entry of heights 0 to 145,000 deleted together", coherent(delete_genesis)),
+        ("an empty inventory", coherent(empty)),
+        ("another activation in the record and the index", coherent(other_activation)),
+        ("a record of another executable", coherent(lambda c: edit_record(c, lambda r: r["executable"].update(sha256="0" * 64)))),
+        ("empty outputs", coherent(lambda c: edit_record(c, lambda r: r.update(outputs={})))),
+        ("outputs without the report", coherent(lambda c: edit_record(c, lambda r: r["outputs"].pop("report")))),
+        ("an output hash that is not a SHA-256", coherent(lambda c: edit_record(c, lambda r: r["outputs"]["response"].update(sha256="xyz")))),
+        ("an output of size 0", coherent(lambda c: edit_record(c, lambda r: r["outputs"]["summary"].update(bytes=0)))),
+        ("a missing request hash", coherent(lambda c: edit_record(c, lambda r: r["inputs"].update(request=None)))),
+        ("a range from a snapshot without coins", coherent(lambda c: edit_record(c, lambda r: r["inputs"].update(coins_file=None)))),
+        ("an end digest other than the expected end", coherent(lambda c: edit_record(c, lambda r: r["result"].update(set_digest_hex="0" * 64)))),
+        ("a changed SHA256SUMS", lambda c: (c / "SHA256SUMS").write_text((c / "SHA256SUMS").read_text().replace("0", "1", 1))),
+    ]
+    results = [planted(name, plant) for name, plant in cases]
+
+    # The check of saved outputs, on a made directory for one run.
+    with tempfile.TemporaryDirectory() as tmp:
+        outputs, record = made_outputs(Path(tmp))
+        try:
+            check_record(record, "short", "RelativeLockTime-1")
+            check_outputs(record, outputs, {})
+            print("ok: the made outputs agree with their record")
+        except RecordError as error:
+            print(f"FAIL: the made outputs fail ({error})")
+            clean = False
+        run_dir = outputs / "runs" / "short" / "RelativeLockTime-1"
+
+        def changed_file(path: Path, text: str):
+            def run() -> None:
+                saved = path.read_text()
+                path.write_text(text)
+                try:
+                    check_outputs(record, outputs, {})
+                finally:
+                    path.write_text(saved)
+            return run
+
+        def changed_summary(key: str, value):
+            summary = json.loads((run_dir / "summary.json").read_text())
+            summary[key] = value
+            changed = dump(summary)
+            # The record follows the new summary file, so that only the field comparison can fail.
+            def run() -> None:
+                saved = (run_dir / "summary.json").read_text()
+                (run_dir / "summary.json").write_text(changed)
+                kept = record["outputs"]["summary"]
+                record["outputs"]["summary"] = file_entry(run_dir / "summary.json")
+                try:
+                    check_outputs(record, outputs, {})
+                finally:
+                    (run_dir / "summary.json").write_text(saved)
+                    record["outputs"]["summary"] = kept
+            return run
+
+        output_cases = [
+            ("a missing outputs directory", lambda: check_outputs(record, Path(tmp) / "absent", {})),
+            ("a missing saved summary", missing(run_dir / "summary.json", lambda: check_outputs(record, outputs, {}))),
+            ("a changed saved response", changed_file(run_dir / "response.json", "{}")),
+            ("a changed saved request", changed_file(outputs / "requests" / "short" / "request.json", "{}")),
+            ("a changed saved recheck", changed_file(outputs / "recheck" / "short" / "RelativeLockTime-1" / "summary.json", "{}")),
+            ("a changed blocks file", changed_file(Path(tmp) / "blocks.bin", "other blocks")),
+            ("a changed coins file", changed_file(Path(tmp) / "coins-9000.bin", "other coins")),
+            ("a changed baseline", changed_file(outputs / "runs" / "short" / "baseline-response.json", "{}")),
+            ("a saved summary with another count", changed_summary("changed_blocks", 1)),
+            ("a saved summary with another digest", changed_summary("set_digest_hex", "0" * 64)),
+            ("a saved summary with another block count", changed_summary("blocks", 3)),
+            ("a saved summary with another blocks hash", changed_summary("blocks_sha256", "0" * 64)),
+        ]
+        results += [outcome(name, run) for name, run in output_cases]
+    return 0 if clean and all(results) else 1
 
 
-def refresh_index(copy: Path) -> None:
-    """Give each index entry the SHA-256 of its record, so that only the planted field is wrong."""
-    index = json.loads((copy / "index.json").read_text())
-    for entry in index["runs"]:
-        entry["sha256"] = sha256_file(copy / entry["file"])
-    (copy / "index.json").write_text(dump(index))
+def missing(path: Path, run):
+    """Run with PATH moved away, and put it back."""
+    def go() -> None:
+        moved = path.with_name(path.name + ".moved")
+        path.rename(moved)
+        try:
+            run()
+        finally:
+            moved.rename(path)
+    return go
 
 
 def main(argv=None) -> int:

@@ -440,14 +440,28 @@ A changed `isRec`, `isReflexive`, `numNested` or `type` does not, so the replay 
 #### The source check
 
 `scripts/check_lean_commands.py` reads the Lean source of `DogeLib`, `ProposalExamples` and `Refinement/Refinement`, and runs in CI on each pull request.
-It fails on each command that runs code during elaboration, such as `run_cmd`, `#eval`, `elab` and `initialize`.
-The script lists them all, with `unsafe` and the attributes that make a declaration an elaborator, a tactic or an initializer.
+It fails on each command of Lean core that runs code during elaboration or defines code for Lean to run later.
+Examples are `run_cmd`, `#eval`, `elab`, `initialize`, `macro` and `macro_rules`.
+A macro counts because it can expand to any command, `run_cmd` included.
+
+The check also fails on each attribute that registers a declaration as an elaborator, a macro, a tactic, an initializer or another handler.
+It finds the attribute in `@[...]` and in an `attribute [...]` command, on one line or across lines.
+The attributes whose names start with `builtin_` count too.
 It also fails on each name that writes the environment, skips the kernel or names a private declaration.
 Examples are `setEnv`, `addDecl`, `skipKernelTC`, `_private` and any name with the component `Kernel`.
-The allowlist `scripts/check_lean_commands_allowlist.txt` names two lines, each with a reason.
+
+Each entry of the allowlist `scripts/check_lean_commands_allowlist.txt` allows one construct, which it names by its first line and the SHA-256 of its source.
+A second construct with the same first line, or a changed construct, needs its own reviewed entry.
+The allowlist has four entries, each with a reason.
 The `initialize` of `DogeLib.Proofs.TheoremTag` registers the attribute described below.
 The `elab` of `definition_value%` in `DogeLib.Proposals.Framework.Proofs.Block` returns the stored value of a definition as a term, and writes nothing.
-The check matches words in the source, so code that reaches the same functions under another name passes it.
+The tactic macros `narrow_widen` and `accept_cases` expand to fixed tactic blocks and to no command.
+
+The check matches words in the source.
+So it misses a command or a function that a module reaches under another name, for example a command that an imported module defines.
+`notation`, `infix` and `syntax` are not findings, because they declare parsers and term templates.
+A new command gets its meaning only through one of the findings above.
+The check is not a ban on native or foreign code: `extern` and `implemented_by` are findings of the declaration check, and `@[export]` is not checked.
 It is a second defence, and the replay is the check of what the modules store.
 
 #### The attribute and the reachability check

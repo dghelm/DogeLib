@@ -159,9 +159,15 @@ REPLAY_JOBS=2 bash scripts/replay.sh tests/ProposalExamples
 
 The script first requires that the kernel rejects the planted theorem of `scripts/ReplayFixture.lean`.
 It then requires the rejection of `scripts/replay-fixtures/ForgedInductive.lean`, which stores a changed inductive type (Lean issue 16730).
+
 Then `scripts/ReplayModule.lean` replays each module in its own process, `REPLAY_JOBS` at a time, with one thread each.
-After the replay of a module, it requires each constant that the module stores to equal the constant in the replayed environment ([C3](SOUNDNESS.md#c3-declarations-the-kernel-did-not-check)).
+After the replay of a module, it requires each constant that the module stores to equal the constant in the replayed environment.
+As the replay does, the comparison skips `unsafe` and `partial` constants.
+It also accepts a theorem that the imports hold with the same name, type, universe parameters and `all` field ([C3](SOUNDNESS.md#stored-inductive-types-lean-issues-16730-and-16688)).
 `REPLAY_BUDGET` sets the time limit for each module, 300 seconds by default.
+
+The replay uses the same kernel as Lean, so it does not check the kernel itself.
+It does not replay the modules under `Refinement/` ([What C3 still leaves open](SOUNDNESS.md#what-c3-still-leaves-open)).
 
 The script replays every module: the root `DogeLib.lean` and each `.lean` file under `DogeLib/`.
 With the argument `tests/ProposalExamples` it replays the test-only library of the proposal examples, the root `tests/ProposalExamples.lean` and each file under `tests/ProposalExamples/`.
@@ -194,10 +200,14 @@ python3 -I scripts/check_lean_commands.py
 python3 -I scripts/test_check_lean_commands.py
 ```
 
-It fails on each command that runs code during elaboration, such as `run_cmd`, `#eval`, `elab` and `initialize`.
+It fails on each command of Lean core that runs code during elaboration or defines code for Lean to run later.
+Examples are `run_cmd`, `#eval`, `elab`, `initialize`, `macro` and `macro_rules`.
+It fails on each attribute that registers a handler, such as `command_elab` or `tactic`, in `@[...]` or `attribute [...]`, on one or several lines.
 It also fails on each name that writes the environment, skips the kernel or names a private declaration, such as `setEnv`, `addDecl`, `Kernel.Environment` and `_private`.
-A line of `scripts/check_lean_commands_allowlist.txt`, with a reason, allows the findings of one code line.
-The check ignores comments and strings, and it matches words only, so it is a second defence beside the kernel replay.
+
+Each line of `scripts/check_lean_commands_allowlist.txt` allows one construct, by its first line and the SHA-256 of its source, with a reason.
+A finding that no entry allows is printed with the digest of its construct, which a reviewed entry can name.
+The check ignores comments and strings, and it matches words only, so it is a second defence beside the kernel replay ([the source check](SOUNDNESS.md#the-source-check)).
 
 ## Rust refinement
 

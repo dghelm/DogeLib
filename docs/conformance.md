@@ -93,6 +93,16 @@ It prints the first difference and exits with status 1 when they disagree.
 A file that is not a results file gives status 2.
 The checker uses only the Python standard library, so a copy of the file alone runs it.
 
+Outside a DogeLib clone, copy the checker and the expected results of the range, and give their paths:
+
+```bash
+python3 -I check_range_results.py results.jsonl expected.jsonl
+```
+
+The expected results of a range are the file `tests/conformance/ranges/<range>/expected.jsonl` of the repository `dghelm/DogeLib`.
+`tests/conformance/SHA256SUMS` pins each of these files.
+The links of this document and the paths of its commands are relative to a clone of that repository.
+
 Steps 1 to 3 for every range, with the checks of the blocks of `scripts/fetch_blocks.py --check`, are one command of a DogeLib clone:
 
 ```bash
@@ -128,6 +138,48 @@ The script sends the program two requests, each to a new process.
 The first is the range request with an empty blocks file. Its result has no block record, and its digest and number of coins are those of the coins of the request.
 The second is the range request with the blocks file.
 Each request is one line of JSON on standard input, and the response is one line on standard output.
+
+#### An example: the short range
+
+Each request is the object of `request.json` with two more keys, `id` and `blocks_file`.
+`blocks_file` is the path of the blocks file, and a relative path starts at the working directory of the program ([docs/oracle.md](oracle.md#blocks-from-a-file)).
+In the lines below, `...` marks the entries and digits that this example leaves out, so the lines are not complete JSON.
+The second request of the short range is this line:
+
+```json
+{"op":"block.validate","mode":"allow_witness","check_pow":true,"check_merkle_root":true,"adjusted_time":4102444800,"chain":[{"height":9000,"time":1386921194,"bits":471492351},{"height":8999,"time":1386921171,"bits":471492351},...],"bip34_ancestor_hex":null,"coins":[{"txid_hex":"00046b16fcb77ab2...","coinbase":false,"height":5951,"outputs":[{"n":1,"value":"401139213418","script_hex":"76a9140e17c572...88ac"}]},...],"id":"range","blocks_file":"/data/short/blocks.bin"}
+```
+
+The response repeats the `id`, and the result is the object `ok`, with one record in `blocks` for each block ([docs/oracle.md](oracle.md#block-validation)):
+
+```json
+{"id":"range","ok":{"blocks":[{"height":9001,"hash_hex":"ef4043ef...","hash_display":"a94f4890d483ef62d2e59dd342187dbc41601f398045c9df0009cd8eef4340ef","valid":true,"reject_reason":null,"dos":null,"reject_code":null,"changes_digest_hex":"e4fa25152176e26ef472df4a1baf214fd251bc7f765bc6b7598b2493523d20b8","spent":47,"created":93,"set_digest_hex":null,"set_value":null},...],"out_of_domain_at":null,"set_digest_hex":"df2822c32b94e18245581f49a345faabe590f648c320112d64f92ebbe798f30d","set_coins":64545,"set_value":"137312791477033652"}}
+```
+
+The first request has the `id` `"start"` and an empty blocks file.
+Its result has an empty list `blocks`, the `set_digest_hex` `d772bc6274db17c2fbcbcbedb5cfa736ed860707d6d4fbbd63bd6f1d958c6942` and the `set_coins` 35,224.
+
+The lines of the [results file](#the-results-dogelib-range-results1) take their values from these sources:
+
+| Line | Keys | Source |
+| --- | --- | --- |
+| Start | `request_sha256`, `blocks_sha256` | The SHA-256 of the files `request.json` and `blocks.bin`, not of a request line |
+| Start | `start_set_digest_hex`, `start_set_coins` | `set_digest_hex` and `set_coins` of the first result |
+| Block | `height`, `hash_display`, `valid`, `reject_reason`, `changes_digest_hex`, `spent`, `created` | The keys with the same names of each record of `blocks` of the second result. The other keys of the record do not go into the results |
+| End | `end_set_digest_hex`, `end_set_coins` | `set_digest_hex` and `set_coins` of the second result |
+
+So the results file of the short range starts and ends with these lines:
+
+```json
+{"format":"dogelib-range-results/1","range":"short","first":9001,"last":10000,"request_sha256":"159cf6bc689012fe4bf428eb99de9352352230c74d339283c76a6c2c26b5aa63","blocks_sha256":"ad5553cf0b0b4c68553124497cddaa4310359025c69204116c84a8c664da4c5b","start_set_digest_hex":"d772bc6274db17c2fbcbcbedb5cfa736ed860707d6d4fbbd63bd6f1d958c6942","start_set_coins":35224}
+{"height":9001,"hash_display":"a94f4890d483ef62d2e59dd342187dbc41601f398045c9df0009cd8eef4340ef","valid":true,"reject_reason":null,"changes_digest_hex":"e4fa25152176e26ef472df4a1baf214fd251bc7f765bc6b7598b2493523d20b8","spent":47,"created":93}
+...
+{"end_set_digest_hex":"df2822c32b94e18245581f49a345faabe590f648c320112d64f92ebbe798f30d","end_set_coins":64545}
+```
+
+A response with `error` in the place of `ok` refuses the request.
+When `out_of_domain_at` is not null, `blocks` has fewer records than the file has blocks.
+In both cases the script writes no results file.
 
 ## The blocks: `dogelib-blocks/1`
 
@@ -190,6 +242,24 @@ The first block names the predecessor of the request, whose hash the table of [t
 The checks read the consensus parameters of mainnet.
 These include the subsidy, the difficulty rules, the AuxPoW chain ID, the heights of BIP34, BIP65 and BIP66, and the deployments of CSV and SegWit.
 Core reads the script verification flags of a block from its height and its predecessor.
+
+#### Where Core defines the rules
+
+This document names Core's checks, but it does not restate the rules inside them.
+A program of your own needs the source of Dogecoin Core at the pinned commit for those rules.
+The table names, for each rule that a verdict depends on, the files of Core and the functions or constants that define it.
+The paths are relative to the root of the Core repository, and [SOURCES.md](../SOURCES.md) links each file at the pin:
+
+| Rule | Files | Functions and constants |
+| --- | --- | --- |
+| Serialization of blocks and transactions, the transaction ID and CompactSize | `src/primitives/block.h`, `src/primitives/pureheader.h`, `src/primitives/transaction.h`, `src/primitives/transaction.cpp`, `src/serialize.h` | `CBlock::SerializationOp`, `CPureBlockHeader`, `SerializeTransaction`, `UnserializeTransaction`, `CTransaction::ComputeHash`, `ReadCompactSize`, `MAX_SIZE` |
+| Proof of work and the target | `src/dogecoin.cpp`, `src/pow.cpp`, `src/primitives/pureheader.cpp`, `src/crypto/scrypt.cpp`, `src/arith_uint256.cpp`, `src/auxpow.cpp`, `src/chainparams.cpp` | `CheckAuxPowProofOfWork`, `CheckProofOfWork`, `CPureBlockHeader::GetPoWHash`, `scrypt_1024_1_1_256_sp_generic`, `arith_uint256::SetCompact`, `UintToArith256`, `CAuxPow::check`, `powLimit` |
+| Difficulty retarget | `src/pow.cpp`, `src/dogecoin.cpp`, `src/chainparams.cpp` | `GetNextWorkRequired`, `CalculateDogecoinNextWorkRequired`, `AllowDigishieldMinDifficultyForBlock`, `nPowTargetTimespan`, `nPowTargetSpacing`, `CChainParams::GetConsensus` |
+| Median time, the future limit and transaction finality | `src/chain.h`, `src/validation.cpp`, `src/script/script.h` | `CBlockIndex::GetMedianTimePast`, `nMedianTimeSpan`, `ContextualCheckBlockHeader`, `ContextualCheckBlock`, `IsFinalTx`, `LOCKTIME_THRESHOLD` |
+| Random subsidy | `src/dogecoin.cpp`, and `boost/random/mersenne_twister.hpp` and `boost/random/uniform_int.hpp` of Boost 1.70.0 | `generateMTRandom`, `GetDogecoinBlockSubsidy`, `boost::mt19937`, `boost::uniform_int` |
+| Coinbase maturity and BIP30 | `src/validation.cpp`, `src/chainparams.cpp`, `src/chainparams.h` | `Consensus::CheckTxInputs`, `GetSpendHeight`, `ConnectBlock`, `nCoinbaseMaturity`, `CChainParams::GetConsensus` |
+| Script verification and signatures | `src/validation.cpp`, `src/script/interpreter.cpp`, `src/script/script.h`, `src/script/script_error.cpp`, `src/pubkey.cpp`, `src/secp256k1/` | `ConnectBlock`, `CheckInputs`, `VerifyScript`, `EvalScript`, `SignatureHash`, `CheckSignatureEncoding`, `ScriptErrorString`, `CPubKey::Verify`, `ecdsa_signature_parse_der_lax`, `MAX_SCRIPT_SIZE`, `MAX_OPS_PER_SCRIPT` |
+| Bounds of blocks and transactions, signature operations, amounts and the order of the checks | `src/validation.cpp`, `src/consensus/consensus.h`, `src/consensus/merkle.cpp`, `src/amount.h`, `src/script/script.cpp` | `CheckBlock`, `CheckTransaction`, `ContextualCheckBlock`, `ConnectBlock`, `GetLegacySigOpCount`, `GetP2SHSigOpCount`, `GetTransactionSigOpCost`, `BlockMerkleRoot`, `MAX_BLOCK_BASE_SIZE`, `MAX_BLOCK_WEIGHT`, `MAX_BLOCK_SIGOPS_COST`, `MAX_MONEY`, `MoneyRange`, `CScript::GetSigOpCount` |
 
 ### The chain
 
@@ -299,6 +369,10 @@ The start line has these keys:
 
 Each block line has these keys, for the blocks of `blocks.bin` in order.
 A results file has exactly one block line for each block, so the heights run from `first` to `last` without a gap.
+
+So the format covers a range of consecutive heights in which every block is accepted.
+A rejected block can stand only at the last height, because the next candidate after it has the same height ([docs/oracle.md](oracle.md#blocks-from-a-file)).
+Every block of the corpus is accepted.
 
 | Key | Value |
 | --- | --- |

@@ -974,6 +974,61 @@ They are in the release `conformance-corpus-2026-11-24`, and [`tests/conformance
 In CI, the job `core` / `conformance` fetches the short range and range D from the release.
 The oracle runs each, and the checker compares its results with the expected results.
 
+**A run from the document alone.**
+Exit condition 4 of stage 5 asks for a run of one range by someone who did not write the tools.
+An AI agent made that run on 2026-11-25 UTC, not a person.
+The agent was a Codex session with no prior access to the repository.
+The agent had these files and programs, in a directory outside the repository:
+
+- `docs/conformance.md` and `docs/oracle.md`, equal to the files at `a4e8b0c`.
+- `tests/conformance/release.json`, `scripts/check_range_results.py`, and the expected results of the short range and range D, each equal to the committed file at `a4e8b0c`.
+- A copy of the source of Dogecoin Core 1.14.9, given to it as the pinned commit `e0a1c157`.
+- A build of the Core harness `core-oracle`, with the SHA-256 `2931c88cd772bbe5d977ab127b090e89958ad8b0475b3017bd0fb75535f71871`, as a program that it did not inspect.
+
+Its report states that it read no other file of DogeLib, and that it ran the checker without reading it.
+The agent's code is not in the repository.
+
+The agent's sandbox had no network, so the agent could not download the assets.
+The maintainer's orchestrating agent downloaded the six compressed assets of the two ranges for it, unchanged.
+The agent's own code checked the size and the SHA-256 of each asset and of each decompressed file against `release.json`, and all of them agreed.
+So the run does not test the download from the document.
+
+The agent wrote two programs from the documents:
+
+- A driver of the harness, which writes a results file. It sends the range request with `blocks_file`, first with an empty blocks file and then with the blocks. It ran the short range and range D.
+- A validator in Python with the standard library alone, which does not call the harness. It decides each verdict, and it computes the coin changes and both digests itself. It ran the short range.
+
+On 2026-11-25 the checker of this repository at `a4e8b0c` passed again on each of the three results files:
+
+```bash
+python3 -I scripts/check_range_results.py <results file> tests/conformance/ranges/<range>/expected.jsonl
+```
+
+| Program | Range | Blocks | SHA-256 of the results file | Checker |
+| --- | --- | ---: | --- | --- |
+| Driver of the harness | short | 1,000 | `0224c2f5ac73b884c7bde69a954401447be72a99c5acb9798e47b5188b770765` | `PASS` |
+| Driver of the harness | D | 2,000 | `2c07fc053c838bab3834dcd36fc15aad1e0f162896de5134a8ee48cecfca8bc8` | `PASS` |
+| Independent validator | short | 1,000 | `0224c2f5ac73b884c7bde69a954401447be72a99c5acb9798e47b5188b770765` | `PASS` |
+
+The two results files of the short range are equal byte for byte.
+The first complete run of the validator passed.
+It checked 35,548 transactions and the scripts of 47,185 inputs in about 74 seconds.
+
+The validator covers only the blocks of the short range, in the random subsidy era, and only blocks that Core accepts.
+It does not check AuxPoW or the rules of later activations, and it is not a program of the `dogelib-oracle/1` protocol.
+The corpus has no rejected block, so the run shows no agreement on a reject reason.
+
+The report of the agent lists the points where the document was missing or needed Core's source:
+
+- The document needed `docs/oracle.md` to complete a request and read its response.
+- It needed Core's source for the serialization of transactions, the proof of work, the retarget, the median time and finality, and the random subsidy.
+- It also needed Core's source for coinbase maturity and BIP30, Script, and the bounds of blocks and transactions.
+- It did not say that the results format holds no rejected block before the last height.
+- Its commands and links assume a clone of the repository.
+
+From these points, [docs/conformance.md](conformance.md) gives an example of a request and its results, and a table of the Core files of each rule. It also states the scope of the results format and the command of a copied checker.
+The report found no ambiguity in the digests or the results format.
+
 ## Block subsidy comparison evidence
 
 The harness calls Core's own `GetDogecoinBlockSubsidy` (D104), so the comparison tests Core's code and the Boost release of the harness build.

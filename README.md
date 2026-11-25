@@ -11,7 +11,7 @@ No human line-by-line audit of a Lean definition against Dogecoin Core source co
 AI models wrote the definitions from the pinned source, and AI models wrote the recorded pull-request reviews.
 Three kinds of evidence connect the definitions to Core ([SOUNDNESS.md](SOUNDNESS.md)):
 
-- **Theorems**: the Lean kernel checks every theorem. `lake exe check-decls` allows only the three standard axioms and rejects `unsafe`, `partial`, `opaque`, and compiler substitutions across all seven production roots. `scripts/replay.sh` replays every `DogeLib` and `ProposalExamples` module into Lean's kernel on pushes to `main` and weekly (`Refinement/` is not replayed). A theorem about a definition that differs from Core still holds ([A1](SOUNDNESS.md#a1-a-wrong-definition)).
+- **Theorems**: the Lean kernel checks every theorem. `lake exe check-decls` allows only the three standard axioms and rejects `unsafe`, `partial`, `opaque`, and compiler substitutions across all seven production roots. `scripts/replay.sh` replays every `DogeLib` and `ProposalExamples` module into Lean's kernel on pushes to `main` and weekly (`Refinement/` is not replayed). Each stored constant must equal the replayed one. A theorem about a definition that differs from Core still holds ([A1](SOUNDNESS.md#a1-a-wrong-definition)).
 - **Finite comparisons**: `lake test` runs independent known answers, and `scripts/compare_core.py` compares `dogelib-oracle` with pinned Core on finite request streams in CI ([docs/comparison-evidence.md](docs/comparison-evidence.md#the-comparison)). Comparisons cover only tested inputs ([B4](SOUNDNESS.md#b4-the-oracle-and-foreign-boundaries)).
 - **Pull-request reviews**: the recorded reviews of pull requests by AI models.
 

@@ -78,6 +78,8 @@ Its section 11 gives the stages and their exit conditions:
 Adoption of the record establishes no result.
 Each stage reports its evidence in COVERAGE.md and SOUNDNESS.md when it merges.
 
+[Design record 0013](docs/design/0013-rejection-paths.md) is proposed and not adopted: a generated search of the rejection paths of the block operations against Core, and negative conformance vectors.
+
 One other candidate is unscheduled, and it needs an approved scope before work starts:
 
 - **Arithmetic agreement with Core's verifier.** A Lean proof that `Point.mulAdd` computes Core's `secp256k1_ecmult` result ([design record 0005](docs/design/0005-signature-verifier.md), section 4.3).

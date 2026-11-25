@@ -2,6 +2,7 @@ module
 
 public import DogeLib.Block.Check
 public import DogeLib.Block.Proofs.Merkle
+public import DogeLib.Block.Proofs.MerkleLeafList
 public import DogeLib.Proofs.TheoremTag
 meta import DogeLib.Proofs.TheoremTag
 
@@ -18,6 +19,13 @@ The theorem shows that the mutation flag separates them, with the reject reason 
 The theorem is about the Lean definitions.
 It assumes nothing about SHA-256.
 It does not cover a block whose list has the root of another list for a different cause, such as a hash collision.
+
+`checkBlock_transactions_eq_of_merkleRoot_eq` covers every other list.
+Let `checkBlock` accept a block with the Merkle check.
+Let a list start with a coinbase, have the root of the header and not set the mutation flag.
+Then the list is the transaction list of the block.
+The other two cases are a collision of double SHA-256 and a pair of digests with the start of a coinbase (`DogeLib.Block.Proofs.MerkleLeafList`).
+`checkBlock_transactions_unique` states the same for two accepted blocks with one `hashMerkleRoot`.
 -/
 
 @[expose] public section
@@ -55,5 +63,82 @@ theorem checkBlock_rejects_merkleDuplication (network : Work.WorkNetwork) (fChec
   unfold checkBlock
   simp only [hheader, hhead, Bool.true_and, blockMerkleRoot, computeMerkleRoot, hroot, hmut, hmr,
     bne_self_eq_false, Bool.false_eq_true, ↓reduceIte]
+
+/--
+Let `checkBlock` accept the block `b` with the Merkle check, for any network and any `fCheckPOW`.
+Then the transaction list of `b` starts with a coinbase and does not set the mutation flag.
+The Merkle root of the list is `hashMerkleRoot` of the header.
+Core's `CheckBlock` makes these three tests at D106, lines 2951 to 2962, 2976 and 2977.
+-/
+theorem checkBlock_ok_merkle (network : Work.WorkNetwork) (fCheckPOW : Bool) (b : Block)
+    (hok : checkBlock network fCheckPOW true b = .ok ()) :
+    ∃ c rest, b.transactions = c :: rest ∧ c.isCoinBase = true ∧
+      (blockMerkleRoot b.transactions).root = b.header.pure.hashMerkleRoot ∧
+      (blockMerkleRoot b.transactions).mutated = false := by
+  unfold checkBlock at hok
+  split at hok
+  · cases hok
+  · simp only [Bool.true_and] at hok
+    split at hok
+    · cases hok
+    · rename_i hroot
+      split at hok
+      · cases hok
+      · rename_i hmut
+        split at hok
+        · cases hok
+        · split at hok
+          · cases hok
+          · rename_i first others heq
+            split at hok
+            · cases hok
+            · rename_i hcb
+              refine ⟨first, others, heq, by simpa using hcb, ?_, by simpa using hmut⟩
+              simpa using (Eq.symm (by simpa using hroot))
+
+/--
+A supplied transaction list for an accepted block.
+Let `checkBlock` accept the block `b` with the Merkle check, for any network and any `fCheckPOW`.
+Let `cy :: ys` be a list of transactions with these properties:
+
+- `cy` is a coinbase (`Transaction.isCoinBase`).
+- The Merkle root of the list is `hashMerkleRoot` of the header of `b`.
+- The list does not set the mutation flag.
+
+Then `cy :: ys` is the transaction list of `b`, or there is a `Sha256dCollision` or a `Sha256dCoinbasePattern`.
+
+A verifier that holds only the header of `b` can make the three tests on a list from any source.
+The theorem then says what a list that passes can be.
+Without the coinbase test, `blockMerkleRoot_inner_transaction` gives another list with the same root.
+The theorem is about the Lean definitions, and it assumes no property of SHA-256.
+-/
+@[theorem_tag property]
+theorem checkBlock_transactions_eq_of_merkleRoot_eq (network : Work.WorkNetwork) (fCheckPOW : Bool)
+    (b : Block) (cy : Transaction) (ys : List Transaction)
+    (hok : checkBlock network fCheckPOW true b = .ok ())
+    (hcy : cy.isCoinBase = true)
+    (hroot : (blockMerkleRoot (cy :: ys)).root = b.header.pure.hashMerkleRoot)
+    (hmy : (blockMerkleRoot (cy :: ys)).mutated = false) :
+    cy :: ys = b.transactions ∨ Sha256dCollision ∨ Sha256dCoinbasePattern := by
+  obtain ⟨c, rest, heq, hc, hr, hm⟩ := checkBlock_ok_merkle network fCheckPOW b hok
+  rw [heq] at hr hm ⊢
+  exact transactions_eq_of_merkleRoot_eq cy c ys rest hcy hc (hroot.trans hr.symm) hmy hm
+
+/--
+Let `checkBlock` accept the blocks `b` and `b'` with the Merkle check, each for any network and any `fCheckPOW`.
+Let their headers have the same `hashMerkleRoot`.
+Then the two blocks have the same transaction list, or there is a `Sha256dCollision` or a `Sha256dCoinbasePattern`.
+-/
+@[theorem_tag property]
+theorem checkBlock_transactions_unique (network network' : Work.WorkNetwork)
+    (fCheckPOW fCheckPOW' : Bool) (b b' : Block)
+    (hroot : b'.header.pure.hashMerkleRoot = b.header.pure.hashMerkleRoot)
+    (hok : checkBlock network fCheckPOW true b = .ok ())
+    (hok' : checkBlock network' fCheckPOW' true b' = .ok ()) :
+    b'.transactions = b.transactions ∨ Sha256dCollision ∨ Sha256dCoinbasePattern := by
+  obtain ⟨c, rest, heq, hc, hr, hm⟩ := checkBlock_ok_merkle network' fCheckPOW' b' hok'
+  rw [heq] at hr hm ⊢
+  exact checkBlock_transactions_eq_of_merkleRoot_eq network fCheckPOW b c rest hok hc
+    (hr.trans hroot) hm
 
 end DogeLib.Block

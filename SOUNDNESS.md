@@ -193,6 +193,11 @@ The theorems of the block-index model take `WellFormed` as a hypothesis.
 `checkWellFormed_iff` makes the first hypothesis checkable, and `wellFormed_preserved` shows that each step keeps it.
 `accept_genesis_insert` assumes that the index lacks the genesis header's `hashPrevBlock` ([one step](docs/soundness/headers.md#one-step-acceptblockheader)).
 
+`transactions_eq_of_merkleRoot_eq` takes two transaction lists with the same Merkle root.
+It assumes that each list starts with a coinbase and does not set the mutation flag.
+`checkBlock` establishes both hypotheses for a block that it accepts, and a verifier tests them on a list from another source.
+The conclusion is not the equality of the lists alone: [Idealisations](#a4-idealisations) states its two other cases.
+
 ### A3. Side channels
 
 DogeLib makes no constant-time claim.
@@ -204,6 +209,16 @@ A security theorem rests on a model, such as a random oracle for a hash.
 DogeLib has no security theorem, so it has no idealisation.
 Equality of two hash plans needs no assumption about the hash function.
 A claim that different preimages give different digests needs a named collision hypothesis or a computational model.
+
+`transactions_eq_of_merkleRoot_eq` keeps such a claim out of its hypotheses.
+Its conclusion is that two transaction lists are equal, or that `Sha256dCollision` holds, or that `Sha256dCoinbasePattern` holds.
+`Sha256dCollision` says that two different byte strings have the same double SHA-256 digest.
+
+`Sha256dCoinbasePattern` is not a collision.
+It says that one digest ends with the byte 1 and 27 zero bytes.
+A second digest starts with 5 zero bytes and 4 bytes `0xff`.
+DogeLib proves neither statement false and assumes neither false.
+[Transaction lists with one Merkle root](docs/soundness/headers.md#transaction-lists-with-one-merkle-root) explains why the theorem keeps the second statement.
 The P2SH theorems of `DogeLib.Script.Proofs.Verify` assume no property of HASH160, and they claim nothing about other redeem scripts with the same digest.
 
 ### A5. Protocol context

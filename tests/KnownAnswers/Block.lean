@@ -332,9 +332,58 @@ def check : IO Nat := do
     (({h with nVersion := 0xffffffff}).signedVersion.toInt == -1))
   IO.println s!"block known answers: {failures} failures"
   return failures
+/--
+A transaction of 64 bytes at an inner node of a Merkle tree (CVE-2017-12842), on made transactions.
+
+`a` is a coinbase and `b` is a transaction with one input and one output. Neither is from a chain.
+A search chose them so that the 64 bytes `txid(a) ++ txid(b)` are the base serialization of a transaction `t`.
+The search ran over the 4 bytes of the `scriptSig` of `a` and over the lock time of `b`.
+`t` has one input with an empty `scriptSig`, and one output with a script of 4 bytes.
+
+The expected values are independent of DogeLib: `txid(a)`, `txid(b)` and the root come from Python's `hashlib`, as `sha256(sha256(bytes))` of the bytes below.
+The root is the digest of the 64 bytes of `t`, in the order that SHA-256 writes it.
+
+The check shows that `[a, b]` and `[t]` have one Merkle root with both mutation flags clear, and that `checkTransaction` accepts all three transactions.
+`a` is a coinbase and `t` is not, which is the hypothesis of `transactions_eq_of_merkleRoot_eq` that this pair does not have.
+-/
+def checkMerkleInnerTransaction : IO Nat := do
+  let parsed : Except String (List UInt8 × List UInt8 × List UInt8 × List UInt8 × List UInt8) := do
+    let a ← parseHex "01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff043b000000ffffffff010000000000000000015100000000"
+    let b ← parseHex "010000000111111111111111111111111111111111111111111111111111111111111111110000000000ffffffff01000000000000000001511c454508"
+    let ida ← parseHex "9b8e849701bffec5d09b50502cf0bebda5647719b835f6708c26dd53a0a57c24"
+    let idb ← parseHex "50b0f5b04a9c4a149100ac8860ae01adafc095bed4640804c05cb887add36899"
+    let root ← parseHex "936897d9c3d11b40a608ec4132fbe238034e1334ee4efa3a2005d4d79588e40b"
+    return (a.toList, b.toList, ida.toList, idb.toList, root.toList)
+  let (rawA, rawB, idA, idB, root) ← match parsed with
+    | .ok p => pure p
+    | .error e => throw (IO.userError e)
+  let decode (label : String) (raw : List UInt8) : IO Transaction.Transaction :=
+    match Transaction.Transaction.decodeBaseComplete raw with
+    | .ok tx => pure tx
+    | .error _ => throw (IO.userError s!"inner transaction: {label} does not decode")
+  let a ← decode "a" rawA
+  let b ← decode "b" rawB
+  let t ← decode "t" (idA ++ idB)
+  let mut failures ← require "inner transaction: ID of a" (a.txid.val == idA)
+  failures := failures + (← require "inner transaction: ID of b" (b.txid.val == idB))
+  failures := failures + (← require "inner transaction: t has 64 bytes"
+    (Codec.encode t == idA ++ idB && (Codec.encode t).length == 64))
+  failures := failures + (← require "inner transaction: ID of t is the root" (t.txid.val == root))
+  failures := failures + (← require "inner transaction: root of [a, b]"
+    ((blockMerkleRoot [a, b]).root.val == root && !(blockMerkleRoot [a, b]).mutated))
+  failures := failures + (← require "inner transaction: root of [t]"
+    ((blockMerkleRoot [t]).root.val == root && !(blockMerkleRoot [t]).mutated))
+  failures := failures + (← require "inner transaction: a is a coinbase, t is not"
+    (a.isCoinBase && !t.isCoinBase && !b.isCoinBase))
+  for (label, tx) in [("a", a), ("b", b), ("t", t)] do
+    failures := failures + (← require s!"inner transaction: checkTransaction accepts {label}"
+      (match Transaction.checkTransaction tx true with | .ok () => true | .error _ => false))
+  IO.println s!"Merkle inner transaction: {failures} failures"
+  return failures
 end KnownAnswers.Block
 
 /-- Named checks for Block known answers, in alphabetical order. -/
 def KnownAnswers.Block.checks : List (String × IO Nat) := [
-  ("blocks", KnownAnswers.Block.check)
+  ("blocks", KnownAnswers.Block.check),
+  ("merkleInnerTransaction", KnownAnswers.Block.checkMerkleInnerTransaction)
 ]

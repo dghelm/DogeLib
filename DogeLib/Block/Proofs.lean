@@ -12,6 +12,7 @@ public import DogeLib.Block.Proofs.ContextualParams
 public import DogeLib.Block.Proofs.Header
 public import DogeLib.Block.Proofs.HeaderSequence
 public import DogeLib.Block.Proofs.Merkle
+public import DogeLib.Block.Proofs.MerkleLeafList
 public import DogeLib.Block.Proofs.ProofOfWork
 public import DogeLib.Block.Proofs.Restrict
 public import DogeLib.Block.Proofs.SigOpCost

@@ -330,10 +330,27 @@ Four more properties compare each program with an expectation that neither progr
 | R1 Agreement | Both programs give the same response to each request, under section 6.1. | The comparison itself |
 | R2 Directed site | A directed case is rejected with the reason, the score and the code of its site. | The rule of the class, which a person derived from the cited lines, and the table of section 3.2 |
 | R3 No change after a rejection | Take a rejected candidate and then the real block of the same height. The real block is accepted with the digest of the changes of the committed expected results of its range. | [`tests/conformance/ranges`](../../tests/conformance/README.md) |
-| R4 Restriction | A case gives the same block records on its restricted coins and on the whole carried set of its derived state. | The first run is the expectation of the second. The property is a relation, not a known answer |
+| R4 Restriction | A case gives the same projected block records on its restricted coins and on the whole carried set of its derived state. The projection is below. | The first run is the expectation of the second. The property is a relation, not a known answer |
 | R5 First failure | A plan with two directed mutations is rejected at the site that Core's order reaches first. | The order of the cited lines |
 
 R3 applies to block mutations, which leave the state of the seed unchanged.
+
+R4 compares one program with itself on two requests, so it compares a projection of each block record.
+The projection keeps the fields that restriction must not change:
+
+- The identity of the block: `height`, `hash_hex` and `hash_display`.
+- The verdict and its metadata: `valid`, `reject_reason`, `dos` and `reject_code`.
+- The coin changes: `changes_digest_hex`, `spent` and `created`.
+
+It leaves out the fields of the whole set: `set_digest_hex` and `set_value` of a block record, and `set_digest_hex`, `set_coins` and `set_value` of the result.
+Those fields cover coins that the blocks do not name, and restriction removes such coins.
+So two correct runs differ in them.
+An accepted block at a multiple of 1,000 has both fields in its record ([block validation](../oracle.md#block-validation)).
+`validateBlock_restrict` states equal errors or equal coin changes, and it does not state equal digests of the whole set.
+`NOT_COMPARED` of `scripts/compare_range.py` (line 40) leaves out the same two fields of a block record.
+
+R1 keeps the complete comparison of section 6.1.
+When both programs get one request, restricted or not, every field of both responses must agree.
 No expected value comes from the oracle, from the harness or from the signer, as design record 0009, decision 4, requires.
 
 ### 6.3 Outcome classes
@@ -347,13 +364,35 @@ The first six are the classes of design record 0009, section 7.2, and the last t
 | `digest` | A digest or a count of coins differs between the programs, or R3 or R4 fails on a digest. |
 | `crash` | A program exits with a nonzero status or a signal, or its output fails the checks of the stream. |
 | `timeout` | A batch, or the bisected request alone, exceeds the time limit. |
-| `unsupported` | The oracle returns the error `outside_model` where the property needs a verdict ([errors](../oracle.md#errors-1)). |
-| `refusal` | Either program returns a request error or an adapter error for the case. |
-| `out-of-domain` | The oracle ends the range at the candidate with `out_of_domain_at` ([the arithmetic domain](../oracle.md#the-arithmetic-domain)). |
+| `unsupported` | The oracle returns the error `outside_model`, and the case passes the domain check of that exclusion below ([errors](../oracle.md#errors-1)). |
+| `refusal` | Both programs return an error for the case, and the case passes the domain check of that exclusion below. |
+| `out-of-domain` | The oracle ends the range at the candidate with `out_of_domain_at`, and the case passes the domain check of that exclusion below ([the arithmetic domain](../oracle.md#the-arithmetic-domain)). |
 | `known` | The case matches an entry of the list of known behaviours (section 6.6). |
 
-`unsupported`, `refusal` and `out-of-domain` are not disagreements.
+`unsupported`, `refusal` and `out-of-domain` are *exclusions*, and an exclusion is not a disagreement.
 The driver counts them and saves a sample of each, so that a loss of coverage stays visible.
+
+**A disagreement comes before an exclusion.**
+The driver classifies each case in this order:
+
+1. A failure of the stream gives `crash` or `timeout`.
+2. The agreement function of section 6.1 and the properties of section 6.2 run on both responses. A failure there is a `verdict` or a `digest` candidate, unless step 3 applies.
+3. A case is an exclusion only when it passes the domain check of its class. The driver computes each check from the request and the plan, without either response.
+
+So a verdict from one program and an error from the other is a candidate, whichever program gives the error.
+An error of the oracle alone, such as `outside_model` or an adapter error, is a `verdict` candidate when its domain check fails.
+`classify` of `scripts/campaign.py` (line 100) has this order for Script requests: it compares the two responses before it exempts an unsupported result.
+
+The domain checks are these:
+
+| Exclusion | Domain check, from the request and the plan | Required of the responses |
+| --- | --- | --- |
+| `refusal` | The request breaks a stated rule of the argument domain of [docs/oracle.md](../oracle.md#block-validation), and the driver names that rule. | Both programs return an error, and the two errors agree under section 6.1. |
+| `unsupported` | The `detail` of `outside_model` names one of the cases that the table of errors lists. The driver confirms the condition of that case from the request: for example, a repeated transaction ID outside a coinbase. | The oracle's error has the documented form. Core's response is a well-formed result. |
+| `out-of-domain` | The driver computes the sums of the candidate from the plan in unbounded integers, and one of them leaves the `int64_t` range. | The harness gets the request without the candidate, and the two responses agree on the blocks before it. |
+
+A case of `outside_model` whose condition the driver cannot confirm from the request stays a candidate.
+The stage that adds a class of exclusion settles its check, and an exclusion without a check does not exist.
 A `verdict` or `digest` failure also records the failing side, by the table of design record 0009, section 7.2.
 
 The search runs the trap build of the harness, `core-oracle-trap` ([the Core pass](../core-harness.md#the-core-pass)).
@@ -375,7 +414,8 @@ A candidate becomes a *finding* when all of these hold:
 3. A person reads Core's text at the site of the reduced case and derives the result by hand.
 4. The checks of section 6.5 give it a label other than `generator-fault`.
 
-A count of `unsupported`, `refusal` or `out-of-domain` cases above the limit of section 9.2 fails a run, but it is not a finding.
+A count of exclusions above the limit of section 9.2 fails a run, but it is not a finding.
+Only a case that passed its domain check counts as an exclusion (section 6.3).
 
 ### 6.5 Triage
 
@@ -641,9 +681,9 @@ Each run writes `summary.json`, as a campaign run does, with these added counts:
 
 - For each reject site of section 3.2: the number of cases that ended there, in each mode, and the number that agreed.
 - For each mutation class: the cases, and the sites where they ended.
-- For each rejecting constructor of the Lean error types: the number of cases whose `diagnostic` names it.
+- For each constructor path of the inventory of section 9.2: the number of cases whose `diagnostic` names it.
 - For each outcome class: the count, with the saved samples.
-- The sites and the constructors that no case reached.
+- The sites and the constructor paths that no case reached, and each path that is outside the inventory.
 
 A run knows the site of a case from three sources.
 The reject reason gives the site, except where two sites share a reason.
@@ -656,10 +696,49 @@ A run at the CI seed must meet all of these:
 
 1. Each of the 40 sites of section 3.2 has a directed case. Core rejects it at that site, and the oracle agrees.
 2. Each condition of section 3.2 that a request can reach alone has a directed case.
-3. Each rejecting constructor of the Lean error types has a case. Otherwise section 3.3 names the theorem or the argument that excludes it.
+3. Each counted constructor path of the inventory below has a case whose `diagnostic` names it.
 4. No case ends at a site of section 3.3.
-5. The cases of class `refusal`, `unsupported` and `out-of-domain` are together under 2 percent of the cases.
+5. The exclusions are together under 2 percent of the cases. Each one passed its domain check of section 6.3, so the limit admits no one-sided error.
 6. No candidate exists other than `known`.
+
+**The inventory of condition 3.**
+The reject sites of section 3.2 are an inventory of Core.
+Condition 3 needs an inventory of the Lean definitions, which is another list.
+A *constructor path* starts at the error type of the Lean definition of an operation.
+It ends at a constructor without a counted error inside it.
+
+The condition counts nested errors, with two stops.
+It does not go into `CheckPowError`, whose every constructor is `high-hash` (section 3.3).
+It does not go into `ScriptError`, which the Script comparison covers.
+It counts only a path that is a rejection of Core.
+A constructor that the Lean source marks as an adapter error or as "not a Core result" is not counted, and section 6.3 handles it.
+
+| Operation | Error type | Counted paths | Count |
+| --- | --- | --- | ---: |
+| `tx.check` | `CheckTransactionError` | Its nine constructors | 9 |
+| `block.check` | `CheckBlockError` | `header`, `merkleRoot`, `duplicateTransactions`, `length`, `coinbaseMissing`, `coinbaseMultiple`, `sigOps`, and `transaction` with eight of the nine constructors of `CheckTransactionError` | 15 |
+| `block.contextual_check` | `ContextualHeaderError` | The seven constructors that `isRejection` accepts | 7 |
+| `block.contextual_check_body` | `ContextualBodyError` | `nonFinal`, `badCbHeight`, `unexpectedWitness`, `badBlkWeight` | 4 |
+| `block.validate` | `ValidateError` | `header`. `contextualHeader` with six constructors. `checkBlock` with 14 of the 15 paths of `block.check`. `contextualBody` with three constructors. `connect` with `bip30`, `inputsMissingOrSpent`, `sigOps`, `coinbaseAmount`, `script` for each value of `mandatory`, and `txInputs` with `prematureSpendOfCoinbase`, `inputValuesOutOfRange` and `inBelowOut` | 33 |
+| `block.header_sequence` | `HeaderRejection` | `duplicate`, `highHash`, `prevBlockNotFound`, `prevBlockInvalid`, `failedAncestor`, and `contextual` with the seven constructors | 12 |
+
+The inventory has 80 counted paths.
+Other paths are rejections that no request of their operation reaches.
+The table lists each of them with its argument:
+
+| Operation | Path | Argument |
+| --- | --- | --- |
+| `block.check`, `block.validate` | `checkBlock`, `transaction`, `oversize` | `checkBlock` tests the size of the block before any transaction, as line 2972 does. A transaction above the limit makes its block fail that test (section 3.2) |
+| `block.validate` | `checkBlock`, `header` | Step 1 of `validateBlock` makes the same test first, with the same flag (`DogeLib/Block/Validate.lean`, lines 122 to 130). The step does not run for the genesis hash, whose header passes the test |
+| `block.validate` | `contextualHeader`, `badForkPriorToCheckpoint` | `block.validate` runs with checkpoints disabled (section 3.2) |
+| `block.validate` | `contextualBody`, `badBlkWeight` | Section 3.2, and design record 0010, section 4 |
+| `block.validate` | `connect`, `checkBlock`, with every path below it | No operation calls `connectBlock` alone. `validateBlock` runs `checkBlock` first, and `connectBlock` then repeats it with both flags false, because `fJustCheck` is true (`DogeLib/Block/Connect.lean`, line 350, and line 1804 of Core). With both flags false, `checkBlock` makes a subset of the tests of the first run, so it cannot fail after that run passed |
+| `block.validate` | `connect`, `txInputs`, `feeNegative` and `feeOutOfRange` | `connectBlock_ne_feeNegative` and `connectBlock_ne_feeOutOfRange` ([coverage](../coverage/blocks.md#block-connection-connectblock)) |
+
+The argument for `connect`, `checkBlock` has no theorem.
+A case whose `diagnostic` names a path of that table fails the run, as a case at a site of section 3.3 does.
+The counts above come from a reading of the Lean source at `038b223`.
+Two exit conditions check the inventory against the source and against the paths that a run reports: condition 5 of stage 1 and condition 2 of stage 3.
 
 The target counts reject sites of Core's text, and a site can hide a path that no class reaches.
 So a recorded run outside CI also measures the lines that Core executed.
@@ -708,12 +787,16 @@ A wrapper stands in for one program and changes its response when a request meet
 | K6 | Lean | A real block with an added unspent coin under the ID of its second transaction | Accept the block | `verdict` |
 | K7 | Core | A header whose predecessor has a failed ancestor two entries below it | Report the score 10 | `verdict` |
 | K8 | Core | A block of exactly 1,000,001 base bytes | Exit with status 3 | `crash` |
+| K9 | Lean | A made block with a P2SH input, which Core judges | Return the error `outside_model`, or an adapter error, in the place of the verdict | `verdict` |
 
 The list is a proposal, and the stage settles the triggers.
 For each mutant the self-test requires detection within the CI budget, and records the case index of the first detection.
 It also requires that the reducer keeps the trigger, and that the replay reproduces the stored class.
 K5 has no difference in a verdict, so only the digests and property R3 find it.
 K6 needs a state mutation, so only that class finds it.
+
+K9 is a one-sided adapter failure.
+The self-test fails if the driver counts a K9 case as `unsupported` or `refusal`, because no such case passes a domain check.
 
 ## 11. Stages and exit conditions
 
@@ -733,13 +816,14 @@ If a number breaks a budget of sections 8.5 or 9.3, the lane stops and asks the 
 ### Stage 1: block mutations
 
 The stage adds block plans, the directed and free modes, the fix-ups, and each class of section 5.3 except *Supplied state* and *Header index*.
-It adds the report of section 9.1, the outcome classes, and the mutants K1 to K4 and K8.
+It adds the report of section 9.1, the outcome classes with their domain checks, and the mutants K1 to K4, K8 and K9.
 
 1. At the CI seed, the sites of five functions meet conditions 1 and 2 of section 9.2. The functions are `CheckTransaction`, `CheckBlockHeader`, `CheckBlock`, `ContextualCheckBlockHeader` and `ContextualCheckBlock`. `bad-fork-prior-to-checkpoint` meets the conditions through `block.contextual_check`.
 2. Each site of `ConnectBlock`, `CheckTxInputs` and `CheckInputs` meets the same conditions through made blocks.
 3. Conditions 4 to 6 of section 9.2 hold.
-4. Each of the five mutants is detected within the budget, and its saved failure replays.
-5. The run is in CI under section 9.3.
+4. Each of the six mutants is detected within the budget, and its saved failure replays. Each K9 case is a `verdict` candidate, and none is an exclusion.
+5. The report gives the constructor path of every rejected case, and no path is outside the inventory of section 9.2. The pull request compares that inventory with the inductive types of the Lean source, constructor by constructor.
+6. The run is in CI under section 9.3.
 
 ### Stage 2: state mutations, derived states and the reducer
 
@@ -749,7 +833,7 @@ It also adds the reducer for block plans, and the mutants K5 and K6.
 1. Take a derived state at a height of each range. The real block of that height gives its block record of the committed expected results.
 2. At the CI seed, each site of `ConnectBlock`, `CheckTxInputs` and `CheckInputs` has a directed case with a real block. Both flags of the case are true. Otherwise the pull request states why a site has none.
 3. The moved heights of section 5.3 reach `late-legacy-block`, `early-auxpow-block`, `bad-version`, `bad-cb-height` and `bad-cb-amount` with real blocks. Otherwise the pull request states which statement of that section failed.
-4. R4 holds on every case of the run, in both programs.
+4. R4 holds on every case of the run, in both programs, under the projection of section 6.2. One case has an accepted control at a height that is a multiple of 1,000. It also has a supplied coin that no block of the case names. Its two runs differ in `set_digest_hex` and `set_value` and agree in the projection.
 5. The reducer keeps the trigger of each mutant, and each output with the label `minimal` replays.
 
 ### Stage 3: header acceptance
@@ -757,7 +841,7 @@ It also adds the reducer for block plans, and the mutants K5 and K6.
 The stage adds header plans, the class *Header index*, and the mutant K7.
 
 1. At the CI seed, each of the four sites of `AcceptBlockHeader` has a directed `block.header_sequence` case. So has each of the seven sites of `ContextualCheckBlockHeader`. The oracle agrees on each case.
-2. Condition 3 of section 9.2 holds for `HeaderRejection`.
+2. Condition 3 of section 9.2 holds for the 12 paths of `HeaderRejection`. The report names no path outside the inventory.
 3. The search detects K7, the reducer keeps its trigger, and the replay reproduces it.
 
 ### Stage 4: triage and replay

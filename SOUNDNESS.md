@@ -211,15 +211,19 @@ Equality of two hash plans needs no assumption about the hash function.
 A claim that different preimages give different digests needs a named collision hypothesis or a computational model.
 
 `transactions_eq_of_merkleRoot_eq` keeps such a claim out of its hypotheses.
-Its conclusion is that two transaction lists are equal, or that `Sha256dCollision` holds, or that `Sha256dCoinbasePattern` holds.
-`Sha256dCollision` says that two different byte strings have the same double SHA-256 digest.
+Its conclusion is that two transaction lists are equal, or that `MerkleCollision` holds, or that `CoinbaseAtInnerNode` holds.
+Both statements are about the two lists, not about SHA-256 alone.
+`MerkleCollision` says that two different inputs of the two trees have the same double SHA-256 digest.
+An input is the serialization of a transaction of a list, or the 64 bytes of two nodes of one level of a tree.
 
-`Sha256dCoinbasePattern` is not a collision.
-It says that one digest ends with the byte 1 and 27 zero bytes.
+`CoinbaseAtInnerNode` is not a collision.
+It says that the serialization of the coinbase of one list is the 64 bytes of two nodes of the other tree.
+Then one digest of that tree ends with the byte 1 and 27 zero bytes.
 A second digest starts with 5 zero bytes and 4 bytes `0xff`.
-DogeLib proves neither statement false and assumes neither false.
+
+DogeLib proves neither statement false in general and assumes neither false.
+It proves both false for lists of one transaction.
 [Transaction lists with one Merkle root](docs/soundness/headers.md#transaction-lists-with-one-merkle-root) explains why the theorem keeps the second statement.
-The P2SH theorems of `DogeLib.Script.Proofs.Verify` assume no property of HASH160, and they claim nothing about other redeem scripts with the same digest.
 
 ### A5. Protocol context
 

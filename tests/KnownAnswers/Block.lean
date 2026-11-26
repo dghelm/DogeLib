@@ -345,6 +345,13 @@ The root is the digest of the 64 bytes of `t`, in the order that SHA-256 writes 
 
 The check shows that `[a, b]` and `[t]` have one Merkle root with both mutation flags clear, and that `checkTransaction` accepts all three transactions.
 `a` is a coinbase and `t` is not, which is the hypothesis of `transactions_eq_of_merkleRoot_eq` that this pair does not have.
+
+The two trees hash six different byte strings.
+They are the serializations of `a` and `b`, and the 64 bytes of each two of the IDs of `a` and `b`.
+The serialization of `t` is one of the six.
+The check shows that their six digests differ, so the pair has no `MerkleCollision`.
+`hashlib` gives the same result.
+So the conclusion of `transactions_eq_of_merkleRoot_eq` fails for this pair, and the theorem needs its coinbase hypothesis.
 -/
 def checkMerkleInnerTransaction : IO Nat := do
   let parsed : Except String (List UInt8 × List UInt8 × List UInt8 × List UInt8 × List UInt8) := do
@@ -375,6 +382,10 @@ def checkMerkleInnerTransaction : IO Nat := do
     ((blockMerkleRoot [t]).root.val == root && !(blockMerkleRoot [t]).mutated))
   failures := failures + (← require "inner transaction: a is a coinbase, t is not"
     (a.isCoinBase && !t.isCoinBase && !b.isCoinBase))
+  let inputs := [rawA, rawB, idA ++ idA, idA ++ idB, idB ++ idA, idB ++ idB]
+  let digests := inputs.map (fun p => (Cryptography.Hash.Sha256d.hash p.toByteArray).toList)
+  failures := failures + (← require "inner transaction: six inputs, six digests"
+    (inputs.eraseDups.length == 6 && digests.eraseDups.length == 6))
   for (label, tx) in [("a", a), ("b", b), ("t", t)] do
     failures := failures + (← require s!"inner transaction: checkTransaction accepts {label}"
       (match Transaction.checkTransaction tx true with | .ok () => true | .error _ => false))

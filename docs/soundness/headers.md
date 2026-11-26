@@ -111,11 +111,13 @@ DogeLib does not assume that statement 2 or statement 3 is false, and it adds no
 A reader who concludes that the two lists are equal assumes two things about these lists (A4).
 No two different inputs of the two trees have the same digest, and no two digests of one tree hold the start of a coinbase.
 Neither assumption follows from the fixed output length of the hash.
-`not_merkleCollision_singleton` and `not_encodesInnerNode_singleton` prove both statements false for lists of one transaction.
+`not_merkleCollision_singleton` proves statement 2 false for two copies of one list of one transaction, `[c]` and `[c]`.
+`not_encodesInnerNode_singleton` proves that no transaction has `EncodesInnerNode` for a list of one transaction, so statement 3 is false for such a target list.
 
 `transactions_eq_or_encodesInnerNode` is the theorem without the coinbase hypotheses.
 Its third statement is `EncodesInnerNode`: the serialization of the first transaction of one list is the 64 bytes of two nodes of the other tree.
-That statement holds for `[t]` and `[a, b]` above, by `encodesInnerNode_of_encode`, so the two theorems cannot conclude statement 1 or 2 alone.
+That statement holds for `[t]` and `[a, b]` above, by `encodesInnerNode_of_encode`.
+So `transactions_eq_or_encodesInnerNode`, the theorem without the coinbase hypotheses, cannot conclude statement 1 or 2 alone.
 The coinbase hypotheses add the condition on the digests.
 
 For the made transactions of `lake test`, `t` is not a coinbase and the six inputs have six digests.

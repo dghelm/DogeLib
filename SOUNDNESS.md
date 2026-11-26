@@ -222,7 +222,8 @@ Then one digest of that tree ends with the byte 1 and 27 zero bytes.
 A second digest starts with 5 zero bytes and 4 bytes `0xff`.
 
 DogeLib proves neither statement false in general and assumes neither false.
-It proves both false for lists of one transaction.
+It proves `MerkleCollision` false for two copies of one list of one transaction, `[c]` and `[c]`.
+It proves `CoinbaseAtInnerNode` false when the other list, whose nodes it names, holds one transaction.
 [Transaction lists with one Merkle root](docs/soundness/headers.md#transaction-lists-with-one-merkle-root) explains why the theorem keeps the second statement.
 
 ### A5. Protocol context

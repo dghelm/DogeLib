@@ -38,7 +38,8 @@ Statements 2 and 3 are about the two lists.
 A statement that some two byte strings collide, with no relation to the lists, would hold for every hash with a fixed output length.
 So each statement names its byte strings among the inputs of the two trees (`MerkleInput`).
 The inputs are the serializations of the transactions, and the 64 bytes of two nodes of one level.
-Both statements are false for lists of one transaction (`not_merkleCollision_singleton`, `not_encodesInnerNode_singleton`).
+Statement 2 is false for two copies of a list of one transaction (`not_merkleCollision_singleton`).
+Statement 3 is false when the other tree has one transaction (`not_encodesInnerNode_singleton`).
 
 The third statement is not a collision.
 It names one 64-byte string, the serialization of a coinbase, and two nodes `l` and `r` of the other tree with that serialization as `l ++ r`.
@@ -550,7 +551,7 @@ Two different byte strings, each a `MerkleInput` of `xs` or of `ys`, have the sa
 
 The statement is about the two trees.
 It names two inputs of the trees, such as the serializations of two transactions or the inputs of two inner nodes.
-It is false for many lists, for example when both lists hold one transaction (`not_merkleCollision_singleton`).
+It is false for some lists, for example for two copies of a list of one transaction (`not_merkleCollision_singleton`).
 DogeLib does not assume that it is false for all lists.
 -/
 def MerkleCollision (xs ys : List Transaction) : Prop :=
@@ -855,7 +856,8 @@ The coinbase of the lower tree is then an inner node of the higher tree.
 A coinbase of 64 bytes is well formed, so the serialization does not exclude it.
 
 Statements 2 and 3 name byte strings of the two trees, and the proof builds them from the two lists.
-Each statement is false for lists of one transaction (`not_merkleCollision_singleton`, `not_encodesInnerNode_singleton`).
+Statement 2 is false for two copies of a list of one transaction (`not_merkleCollision_singleton`).
+Statement 3 is false when the other tree has one transaction (`not_encodesInnerNode_singleton`).
 So the conclusion is not a statement about SHA-256 alone.
 
 The theorem is about the Lean definitions, and it assumes no property of SHA-256.

@@ -110,6 +110,12 @@ A definition that compared only the root would accept both blocks, which is the 
 The theorem does not cover two lists with one root for another cause, such as a hash collision.
 It is a statement about `checkBlock`, and it does not show that Core's `CheckBlock` has the property.
 
+`checkBlock_transactions_eq_of_merkleRoot_eq` and `checkBlock_transactions_unique` cover every other list with the root of an accepted block.
+Each has two further cases in its conclusion.
+One is a collision between two inputs of the two trees.
+The other is a coinbase whose serialization is the 64 bytes of two nodes of the other tree.
+[Transaction lists with one Merkle root](headers.md#transaction-lists-with-one-merkle-root) states them.
+
 `Script.getSigOpCount_le` bounds the count of a script by 20 times the number of its bytes.
 It does not bound the count of a block, and no theorem shows that Core's `unsigned int` count never wraps.
 `checkBlock` needs no such theorem, because it takes the product modulo `2^32`.

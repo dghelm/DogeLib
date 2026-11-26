@@ -55,6 +55,103 @@ Finite comparisons and structural theorems do not establish collision resistance
 The checked header codec, length, digest and Merkle structural proofs depend on `propext` and `Quot.sound`, by `#print axioms`.
 The declaration check inspects all declarations under the unchanged standard-axiom policy (C1, C2).
 
+## Transaction lists with one Merkle root
+
+The `hashMerkleRoot` of a header does not fix the transaction list of the block alone.
+The root holds neither the number of leaves nor the depth of the tree.
+A transaction ID and an inner node are both double SHA-256 digests, and nothing marks which one a digest is.
+Two ambiguities are known, and `DogeLib.Block.Proofs.MerkleLeafList` states both, with what excludes them.
+
+The first ambiguity is the duplication of CVE-2012-2459, which `MerkleDuplication.root_eq_and_mutated` states.
+The second is a transaction of 64 bytes at an inner node, CVE-2017-12842.
+An inner node is the digest of the 64 bytes of its two children.
+
+`blockMerkleRoot_inner_transaction` takes transactions `t`, `a` and `b`, where the base serialization of `t` is the ID of `a` followed by the ID of `b`.
+Then `[t]` has the Merkle root of `[a, b]`, and `[t]` does not set the mutation flag.
+`[a, b]` sets the flag exactly when the two IDs are equal.
+The theorem assumes nothing about the hash.
+The known answer `merkleInnerTransaction` of `lake test` gives made transactions with that hypothesis, and `checkTransaction` accepts all three.
+
+`transactions_eq_of_merkleRoot_eq` takes two transaction lists `cx :: xs` and `cy :: ys`, with these hypotheses:
+
+- `cx` and `cy` are coinbases: `Transaction.isCoinBase`, which is Core's `CTransaction::IsCoinBase` (D4, lines 354 to 357), one input with the null outpoint.
+- The two lists have the same `blockMerkleRoot` root.
+- Neither list sets the mutation flag.
+
+The theorem concludes one of three statements:
+
+1. The two lists are equal, as lists of `Transaction` values.
+2. `MerkleCollision`: two different inputs of the two trees have the same double SHA-256 digest.
+3. `CoinbaseAtInnerNode`: the base serialization of one coinbase is the 64 bytes of two nodes of the other tree.
+
+Statements 2 and 3 are local to the two lists.
+An input of a tree (`MerkleInput`) is the base serialization of one of its transactions.
+The 64 bytes of two nodes of one level below the root are also an input.
+A list of `n` transactions has fewer than `n + 4 * n * n` inputs.
+A statement that some two byte strings collide, with no relation to the lists, holds for every hash with a fixed output length.
+Such a statement would make the theorem say nothing, so no theorem here uses it.
+
+Statement 3 is a condition on two digests, not a collision.
+It names the coinbase `c` and two nodes `l` and `r` of one level of the other tree, with `l ++ r` as the serialization of `c`.
+Bytes 4 to 40 of that serialization are the input count 1, the 32 zero bytes of the null hash and the index `ff ff ff ff`.
+So the digest `l` ends with the byte 1 and 27 zero bytes.
+The digest `r` starts with 5 zero bytes and `ff ff ff ff`.
+The statement fixes 37 bytes, which are 296 bits, of two digests of inputs of that tree (`encodesInnerNode_coinbase_pattern`).
+
+The theorem keeps statement 3, for this reason.
+Suppose that one tree has more levels than the other.
+Then the coinbase of the lower tree has the digest of an inner node of the higher tree.
+Either the two inputs of that digest are a collision, or the serialization of the coinbase is the 64 bytes of the two children.
+
+A coinbase of 64 bytes is well formed, so the serialization does not exclude the second case.
+That case has one 64-byte string and no second one, so it gives no collision.
+To leave statement 3 out, the theorem would need a further assumption about SHA-256.
+
+DogeLib does not assume that statement 2 or statement 3 is false, and it adds no hypothesis about SHA-256.
+A reader who concludes that the two lists are equal assumes two things about these lists (A4).
+No two different inputs of the two trees have the same digest, and no two digests of one tree hold the start of a coinbase.
+Neither assumption follows from the fixed output length of the hash.
+`not_merkleCollision_singleton` proves statement 2 false for two copies of one list of one transaction, `[c]` and `[c]`.
+`not_encodesInnerNode_singleton` proves that no transaction has `EncodesInnerNode` for a list of one transaction, so statement 3 is false for such a target list.
+
+`transactions_eq_or_encodesInnerNode` is the theorem without the coinbase hypotheses.
+Its third statement is `EncodesInnerNode`: the serialization of the first transaction of one list is the 64 bytes of two nodes of the other tree.
+That statement holds for `[t]` and `[a, b]` above, by `encodesInnerNode_of_encode`.
+So `transactions_eq_or_encodesInnerNode`, the theorem without the coinbase hypotheses, cannot conclude statement 1 or 2 alone.
+The coinbase hypotheses add the condition on the digests.
+
+For the made transactions of `lake test`, `t` is not a coinbase and the six inputs have six digests.
+So the conclusion of `transactions_eq_of_merkleRoot_eq` fails for that pair, which lacks one coinbase hypothesis.
+That result is a compiled known answer, not a theorem.
+
+Without the mutation flags, `[A, B, C]` and `[A, B, C, C]` have one root and are not equal.
+No theorem states that the conclusion fails for such a pair.
+The conclusion is an equality of `Transaction` values, because the base codec is injective on every `Transaction` (`encode_injective`).
+A caller that reads a list from bytes applies the theorem to the values that its reader returned.
+
+`checkBlock_transactions_eq_of_merkleRoot_eq` carries the result to blocks.
+Let `checkBlock` accept a block with the Merkle check.
+Let a second list start with a coinbase, have the `hashMerkleRoot` of the header as its root, and not set the mutation flag.
+Then the list is the transaction list of the block, apart from statements 2 and 3 for that list and the list of the block.
+
+`checkBlock` gives the three hypotheses for the block, by `checkBlock_ok_merkle`.
+Core's tests are at D106, lines 2951 to 2962, 2976 and 2977.
+`checkBlock_transactions_unique` states the same for two accepted blocks whose headers have one `hashMerkleRoot`.
+These theorems are about `checkBlock`, and they do not show that Core's `CheckBlock` has the property.
+
+At the pin, no rule of Core rejects a transaction because it has 64 bytes.
+`CheckTransaction` tests the size only against the upper bound `MAX_BLOCK_BASE_SIZE` (D106, lines 535 and 536).
+The only test of the total size in `IsStandardTx` is that the weight is below `MAX_STANDARD_TX_WEIGHT` (D118, lines 71 to 75).
+It also bounds the size of each `scriptSig` from above, at 1650 bytes (line 86).
+Neither function has a test that rejects a size of 64 bytes.
+
+The pin has no file `src/consensus/tx_verify.cpp`, and `CheckTransaction` is in `src/validation.cpp`.
+This record is a reading of those functions.
+DogeLib makes no claim about which transactions the mainnet chain holds.
+
+By `#print axioms`, `transactions_eq_of_merkleRoot_eq`, `transactions_eq_or_encodesInnerNode`, `merkleRoot_eq_levels`, `blockMerkleRoot_inner_transaction` and `isCoinBase_encode_pattern` depend on `propext` and `Quot.sound`.
+`checkBlock_transactions_eq_of_merkleRoot_eq` and `checkBlock_transactions_unique` depend on `propext`, `Classical.choice` and `Quot.sound`.
+
 ## Full headers and the AuxPoW payload
 
 `BlockHeader.read` follows `CBlockHeader::SerializationOp` (D41) and the payload fields of `CMerkleTx` and `CAuxPow` (D54).

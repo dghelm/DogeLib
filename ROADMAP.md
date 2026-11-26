@@ -78,6 +78,24 @@ Its section 11 gives the stages and their exit conditions:
 Adoption of the record establishes no result.
 Each stage reports its evidence in COVERAGE.md and SOUNDNESS.md when it merges.
 
+### Rejection paths and negative vectors
+
+[Design record 0013](docs/design/0013-rejection-paths.md) defines a generated search of the rejection paths of the block operations against Core, and negative conformance vectors.
+The maintainer adopted it on 2026-11-25, with all 16 decisions of its section 13.
+Its section 11 gives the stages and their exit conditions:
+
+| Stage | Deliverable | Status |
+| --- | --- | --- |
+| 0 | Measurements: the seeds, the size of a group file, the time of a request and the cost of a mined block. Also a coverage build of the harness. The maintainer sees the cost of a mined block before any mined case is added | Not started |
+| 1 | Block mutations: block plans, the directed and free modes, the fix-ups, the report of a run, and the run in CI | Not started |
+| 2 | State mutations, derived states, the properties R3 to R5 and the reducer for block plans | Not started |
+| 3 | Header acceptance: header plans and the class *Header index* for `block.header_sequence` | Not started |
+| 4 | Triage and replay: the labels and the checks B1 to B3 | Not started |
+| 5 | The negative corpus: the three formats, the groups, the expected results and the checker | Not started |
+| 6 | A recorded run with a fresh seed, the coverage measurement, the fixtures and the documents | Not started |
+
+Adoption of the record establishes no result.
+
 One other candidate is unscheduled, and it needs an approved scope before work starts:
 
 - **Arithmetic agreement with Core's verifier.** A Lean proof that `Point.mulAdd` computes Core's `secp256k1_ecmult` result ([design record 0005](docs/design/0005-signature-verifier.md), section 4.3).

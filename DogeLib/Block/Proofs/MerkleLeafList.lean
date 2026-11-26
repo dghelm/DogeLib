@@ -31,7 +31,7 @@ Each list starts with a coinbase, the two lists have the same Merkle root, and n
 Then one of three statements holds:
 
 1. The two lists are equal.
-2. `MerkleCollision`: two different byte strings that the two trees hash have the same double SHA-256 digest.
+2. `MerkleCollision`: two different inputs of the two trees have the same double SHA-256 digest.
 3. `CoinbaseAtInnerNode`: the serialization of one coinbase is the 64 bytes of two nodes of the other tree.
 
 Statements 2 and 3 are about the two lists.
@@ -535,7 +535,7 @@ theorem merkleRoot_eq_levels (xs ys : List Hash256) (hx : xs ≠ []) (hy : ys �
 /-! ## Transactions at the leaves -/
 
 /--
-A byte string that the tree over the transactions `ts` hashes:
+An input of the tree over the transactions `ts`, one of these byte strings:
 
 - the base serialization of a transaction of `ts`, whose digest is a leaf, or
 - a `MerkleNodeInput` of the transaction IDs: the 64 bytes of two nodes of one level below the root.
@@ -549,7 +549,7 @@ def MerkleInput (ts : List Transaction) (p : List UInt8) : Prop :=
 Two different byte strings, each a `MerkleInput` of `xs` or of `ys`, have the same double SHA-256 digest.
 
 The statement is about the two trees.
-It names two byte strings that the trees hash, such as the serializations of two transactions or the inputs of two inner nodes.
+It names two inputs of the trees, such as the serializations of two transactions or the inputs of two inner nodes.
 It is false for many lists, for example when both lists hold one transaction (`not_merkleCollision_singleton`).
 DogeLib does not assume that it is false for all lists.
 -/
@@ -842,7 +842,7 @@ Let `cx :: xs` and `cy :: ys` be two lists of transactions, with these hypothese
 Then one of these holds:
 
 1. `cx :: xs = cy :: ys`, as lists of transactions.
-2. `MerkleCollision (cx :: xs) (cy :: ys)`: two different byte strings that the two trees hash have the same double SHA-256 digest.
+2. `MerkleCollision (cx :: xs) (cy :: ys)`: two different inputs of the two trees have the same double SHA-256 digest.
    Each is the serialization of a transaction of one list, or the 64 bytes of two nodes of one level.
 3. `CoinbaseAtInnerNode` for one list and the other.
    The serialization of one coinbase is the 64 bytes of two nodes of the other tree.
@@ -935,7 +935,7 @@ theorem not_merkleNodeInput_singleton (a : Hash256) (p : List UInt8) : ¬ Merkle
 
 /--
 For every transaction `c`, `MerkleCollision [c] [c]` is false.
-The two trees hash one byte string, the serialization of `c`, so no two different inputs exist.
+The two trees have one input, the serialization of `c`, so no two different inputs exist.
 So `MerkleCollision` is a statement about its lists, and it does not hold for all lists.
 -/
 theorem not_merkleCollision_singleton (c : Transaction) : ¬ MerkleCollision [c] [c] := by

@@ -111,7 +111,7 @@ Let `cy :: ys` be a list of transactions with these properties:
 Then one of these holds:
 
 1. `cy :: ys` is the transaction list of `b`.
-2. `MerkleCollision (cy :: ys) b.transactions`: two different byte strings that the two trees hash have the same double SHA-256 digest.
+2. `MerkleCollision (cy :: ys) b.transactions`: two different inputs of the two trees have the same double SHA-256 digest.
 3. `CoinbaseAtInnerNode` for one list and the other.
    The serialization of one coinbase is the 64 bytes of two nodes of the other tree.
 

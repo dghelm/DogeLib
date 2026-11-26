@@ -346,7 +346,7 @@ The root is the digest of the 64 bytes of `t`, in the order that SHA-256 writes 
 The check shows that `[a, b]` and `[t]` have one Merkle root with both mutation flags clear, and that `checkTransaction` accepts all three transactions.
 `a` is a coinbase and `t` is not, which is the hypothesis of `transactions_eq_of_merkleRoot_eq` that this pair does not have.
 
-The two trees hash six different byte strings.
+The two trees have six different inputs.
 They are the serializations of `a` and `b`, and the 64 bytes of each two of the IDs of `a` and `b`.
 The serialization of `t` is one of the six.
 The check shows that their six digests differ, so the pair has no `MerkleCollision`.

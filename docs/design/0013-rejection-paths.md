@@ -1,8 +1,7 @@
 # Rejection paths and negative conformance vectors
 
-**Status:** Proposed on 2026-11-25. The maintainer has not adopted this record.
-Section 13 lists the decisions that adoption needs.
-Implementation status belongs in ROADMAP.md and COVERAGE.md.
+**Status:** Adopted on 2026-11-25, with the decisions of section 13.
+This record is frozen. Implementation status belongs in ROADMAP.md and COVERAGE.md.
 
 **Date:** 2026-11-25
 **Companions:** [Design record 0009](0009-bug-finding-campaign.md), [design record 0010](0010-block-validity.md), [design record 0011](0011-mainnet-ranges.md), [design record 0008](0008-header-sequence-validation.md), [the conformance corpus](../conformance.md), [the campaign](../campaign.md), [oracle contract](../oracle.md), [the Core harness](../core-harness.md), [comparison evidence](../comparison-evidence.md), [coverage](../../COVERAGE.md) and [soundness](../../SOUNDNESS.md).
@@ -889,26 +888,29 @@ The fresh-seed run, the coverage measurement and the node replay are recorded ga
 
 ## 13. Decisions
 
-**Decision maker:** Maintainer. Every decision is open.
+**Date:** 2026-11-25. **Decision maker:** Maintainer.
+The maintainer accepted every proposal, as its status states.
+Decision 16 has one note.
+Stage 0 measures the cost of a mined block, and the lane brings the measurement to the maintainer before it adds any mined case.
 
 | Number | Topic | Proposal | Alternative | Status |
 | --- | --- | --- | --- | --- |
-| 1 | Scope | The six operations of section 3.1 and the 40 reject sites of section 3.2, with the exclusions of section 3.3. | The sites of `ConnectBlock` alone. Or `block.validate` alone, without the operations that reach one check. | Open |
-| 2 | Seeds | The seeds of section 4, and no other block. | Made blocks alone, with no real block. | Open |
-| 3 | Generator | Plans with block mutations and state mutations, in a directed and a free mode, with the fix-ups of section 5.4. | Byte-level mutation of block bytes, which ends mostly at the reader and at the Merkle root. | Open |
-| 4 | State mutations | The class *Supplied state*, with derived states from the harness's carried set (sections 5.3 and 5.5). | Block mutations alone. Each real block then loses its proof of work when a check below the Merkle root is the target. | Open |
-| 5 | Expected values | From the rule of a directed class, which a person derives from Core's text. Never from either program (section 6.2). | Agreement alone, with no expectation. | Open |
-| 6 | Comparison | The agreement functions of the CI comparison, properties R1 to R5 and the eight outcome classes. The trap build is the harness of the search (section 6). | The ordinary harness build, with no trap. | Open |
-| 7 | Triage and replay | The six labels of section 6.5, and the checks B1 to B3 with a node replay through `getblocktemplate` in the mode `proposal`. The disclosure rules of design record 0009 apply (section 6.7). | Triage by source inspection alone, with no node replay. | Open |
-| 8 | Form of the negative corpus | N2: cases in groups, with the formats `dogelib-block-cases/1`, `dogelib-case-results/1` and `dogelib-case-assets/1`. No existing format and no published file changes (section 8). | N1: rejected candidates in the ranges, with a second version of `dogelib-range-results`. Or no negative corpus, with the search as a tool of the DogeLib comparison alone. | Open |
-| 9 | Unmined cases | The corpus holds cases with `check_pow` false, so a third program needs that option. | Cases with both flags true alone: state mutations, the three block mutations that keep a header, and mined blocks below height 240. | Open |
-| 10 | Reject reasons in the checker | The ordinary mode compares the reject reason, and `--verdict-only` leaves it out. The expected results also hold the score and the code (section 8.3). | Verdicts alone. Or the reason, the score and the code as required fields. | Open |
-| 11 | Header cases | Published for an index without failure flags, in the same formats (section 8.6). | No header case in the corpus. The search still compares them. | Open |
-| 12 | Size | The budget of section 8.5, and no group on E1 or E2. | Another budget after stage 0. | Open |
-| 13 | Coverage | The target of section 9.2, and a build option `--coverage` for a measurement outside CI. | The response counts alone, with no measurement of executed lines. | Open |
-| 14 | CI | The directed cases, a free search at one reviewed seed and the self-test in the job `compare`, within 10 minutes. The groups in the job `conformance` (section 9.3). | All of it outside CI. Or a job of its own. | Open |
-| 15 | Campaign reuse | The search is a campaign of `scripts/campaign.py`. `dogelib-campaign-failure/1` gains the field `plan_kind`, and the regression fixtures go in `tests/block/campaign/` (section 7). | A separate driver and a separate format of saved failures. | Open |
-| 16 | Mined blocks | Stage 0 measures the cost. If one block takes under one minute, the corpus holds a mined case for each class that a chain below height 240 can hold. | No mined block. | Open |
+| 1 | Scope | The six operations of section 3.1 and the 40 reject sites of section 3.2, with the exclusions of section 3.3. | The sites of `ConnectBlock` alone. Or `block.validate` alone, without the operations that reach one check. | Accepted |
+| 2 | Seeds | The seeds of section 4, and no other block. | Made blocks alone, with no real block. | Accepted |
+| 3 | Generator | Plans with block mutations and state mutations, in a directed and a free mode, with the fix-ups of section 5.4. | Byte-level mutation of block bytes, which ends mostly at the reader and at the Merkle root. | Accepted |
+| 4 | State mutations | The class *Supplied state*, with derived states from the harness's carried set (sections 5.3 and 5.5). | Block mutations alone. Each real block then loses its proof of work when a check below the Merkle root is the target. | Accepted |
+| 5 | Expected values | From the rule of a directed class, which a person derives from Core's text. Never from either program (section 6.2). | Agreement alone, with no expectation. | Accepted |
+| 6 | Comparison | The agreement functions of the CI comparison, properties R1 to R5 and the eight outcome classes. The trap build is the harness of the search (section 6). | The ordinary harness build, with no trap. | Accepted |
+| 7 | Triage and replay | The six labels of section 6.5, and the checks B1 to B3 with a node replay through `getblocktemplate` in the mode `proposal`. The disclosure rules of design record 0009 apply (section 6.7). | Triage by source inspection alone, with no node replay. | Accepted |
+| 8 | Form of the negative corpus | N2: cases in groups, with the formats `dogelib-block-cases/1`, `dogelib-case-results/1` and `dogelib-case-assets/1`. No existing format and no published file changes (section 8). | N1: rejected candidates in the ranges, with a second version of `dogelib-range-results`. Or no negative corpus, with the search as a tool of the DogeLib comparison alone. | Accepted |
+| 9 | Unmined cases | The corpus holds cases with `check_pow` false, so a third program needs that option. | Cases with both flags true alone: state mutations, the three block mutations that keep a header, and mined blocks below height 240. | Accepted |
+| 10 | Reject reasons in the checker | The ordinary mode compares the reject reason, and `--verdict-only` leaves it out. The expected results also hold the score and the code (section 8.3). | Verdicts alone. Or the reason, the score and the code as required fields. | Accepted |
+| 11 | Header cases | Published for an index without failure flags, in the same formats (section 8.6). | No header case in the corpus. The search still compares them. | Accepted |
+| 12 | Size | The budget of section 8.5, and no group on E1 or E2. | Another budget after stage 0. | Accepted |
+| 13 | Coverage | The target of section 9.2, and a build option `--coverage` for a measurement outside CI. | The response counts alone, with no measurement of executed lines. | Accepted |
+| 14 | CI | The directed cases, a free search at one reviewed seed and the self-test in the job `compare`, within 10 minutes. The groups in the job `conformance` (section 9.3). | All of it outside CI. Or a job of its own. | Accepted |
+| 15 | Campaign reuse | The search is a campaign of `scripts/campaign.py`. `dogelib-campaign-failure/1` gains the field `plan_kind`, and the regression fixtures go in `tests/block/campaign/` (section 7). | A separate driver and a separate format of saved failures. | Accepted |
+| 16 | Mined blocks | Stage 0 measures the cost. If one block takes under one minute, the corpus holds a mined case for each class that a chain below height 240 can hold. | No mined block. | Accepted, with the note above |
 
 ## 14. Remaining risks
 

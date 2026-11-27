@@ -86,6 +86,7 @@ python3 -I scripts/compare_core.py .lake/build/bin/dogelib-oracle build/core-har
 ```
 
 The build script uses `JOBS` parallel jobs, 8 by default.
+With `--coverage` it also builds `core-oracle-coverage`, a measurement tool outside CI ([the coverage build](docs/core-harness.md#the-coverage-build)).
 It reuses Boost and the Core libraries when the build directory's stamp matches the pin, the scripts, the compilers and the flags.
 A first build takes about 2 minutes on 8 cores and uses about 360 MB, and the comparison takes about 1 minute.
 The self-test runs four cases at a time and takes about 7 minutes.

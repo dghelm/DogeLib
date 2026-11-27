@@ -513,6 +513,36 @@ Its `--version` output has `"trap_overflow": true`.
 - The trap build stops on the two requests of the arithmetic-domain cases whose sums leave the `int64_t` range, once in `validation.cpp` and once in `coins.cpp`. It gives the response of the ordinary build on the other requests of those cases.
 - Nineteen supplied coins of `MAX_MONEY` and one of `MAX_MONEY - 1` give a set of 19,999,999,999,999,999,999 koinu, above 2^64. Both programs give that exact `set_value` with the coins in the request and in `coins_file`. The harness also gives it with `coins_db` and in the manifest of a written snapshot. The comparator accepts both responses, and they agree with its model.
 
+### The coverage build
+
+The coverage build measures which lines of Core's `src/validation.cpp` a set of requests executes (design record 0013, section 9.2, and decision 13).
+It is a measurement tool outside CI, and no verdict comes from it.
+`scripts/build_core_harness.sh --coverage` builds `core-oracle-coverage` beside `core-oracle`.
+The option and `--trap-overflow` can come in either order, before `--revision`.
+
+The build compiles `harness/core/core_validation.cpp`, the unit that includes `src/validation.cpp`, with gcc's `--coverage` at `-O0`.
+At `-O0` each line of Core's source keeps its own count.
+The other units and the libraries are those of `core-oracle`.
+The object and its notes file `core_validation.gcno` stay in `<build-dir>/coverage`.
+Each run of `core-oracle-coverage` adds its counts to `core_validation.gcda` in that directory, and a new build removes the old counts.
+
+`scripts/core_coverage.py` runs the `block.validate` requests of the full comparison, or the requests of another operation with `--op`:
+
+```bash
+scripts/build_core_harness.sh --coverage <dogecoin-git-clone> build/core-harness
+python3 -I scripts/core_coverage.py --output build/core-coverage/validate .lake/build/bin/dogelib-oracle build/core-harness
+```
+
+The script removes the old counts first.
+Then `core-oracle` and `core-oracle-coverage` answer the same requests, which the comparison would send to the harness.
+Their responses must be equal as JSON values, and each must agree with the oracle under the agreement function of `scripts/compare_core.py`.
+Then gcov writes `validation.cpp.gcov` with the count of each line and each branch.
+
+The script also writes `report.md` and `report.json`.
+The report gives the executed lines and the taken branches of each function of design record 0013, section 3.2.
+It lists the lines of those functions that no request executed.
+It also gives the count of each reject site of sections 3.2 and 3.3.
+
 ## Comparator and self-test mechanics
 
 `scripts/compare_core.py` gives each request its own `id` and sends both programs the same text, with one exception.

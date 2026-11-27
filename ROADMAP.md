@@ -86,7 +86,7 @@ Its section 11 gives the stages and their exit conditions:
 
 | Stage | Deliverable | Status |
 | --- | --- | --- |
-| 0 | Measurements: the seeds, the size of a group file, the time of a request and the cost of a mined block. Also a coverage build of the harness. The maintainer sees the cost of a mined block before any mined case is added | Not started |
+| 0 | Measurements: the seeds, the size of a group file, the time of a request and the cost of a mined block. Also a coverage build of the harness. The maintainer sees the cost of a mined block before any mined case is added | Done. Every block of the nine ranges passes the constraint of section 4. Each group file of the seven ranges other than E1 and E2 is under 1 MB after xz. A deep request of 100 candidates on a block of about 1,300 inputs takes the oracle 5 to 8 minutes. A mined block takes about 3 minutes on one core. `scripts/build_core_harness.sh --coverage` builds the coverage build ([measurements](docs/comparison-evidence.md#measurements-for-the-rejection-search)) |
 | 1 | Block mutations: block plans, the directed and free modes, the fix-ups, the report of a run, and the run in CI | Not started |
 | 2 | State mutations, derived states, the properties R3 to R5 and the reducer for block plans | Not started |
 | 3 | Header acceptance: header plans and the class *Header index* for `block.header_sequence` | Not started |

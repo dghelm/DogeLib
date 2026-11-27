@@ -1220,3 +1220,185 @@ A record has the revision, the activation and the SHA-256 of the executable. It 
 It has the counts, the digest at the end, the time, the memory and the recheck.
 The maintainer's machine keeps the requests, responses and logs under `build/impact/`, outside Git and outside any release asset.
 `scripts/impact_records.py --check` checks the records against their index and `SHA256SUMS`, and with `--outputs build/impact` against the saved files.
+
+## Measurements for the rejection search
+
+Stage 0 of [design record 0013](design/0013-rejection-paths.md) measures five quantities before any generator exists (section 11).
+The stage adds no Lean code and no gate, and it fixes no format.
+The measurements were made on 2026-11-27 on a development machine with an AMD Ryzen AI MAX+ 395 (16 cores, 32 threads), at nice level 19.
+Other jobs shared the machine, and each program ran on one core that `taskset` selected.
+
+The revision is DogeLib `5c092f5`, with `scripts/rejection_measurements.py`, `scripts/core_coverage.py` and the option `--coverage` of `scripts/build_core_harness.sh` as committed beside this section.
+Core is the pin `e0a1c157791544e818c901bd9341896965afbf9d`, built with gcc 16.2.1.
+The inputs are the assets of the nine ranges that `python3 -I scripts/conformance.py fetch` wrote to `build/conformance`.
+Each `blocks.bin` and each `request.json` has the SHA-256 that [`tests/conformance/release.json`](../tests/conformance/release.json) gives, and that file has the SHA-256 `b51b028b812a41a3525d66600d1930eddd8224fc9c537ec87e64b13d23657a16`.
+The executables have these SHA-256 values:
+
+| Executable | SHA-256 |
+| --- | --- |
+| `.lake/build/bin/dogelib-oracle` | `d142d5c97d19fea93994ba5bb4e108c90c8315fc513c504ae74b690b7209de34` |
+| `build/core-harness/core-oracle` | `2a71275c8b5ce1c3389f9e18570258d9bde215272a3d77d91f4497f000aa1132` |
+| `build/core-harness/core-oracle-trap` | `18c1b538e24e7b37f14d4ce29dfcd59cfa805fbf37502b4197eb1e7430fcfc6a` |
+| `build/core-harness/core-oracle-coverage` | `8a3bcaf8df838e1044f72b6f6b44e8554b158ddca0b4a64899f59a20349ba4fd` |
+
+### The seeds
+
+The count follows the definition of `Block.payloadNoWitness`.
+
+| Range | Blocks | Blocks that pass |
+| --- | ---: | ---: |
+| `short` | 1,000 | 1,000 |
+| `A` | 10,000 | 10,000 |
+| `B` | 2,000 | 2,000 |
+| `C` | 2,000 | 2,000 |
+| `D` | 2,000 | 2,000 |
+| `E1` | 2,000 | 2,000 |
+| `E2` | 2,000 | 2,000 |
+| `F` | 2,000 | 2,000 |
+| `H` | 1,000 | 1,000 |
+| All | 24,000 | 24,000 |
+
+So every block of the nine ranges can be a seed.
+
+### The size of a group file
+
+`python3 -I scripts/rejection_measurements.py groups --output build/stage0/groups` writes a group file in the proposed format `dogelib-block-cases/1` for two seeds of each range.
+The seeds are the first block and the largest block of the range.
+Each group has the accepted control and 40 cases, and each case holds a changed copy of the seed block and then the seed block.
+So the cases are as large as a case on a real block can be, and they aim at no reject site.
+The compression is xz at the preset of the corpus assets, 9 with the extreme flag.
+
+`python3 -I scripts/rejection_measurements.py controls --groups build/stage0/groups .lake/build/bin/dogelib-oracle build/core-harness/core-oracle-trap` checks the state of each group.
+Both programs accept each seed block on the group's request, with the same digests.
+The digest of the coin changes equals the value of the committed expected results of the range.
+So the chain and the coins of each group are a correct derived state.
+That result also holds where the script computed the chain and the coins from the earlier blocks of the range.
+
+| Group | Block bytes | Chain entries | Coin entries | Request bytes | File bytes | File bytes, xz |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `short`, 9,001 | 10,752 | 9,001 | 39 | 470,182 | 2,215,595 | 32,248 |
+| `short`, 9,633 | 62,268 | 9,633 | 180 | 547,282 | 10,638,289 | 86,684 |
+| `A`, 145,001 | 18,184 | 10,341 | 106 | 1,738,363 | 4,687,756 | 192,956 |
+| `A`, 152,911 | 352,787 | 18,251 | 2,292 | 3,273,395 | 60,428,476 | 737,428 |
+| `B`, 370,337 | 1,301 | 10,341 | 5 | 549,633 | 763,980 | 64,904 |
+| `B`, 371,224 | 338,636 | 11,228 | 1,710 | 3,268,126 | 58,130,745 | 539,572 |
+| `C`, 599,000 | 12,734 | 10,341 | 54 | 775,495 | 2,841,988 | 112,320 |
+| `C`, 600,084 | 451,367 | 11,425 | 1,159 | 2,871,428 | 75,996,469 | 741,236 |
+| `D`, 1,033,383 | 3,016 | 10,341 | 10 | 561,397 | 1,053,576 | 57,848 |
+| `D`, 1,034,671 | 331,274 | 11,629 | 1,276 | 1,046,375 | 54,716,352 | 339,476 |
+| `E1`, 1,198,520 | 22,607 | 10,341 | 56 | 936,201 | 4,602,124 | 116,928 |
+| `E1`, 1,198,761 | 237,544 | 10,582 | 106 | 3,229,450 | 41,715,169 | 588,800 |
+| `E2`, 1,702,520 | 965 | 513,092 | 1 | 36,943,169 | 37,103,088 | 2,291,492 |
+| `E2`, 1,704,268 | 97,101 | 514,840 | 612 | 37,801,856 | 53,535,809 | 2,594,404 |
+| `F`, 3,463,751 | 4,801 | 10,341 | 21 | 569,751 | 1,351,100 | 61,564 |
+| `F`, 3,464,390 | 405,407 | 10,980 | 1,571 | 1,230,573 | 66,910,096 | 430,564 |
+| `H`, 5,049,001 | 74,772 | 10,341 | 416 | 686,633 | 12,803,284 | 117,512 |
+| `H`, 5,049,750 | 998,731 | 11,090 | 601 | 789,229 | 162,587,240 | 910,316 |
+
+The budget of section 8.5 allows 2 MB for each group asset after xz, and no group on a seed of E1 or E2.
+Every group of the seven other ranges has at most 910,316 bytes after xz, under that limit.
+The two groups of E2 are above it, at 2.3 MB and 2.6 MB, because their chain has about 514,000 entries.
+The budget already excludes them.
+
+Without compression a group of 40 cases on a large block has up to 163 MB, because each case holds the block twice, in hexadecimal.
+The budget sets no limit on that size.
+The total of 25 MB and the expected results of 2 MB depend on the number of groups, which stage 5 sets.
+
+### The time of a request
+
+`SEEDS=... python3 -I scripts/rejection_measurements.py time --groups build/stage0/groups --cpu 27 --output build/stage0/time.json <programs>` runs one `block.validate` request in a new process for each program.
+`SEEDS` is not set in the recorded run, so the default list of five groups applies.
+A request of 100 candidates has 99 rejected candidates and then the seed block:
+
+- In a *shallow* candidate, the lock time of the last transaction changes and the Merkle root does not. Both flags are true, and `CheckBlock` rejects it with `bad-txnmrklroot`.
+- In a *deep* candidate, the coinbase claims 1 to 99 koinu more, the Merkle root follows, and `check_pow` is false. Every check runs, and `ConnectBlock` rejects it last, with `bad-cb-amount`.
+
+The baseline is the seed block alone.
+Each response gave the expected reasons, and the three programs ended with the same digest of the coins.
+The times in seconds include the read of the request:
+
+| Group | Inputs | Chain entries | Request | Oracle | `core-oracle-trap` | `core-oracle` |
+| --- | ---: | ---: | --- | ---: | ---: | ---: |
+| `D`, 1,033,383 | 10 | 10,341 | Baseline | 0.056 | 0.018 | 0.018 |
+| | | | 100 shallow | 0.479 | 0.053 | 0.052 |
+| | | | 100 deep | 1.821 | 0.028 | 0.029 |
+| `D`, 1,034,671 | 1,280 | 11,629 | Baseline | 5.043 | 0.173 | 0.181 |
+| | | | 100 shallow | 11.156 | 0.961 | 0.974 |
+| | | | 100 deep | 499.539 | 7.286 | 7.994 |
+| `H`, 5,049,750 | 1,425 | 11,090 | Baseline | 3.321 | 0.103 | 0.105 |
+| | | | 100 shallow | 20.653 | 2.518 | 2.476 |
+| | | | 100 deep | 324.944 | 3.782 | 3.811 |
+| `E2`, 1,702,520 | 1 | 513,092 | Baseline | 0.610 | 0.647 | 0.640 |
+| | | | 100 shallow | 1.457 | 0.670 | 0.657 |
+| | | | 100 deep | 1.289 | 0.656 | 0.636 |
+| `E2`, 1,704,268 | 623 | 514,840 | Baseline | 2.565 | 0.704 | 0.703 |
+| | | | 100 shallow | 9.561 | 0.951 | 0.960 |
+| | | | 100 deep | 173.078 | 3.112 | 3.378 |
+
+The cost of the oracle follows the inputs of the candidates.
+On the deep request of D at 1,034,671 it takes about 3.9 ms for each input of a candidate.
+Design record 0011, section 2, recorded 4.1 ms.
+
+The chain of E2 adds about 0.6 seconds to each request in both programs.
+In Core a deep candidate takes less time than the seed block alone.
+The reason is Core's signature cache, which keeps the signatures of the seed block after the first candidate (`fCacheResults` is `fJustCheck`, `validation.cpp`, line 1977).
+A candidate on the same real transactions has the same signatures, so the cache also applies in the search.
+
+The CI budget of section 9.3 is 10 minutes of the job `compare` on a GitHub runner.
+One deep request of 100 candidates on a block of about 1,300 inputs takes 5 to 8 minutes of the oracle on this machine.
+So the CI run of stage 1 can hold only a few such requests.
+Its deep cases need seeds with few inputs, or made blocks.
+The deep request of D at 1,033,383, with 10 inputs, takes 1.8 seconds.
+
+A run with a fresh seed has 8 hours on 8 cores, which hold about 460 deep requests of the largest kind.
+Seeds with fewer inputs give many more.
+This machine is not a GitHub runner, so stage 1 records the time of its run in CI.
+
+### The cost of a mined block
+
+`python3 -I scripts/rejection_measurements.py mine --samples N --workers W --output FILE --check .lake/build/bin/dogelib-oracle build/core-harness/core-oracle` mines made blocks at height 1 of mainnet.
+Their `nBits` is `0x1e0ffff0`, the value of the genesis block.
+That target accepts a scrypt digest with the probability 1 in 1,048,592, so a block needs 1,048,592 attempts on average.
+The miner uses Python's `hashlib.scrypt`, as `scripts/generate_header_sequences.py` does.
+Both programs accept each mined header with `block.check_pow`, and reject it with the nonce below.
+
+| Workers | Samples | Hashes per second | Nonces of the samples | Seconds of the samples | Mean time of a block |
+| ---: | ---: | ---: | --- | --- | ---: |
+| 1 | 3 | 5,843 to 5,924 | 34,682, 457,516, 1,275,685 | 5.9, 77.8, 215.4 | about 178 s |
+| 3 | 5 | 17,162 to 17,528 | 34,682, 457,516, 1,275,685, 613,121, 191,429 | 2.0, 26.1, 72.8, 35.1, 10.9 | about 60 s |
+
+The mean time is 1,048,592 attempts at the measured rate.
+The time of one block varies widely, as the samples show, because the number of attempts has a geometric distribution.
+
+Core's generic scrypt, `scrypt_1024_1_1_256` as the harness builds it, computes about 7,790 digests per second on one core of this machine.
+With it a block takes about 135 seconds.
+
+### Executed lines of Core
+
+`scripts/build_core_harness.sh --trap-overflow --coverage <dogecoin-git-clone> build/core-harness` builds the [coverage build](core-harness.md#the-coverage-build).
+A build without `--coverage` reuses the libraries and gives a `core-oracle` with the same SHA-256 as the build with it.
+`python3 -I scripts/core_coverage.py --output build/core-coverage/validate .lake/build/bin/dogelib-oracle build/core-harness` runs the 42 `block.validate` requests of the full comparison.
+`core-oracle` and `core-oracle-coverage` gave equal responses, and both agreed with the oracle.
+gcov gave these counts for the functions of section 3.2:
+
+| Function | Lines | Lines executed | Branches | Branches taken |
+| --- | ---: | ---: | ---: | ---: |
+| `CheckTransaction` (lines 527 to 574) | 29 | 21 | 82 | 31 |
+| `CheckBlockHeader` (lines 2927 to 2937) | 4 | 3 | 12 | 4 |
+| `CheckBlock` (lines 2939 to 3000) | 30 | 24 | 92 | 39 |
+| `ContextualCheckBlockHeader` (lines 3066 to 3119) | 28 | 16 | 96 | 30 |
+| `ContextualCheckBlock` (lines 3121 to 3203) | 38 | 24 | 106 | 32 |
+| `ConnectBlock` (lines 1783 to 2050) | 132 | 91 | 368 | 128 |
+| `Consensus::CheckTxInputs` (lines 1415 to 1459) | 28 | 25 | 68 | 33 |
+| `CheckInputs` (lines 1462 to 1519) | 25 | 22 | 52 | 30 |
+| `AcceptBlockHeader` (lines 3205 to 3267) | 42 | 0 | 106 | 0 |
+
+The requests executed 13 of the 40 reject sites of section 3.2.
+They are all 9 sites of `ConnectBlock`, `CheckTxInputs` and `CheckInputs`, and `bad-txns-inputs-duplicate`, `bad-txnmrklroot`, `bad-diffbits` and `bad-txns-nonfinal` of `ContextualCheckBlock`.
+They executed no site of section 3.3.
+`block.validate` does not call `AcceptBlockHeader`, which has 4 of the other sites.
+
+The other 23 sites are the targets of other operations of the full comparison or of the search.
+`report.md` lists each line that no request executed.
+The recorded `report.json` has the SHA-256 `fc796c2e09c19bbd846069de2c7e5b314d136dad51902db2e3849c59e9c521bb`.
+Section 9.2 sets the coverage target of a run of the search, which stage 6 measures.

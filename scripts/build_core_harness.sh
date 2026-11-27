@@ -4,7 +4,7 @@
 # Core's server library, and harness/core/core_validation.cpp includes Core's
 # src/validation.cpp and src/timedata.cpp as text.
 #
-# Usage: scripts/build_core_harness.sh [--trap-overflow] [--revision COMMIT] <core-git-repo> <build-dir>
+# Usage: scripts/build_core_harness.sh [--trap-overflow] [--coverage] [--revision COMMIT] <core-git-repo> <build-dir>
 #
 # --trap-overflow also builds <build-dir>/core-oracle-trap, the harness of the
 # Core pass (design record 0011, section 3.2). It compiles Core's
@@ -13,6 +13,16 @@
 # -fsanitize=signed-integer-overflow -fno-sanitize-recover. A signed overflow
 # in those files then ends the program instead of being undefined behaviour.
 # The libraries and core-oracle are the same as without the option.
+#
+# --coverage also builds <build-dir>/core-oracle-coverage, a measurement tool
+# outside CI (design record 0013, section 9.2, and decision 13). It compiles
+# harness/core/core_validation.cpp, the unit that includes Core's
+# src/validation.cpp, with gcc's --coverage at -O0, so that each line keeps its
+# own count. The object and its notes file stay in <build-dir>/coverage. Each
+# run of core-oracle-coverage adds its counts to
+# <build-dir>/coverage/core_validation.gcda, and gcov reads them from there.
+# The other units, the libraries and core-oracle are the same as without the
+# option. No verdict comes from this build.
 #
 # --revision builds against another Core commit for a labelled replay
 # (design record 0009, section 9.2). It needs a build directory other than
@@ -40,18 +50,23 @@ set -euo pipefail
 PIN=e0a1c157791544e818c901bd9341896965afbf9d
 revision=
 trap=
-if [ "${1:-}" = --trap-overflow ]; then
-  trap=1
-  shift
-fi
+coverage=
+usage="usage: $0 [--trap-overflow] [--coverage] [--revision COMMIT] <core-git-repo> <build-dir>"
+while :; do
+  case "${1:-}" in
+    --trap-overflow) trap=1; shift ;;
+    --coverage) coverage=1; shift ;;
+    *) break ;;
+  esac
+done
 if [ "${1:-}" = --revision ]; then
-  [ "$#" -eq 4 ] || { echo "usage: $0 [--trap-overflow] [--revision COMMIT] <core-git-repo> <build-dir>" >&2; exit 2; }
+  [ "$#" -eq 4 ] || { echo "$usage" >&2; exit 2; }
   revision=$2
   shift 2
 fi
 
 if [ "$#" -ne 2 ]; then
-  echo "usage: $0 [--trap-overflow] [--revision COMMIT] <core-git-repo> <build-dir>" >&2
+  echo "$usage" >&2
   exit 2
 fi
 
@@ -210,6 +225,31 @@ if [ -n "$trap" ]; then
   set +x
   rm -f "$build/trap-core_oracle.o" "$build/trap-core_validation.o" "$build/trap-coins.o"
   echo "built $build/core-oracle-trap"
+fi
+
+if [ -n "$coverage" ]; then
+  # The same harness, with the unit that includes validation.cpp under gcc's
+  # coverage option. -O0 keeps one count for each line of Core's source. The
+  # object stays in coverage/, beside its notes file core_validation.gcno, and
+  # a run writes core_validation.gcda there. A new build removes old counts.
+  covdir=$build/coverage
+  rm -rf "$covdir"
+  mkdir -p "$covdir"
+  includes=(-I"$src" -I"$src/config" -I"$src/univalue/include" -I"$src/secp256k1/include"
+    -I"$src/leveldb/include" -isystem "$boost/include")
+  set -x
+  "$cxx" -std=c++11 $core_cxxflags -DHAVE_CONFIG_H "${includes[@]}" "${revision_flags[@]}" \
+    -c "$here/harness/core/core_oracle.cpp" -o "$covdir/core_oracle.o"
+  "$cxx" -std=c++11 -O0 --coverage -DHAVE_CONFIG_H "${includes[@]}" \
+    -c "$here/harness/core/core_validation.cpp" -o "$covdir/core_validation.o"
+  "$cxx" -std=c++11 --coverage -o "$build/core-oracle-coverage" \
+    "$covdir/core_oracle.o" "$covdir/core_validation.o" \
+    "${oracle_libs[@]}" \
+    -L"$boost/lib" -lboost_system -lboost_filesystem -lboost_program_options -lboost_thread -lboost_chrono \
+    -lssl -lcrypto -levent_pthreads -levent -pthread
+  set +x
+  rm -f "$covdir/core_oracle.o"
+  echo "built $build/core-oracle-coverage, with counts in $covdir"
 fi
 
 # UniValue parses the signer's requests. Compile every library source that the
